@@ -1,0 +1,1741 @@
+{
+  "ordered_nodes": [
+    [
+      "rust::free_int_mir::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: target code/diff_fn/main.rs:21:15: 21:31 (#0), scope: scope[0] }, kind: _3 = std::boxed::Box::<i32>::into_raw(move _1) -> [return: bb1, unwind continue] }",
+            "source_info": "target code/diff_fn/main.rs:21:15: 21:31 (#0)",
+            "function_called": "std::boxed::Box::<i32>::into_raw",
+            "arguments": [
+              {
+                "arg": "Local(_1)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_3",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::free_int_mir::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [
+            {
+              "source_info": {
+                "span": "target code/diff_fn/main.rs:21:15: 21:46 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_2, move _3 as *mut std::ffi::c_void (PtrToPtr)))",
+              "place": "Local(_2)",
+              "is_mutable": false,
+              "rvalue": "move _3 as *mut std::ffi::c_void (PtrToPtr)"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: target code/diff_fn/main.rs:23:9: 23:22 (#0), scope: scope[1] }, kind: _4 = free_str(copy _2) -> [return: bb2, unwind unreachable] }",
+            "source_info": "target code/diff_fn/main.rs:23:9: 23:22 (#0)",
+            "function_called": "free_str",
+            "arguments": [
+              {
+                "arg": "Local(_2)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_4",
+            "return_target": "bb2",
+            "unwind_target": "unreachable"
+          }
+        }
+      }
+    ],
+    [
+      "dummyCall::rust::free_int_mir::bb1::rust::free_int_mir::bb1",
+      {
+        "node_type": "DummyCall",
+        "node_data": {
+          "dummy_node_name": "dummyCall",
+          "incoming_edge": "rust::free_int_mir::bb1",
+          "outgoing_edge": "llvm::free_str::node105476947677456::rust::free_int_mir::bb1",
+          "id": "af4370a8e4932696",
+          "mir_var": "Local(_2)",
+          "llvm_var": "9@rust::free_int_mir::bb1",
+          "is_internal": false
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476947677456::rust::free_int_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476947677456,
+          "node_type": false,
+          "info": "IntraICFGNode9 {fun: free_str}\nAddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %str.addr = alloca ptr, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "free_str",
+          "basic_block": 105476947575296,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 105476947510560,
+              "stmt_type": "AddrStmt",
+              "stmt_info": "AddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %str.addr = alloca ptr, align 8 ",
+              "edge_id": 7,
+              "pta_edge": true,
+              "lhs_var_id": 8,
+              "rhs_var_id": 9,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 105476947726624,
+              "destination": 105476947677456,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476947677456,
+              "destination": 105476947499312,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476947499312::rust::free_int_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476947499312,
+          "node_type": false,
+          "info": "IntraICFGNode10 {fun: free_str}\nStoreStmt: [Var8 <-- Var7]\t\nValVar ID: 11\n   store ptr %str, ptr %str.addr, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "free_str",
+          "basic_block": 105476947575296,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 105476947696032,
+              "stmt_type": "StoreStmt",
+              "stmt_info": "StoreStmt: [Var8 <-- Var7]\t\nValVar ID: 11\n   store ptr %str, ptr %str.addr, align 8 ",
+              "edge_id": 8,
+              "pta_edge": true,
+              "lhs_var_id": 8,
+              "rhs_var_id": 7,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 105476947677456,
+              "destination": 105476947499312,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476947499312,
+              "destination": 105476947890384,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476947890384::rust::free_int_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476947890384,
+          "node_type": false,
+          "info": "IntraICFGNode11 {fun: free_str}\nLoadStmt: [Var12 <-- Var8]\t\nValVar ID: 12\n   %0 = load ptr, ptr %str.addr, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "free_str",
+          "basic_block": 105476947575296,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 105476947700192,
+              "stmt_type": "LoadStmt",
+              "stmt_info": "LoadStmt: [Var12 <-- Var8]\t\nValVar ID: 12\n   %0 = load ptr, ptr %str.addr, align 8 ",
+              "edge_id": 9,
+              "pta_edge": true,
+              "lhs_var_id": 12,
+              "rhs_var_id": 8,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 105476947499312,
+              "destination": 105476947890384,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476947890384,
+              "destination": 105476948083296,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476948083296::rust::free_int_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476948083296,
+          "node_type": false,
+          "info": "IntraICFGNode12 {fun: free_str}\nCmpStmt: [Var13 <-- (Var12 predicate33 Var0)]\t\nValVar ID: 13\n   %cmp = icmp ne ptr %0, null ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "free_str",
+          "basic_block": 105476947575296,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 105476947900272,
+              "stmt_type": "CmpStmt",
+              "stmt_info": "CmpStmt: [Var13 <-- (Var12 predicate33 Var0)]\t\nValVar ID: 13\n   %cmp = icmp ne ptr %0, null ",
+              "edge_id": 10,
+              "pta_edge": false,
+              "lhs_var_id": null,
+              "rhs_var_id": null,
+              "res_var_id": 13,
+              "operand_var_ids": [
+                12,
+                0
+              ],
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 105476947890384,
+              "destination": 105476948083296,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476948083296,
+              "destination": 105476948136496,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476948136496::rust::free_int_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476948136496,
+          "node_type": false,
+          "info": "IntraICFGNode13 {fun: free_str}\nBranchStmt: [Condition Var13]\nSuccessor 0 ICFGNode14   Successor 1 ICFGNode15   \nValVar ID: 14\n   br i1 %cmp, label %if.then, label %if.end ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "free_str",
+          "basic_block": 105476947575296,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 105476947887264,
+              "stmt_type": "BranchStmt",
+              "stmt_info": "BranchStmt: [Condition Var13]\nSuccessor 0 ICFGNode14   Successor 1 ICFGNode15   \nValVar ID: 14\n   br i1 %cmp, label %if.then, label %if.end ",
+              "edge_id": 11,
+              "pta_edge": false,
+              "lhs_var_id": null,
+              "rhs_var_id": null,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": true,
+              "condition_var_id": 105476948145744,
+              "successors": [
+                {
+                  "successor_id": 105476948126464,
+                  "condition_value": 1
+                },
+                {
+                  "successor_id": 105476947713920,
+                  "condition_value": 0
+                }
+              ]
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 105476948083296,
+              "destination": 105476948136496,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476948136496,
+              "destination": 105476948126464,
+              "edge_type": "intra"
+            },
+            {
+              "source": 105476948136496,
+              "destination": 105476947713920,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476948126464::rust::free_int_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476948126464,
+          "node_type": false,
+          "info": "IntraICFGNode14 {fun: free_str}\nLoadStmt: [Var15 <-- Var8]\t\nValVar ID: 15\n   %1 = load ptr, ptr %str.addr, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "free_str",
+          "basic_block": 105476947575952,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 105476947886192,
+              "stmt_type": "LoadStmt",
+              "stmt_info": "LoadStmt: [Var15 <-- Var8]\t\nValVar ID: 15\n   %1 = load ptr, ptr %str.addr, align 8 ",
+              "edge_id": 12,
+              "pta_edge": true,
+              "lhs_var_id": 15,
+              "rhs_var_id": 8,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 105476948136496,
+              "destination": 105476948126464,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476948126464,
+              "destination": 105476947968976,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476947713920::rust::free_int_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476947713920,
+          "node_type": false,
+          "info": "IntraICFGNode15 {fun: free_str}\n   ret void ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "free_str",
+          "basic_block": 105476947504768,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+          "svf_statements": [],
+          "incoming_edges": [
+            {
+              "source": 105476948136496,
+              "destination": 105476947713920,
+              "edge_type": "intra"
+            },
+            {
+              "source": 105476947716704,
+              "destination": 105476947713920,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476947713920,
+              "destination": 105476947595248,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476947968976::rust::free_int_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476947968976,
+          "node_type": true,
+          "info": "CallICFGNode16 {fun: free_str}\n   call void @free(ptr noundef %1) #2 CallICFGNode: ",
+          "node_kind_string": "FunCallBlock",
+          "node_kind": 4,
+          "node_source_loc": "CallICFGNode: ",
+          "function_name": "free_str",
+          "basic_block": 105476947575952,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+          "svf_statements": [],
+          "incoming_edges": [
+            {
+              "source": 105476948126464,
+              "destination": 105476947968976,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476947968976,
+              "destination": 105476947717632,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476947595248::rust::free_int_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476947595248,
+          "node_type": false,
+          "info": "FunExitICFGNode2 {fun: free_str}",
+          "node_kind_string": "FunExitBlock",
+          "node_kind": 3,
+          "node_source_loc": "function ret: ",
+          "function_name": "free_str",
+          "basic_block": 105476947504768,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+          "svf_statements": [],
+          "incoming_edges": [
+            {
+              "source": 105476947713920,
+              "destination": 105476947595248,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": []
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476947717632::rust::free_int_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476947717632,
+          "node_type": true,
+          "info": "RetICFGNode17 {fun: free_str}\n   call void @free(ptr noundef %1) #2 RetICFGNode: ",
+          "node_kind_string": "FunRetBlock",
+          "node_kind": 5,
+          "node_source_loc": "RetICFGNode: ",
+          "function_name": "free_str",
+          "basic_block": 105476947575952,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+          "svf_statements": [],
+          "incoming_edges": [
+            {
+              "source": 105476947968976,
+              "destination": 105476947717632,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476947717632,
+              "destination": 105476947716704,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476947716704::rust::free_int_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476947716704,
+          "node_type": false,
+          "info": "IntraICFGNode18 {fun: free_str}\nBranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode15   \nValVar ID: 19\n   br label %if.end ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "free_str",
+          "basic_block": 105476947575952,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 105476947877360,
+              "stmt_type": "BranchStmt",
+              "stmt_info": "BranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode15   \nValVar ID: 19\n   br label %if.end ",
+              "edge_id": 13,
+              "pta_edge": false,
+              "lhs_var_id": null,
+              "rhs_var_id": null,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": false,
+              "condition_var_id": null,
+              "successors": [
+                {
+                  "successor_id": 105476947713920,
+                  "condition_value": 1
+                }
+              ]
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 105476947717632,
+              "destination": 105476947716704,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476947716704,
+              "destination": 105476947713920,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "dummyRet::rust::free_int_mir::bb2::rust::free_int_mir::bb1",
+      {
+        "node_type": "DummyRet",
+        "node_data": {
+          "dummy_node_name": "dummyRet",
+          "incoming_edge": "llvm::free_str::node105476947595248::rust::free_int_mir::bb1",
+          "outgoing_edge": "rust::free_int_mir::bb2",
+          "id": "3652e8e6f4818fe7",
+          "mir_var": null,
+          "llvm_var": "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+          "is_internal": false
+        }
+      }
+    ],
+    [
+      "rust::free_int_mir::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: target code/diff_fn/main.rs:25:2: 25:2 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "target code/diff_fn/main.rs:25:2: 25:2 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "target code/diff_fn/main.rs:29:23: 29:38 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_2, const \"Hello, world!\"))",
+              "place": "Local(_2) [mutable]",
+              "is_mutable": true,
+              "rvalue": "const \"Hello, world!\""
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: target code/diff_fn/main.rs:29:13: 29:39 (#0), scope: scope[0] }, kind: _1 = alloc_str(move _2) -> [return: bb1, unwind continue] }",
+            "source_info": "target code/diff_fn/main.rs:29:13: 29:39 (#0)",
+            "function_called": "alloc_str",
+            "arguments": [
+              {
+                "arg": "Local(_2) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_1",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "dummyCall::rust::main::bb0::rust::main::bb0_internal",
+      {
+        "node_type": "DummyCall",
+        "node_data": {
+          "dummy_node_name": "dummyCall",
+          "incoming_edge": "rust::main::bb0",
+          "outgoing_edge": "dummyRet::rust::main::0::rust::main::bb0_internal",
+          "id": "62017da3289b57d5",
+          "mir_var": "Local(_2) [mutable]",
+          "llvm_var": null,
+          "is_internal": true
+        }
+      }
+    ],
+    [
+      "dummyRet::rust::main::0::rust::main::bb0_internal",
+      {
+        "node_type": "DummyRet",
+        "node_data": {
+          "dummy_node_name": "dummyRet",
+          "incoming_edge": "dummyCall::rust::main::bb0::rust::main::bb0_internal",
+          "outgoing_edge": "rust::main::bb1",
+          "id": "ddf9337e99e30f9b",
+          "mir_var": "_1",
+          "llvm_var": "Local _0",
+          "is_internal": true
+        }
+      }
+    ],
+    [
+      "rust::main::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: target code/diff_fn/main.rs:30:5: 30:23 (#0), scope: scope[1] }, kind: _3 = free_string_mir(move _1) -> [return: bb2, unwind continue] }",
+            "source_info": "target code/diff_fn/main.rs:30:5: 30:23 (#0)",
+            "function_called": "free_string_mir",
+            "arguments": [
+              {
+                "arg": "Local(_1)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_3",
+            "return_target": "bb2",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "dummyCall::rust::main::bb1::rust::main::bb1_internal",
+      {
+        "node_type": "DummyCall",
+        "node_data": {
+          "dummy_node_name": "dummyCall",
+          "incoming_edge": "rust::main::bb1",
+          "outgoing_edge": "dummyRet::rust::main::1::rust::main::bb1_internal",
+          "id": "136eb08ca49a7d2a",
+          "mir_var": "Local(_1)",
+          "llvm_var": null,
+          "is_internal": true
+        }
+      }
+    ],
+    [
+      "dummyRet::rust::main::1::rust::main::bb1_internal",
+      {
+        "node_type": "DummyRet",
+        "node_data": {
+          "dummy_node_name": "dummyRet",
+          "incoming_edge": "dummyCall::rust::main::bb1::rust::main::bb1_internal",
+          "outgoing_edge": "rust::main::bb2",
+          "id": "9d6bfa87fe144916",
+          "mir_var": "_3",
+          "llvm_var": "Local _0",
+          "is_internal": true
+        }
+      }
+    ],
+    [
+      "rust::main::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: target code/diff_fn/main.rs:35:2: 35:2 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "target code/diff_fn/main.rs:35:2: 35:2 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::alloc_int::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: target code/diff_fn/main.rs:12:5: 12:16 (#0), scope: scope[0] }, kind: _0 = std::boxed::Box::<i32>::new(copy _1) -> [return: bb1, unwind continue] }",
+            "source_info": "target code/diff_fn/main.rs:12:5: 12:16 (#0)",
+            "function_called": "std::boxed::Box::<i32>::new",
+            "arguments": [
+              {
+                "arg": "Local(_1)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_0",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::alloc_int::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: target code/diff_fn/main.rs:13:2: 13:2 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "target code/diff_fn/main.rs:13:2: 13:2 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::free_string_mir::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: target code/diff_fn/main.rs:15:15: 15:31 (#0), scope: scope[0] }, kind: _3 = std::boxed::Box::<std::string::String>::into_raw(move _1) -> [return: bb1, unwind continue] }",
+            "source_info": "target code/diff_fn/main.rs:15:15: 15:31 (#0)",
+            "function_called": "std::boxed::Box::<std::string::String>::into_raw",
+            "arguments": [
+              {
+                "arg": "Local(_1)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_3",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::free_string_mir::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [
+            {
+              "source_info": {
+                "span": "target code/diff_fn/main.rs:15:15: 15:46 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_2, move _3 as *mut std::ffi::c_void (PtrToPtr)))",
+              "place": "Local(_2)",
+              "is_mutable": false,
+              "rvalue": "move _3 as *mut std::ffi::c_void (PtrToPtr)"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: target code/diff_fn/main.rs:17:9: 17:22 (#0), scope: scope[1] }, kind: _4 = free_str(copy _2) -> [return: bb2, unwind unreachable] }",
+            "source_info": "target code/diff_fn/main.rs:17:9: 17:22 (#0)",
+            "function_called": "free_str",
+            "arguments": [
+              {
+                "arg": "Local(_2)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_4",
+            "return_target": "bb2",
+            "unwind_target": "unreachable"
+          }
+        }
+      }
+    ],
+    [
+      "dummyCall::rust::free_string_mir::bb1::rust::free_string_mir::bb1",
+      {
+        "node_type": "DummyCall",
+        "node_data": {
+          "dummy_node_name": "dummyCall",
+          "incoming_edge": "rust::free_string_mir::bb1",
+          "outgoing_edge": "llvm::free_str::node105476947677456::rust::free_string_mir::bb1",
+          "id": "1e200e21cae7df42",
+          "mir_var": "Local(_2)",
+          "llvm_var": "9@rust::free_string_mir::bb1",
+          "is_internal": false
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476947677456::rust::free_string_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476947677456,
+          "node_type": false,
+          "info": "IntraICFGNode9 {fun: free_str}\nAddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %str.addr = alloca ptr, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "free_str",
+          "basic_block": 105476947575296,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 105476947510560,
+              "stmt_type": "AddrStmt",
+              "stmt_info": "AddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %str.addr = alloca ptr, align 8 ",
+              "edge_id": 7,
+              "pta_edge": true,
+              "lhs_var_id": 8,
+              "rhs_var_id": 9,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 105476947726624,
+              "destination": 105476947677456,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476947677456,
+              "destination": 105476947499312,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476947499312::rust::free_string_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476947499312,
+          "node_type": false,
+          "info": "IntraICFGNode10 {fun: free_str}\nStoreStmt: [Var8 <-- Var7]\t\nValVar ID: 11\n   store ptr %str, ptr %str.addr, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "free_str",
+          "basic_block": 105476947575296,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 105476947696032,
+              "stmt_type": "StoreStmt",
+              "stmt_info": "StoreStmt: [Var8 <-- Var7]\t\nValVar ID: 11\n   store ptr %str, ptr %str.addr, align 8 ",
+              "edge_id": 8,
+              "pta_edge": true,
+              "lhs_var_id": 8,
+              "rhs_var_id": 7,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 105476947677456,
+              "destination": 105476947499312,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476947499312,
+              "destination": 105476947890384,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476947890384::rust::free_string_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476947890384,
+          "node_type": false,
+          "info": "IntraICFGNode11 {fun: free_str}\nLoadStmt: [Var12 <-- Var8]\t\nValVar ID: 12\n   %0 = load ptr, ptr %str.addr, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "free_str",
+          "basic_block": 105476947575296,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 105476947700192,
+              "stmt_type": "LoadStmt",
+              "stmt_info": "LoadStmt: [Var12 <-- Var8]\t\nValVar ID: 12\n   %0 = load ptr, ptr %str.addr, align 8 ",
+              "edge_id": 9,
+              "pta_edge": true,
+              "lhs_var_id": 12,
+              "rhs_var_id": 8,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 105476947499312,
+              "destination": 105476947890384,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476947890384,
+              "destination": 105476948083296,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476948083296::rust::free_string_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476948083296,
+          "node_type": false,
+          "info": "IntraICFGNode12 {fun: free_str}\nCmpStmt: [Var13 <-- (Var12 predicate33 Var0)]\t\nValVar ID: 13\n   %cmp = icmp ne ptr %0, null ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "free_str",
+          "basic_block": 105476947575296,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 105476947900272,
+              "stmt_type": "CmpStmt",
+              "stmt_info": "CmpStmt: [Var13 <-- (Var12 predicate33 Var0)]\t\nValVar ID: 13\n   %cmp = icmp ne ptr %0, null ",
+              "edge_id": 10,
+              "pta_edge": false,
+              "lhs_var_id": null,
+              "rhs_var_id": null,
+              "res_var_id": 13,
+              "operand_var_ids": [
+                12,
+                0
+              ],
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 105476947890384,
+              "destination": 105476948083296,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476948083296,
+              "destination": 105476948136496,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476948136496::rust::free_string_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476948136496,
+          "node_type": false,
+          "info": "IntraICFGNode13 {fun: free_str}\nBranchStmt: [Condition Var13]\nSuccessor 0 ICFGNode14   Successor 1 ICFGNode15   \nValVar ID: 14\n   br i1 %cmp, label %if.then, label %if.end ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "free_str",
+          "basic_block": 105476947575296,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 105476947887264,
+              "stmt_type": "BranchStmt",
+              "stmt_info": "BranchStmt: [Condition Var13]\nSuccessor 0 ICFGNode14   Successor 1 ICFGNode15   \nValVar ID: 14\n   br i1 %cmp, label %if.then, label %if.end ",
+              "edge_id": 11,
+              "pta_edge": false,
+              "lhs_var_id": null,
+              "rhs_var_id": null,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": true,
+              "condition_var_id": 105476948145744,
+              "successors": [
+                {
+                  "successor_id": 105476948126464,
+                  "condition_value": 1
+                },
+                {
+                  "successor_id": 105476947713920,
+                  "condition_value": 0
+                }
+              ]
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 105476948083296,
+              "destination": 105476948136496,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476948136496,
+              "destination": 105476948126464,
+              "edge_type": "intra"
+            },
+            {
+              "source": 105476948136496,
+              "destination": 105476947713920,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476948126464::rust::free_string_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476948126464,
+          "node_type": false,
+          "info": "IntraICFGNode14 {fun: free_str}\nLoadStmt: [Var15 <-- Var8]\t\nValVar ID: 15\n   %1 = load ptr, ptr %str.addr, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "free_str",
+          "basic_block": 105476947575952,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 105476947886192,
+              "stmt_type": "LoadStmt",
+              "stmt_info": "LoadStmt: [Var15 <-- Var8]\t\nValVar ID: 15\n   %1 = load ptr, ptr %str.addr, align 8 ",
+              "edge_id": 12,
+              "pta_edge": true,
+              "lhs_var_id": 15,
+              "rhs_var_id": 8,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 105476948136496,
+              "destination": 105476948126464,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476948126464,
+              "destination": 105476947968976,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476947713920::rust::free_string_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476947713920,
+          "node_type": false,
+          "info": "IntraICFGNode15 {fun: free_str}\n   ret void ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "free_str",
+          "basic_block": 105476947504768,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+          "svf_statements": [],
+          "incoming_edges": [
+            {
+              "source": 105476948136496,
+              "destination": 105476947713920,
+              "edge_type": "intra"
+            },
+            {
+              "source": 105476947716704,
+              "destination": 105476947713920,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476947713920,
+              "destination": 105476947595248,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476947968976::rust::free_string_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476947968976,
+          "node_type": true,
+          "info": "CallICFGNode16 {fun: free_str}\n   call void @free(ptr noundef %1) #2 CallICFGNode: ",
+          "node_kind_string": "FunCallBlock",
+          "node_kind": 4,
+          "node_source_loc": "CallICFGNode: ",
+          "function_name": "free_str",
+          "basic_block": 105476947575952,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+          "svf_statements": [],
+          "incoming_edges": [
+            {
+              "source": 105476948126464,
+              "destination": 105476947968976,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476947968976,
+              "destination": 105476947717632,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476947595248::rust::free_string_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476947595248,
+          "node_type": false,
+          "info": "FunExitICFGNode2 {fun: free_str}",
+          "node_kind_string": "FunExitBlock",
+          "node_kind": 3,
+          "node_source_loc": "function ret: ",
+          "function_name": "free_str",
+          "basic_block": 105476947504768,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+          "svf_statements": [],
+          "incoming_edges": [
+            {
+              "source": 105476947713920,
+              "destination": 105476947595248,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": []
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476947717632::rust::free_string_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476947717632,
+          "node_type": true,
+          "info": "RetICFGNode17 {fun: free_str}\n   call void @free(ptr noundef %1) #2 RetICFGNode: ",
+          "node_kind_string": "FunRetBlock",
+          "node_kind": 5,
+          "node_source_loc": "RetICFGNode: ",
+          "function_name": "free_str",
+          "basic_block": 105476947575952,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+          "svf_statements": [],
+          "incoming_edges": [
+            {
+              "source": 105476947968976,
+              "destination": 105476947717632,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476947717632,
+              "destination": 105476947716704,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::free_str::node105476947716704::rust::free_string_mir::bb1",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 105476947716704,
+          "node_type": false,
+          "info": "IntraICFGNode18 {fun: free_str}\nBranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode15   \nValVar ID: 19\n   br label %if.end ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "free_str",
+          "basic_block": 105476947575952,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 105476947877360,
+              "stmt_type": "BranchStmt",
+              "stmt_info": "BranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode15   \nValVar ID: 19\n   br label %if.end ",
+              "edge_id": 13,
+              "pta_edge": false,
+              "lhs_var_id": null,
+              "rhs_var_id": null,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": false,
+              "condition_var_id": null,
+              "successors": [
+                {
+                  "successor_id": 105476947713920,
+                  "condition_value": 1
+                }
+              ]
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 105476947717632,
+              "destination": 105476947716704,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 105476947716704,
+              "destination": 105476947713920,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "dummyRet::rust::free_string_mir::bb2::rust::free_string_mir::bb1",
+      {
+        "node_type": "DummyRet",
+        "node_data": {
+          "dummy_node_name": "dummyRet",
+          "incoming_edge": "llvm::free_str::node105476947595248::rust::free_string_mir::bb1",
+          "outgoing_edge": "rust::free_string_mir::bb2",
+          "id": "52de32512980a09b",
+          "mir_var": null,
+          "llvm_var": "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+          "is_internal": false
+        }
+      }
+    ],
+    [
+      "rust::free_string_mir::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: target code/diff_fn/main.rs:19:2: 19:2 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "target code/diff_fn/main.rs:19:2: 19:2 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::alloc_str::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: target code/diff_fn/main.rs:8:14: 8:27 (#0), scope: scope[0] }, kind: _2 = <str as std::string::ToString>::to_string(copy _1) -> [return: bb1, unwind continue] }",
+            "source_info": "target code/diff_fn/main.rs:8:14: 8:27 (#0)",
+            "function_called": "<str as std::string::ToString>::to_string",
+            "arguments": [
+              {
+                "arg": "Local(_1)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_2",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::alloc_str::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: target code/diff_fn/main.rs:8:5: 8:28 (#0), scope: scope[0] }, kind: _0 = std::boxed::Box::<std::string::String>::new(move _2) -> [return: bb2, unwind continue] }",
+            "source_info": "target code/diff_fn/main.rs:8:5: 8:28 (#0)",
+            "function_called": "std::boxed::Box::<std::string::String>::new",
+            "arguments": [
+              {
+                "arg": "Local(_2) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_0",
+            "return_target": "bb2",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::alloc_str::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: target code/diff_fn/main.rs:9:2: 9:2 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "target code/diff_fn/main.rs:9:2: 9:2 (#0)"
+          }
+        }
+      }
+    ]
+  ],
+  "icfg_edges": [
+    {
+      "source": "rust::free_int_mir::bb0",
+      "destination": "rust::free_int_mir::bb1",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::free_int_mir::bb1",
+      "destination": "dummyCall::rust::free_int_mir::bb1::rust::free_int_mir::bb1",
+      "label": "FFI Call",
+      "source_label": "Mir bb1",
+      "destination_label": "dummyCall (id: af4370a8e4932696)"
+    },
+    {
+      "source": "dummyCall::rust::free_int_mir::bb1::rust::free_int_mir::bb1",
+      "destination": "llvm::free_str::node105476947677456::rust::free_int_mir::bb1",
+      "label": "dummyCall->LLVM Entry",
+      "source_label": "dummyCall (id: af4370a8e4932696)",
+      "destination_label": "IntraICFGNode9 {fun: free_str}\nAddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %str.addr = alloca ptr, align 8 "
+    },
+    {
+      "source": "llvm::free_str::node105476947595248::rust::free_int_mir::bb1",
+      "destination": "dummyRet::rust::free_int_mir::bb2::rust::free_int_mir::bb1",
+      "label": "LLVM Exit->dummyRet",
+      "source_label": "FunExitICFGNode2 {fun: free_str}",
+      "destination_label": "dummyRet (id: 3652e8e6f4818fe7)"
+    },
+    {
+      "source": "dummyRet::rust::free_int_mir::bb2::rust::free_int_mir::bb1",
+      "destination": "rust::free_int_mir::bb2",
+      "label": "dummyRet->MIR Return",
+      "source_label": "dummyRet (id: 3652e8e6f4818fe7)",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::main::bb0",
+      "destination": "dummyCall::rust::main::bb0::rust::main::bb0_internal",
+      "label": "Internal Call (dummy inserted)",
+      "source_label": "Mir bb0",
+      "destination_label": "dummyCall (id: 62017da3289b57d5)"
+    },
+    {
+      "source": "dummyCall::rust::main::bb0::rust::main::bb0_internal",
+      "destination": "dummyRet::rust::main::0::rust::main::bb0_internal",
+      "label": "dummyCall->dummyRet",
+      "source_label": "dummyCall (id: 62017da3289b57d5)",
+      "destination_label": "dummyRet (id: ddf9337e99e30f9b)"
+    },
+    {
+      "source": "dummyRet::rust::main::0::rust::main::bb0_internal",
+      "destination": "rust::main::bb1",
+      "label": "dummyRet->Internal Return",
+      "source_label": "dummyRet (id: ddf9337e99e30f9b)",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::main::bb1",
+      "destination": "dummyCall::rust::main::bb1::rust::main::bb1_internal",
+      "label": "Internal Call (dummy inserted)",
+      "source_label": "Mir bb1",
+      "destination_label": "dummyCall (id: 136eb08ca49a7d2a)"
+    },
+    {
+      "source": "dummyCall::rust::main::bb1::rust::main::bb1_internal",
+      "destination": "dummyRet::rust::main::1::rust::main::bb1_internal",
+      "label": "dummyCall->dummyRet",
+      "source_label": "dummyCall (id: 136eb08ca49a7d2a)",
+      "destination_label": "dummyRet (id: 9d6bfa87fe144916)"
+    },
+    {
+      "source": "dummyRet::rust::main::1::rust::main::bb1_internal",
+      "destination": "rust::main::bb2",
+      "label": "dummyRet->Internal Return",
+      "source_label": "dummyRet (id: 9d6bfa87fe144916)",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::alloc_int::bb0",
+      "destination": "rust::alloc_int::bb1",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::free_string_mir::bb0",
+      "destination": "rust::free_string_mir::bb1",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::free_string_mir::bb1",
+      "destination": "dummyCall::rust::free_string_mir::bb1::rust::free_string_mir::bb1",
+      "label": "FFI Call",
+      "source_label": "Mir bb1",
+      "destination_label": "dummyCall (id: 1e200e21cae7df42)"
+    },
+    {
+      "source": "dummyCall::rust::free_string_mir::bb1::rust::free_string_mir::bb1",
+      "destination": "llvm::free_str::node105476947677456::rust::free_string_mir::bb1",
+      "label": "dummyCall->LLVM Entry",
+      "source_label": "dummyCall (id: 1e200e21cae7df42)",
+      "destination_label": "IntraICFGNode9 {fun: free_str}\nAddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %str.addr = alloca ptr, align 8 "
+    },
+    {
+      "source": "llvm::free_str::node105476947595248::rust::free_string_mir::bb1",
+      "destination": "dummyRet::rust::free_string_mir::bb2::rust::free_string_mir::bb1",
+      "label": "LLVM Exit->dummyRet",
+      "source_label": "FunExitICFGNode2 {fun: free_str}",
+      "destination_label": "dummyRet (id: 52de32512980a09b)"
+    },
+    {
+      "source": "dummyRet::rust::free_string_mir::bb2::rust::free_string_mir::bb1",
+      "destination": "rust::free_string_mir::bb2",
+      "label": "dummyRet->MIR Return",
+      "source_label": "dummyRet (id: 52de32512980a09b)",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::alloc_str::bb0",
+      "destination": "rust::alloc_str::bb1",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::alloc_str::bb1",
+      "destination": "rust::alloc_str::bb2",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb1",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "llvm::free_str::node105476947499312::rust::free_int_mir::bb1",
+      "destination": "llvm::free_str::node105476947890384::rust::free_int_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode10 {fun: free_str}\nStoreStmt: [Var8 <-- Var7]\t\nValVar ID: 11\n   store ptr %str, ptr %str.addr, align 8 ",
+      "destination_label": "IntraICFGNode11 {fun: free_str}\nLoadStmt: [Var12 <-- Var8]\t\nValVar ID: 12\n   %0 = load ptr, ptr %str.addr, align 8 "
+    },
+    {
+      "source": "llvm::free_str::node105476947499312::rust::free_string_mir::bb1",
+      "destination": "llvm::free_str::node105476947890384::rust::free_string_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode10 {fun: free_str}\nStoreStmt: [Var8 <-- Var7]\t\nValVar ID: 11\n   store ptr %str, ptr %str.addr, align 8 ",
+      "destination_label": "IntraICFGNode11 {fun: free_str}\nLoadStmt: [Var12 <-- Var8]\t\nValVar ID: 12\n   %0 = load ptr, ptr %str.addr, align 8 "
+    },
+    {
+      "source": "llvm::free_str::node105476947677456::rust::free_int_mir::bb1",
+      "destination": "llvm::free_str::node105476947499312::rust::free_int_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode9 {fun: free_str}\nAddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %str.addr = alloca ptr, align 8 ",
+      "destination_label": "IntraICFGNode10 {fun: free_str}\nStoreStmt: [Var8 <-- Var7]\t\nValVar ID: 11\n   store ptr %str, ptr %str.addr, align 8 "
+    },
+    {
+      "source": "llvm::free_str::node105476947677456::rust::free_string_mir::bb1",
+      "destination": "llvm::free_str::node105476947499312::rust::free_string_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode9 {fun: free_str}\nAddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %str.addr = alloca ptr, align 8 ",
+      "destination_label": "IntraICFGNode10 {fun: free_str}\nStoreStmt: [Var8 <-- Var7]\t\nValVar ID: 11\n   store ptr %str, ptr %str.addr, align 8 "
+    },
+    {
+      "source": "llvm::free_str::node105476947713920::rust::free_int_mir::bb1",
+      "destination": "llvm::free_str::node105476947595248::rust::free_int_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode15 {fun: free_str}\n   ret void ",
+      "destination_label": "FunExitICFGNode2 {fun: free_str}"
+    },
+    {
+      "source": "llvm::free_str::node105476947713920::rust::free_string_mir::bb1",
+      "destination": "llvm::free_str::node105476947595248::rust::free_string_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode15 {fun: free_str}\n   ret void ",
+      "destination_label": "FunExitICFGNode2 {fun: free_str}"
+    },
+    {
+      "source": "llvm::free_str::node105476947716704::rust::free_int_mir::bb1",
+      "destination": "llvm::free_str::node105476947713920::rust::free_int_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode18 {fun: free_str}\nBranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode15   \nValVar ID: 19\n   br label %if.end ",
+      "destination_label": "IntraICFGNode15 {fun: free_str}\n   ret void "
+    },
+    {
+      "source": "llvm::free_str::node105476947716704::rust::free_string_mir::bb1",
+      "destination": "llvm::free_str::node105476947713920::rust::free_string_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode18 {fun: free_str}\nBranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode15   \nValVar ID: 19\n   br label %if.end ",
+      "destination_label": "IntraICFGNode15 {fun: free_str}\n   ret void "
+    },
+    {
+      "source": "llvm::free_str::node105476947717632::rust::free_int_mir::bb1",
+      "destination": "llvm::free_str::node105476947716704::rust::free_int_mir::bb1",
+      "label": "LLVM",
+      "source_label": "RetICFGNode17 {fun: free_str}\n   call void @free(ptr noundef %1) #2 RetICFGNode: ",
+      "destination_label": "IntraICFGNode18 {fun: free_str}\nBranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode15   \nValVar ID: 19\n   br label %if.end "
+    },
+    {
+      "source": "llvm::free_str::node105476947717632::rust::free_string_mir::bb1",
+      "destination": "llvm::free_str::node105476947716704::rust::free_string_mir::bb1",
+      "label": "LLVM",
+      "source_label": "RetICFGNode17 {fun: free_str}\n   call void @free(ptr noundef %1) #2 RetICFGNode: ",
+      "destination_label": "IntraICFGNode18 {fun: free_str}\nBranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode15   \nValVar ID: 19\n   br label %if.end "
+    },
+    {
+      "source": "llvm::free_str::node105476947890384::rust::free_int_mir::bb1",
+      "destination": "llvm::free_str::node105476948083296::rust::free_int_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode11 {fun: free_str}\nLoadStmt: [Var12 <-- Var8]\t\nValVar ID: 12\n   %0 = load ptr, ptr %str.addr, align 8 ",
+      "destination_label": "IntraICFGNode12 {fun: free_str}\nCmpStmt: [Var13 <-- (Var12 predicate33 Var0)]\t\nValVar ID: 13\n   %cmp = icmp ne ptr %0, null "
+    },
+    {
+      "source": "llvm::free_str::node105476947890384::rust::free_string_mir::bb1",
+      "destination": "llvm::free_str::node105476948083296::rust::free_string_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode11 {fun: free_str}\nLoadStmt: [Var12 <-- Var8]\t\nValVar ID: 12\n   %0 = load ptr, ptr %str.addr, align 8 ",
+      "destination_label": "IntraICFGNode12 {fun: free_str}\nCmpStmt: [Var13 <-- (Var12 predicate33 Var0)]\t\nValVar ID: 13\n   %cmp = icmp ne ptr %0, null "
+    },
+    {
+      "source": "llvm::free_str::node105476947968976::rust::free_int_mir::bb1",
+      "destination": "llvm::free_str::node105476947717632::rust::free_int_mir::bb1",
+      "label": "LLVM",
+      "source_label": "CallICFGNode16 {fun: free_str}\n   call void @free(ptr noundef %1) #2 CallICFGNode: ",
+      "destination_label": "RetICFGNode17 {fun: free_str}\n   call void @free(ptr noundef %1) #2 RetICFGNode: "
+    },
+    {
+      "source": "llvm::free_str::node105476947968976::rust::free_string_mir::bb1",
+      "destination": "llvm::free_str::node105476947717632::rust::free_string_mir::bb1",
+      "label": "LLVM",
+      "source_label": "CallICFGNode16 {fun: free_str}\n   call void @free(ptr noundef %1) #2 CallICFGNode: ",
+      "destination_label": "RetICFGNode17 {fun: free_str}\n   call void @free(ptr noundef %1) #2 RetICFGNode: "
+    },
+    {
+      "source": "llvm::free_str::node105476948083296::rust::free_int_mir::bb1",
+      "destination": "llvm::free_str::node105476948136496::rust::free_int_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode12 {fun: free_str}\nCmpStmt: [Var13 <-- (Var12 predicate33 Var0)]\t\nValVar ID: 13\n   %cmp = icmp ne ptr %0, null ",
+      "destination_label": "IntraICFGNode13 {fun: free_str}\nBranchStmt: [Condition Var13]\nSuccessor 0 ICFGNode14   Successor 1 ICFGNode15   \nValVar ID: 14\n   br i1 %cmp, label %if.then, label %if.end "
+    },
+    {
+      "source": "llvm::free_str::node105476948083296::rust::free_string_mir::bb1",
+      "destination": "llvm::free_str::node105476948136496::rust::free_string_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode12 {fun: free_str}\nCmpStmt: [Var13 <-- (Var12 predicate33 Var0)]\t\nValVar ID: 13\n   %cmp = icmp ne ptr %0, null ",
+      "destination_label": "IntraICFGNode13 {fun: free_str}\nBranchStmt: [Condition Var13]\nSuccessor 0 ICFGNode14   Successor 1 ICFGNode15   \nValVar ID: 14\n   br i1 %cmp, label %if.then, label %if.end "
+    },
+    {
+      "source": "llvm::free_str::node105476948126464::rust::free_int_mir::bb1",
+      "destination": "llvm::free_str::node105476947968976::rust::free_int_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode14 {fun: free_str}\nLoadStmt: [Var15 <-- Var8]\t\nValVar ID: 15\n   %1 = load ptr, ptr %str.addr, align 8 ",
+      "destination_label": "CallICFGNode16 {fun: free_str}\n   call void @free(ptr noundef %1) #2 CallICFGNode: "
+    },
+    {
+      "source": "llvm::free_str::node105476948126464::rust::free_string_mir::bb1",
+      "destination": "llvm::free_str::node105476947968976::rust::free_string_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode14 {fun: free_str}\nLoadStmt: [Var15 <-- Var8]\t\nValVar ID: 15\n   %1 = load ptr, ptr %str.addr, align 8 ",
+      "destination_label": "CallICFGNode16 {fun: free_str}\n   call void @free(ptr noundef %1) #2 CallICFGNode: "
+    },
+    {
+      "source": "llvm::free_str::node105476948136496::rust::free_int_mir::bb1",
+      "destination": "llvm::free_str::node105476947713920::rust::free_int_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode13 {fun: free_str}\nBranchStmt: [Condition Var13]\nSuccessor 0 ICFGNode14   Successor 1 ICFGNode15   \nValVar ID: 14\n   br i1 %cmp, label %if.then, label %if.end ",
+      "destination_label": "IntraICFGNode15 {fun: free_str}\n   ret void "
+    },
+    {
+      "source": "llvm::free_str::node105476948136496::rust::free_string_mir::bb1",
+      "destination": "llvm::free_str::node105476947713920::rust::free_string_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode13 {fun: free_str}\nBranchStmt: [Condition Var13]\nSuccessor 0 ICFGNode14   Successor 1 ICFGNode15   \nValVar ID: 14\n   br i1 %cmp, label %if.then, label %if.end ",
+      "destination_label": "IntraICFGNode15 {fun: free_str}\n   ret void "
+    },
+    {
+      "source": "llvm::free_str::node105476948136496::rust::free_int_mir::bb1",
+      "destination": "llvm::free_str::node105476948126464::rust::free_int_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode13 {fun: free_str}\nBranchStmt: [Condition Var13]\nSuccessor 0 ICFGNode14   Successor 1 ICFGNode15   \nValVar ID: 14\n   br i1 %cmp, label %if.then, label %if.end ",
+      "destination_label": "IntraICFGNode14 {fun: free_str}\nLoadStmt: [Var15 <-- Var8]\t\nValVar ID: 15\n   %1 = load ptr, ptr %str.addr, align 8 "
+    },
+    {
+      "source": "llvm::free_str::node105476948136496::rust::free_string_mir::bb1",
+      "destination": "llvm::free_str::node105476948126464::rust::free_string_mir::bb1",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode13 {fun: free_str}\nBranchStmt: [Condition Var13]\nSuccessor 0 ICFGNode14   Successor 1 ICFGNode15   \nValVar ID: 14\n   br i1 %cmp, label %if.then, label %if.end ",
+      "destination_label": "IntraICFGNode14 {fun: free_str}\nLoadStmt: [Var15 <-- Var8]\t\nValVar ID: 15\n   %1 = load ptr, ptr %str.addr, align 8 "
+    }
+  ]
+}

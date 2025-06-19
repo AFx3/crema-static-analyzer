@@ -1,0 +1,10 @@
+[let o [obj]]
+
+[let observer println]
+
+[= o.__set__ /[k v] [begin
+	[if observer [observer k v]]
+	[set this k v]
+]]
+
+[= o.x 42] ; print x 42

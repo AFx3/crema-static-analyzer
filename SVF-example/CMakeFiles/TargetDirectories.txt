@@ -1,0 +1,9 @@
+/home/af/Documenti/a-phd/SVF-example/CMakeFiles/intrinsics_gen.dir
+/home/af/Documenti/a-phd/SVF-example/CMakeFiles/omp_gen.dir
+/home/af/Documenti/a-phd/SVF-example/CMakeFiles/acc_gen.dir
+/home/af/Documenti/a-phd/SVF-example/CMakeFiles/RISCVTargetParserTableGen.dir
+/home/af/Documenti/a-phd/SVF-example/CMakeFiles/edit_cache.dir
+/home/af/Documenti/a-phd/SVF-example/CMakeFiles/rebuild_cache.dir
+/home/af/Documenti/a-phd/SVF-example/src/CMakeFiles/svf-example.dir
+/home/af/Documenti/a-phd/SVF-example/src/CMakeFiles/edit_cache.dir
+/home/af/Documenti/a-phd/SVF-example/src/CMakeFiles/rebuild_cache.dir

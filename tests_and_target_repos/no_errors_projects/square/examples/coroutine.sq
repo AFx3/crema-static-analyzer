@@ -1,0 +1,26 @@
+[let gen /[yield]
+                [begin 
+                    [let i 0]
+                    [while [< i 4]
+                        [callcc /[cc] [yield [vec i cc]]]
+                        [+= i 1]]]]
+[let iter_k nil]
+[let next /[g]
+            [begin 
+                [if iter_k
+                    [iter_k]
+                    [begin
+                        [let value [callcc /[cc] [g cc]]]
+                        [if [== [typeof value] 'vec']
+                          [begin 
+                            [let i nil]
+                            [= [i iter_k] value]
+                            [println i]]
+                          nil]]]]]
+
+[next gen]
+[next gen]
+[next gen]
+[next gen]
+[next gen]
+[next gen]

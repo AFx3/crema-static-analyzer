@@ -1,0 +1,15 @@
+[package]
+name = "napkin-math-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+libc = "0.2.172"
+byte-unit = "3.0"
+num-format = "0.4.0"
+#byte-unit = "5.1.6"
+#num-format = "0.4.4"
+#clap = "4.5.38"
+#jemallocator = "0.5.4"
+
+[build-dependencies]

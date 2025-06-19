@@ -1,0 +1,1008 @@
+{
+  "ordered_nodes": [
+    [
+      "rust::main::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: target code/uafmul/main.rs:7:21: 7:33 (#0), scope: scope[0] }, kind: _1 = std::boxed::Box::<i32>::new(const 90_i32) -> [return: bb1, unwind continue] }",
+            "source_info": "target code/uafmul/main.rs:7:21: 7:33 (#0)",
+            "function_called": "std::boxed::Box::<i32>::new",
+            "arguments": [
+              {
+                "arg": "const 90_i32",
+                "is_mutable": null
+              }
+            ],
+            "return_place": "_1",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: target code/uafmul/main.rs:9:32: 9:56 (#0), scope: scope[1] }, kind: _3 = std::boxed::Box::<i32>::into_raw(move _1) -> [return: bb2, unwind continue] }",
+            "source_info": "target code/uafmul/main.rs:9:32: 9:56 (#0)",
+            "function_called": "std::boxed::Box::<i32>::into_raw",
+            "arguments": [
+              {
+                "arg": "Local(_1)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_3",
+            "return_target": "bb2",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [
+            {
+              "source_info": {
+                "span": "target code/uafmul/main.rs:9:32: 9:71 (#0)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_2, move _3 as *mut std::ffi::c_void (PtrToPtr)))",
+              "place": "Local(_2)",
+              "is_mutable": false,
+              "rvalue": "move _3 as *mut std::ffi::c_void (PtrToPtr)"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: target code/uafmul/main.rs:12:9: 12:39 (#0), scope: scope[2] }, kind: _4 = cast_and_free_pointer(copy _2) -> [return: bb3, unwind unreachable] }",
+            "source_info": "target code/uafmul/main.rs:12:9: 12:39 (#0)",
+            "function_called": "cast_and_free_pointer",
+            "arguments": [
+              {
+                "arg": "Local(_2)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_4",
+            "return_target": "bb3",
+            "unwind_target": "unreachable"
+          }
+        }
+      }
+    ],
+    [
+      "dummyCall::rust::main::bb2",
+      {
+        "node_type": "DummyCall",
+        "node_data": {
+          "dummy_node_name": "dummyCall",
+          "incoming_edge": "rust::main::bb2",
+          "outgoing_edge": "llvm::cast_and_free_pointer::node98855938674912",
+          "id": "9a131aa0762ebbf3",
+          "mir_var": "Local(_2)",
+          "llvm_var": "9",
+          "is_internal": false
+        }
+      }
+    ],
+    [
+      "llvm::cast_and_free_pointer::node98855938674912",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 98855938674912,
+          "node_type": false,
+          "info": "IntraICFGNode5 {fun: cast_and_free_pointer}\nAddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %ptr.addr = alloca ptr, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "cast_and_free_pointer",
+          "basic_block": 98855938509232,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 98855938588688,
+              "stmt_type": "AddrStmt",
+              "stmt_info": "AddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %ptr.addr = alloca ptr, align 8 ",
+              "edge_id": 5,
+              "pta_edge": true,
+              "lhs_var_id": 8,
+              "rhs_var_id": 9,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 98855938724160,
+              "destination": 98855938674912,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 98855938674912,
+              "destination": 98855938500912,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::cast_and_free_pointer::node98855938500912",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 98855938500912,
+          "node_type": false,
+          "info": "IntraICFGNode6 {fun: cast_and_free_pointer}\nAddrStmt: [Var11 <-- Var12]\t\nValVar ID: 11\n   %int_ptr = alloca ptr, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "cast_and_free_pointer",
+          "basic_block": 98855938509232,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 98855939081920,
+              "stmt_type": "AddrStmt",
+              "stmt_info": "AddrStmt: [Var11 <-- Var12]\t\nValVar ID: 11\n   %int_ptr = alloca ptr, align 8 ",
+              "edge_id": 6,
+              "pta_edge": true,
+              "lhs_var_id": 11,
+              "rhs_var_id": 12,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 98855938674912,
+              "destination": 98855938500912,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 98855938500912,
+              "destination": 98855939081520,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::cast_and_free_pointer::node98855939081520",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 98855939081520,
+          "node_type": false,
+          "info": "IntraICFGNode7 {fun: cast_and_free_pointer}\nStoreStmt: [Var8 <-- Var7]\t\nValVar ID: 13\n   store ptr %ptr, ptr %ptr.addr, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "cast_and_free_pointer",
+          "basic_block": 98855938509232,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 98855938583888,
+              "stmt_type": "StoreStmt",
+              "stmt_info": "StoreStmt: [Var8 <-- Var7]\t\nValVar ID: 13\n   store ptr %ptr, ptr %ptr.addr, align 8 ",
+              "edge_id": 7,
+              "pta_edge": true,
+              "lhs_var_id": 8,
+              "rhs_var_id": 7,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 98855938500912,
+              "destination": 98855939081520,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 98855939081520,
+              "destination": 98855938715904,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::cast_and_free_pointer::node98855938715904",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 98855938715904,
+          "node_type": false,
+          "info": "IntraICFGNode8 {fun: cast_and_free_pointer}\nLoadStmt: [Var14 <-- Var8]\t\nValVar ID: 14\n   %0 = load ptr, ptr %ptr.addr, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "cast_and_free_pointer",
+          "basic_block": 98855938509232,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 98855938956000,
+              "stmt_type": "LoadStmt",
+              "stmt_info": "LoadStmt: [Var14 <-- Var8]\t\nValVar ID: 14\n   %0 = load ptr, ptr %ptr.addr, align 8 ",
+              "edge_id": 8,
+              "pta_edge": true,
+              "lhs_var_id": 14,
+              "rhs_var_id": 8,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 98855939081520,
+              "destination": 98855938715904,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 98855938715904,
+              "destination": 98855938836048,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::cast_and_free_pointer::node98855938836048",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 98855938836048,
+          "node_type": false,
+          "info": "IntraICFGNode9 {fun: cast_and_free_pointer}\nCopyStmt: [Var15 <-- Var14]\t\nValVar ID: 15\n   %1 = bitcast ptr %0 to ptr ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "cast_and_free_pointer",
+          "basic_block": 98855938509232,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 98855938924208,
+              "stmt_type": "AssignStmt",
+              "stmt_info": "CopyStmt: [Var15 <-- Var14]\t\nValVar ID: 15\n   %1 = bitcast ptr %0 to ptr ",
+              "edge_id": 9,
+              "pta_edge": true,
+              "lhs_var_id": 15,
+              "rhs_var_id": 14,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 98855938715904,
+              "destination": 98855938836048,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 98855938836048,
+              "destination": 98855938829456,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::cast_and_free_pointer::node98855938829456",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 98855938829456,
+          "node_type": false,
+          "info": "IntraICFGNode10 {fun: cast_and_free_pointer}\nStoreStmt: [Var11 <-- Var15]\t\nValVar ID: 16\n   store ptr %1, ptr %int_ptr, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "cast_and_free_pointer",
+          "basic_block": 98855938509232,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 98855938934144,
+              "stmt_type": "StoreStmt",
+              "stmt_info": "StoreStmt: [Var11 <-- Var15]\t\nValVar ID: 16\n   store ptr %1, ptr %int_ptr, align 8 ",
+              "edge_id": 10,
+              "pta_edge": true,
+              "lhs_var_id": 11,
+              "rhs_var_id": 15,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 98855938836048,
+              "destination": 98855938829456,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 98855938829456,
+              "destination": 98855938808288,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::cast_and_free_pointer::node98855938808288",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 98855938808288,
+          "node_type": false,
+          "info": "IntraICFGNode11 {fun: cast_and_free_pointer}\nLoadStmt: [Var17 <-- Var11]\t\nValVar ID: 17\n   %2 = load ptr, ptr %int_ptr, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "cast_and_free_pointer",
+          "basic_block": 98855938509232,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 98855938719120,
+              "stmt_type": "LoadStmt",
+              "stmt_info": "LoadStmt: [Var17 <-- Var11]\t\nValVar ID: 17\n   %2 = load ptr, ptr %int_ptr, align 8 ",
+              "edge_id": 11,
+              "pta_edge": true,
+              "lhs_var_id": 17,
+              "rhs_var_id": 11,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 98855938829456,
+              "destination": 98855938808288,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 98855938808288,
+              "destination": 98855938685168,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::cast_and_free_pointer::node98855938685168",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 98855938685168,
+          "node_type": false,
+          "info": "IntraICFGNode12 {fun: cast_and_free_pointer}\nCopyStmt: [Var18 <-- Var17]\t\nValVar ID: 18\n   %3 = bitcast ptr %2 to ptr ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "cast_and_free_pointer",
+          "basic_block": 98855938509232,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 98855939117568,
+              "stmt_type": "AssignStmt",
+              "stmt_info": "CopyStmt: [Var18 <-- Var17]\t\nValVar ID: 18\n   %3 = bitcast ptr %2 to ptr ",
+              "edge_id": 12,
+              "pta_edge": true,
+              "lhs_var_id": 18,
+              "rhs_var_id": 17,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 98855938808288,
+              "destination": 98855938685168,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 98855938685168,
+              "destination": 98855939136864,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::cast_and_free_pointer::node98855939136864",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 98855939136864,
+          "node_type": true,
+          "info": "CallICFGNode13 {fun: cast_and_free_pointer}\n   call void @free(ptr noundef %3) #2 CallICFGNode: ",
+          "node_kind_string": "FunCallBlock",
+          "node_kind": 4,
+          "node_source_loc": "CallICFGNode: ",
+          "function_name": "cast_and_free_pointer",
+          "basic_block": 98855938509232,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [],
+          "incoming_edges": [
+            {
+              "source": 98855938685168,
+              "destination": 98855939136864,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 98855939136864,
+              "destination": 98855938680448,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::cast_and_free_pointer::node98855938680448",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 98855938680448,
+          "node_type": true,
+          "info": "RetICFGNode14 {fun: cast_and_free_pointer}\n   call void @free(ptr noundef %3) #2 RetICFGNode: ",
+          "node_kind_string": "FunRetBlock",
+          "node_kind": 5,
+          "node_source_loc": "RetICFGNode: ",
+          "function_name": "cast_and_free_pointer",
+          "basic_block": 98855938509232,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [],
+          "incoming_edges": [
+            {
+              "source": 98855939136864,
+              "destination": 98855938680448,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 98855938680448,
+              "destination": 98855938679952,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::cast_and_free_pointer::node98855938679952",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 98855938679952,
+          "node_type": false,
+          "info": "IntraICFGNode15 {fun: cast_and_free_pointer}\n   ret void ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "cast_and_free_pointer",
+          "basic_block": 98855938509232,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [],
+          "incoming_edges": [
+            {
+              "source": 98855938680448,
+              "destination": 98855938679952,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 98855938679952,
+              "destination": 98855938577120,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::cast_and_free_pointer::node98855938577120",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 98855938577120,
+          "node_type": false,
+          "info": "FunExitICFGNode2 {fun: cast_and_free_pointer}",
+          "node_kind_string": "FunExitBlock",
+          "node_kind": 3,
+          "node_source_loc": "function ret: ",
+          "function_name": "cast_and_free_pointer",
+          "basic_block": 98855938509232,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [],
+          "incoming_edges": [
+            {
+              "source": 98855938679952,
+              "destination": 98855938577120,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": []
+        }
+      }
+    ],
+    [
+      "dummyRet::rust::main::bb3",
+      {
+        "node_type": "DummyRet",
+        "node_data": {
+          "dummy_node_name": "dummyRet",
+          "incoming_edge": "llvm::cast_and_free_pointer::node98855938577120",
+          "outgoing_edge": "rust::main::bb3",
+          "id": "7e00d78975e00303",
+          "mir_var": null,
+          "llvm_var": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "is_internal": false
+        }
+      }
+    ],
+    [
+      "rust::main::bb3",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 3,
+          "statements": [
+            {
+              "source_info": {
+                "span": "target code/uafmul/main.rs:14:22: 14:41 (#0)",
+                "scope": "scope[2]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_5, copy _2 as *mut i32 (PtrToPtr)))",
+              "place": "Local(_5)",
+              "is_mutable": false,
+              "rvalue": "copy _2 as *mut i32 (PtrToPtr)"
+            },
+            {
+              "source_info": {
+                "span": "target code/uafmul/main.rs:15:17: 15:45 (#0)",
+                "scope": "scope[3]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_8, const main::promoted[0]))",
+              "place": "Local(_8)",
+              "is_mutable": false,
+              "rvalue": "const main::promoted[0]"
+            },
+            {
+              "source_info": {
+                "span": "target code/uafmul/main.rs:15:47: 15:55 (#5)",
+                "scope": "scope[3]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_12, &(*_5)))",
+              "place": "Local(_12)",
+              "is_mutable": false,
+              "rvalue": "&(*_5)"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: target code/uafmul/main.rs:15:42: 15:44 (#5), scope: scope[3] }, kind: _11 = core::fmt::rt::Argument::<'_>::new_display::<i32>(copy _12) -> [return: bb4, unwind continue] }",
+            "source_info": "target code/uafmul/main.rs:15:42: 15:44 (#5)",
+            "function_called": "core::fmt::rt::Argument::<'_>::new_display::<i32>",
+            "arguments": [
+              {
+                "arg": "Local(_12)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_11",
+            "return_target": "bb4",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb4",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 4,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:28: 143:61 (#5)",
+                "scope": "scope[3]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_10, [move _11]))",
+              "place": "Local(_10)",
+              "is_mutable": false,
+              "rvalue": "[move _11]"
+            },
+            {
+              "source_info": {
+                "span": "/home/af/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:28: 143:61 (#5)",
+                "scope": "scope[3]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_9, &_10))",
+              "place": "Local(_9)",
+              "is_mutable": false,
+              "rvalue": "&_10"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:28: 143:61 (#5), scope: scope[3] }, kind: _7 = std::fmt::Arguments::<'_>::new_v1::<2, 1>(copy _8, copy _9) -> [return: bb5, unwind continue] }",
+            "source_info": "/home/af/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:28: 143:61 (#5)",
+            "function_called": "std::fmt::Arguments::<'_>::new_v1::<2, 1>",
+            "arguments": [
+              {
+                "arg": "Local(_8)",
+                "is_mutable": false
+              },
+              {
+                "arg": "Local(_9)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_7",
+            "return_target": "bb5",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb5",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 5,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:9: 143:62 (#4), scope: scope[3] }, kind: _6 = std::io::_print(move _7) -> [return: bb6, unwind continue] }",
+            "source_info": "/home/af/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:9: 143:62 (#4)",
+            "function_called": "std::io::_print",
+            "arguments": [
+              {
+                "arg": "Local(_7) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_6",
+            "return_target": "bb6",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb6",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 6,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: target code/uafmul/main.rs:22:17: 22:29 (#0), scope: scope[2] }, kind: _13 = std::boxed::Box::<i32>::new(const 90_i32) -> [return: bb7, unwind continue] }",
+            "source_info": "target code/uafmul/main.rs:22:17: 22:29 (#0)",
+            "function_called": "std::boxed::Box::<i32>::new",
+            "arguments": [
+              {
+                "arg": "const 90_i32",
+                "is_mutable": null
+              }
+            ],
+            "return_place": "_13",
+            "return_target": "bb7",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb7",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 7,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: target code/uafmul/main.rs:24:30: 24:50 (#0), scope: scope[4] }, kind: _15 = std::boxed::Box::<i32>::into_raw(move _13) -> [return: bb8, unwind continue] }",
+            "source_info": "target code/uafmul/main.rs:24:30: 24:50 (#0)",
+            "function_called": "std::boxed::Box::<i32>::into_raw",
+            "arguments": [
+              {
+                "arg": "Local(_13)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_15",
+            "return_target": "bb8",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb8",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 8,
+          "statements": [
+            {
+              "source_info": {
+                "span": "target code/uafmul/main.rs:24:30: 24:65 (#0)",
+                "scope": "scope[4]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_14, move _15 as *mut std::ffi::c_void (PtrToPtr)))",
+              "place": "Local(_14)",
+              "is_mutable": false,
+              "rvalue": "move _15 as *mut std::ffi::c_void (PtrToPtr)"
+            }
+          ],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: target code/uafmul/main.rs:48:2: 48:2 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "target code/uafmul/main.rs:48:2: 48:2 (#0)"
+          }
+        }
+      }
+    ]
+  ],
+  "icfg_edges": [
+    {
+      "source": "rust::main::bb0",
+      "destination": "rust::main::bb1",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::main::bb1",
+      "destination": "rust::main::bb2",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb1",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::main::bb2",
+      "destination": "dummyCall::rust::main::bb2",
+      "label": "FFI Call",
+      "source_label": "Mir bb2",
+      "destination_label": "dummyCall (id: 9a131aa0762ebbf3)"
+    },
+    {
+      "source": "dummyCall::rust::main::bb2",
+      "destination": "llvm::cast_and_free_pointer::node98855938674912",
+      "label": "dummyCall->LLVM Entry",
+      "source_label": "dummyCall (id: 9a131aa0762ebbf3)",
+      "destination_label": "IntraICFGNode5 {fun: cast_and_free_pointer}\nAddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %ptr.addr = alloca ptr, align 8 "
+    },
+    {
+      "source": "llvm::cast_and_free_pointer::node98855938577120",
+      "destination": "dummyRet::rust::main::bb3",
+      "label": "LLVM Exit->dummyRet",
+      "source_label": "FunExitICFGNode2 {fun: cast_and_free_pointer}",
+      "destination_label": "dummyRet (id: 7e00d78975e00303)"
+    },
+    {
+      "source": "dummyRet::rust::main::bb3",
+      "destination": "rust::main::bb3",
+      "label": "dummyRet->MIR Return",
+      "source_label": "dummyRet (id: 7e00d78975e00303)",
+      "destination_label": "Mir bb3"
+    },
+    {
+      "source": "rust::main::bb3",
+      "destination": "rust::main::bb4",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb3",
+      "destination_label": "Mir bb4"
+    },
+    {
+      "source": "rust::main::bb4",
+      "destination": "rust::main::bb5",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb4",
+      "destination_label": "Mir bb5"
+    },
+    {
+      "source": "rust::main::bb5",
+      "destination": "rust::main::bb6",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb5",
+      "destination_label": "Mir bb6"
+    },
+    {
+      "source": "rust::main::bb6",
+      "destination": "rust::main::bb7",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb6",
+      "destination_label": "Mir bb7"
+    },
+    {
+      "source": "rust::main::bb7",
+      "destination": "rust::main::bb8",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb7",
+      "destination_label": "Mir bb8"
+    },
+    {
+      "source": "llvm::cast_and_free_pointer::node98855938500912",
+      "destination": "llvm::cast_and_free_pointer::node98855939081520",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode6 {fun: cast_and_free_pointer}\nAddrStmt: [Var11 <-- Var12]\t\nValVar ID: 11\n   %int_ptr = alloca ptr, align 8 ",
+      "destination_label": "IntraICFGNode7 {fun: cast_and_free_pointer}\nStoreStmt: [Var8 <-- Var7]\t\nValVar ID: 13\n   store ptr %ptr, ptr %ptr.addr, align 8 "
+    },
+    {
+      "source": "llvm::cast_and_free_pointer::node98855938674912",
+      "destination": "llvm::cast_and_free_pointer::node98855938500912",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode5 {fun: cast_and_free_pointer}\nAddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %ptr.addr = alloca ptr, align 8 ",
+      "destination_label": "IntraICFGNode6 {fun: cast_and_free_pointer}\nAddrStmt: [Var11 <-- Var12]\t\nValVar ID: 11\n   %int_ptr = alloca ptr, align 8 "
+    },
+    {
+      "source": "llvm::cast_and_free_pointer::node98855938679952",
+      "destination": "llvm::cast_and_free_pointer::node98855938577120",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode15 {fun: cast_and_free_pointer}\n   ret void ",
+      "destination_label": "FunExitICFGNode2 {fun: cast_and_free_pointer}"
+    },
+    {
+      "source": "llvm::cast_and_free_pointer::node98855938680448",
+      "destination": "llvm::cast_and_free_pointer::node98855938679952",
+      "label": "LLVM",
+      "source_label": "RetICFGNode14 {fun: cast_and_free_pointer}\n   call void @free(ptr noundef %3) #2 RetICFGNode: ",
+      "destination_label": "IntraICFGNode15 {fun: cast_and_free_pointer}\n   ret void "
+    },
+    {
+      "source": "llvm::cast_and_free_pointer::node98855938685168",
+      "destination": "llvm::cast_and_free_pointer::node98855939136864",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode12 {fun: cast_and_free_pointer}\nCopyStmt: [Var18 <-- Var17]\t\nValVar ID: 18\n   %3 = bitcast ptr %2 to ptr ",
+      "destination_label": "CallICFGNode13 {fun: cast_and_free_pointer}\n   call void @free(ptr noundef %3) #2 CallICFGNode: "
+    },
+    {
+      "source": "llvm::cast_and_free_pointer::node98855938715904",
+      "destination": "llvm::cast_and_free_pointer::node98855938836048",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode8 {fun: cast_and_free_pointer}\nLoadStmt: [Var14 <-- Var8]\t\nValVar ID: 14\n   %0 = load ptr, ptr %ptr.addr, align 8 ",
+      "destination_label": "IntraICFGNode9 {fun: cast_and_free_pointer}\nCopyStmt: [Var15 <-- Var14]\t\nValVar ID: 15\n   %1 = bitcast ptr %0 to ptr "
+    },
+    {
+      "source": "llvm::cast_and_free_pointer::node98855938808288",
+      "destination": "llvm::cast_and_free_pointer::node98855938685168",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode11 {fun: cast_and_free_pointer}\nLoadStmt: [Var17 <-- Var11]\t\nValVar ID: 17\n   %2 = load ptr, ptr %int_ptr, align 8 ",
+      "destination_label": "IntraICFGNode12 {fun: cast_and_free_pointer}\nCopyStmt: [Var18 <-- Var17]\t\nValVar ID: 18\n   %3 = bitcast ptr %2 to ptr "
+    },
+    {
+      "source": "llvm::cast_and_free_pointer::node98855938829456",
+      "destination": "llvm::cast_and_free_pointer::node98855938808288",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode10 {fun: cast_and_free_pointer}\nStoreStmt: [Var11 <-- Var15]\t\nValVar ID: 16\n   store ptr %1, ptr %int_ptr, align 8 ",
+      "destination_label": "IntraICFGNode11 {fun: cast_and_free_pointer}\nLoadStmt: [Var17 <-- Var11]\t\nValVar ID: 17\n   %2 = load ptr, ptr %int_ptr, align 8 "
+    },
+    {
+      "source": "llvm::cast_and_free_pointer::node98855938836048",
+      "destination": "llvm::cast_and_free_pointer::node98855938829456",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode9 {fun: cast_and_free_pointer}\nCopyStmt: [Var15 <-- Var14]\t\nValVar ID: 15\n   %1 = bitcast ptr %0 to ptr ",
+      "destination_label": "IntraICFGNode10 {fun: cast_and_free_pointer}\nStoreStmt: [Var11 <-- Var15]\t\nValVar ID: 16\n   store ptr %1, ptr %int_ptr, align 8 "
+    },
+    {
+      "source": "llvm::cast_and_free_pointer::node98855939081520",
+      "destination": "llvm::cast_and_free_pointer::node98855938715904",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode7 {fun: cast_and_free_pointer}\nStoreStmt: [Var8 <-- Var7]\t\nValVar ID: 13\n   store ptr %ptr, ptr %ptr.addr, align 8 ",
+      "destination_label": "IntraICFGNode8 {fun: cast_and_free_pointer}\nLoadStmt: [Var14 <-- Var8]\t\nValVar ID: 14\n   %0 = load ptr, ptr %ptr.addr, align 8 "
+    },
+    {
+      "source": "llvm::cast_and_free_pointer::node98855939136864",
+      "destination": "llvm::cast_and_free_pointer::node98855938680448",
+      "label": "LLVM",
+      "source_label": "CallICFGNode13 {fun: cast_and_free_pointer}\n   call void @free(ptr noundef %3) #2 CallICFGNode: ",
+      "destination_label": "RetICFGNode14 {fun: cast_and_free_pointer}\n   call void @free(ptr noundef %3) #2 RetICFGNode: "
+    }
+  ]
+}

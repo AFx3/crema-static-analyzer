@@ -1,0 +1,448 @@
+//===- svf-ex.cpp -- A driver example of SVF-------------------------------------//
+//
+//                     SVF: Static Value-Flow Analysis
+//
+// Copyright (C) <2013->  <Yulei Sui>
+//
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+//
+//===-----------------------------------------------------------------------===//
+
+/*
+ // A driver program of SVF including usages of SVF APIs
+ //
+ // Author: Yulei Sui,
+ */
+
+#include "SVF-LLVM/LLVMUtil.h"
+#include "Graphs/SVFG.h"
+#include "WPA/Andersen.h"
+#include "SVF-LLVM/SVFIRBuilder.h"
+#include "Util/Options.h"
+
+#include "Graphs/PTACallGraph.h"
+#include "Graphs/VFG.h"
+
+
+
+//#include "SVFFileSystem.h"  // For ICFGWriter and SVFIRWriter
+//#include "SVFIR.h"
+
+
+#include "/home/af/Documenti/a-phd/SVF/svf/include/SVFIR/SVFFileSystem.h"
+#include "/home/af/Documenti/a-phd/SVF/svf/include/SVFIR/SVFIR.h"
+
+
+using namespace llvm;
+using namespace std;
+using namespace SVF;
+
+/*
+ * Functiom to query alias results of two LLVM values
+ * Determines whether two LLVM Value objects (v1 and v2) can alias
+ * INPUT: 
+ *      PointerAnalysis* pta: pointer analysis object, e.g. Andersen
+ *      Value* v1, Value* v2: LLVM Value objects representing the two entities whose aliasing relationship is to be checked
+ * RET:
+ *      SVF::AliasResult: the result of the alias query 
+ * invoke: SVF::AliasResult result = aliasQuery(pta, v1, v2);    
+ */
+SVF::AliasResult aliasQuery(PointerAnalysis* pta, Value* v1, Value* v2)
+{
+    // LLVMModuleSet::getLLVMModuleSet(): retrieves the singleton instance of the LLVMModuleSet class, which provides global access to all LLVM modules currently being analyzed
+    /* getSVFValue convert various LLVM IR constructs (like Function, BasicBlock, Instruction, Argument, Constant, etc.) into corresponding SVF representations (SVFValue, SVFFunction, SVFBasicBlock, SVFInstruction, SVFArgument, SVFConstant, etc.)
+    */
+    SVFValue* val1 = LLVMModuleSet::getLLVMModuleSet()->getSVFValue(v1);
+    SVFValue* val2 = LLVMModuleSet::getLLVMModuleSet()->getSVFValue(v2);
+    //val1 and val2 hold SVFValue objects corresponding to v1 and v2
+
+    return pta->alias(val1,val2); // alias eturns alias results based on our points-to/alias analysis
+    // eturn NoAlias if any PTA gives NoAlias result, MayAlias if any PTA gives MayAlias result
+}
+
+/*!
+ * Function to print points-to set of an LLVM value
+ * Input:
+ *      pta: a pointer to the PointerAnalysis object
+ *      val: a pointer to an LLVM Value object, target to be analyzed
+ * Output: 
+ *      a string that contains the points-to information for the given value
+ * 
+ */
+std::string printPts(PointerAnalysis* pta, Value* val)
+{
+    std::string str; // string str to store the the poiny-to set result
+    // raw_string_ostream: helper class in LLVM writing output to a string buffer
+    // rawstr is an output stream that writes to the str variable, used to accumulate the results in str
+    raw_string_ostream rawstr(str);
+
+    // retrieves the SVFValue representation of the given LLVM Value (val)
+    SVFValue* svfval = LLVMModuleSet::getLLVMModuleSet()->getSVFValue(val);
+
+    // pta->getPAG() retrieves the Program Assignment Graph (PAG) from the PointerAnalysis object.
+    // getValueNode(svfval) retrieves the corresponding NodeID in the PAG for the given SVFValue
+    // The NodeID represents the node in the PAG that corresponds to the svfval
+    NodeID pNodeId = pta->getPAG()->getValueNode(svfval);
+
+    // pta->getPts(pNodeId) retrieves the points-to set for the node identified by pNodeId
+    // tore in pts the results, which is a reference to a PointsTo container
+    const PointsTo& pts = pta->getPts(pNodeId);
+
+    // iterate over each element (each pointer) in the points-to set (pts)
+    // ii is the iterator pointing to the current element
+    // ie is the end iterator of the points-to set (pts)
+    for (PointsTo::iterator ii = pts.begin(), ie = pts.end();
+            ii != ie; ii++)
+    {
+        rawstr << " " << *ii << " "; // write the pointer to the rawstr stream dereferencing the iterator *ii to get the actual value of the point-to object, and it is appended to rawstr
+        // pta->getPAG()->getGNode(*ii) to retrieve the corresponding PAGNode for the pointer *ii in the points-to set
+        PAGNode* targetObj = pta->getPAG()->getGNode(*ii);
+        // check if the PAGNode (i.e., the memory location) actually has an associated value (whether the node has a value that can be printed)
+        if(targetObj->hasValue())
+        {
+            // So if the node has a value, it retrieves that value using targetObj->getValue() and converts it to a string using toString()
+            // appending this string to rawstr in the format (value) and adds a tab (\t) for formatting
+            rawstr << "(" << targetObj->getValue()->toString() << ")\t ";
+        }
+    }
+    // returns the string accumulated in rawstr,
+    return rawstr.str();
+
+}
+
+
+/*!
+ * FUNCTION to query/collect all successor nodes from a ICFGNode (iNode) along control-flow graph (ICFG)
+ visita per istruzioni
+
+void traverseOnICFG(ICFG* icfg, const Instruction* inst)
+{
+    const ICFGNode* iNode = LLVMModuleSet::getLLVMModuleSet()->getICFGNode(inst);
+
+    FIFOWorkList<const ICFGNode*> worklist;
+    Set<const ICFGNode*> visited;
+    worklist.push(iNode);
+
+    /// Traverse along VFG
+    while (!worklist.empty())
+    {
+        const ICFGNode* iNode = worklist.pop();
+        for (ICFGNode::const_iterator it = iNode->OutEdgeBegin(), eit =
+                    iNode->OutEdgeEnd(); it != eit; ++it)
+        {
+            ICFGEdge* edge = *it;
+            ICFGNode* succNode = edge->getDstNode();
+            if (visited.find(succNode) == visited.end())
+            {
+                visited.insert(succNode);
+                worklist.push(succNode);
+            }
+        }
+    }
+}
+
+ */
+// okkkk ma senza printare nulla, visita per nodi
+
+void traverseOnICFG(ICFG* icfg, const ICFGNode* startNode)
+{
+    // Create a worklist to perform a breadth-first search (BFS)
+    FIFOWorkList<const ICFGNode*> worklist;
+    Set<const ICFGNode*> visited;
+    worklist.push(startNode);
+
+    // Traverse the graph
+    while (!worklist.empty())
+    {
+        const ICFGNode* iNode = worklist.pop();
+        
+        // Visit each outgoing edge of the node
+        for (ICFGNode::const_iterator it = iNode->OutEdgeBegin(), eit = iNode->OutEdgeEnd(); it != eit; ++it)
+        {
+            ICFGEdge* edge = *it;
+            ICFGNode* succNode = edge->getDstNode();
+
+            // If the successor node hasn't been visited, add it to the worklist
+            if (visited.find(succNode) == visited.end())
+            {
+                visited.insert(succNode);
+                worklist.push(succNode);
+            }
+        }
+    }
+}
+
+
+void traversePrintOnICFG(SVF::ICFG* icfg, const SVF::ICFGNode* startNode)
+{
+    // Create a worklist to perform a breadth-first search (BFS)
+    FIFOWorkList<const SVF::ICFGNode*> worklist;
+    Set<const SVF::ICFGNode*> visited;
+    worklist.push(startNode);
+
+    // Traverse the graph
+    while (!worklist.empty())
+    {
+        const SVF::ICFGNode* iNode = worklist.pop();
+
+        // Output information about the current node
+        if (iNode)
+        {
+            // Print basic node information
+            errs() << "Processing Node: " << iNode << "\n";
+            errs() << "Node Info: " << iNode->toString() << "\n"; // Uses the `toString` method
+
+            // Print the associated function, if available
+            const SVF::SVFFunction* func = iNode->getFun();
+            if (func)
+            {
+                errs() << "Function associated with node: " << func << "\n";
+            }
+            else
+            {
+                errs() << "No function associated with this node.\n";
+            }
+
+            // Print the associated basic block, if available
+            const SVF::SVFBasicBlock* basicBlock = iNode->getBB();
+            if (basicBlock)
+            {
+                errs() << "Basic Block: " << basicBlock << "\n";
+            }
+            else
+            {
+                errs() << "No basic block information available.\n";
+            }
+
+            // Print associated VFGNodes
+            const auto& vfgNodes = iNode->getVFGNodes();
+            if (!vfgNodes.empty())
+            {
+                errs() << "Associated VFGNodes:\n";
+                for (const auto* vfgNode : vfgNodes)
+                {
+                    errs() << "  - " << vfgNode << "\n";
+                }
+            }
+
+            // Print associated SVF statements
+            const auto& svfStmts = iNode->getSVFStmts();
+            if (!svfStmts.empty())
+            {
+                errs() << "Associated SVF Statements:\n";
+                for (const auto* stmt : svfStmts)
+                {
+                    errs() << "  - " << stmt << "\n";
+                }
+            }
+        }
+
+        // Visit each outgoing edge of the node
+        for (SVF::ICFGNode::const_iterator it = iNode->OutEdgeBegin(), eit = iNode->OutEdgeEnd(); it != eit; ++it)
+        {
+            SVF::ICFGEdge* edge = *it;
+            SVF::ICFGNode* succNode = edge->getDstNode();
+
+            // If the successor node hasn't been visited, add it to the worklist
+            if (visited.find(succNode) == visited.end())
+            {
+                visited.insert(succNode);
+                worklist.push(succNode);
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+/*!
+ * An example to query/collect all the uses of a definition of a value along value-flow graph (VFG)
+ */
+void traverseOnVFG(const SVFG* vfg, Value* val)
+{
+    SVFIR* pag = SVFIR::getPAG();
+    SVFValue* svfval = LLVMModuleSet::getLLVMModuleSet()->getSVFValue(val);
+
+    PAGNode* pNode = pag->getGNode(pag->getValueNode(svfval));
+    const VFGNode* vNode = vfg->getDefSVFGNode(pNode);
+    FIFOWorkList<const VFGNode*> worklist;
+    Set<const VFGNode*> visited;
+    worklist.push(vNode);
+
+    /// Traverse along VFG
+    while (!worklist.empty())
+    {
+        const VFGNode* vNode = worklist.pop();
+        for (VFGNode::const_iterator it = vNode->OutEdgeBegin(), eit =
+                    vNode->OutEdgeEnd(); it != eit; ++it)
+        {
+            VFGEdge* edge = *it;
+            VFGNode* succNode = edge->getDstNode();
+            if (visited.find(succNode) == visited.end())
+            {
+                visited.insert(succNode);
+                worklist.push(succNode);
+            }
+        }
+    }
+
+    /// Collect all LLVM Values
+    for(Set<const VFGNode*>::const_iterator it = visited.begin(), eit = visited.end(); it!=eit; ++it)
+    {
+        const VFGNode* node = *it;
+        /// can only query VFGNode involving top-level pointers (starting with % or @ in LLVM IR)
+        /// PAGNode* pNode = vfg->getLHSTopLevPtr(node);
+        /// Value* val = pNode->getValue();
+    }
+}
+
+int main(int argc, char ** argv)
+{
+
+
+    std::vector<std::string> moduleNameVec;
+    moduleNameVec = OptionBase::parseOptions(
+            argc, argv, "Whole Program Points-to Analysis", "[options] <input-bitcode...>"
+    );
+
+    if (Options::WriteAnder() == "ir_annotator")
+    {
+        LLVMModuleSet::preProcessBCs(moduleNameVec);
+    }
+
+    SVFModule* svfModule = LLVMModuleSet::buildSVFModule(moduleNameVec);
+
+    /// Build Program Assignment Graph (SVFIR)
+    SVFIRBuilder builder(svfModule);
+    SVFIR* pag = builder.build();
+
+    /// Create Andersen's pointer analysis
+    Andersen* ander = AndersenWaveDiff::createAndersenWaveDiff(pag);
+
+    /// Query aliases
+    /// aliasQuery(ander,value1,value2);
+
+    /// Print points-to information
+    /// printPts(ander, value1);
+
+    /// Call Graph
+    PTACallGraph* callgraph = ander->getCallGraph();
+
+
+    /// ICFG
+    ICFG* icfg = pag->getICFG();
+
+
+// want see the icfg
+// so get first instructiom 
+const SVFFunction* mainFunc = svfModule->getSVFModule()->getSVFFunction("main");
+if (!mainFunc)
+{
+    errs() << "Function 'main' not found!\n";
+    return 1;
+}
+
+const ICFGNode* firstInstNode = nullptr;
+for (const SVF::SVFBasicBlock* bb : mainFunc->getBasicBlockList())
+{
+    // Get the list of ICFGNodes associated with the basic block
+    const std::vector<const ICFGNode*>& icfgNodes = bb->getICFGNodeList();
+
+    if (!icfgNodes.empty())
+    {
+        firstInstNode = icfgNodes.front();  // Take the first ICFGNode, or any other logic if needed
+        break;
+    }
+}
+
+if (firstInstNode)
+{
+    // Traverse and print the ICFG starting from the first ICFGNode
+    traverseOnICFG(icfg, firstInstNode);
+    errs() << "ICFG Traversal Complete.\n";
+}
+else
+{
+    errs() << "No instructions found in 'main'.\n";
+}
+
+
+// Print json
+// Create an ICFGWriter instance for the ICFG object
+
+//ICFGWriter icfgWriter(icfg);
+
+// Generate the JSON representation of the ICFG
+//auto jsonICFG = icfgWriter.generateJson();
+
+// Output the ICFG as JSON to a file
+SVFIRWriter::writeJsonToPath(pag, "output_icfg.json");
+
+
+
+
+
+
+
+
+
+    /// Value-Flow Graph (VFG)
+    VFG* vfg = new VFG(callgraph);
+
+    /// Sparse value-flow graph (SVFG)
+    SVFGBuilder svfBuilder;
+    SVFG* svfg = svfBuilder.buildFullSVFG(ander);
+
+    /// Collect uses of an LLVM Value
+    /// traverseOnVFG(svfg, value);
+
+
+    /// Collect all successor nodes on ICFG
+    traverseOnICFG(icfg, firstInstNode);
+
+    traversePrintOnICFG(icfg, firstInstNode);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // clean up memory
+    delete vfg;
+    AndersenWaveDiff::releaseAndersenWaveDiff();
+    SVFIR::releaseSVFIR();
+
+    LLVMModuleSet::getLLVMModuleSet()->dumpModulesToFile(".svf.bc");
+    SVF::LLVMModuleSet::releaseLLVMModuleSet();
+
+    llvm::llvm_shutdown();
+
+
+
+    return 0;
+}
+

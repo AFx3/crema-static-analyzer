@@ -1,0 +1,42 @@
+[package]
+name = "rusant"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+#gtk = {package = "gtk4",  version = "0.5.1"}
+#gst = {package = "gstreamer", version = "0.19.2"}
+#gst_base = {package = "gstreamer-base", version = "0.19.2"}
+#gst_video = {package = "gstreamer-video", version = "0.19.2"}
+#gst_audio = {package = "gstreamer-app", version = "0.19.2"} 
+#gst_app = {package = "gstreamer-audio", version = "0.19.2"}
+#gstgtk4 = {package = "gst-plugin-gtk4", version = "0.9.1"}
+#gstreamer-sys = "0.6.1"
+#config = "0.13.1"
+#glib = "0.16.3"
+#byte-slice-cast = "1"
+#gobject-sys = "0.16.3"
+#log = "0.4"
+#pretty_env_logger = "0.4"
+#libadwaita = {package = "libadwaita", version = "0.2.1", features = ["v1_2"]}
+#rss = "*"
+#curio = "*"
+#gio = "0.16.7"
+#gtk-macros = "0.3.0"
+once_cell = "1.17.0"
+regex = "1"
+#webkit2gtk5 = "0.2.0"
+#derive_more = "0.99.17"
+anyhow = "1.0.68"
+#serde_json = "1.0.91"
+#serde = "1.0.152"
+#saltpanelo-sys = { path = "saltpanelo-sys" }
+open = "3.2.0"
+
+[build-dependencies]
+#glib-build-tools = "0.16.3"
+#libadwaita = {package = "libadwaita", version = "0.2.1", features = ["v1_2"]}
+cc = "1.2.18"
+
+
+
