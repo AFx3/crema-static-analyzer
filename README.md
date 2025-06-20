@@ -1,5 +1,42 @@
 <img src="./crema/img/crema_logo6.png" alt="logo"/>
 
+# RUN WITH DOCKER
+### Step 0: install Docker
+```bash
+https://docs.docker.com/get-started/get-docker/
+```
+### Step 1: clone this repo and navigate to *crema-static-analyzer* folder
+```bash
+git clone https://github.com/AFx3/crema-static-analyzercd c
+
+cd crema-static-analyzer
+```
+### Step 2: build the Docker image and run the container
+```bash
+docker build --tag 'crema' .
+
+docker run -it crema bash
+```
+### Step 3: enter in crema folder and start to analyze cargo projects:
+```bash
+cd crema
+```
+
+## How analyze project / prototype notes :
+Crema is in very early development phase, so note that currenty the cargo target projects requires a main.rs entry point
+
+* cargo project as target
+
+```bash
+cargo run /<path_to_cargo_target_project>
+``` 
+
+* specify a custum entry point:
+```bash
+cargo run /<path_to_cargo_target_project> -f "<your::target_function::bb0>"
+``` 
+
+
 # REQUIREMENTS
 crema, cargo_project_test, svf, svf-driver, query_github_rust_prj
 
