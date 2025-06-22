@@ -1,4 +1,4 @@
-# Vulnerabilities found
+# Memory errors discovered (double checked with Valgrind)
 
 ## 1
 ### name: noGenerator
@@ -333,7 +333,7 @@ open_url returned: ""
 ### name: napkin-math
 ### link: https://github.com/sirupsen/napkin-math/
 ### type: 1 memory leak
-### note: syscall_getrusage never wraps back the raw pointer after Box::into_raw()
+### note: syscall_getrusage never wraps back the raw pointer after Box::into_raw(). Since the repo uses jemalloc, modified with the global allocator to be analyzed with Valgrind
 ### valgrind output:
 ```bash
 ==51438== Memcheck, a memory error detector

@@ -1,5 +1,5 @@
 # Instructions for replicating results reported Table 3 and Table 4 of the paper
-### scripts:
+### Scripts:
 * tests_and_target_repos/cargo_build_all_dirs.sh 
 * run_tests_literals.sh 
 * run_tests_mix_only_rust.sh
@@ -8,38 +8,50 @@
 ## Requirements
 Follow the instruction in the README.md file to build crema, svf-driver and SVF or run experiments with docker
 
-## RUN WITH DOCKER
-### Step 0: install Docker
+# Run with Docker
+### Step 0: install Docker (see online Docker installation guide)
 ```bash
-https://docs.docker.com/get-started/get-docker/
+open https://docs.docker.com/get-started/get-docker/
 ```
-### Step 1: clone this repo and navigate to *crema-static-analyzer* folder
+### Step 1: clone this repository and navigate to *crema-static-analyzer* folder
 ```bash
-git clone https://github.com/AFx3/crema-static-analyzercd c
-
+git clone https://github.com/AFx3/crema-static-analyzer
+```
+```bash
 cd crema-static-analyzer
 ```
 ### Step 2: build the Docker image and run the container
 ```bash
 docker build --tag 'crema' .
-
+```
+```bash
 docker run -it crema bash
 ```
 
 ----------------------------------------------------------------------------------------------------------
 
-### Step 0: Build test and GitHub target repositories (FROM crema-rust-static-analyzer main folder)
+### Step 0: build test and GitHub target repositories (FROM crema-rust-static-analyzer main folder)
+
+* Compile (build) test and target cargo projects
+* From the current directory (```bash crema-static-analyzer```)
+```bash
+cd tests_and_target_repos
 
 ```
-From the this directory (crema)
 ```bash
 chmod +x ./tests_and_target_repos/cargo_build_all_dirs.sh
+```
+```bash
 ./tests_and_target_repos/cargo_build_all_dirs.sh 
+```
+* Go back to main project directory
+```bash
+cd ..
 ```
 
 ### TEST Cargo projects (Paper Table 3)
 
-### Step 1: run crema on only Rust code concerning **doube-frees**, **memory-leaks**, **use-after-frees** on literals
+### Step 1: run crema on pure Rust code abses concerning **doube-frees**, **memory-leaks**, **use-after-frees** about literals
 ```bash
 cd crema
 ```
@@ -268,7 +280,7 @@ Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-c
 
 
 
-### Step 2: run crema on only Rust code including different memory errors and error-free
+### Step 2: run crema on pure Rust code bases including different memory errors and no-errors
 ```bash
 chmod +x run_tests_mix_only_rust.sh   
 ./run_tests_mix_only_rust.sh
@@ -323,7 +335,7 @@ Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-
 ☢ Never Free Issues ☢: {"{Local(_2)}": 1}
 
 ```
-### Step 3: run crema on Rust code including FFI with different memory errors and error-free
+### Step 3: run crema on Rust code including FFI with different memory errors and no-errors
 ```bash
 chmod +x run_tests_rust_FFI.sh
 ./run_tests_rust_FFI.sh

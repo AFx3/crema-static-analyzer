@@ -43,7 +43,7 @@ cmake . && make
 ```
 ## If -lSvfLLVM not found :
 ```
-cmake -DSVF_DIR=/home/af/Documenti/a-phd/SVF/Release-build .
+cmake -DSVF_DIR=<path to this>/Release-build .
 cmake . && make
 ```
 
