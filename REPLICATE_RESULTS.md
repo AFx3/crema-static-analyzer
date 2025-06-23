@@ -49,7 +49,7 @@ chmod +x ./tests_and_target_repos/cargo_build_all_dirs.sh
 cd ..
 ```
 
-### TEST Cargo projects (Paper Table 3)
+### TEST Cargo projects (Table 3 of the paper)
 
 ### Step 1: run crema on pure Rust code abses concerning **doube-frees**, **memory-leaks**, **use-after-frees** about literals
 ```bash
@@ -473,7 +473,7 @@ Possible UNDEFINED BEHAVIOUR!
 
 -----------------------------------------------------------------------------------------------
 
-### TEST GitHub projects (Paper Table 4)
+### TEST GitHub projects (Table 4 of the paper)
 ### Step 4: run crema on GitHub repositories
 ```bash
 chmod +x run_github_target_repositories.sh

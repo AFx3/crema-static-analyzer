@@ -58,6 +58,7 @@ The working directory must be
 ├── README.md                   (this file)
 ├── REPLICATE_RESULTS.md        (instructions for replicating the results)
 ├── MEMORY_ERRORS_DISCOVERED    (memory errors discovered, including Valgrind outputs)
+├── LICENSE                     (MIT license)
 ├── SVF-example                 (SVF driver to interact with SVF)      
 ├── Dockerfile                  (Dockerfile, run crema easily. Already includes SVF, SVF-driver, crema ...)
 ├── SVF                         (SVF, NEED TO BE INSTALLED)   

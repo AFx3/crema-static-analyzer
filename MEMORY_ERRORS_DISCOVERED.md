@@ -1,6 +1,6 @@
 # Memory errors discovered (double checked with Valgrind)
 
-## 1
+## 1st repository
 ### name: noGenerator
 ### link: https://github.com/pamquale/noGenerator
 ### type: 1 memory leak
@@ -54,7 +54,7 @@
 ==51070== ERROR SUMMARY: 1 errors from 1 contexts (suppressed: 0 from 0)
 ```
 
-## 2
+## 2nd repository
 ### name: wasm-demo
 ### link: https://github.com/danpaz/wasm-demo
 ### type: 1 memory leak
@@ -93,8 +93,8 @@ cargo run ../cargo_project_test/found\ vulns/wasm-demo -f "rust::demo_new_state:
 ==49113== 
 ==49113== ERROR SUMMARY: 1 errors from 1 contexts (suppressed: 0 from 0)
 ```
-
-## 3
+ 
+## 3rd repository 
 ### name: skip-list-test
 ### link: https://github.com/abhijeetbhagat/skip-list-test
 ### type: 10 memory leak
@@ -282,7 +282,7 @@ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 ==51185== ERROR SUMMARY: 10 errors from 10 contexts (suppressed: 0 from 0)
 ```
 
-## 4
+## 4th repository
 ### name: rusant
 ### link: https://github.com/JakWai01/rusant
 ### type: 1 memory leak
@@ -329,7 +329,7 @@ open_url returned: ""
 ==51281== ERROR SUMMARY: 1 errors from 1 contexts (suppressed: 0 from 0)
 ```
 
-## 5
+## 5th repository
 ### name: napkin-math
 ### link: https://github.com/sirupsen/napkin-math/
 ### type: 1 memory leak
@@ -373,7 +373,7 @@ Leaked rusage at: 0x4abda30
 ==51438== ERROR SUMMARY: 1 errors from 1 contexts (suppressed: 0 from 0)
 ```
 
-## 6
+## 6th repository
 ### name: shared-register
 ### link: https://github.com/namrapatel/shared-register
 ### type: 1 memory leak
@@ -413,7 +413,7 @@ Please provide a port number as an argument
 ==51605== 
 ==51605== ERROR SUMMARY: 1 errors from 1 contexts (suppressed: 0 from 0)
 ```
-## 7
+## 7th repository
 ### name: whisper-rs-example
 ### link: https://github.com/bruceunx/whisper-rs-example
 ### type: 1 memory leak
@@ -537,7 +537,7 @@ Please provide a port number as an argument
 ==51732== 
 ==51732== ERROR SUMMARY: 2 errors from 2 contexts (suppressed: 0 from 0)
 ```
-## 8
+## 8th repository
 ### name: lock-free
 ### link: https://github.com/DorukCem/lock-free
 ### type: 1 memory leak
