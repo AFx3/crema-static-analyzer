@@ -2,11 +2,11 @@
 
 * Crema is a static analysis tool for Rust-C FFI. It detects memory errors (memory leak, double-free and use-after-free) in pure Rust code and Rust interacting with C code.
 * Crema constructs an inter-procedural Control Flow Graph (ICFG) capturing the interactions between Rust and C functions. 
-* To build such a graph, crema exploit Rust MIR and LLVM IR (for C representation).
+* To build such a graph, crema exploits Rust MIR and LLVM IR (for C representation).
 * The ICFG includes dummyCall and dummyRet nodes storing the association between the two different IRs.
 * The abstract domain tracks taint information related to heap management, focusing specifically on memory objects passed through FFI and their ownership. 
-* For testing crema see REPLICATE_RESULTS.md 
-* Crema is in very early development stage, so note that currenty the cargo target projects requires a main.rs entry point.
+* For testing Crema, see REPLICATE_RESULTS.md 
+* Crema is in a very early development stage, so note that currently the cargo target projects require a main.rs entry point.
 
 
 # Run with Docker
@@ -32,31 +32,31 @@ docker run -it crema bash
 --------------------------------------------------------------------------------------------------------------------------
 
 # How to analyze project / prototype notes :
-Crema is in very early development phase, so note that currenty the cargo target projects requires a main.rs entry point
+Crema is in a very early development phase, so note that currently the cargo target projects require a main.rs entry point
 
-* From crema folder, run the tool specifying a cargo project as target
+* From `crema` folder, run the tool specifying a cargo project as target
 ```bash
 cargo run /<path_to_cargo_target_project>
 ``` 
 
-* Or specify a custum entry point:
+* Or specify a custom entry point:
 ```bash
 cargo run /<path_to_cargo_target_project> -f "<your::target_function::bb0>"
 ``` 
 --------------------------------------------------------------------------------------------------------------------------
-# Working direcrory
+# Working directory
 
-Working directory must be
+The working directory must be
 ```bash
 /home/<user>/.../<path_to_crema_static_analyzer>/crema_static_analyzer
 ```
-# Project structure/workind directory content
+# Project structure/working directory content
 ```bash
 . crema-static-analyzer         (whole project folder)
-├── crema                       (crema statci analyzer)
+├── crema                       (crema static analyzer)
 ├── query_github_rust_prj       (script to get GitHub repositories)
 ├── README.md                   (this file)
-├── REPLICATE_RESULTS.md        (instructions for replicating the resutls)
+├── REPLICATE_RESULTS.md        (instructions for replicating the results)
 ├── MEMORY_ERRORS_DISCOVERED    (memory errors discovered, including Valgrind outputs)
 ├── SVF-example                 (SVF driver to interact with SVF)      
 ├── Dockerfile                  (Dockerfile, run crema easily. Already includes SVF, SVF-driver, crema ...)
@@ -71,7 +71,7 @@ Note that you have to modify working environment variables by updating the shell
 find  ~/.zshrc
 vim /path/to/your/shell_config_file
 ```
-### This is what at the and of each repository configuration your work envirmonment should be
+### At the end of each repository configuration, your work environment should be as follows
 ```bash
 #rustc
 export RUSTC_SYSROOT=/home/<user>/.../<path_to_crema_static_analyzer>/crema_static_analyzer
@@ -79,7 +79,7 @@ export RUSTC_SYSROOT=/home/<user>/.../<path_to_crema_static_analyzer>/crema_stat
 export PATH=/opt/cmake/bin:$PATH
 export PATH=/opt/cmake/bin:$PATH
 
-# Setting up environment for SVF
+# Setting up the environment for SVF
 export SVF_DIR=/home/<user>/.../<path_to_crema_static_analyzer>/crema_static_analyzer/SVF
 export LLVM_DIR=/home/<user>/.../<path_to_crema_static_analyzer>/crema_static_analyzer/SVF/llvm-16.0.0.obj
 export Z3_DIR=/home/<user>/.../<path_to_crema_static_analyzer>/crema_static_analyzer/SVF/z3.obj
@@ -87,7 +87,7 @@ export Z3_DIR=/home/<user>/.../<path_to_crema_static_analyzer>/crema_static_anal
 # Update PATH to include SVF binaries
 export PATH=$SVF_DIR/Release-build/bin:$PATH
 
-# Update LD_LIBRARY_PATH for dynamic linker to find SVF libraries
+# Update LD_LIBRARY_PATH for the dynamic linker to find SVF libraries
 export LD_LIBRARY_PATH=$SVF_DIR/lib:$LLVM_DIR/lib:$Z3_DIR/lib:$LD_LIBRARY_PATH
 ```
 ----
@@ -102,7 +102,7 @@ git clone https://github.com/AFx3/crema-static-analyzer
 cd crema-static-analyzer
 ```
 ## 1. Install SVF
-Follow the instruction at: https://github.com/svf-tools/SVF/wiki/Setup-Guide#getting-started
+Follow the instructions at: https://github.com/svf-tools/SVF/wiki/Setup-Guide#getting-started
 
 Cmake install:
 ```bash
@@ -123,19 +123,19 @@ SET UP ENV VAR (go to ENV step above)
 
 ### Install the Rust nightly compiler 
 
-* After getting this repository, install the following version of the rust nightly compiler and set up the rust toolchain.
+* After getting this repository, install the following version of the Rust nightly compiler and set up the Rust toolchain.
 
 * Version required
 ```bash
 rustc version: 1.84.0-nightly (b19329a37 2024-11-21)
 ```
 * From crema-static-analyzer directory
-* install required rust nightly version:
+* Install the required Rust nightly version:
 ```bash
 rustup toolchain install nightly-2024-11-21
 ```
 
-* Check if it has correctly installed:
+* Check if it has been correctly installed:
 ```bash
 rustup show
 ```
@@ -145,11 +145,11 @@ rustup show
 rustup override set nightly-2024-11-21
 ```
 
-* Install rust nightly tools:
+* Install Rust nightly tools:
 ```bash
 rustup component add rust-src rustc-dev llvm-tools-preview
 ```
-(if you find errors, lunch again utill succesfully it downloads all the files)
+(if you find errors, lunch again utill it successfully downloads all the files)
 
 * Again, check now if it active the right version:
 ```bash
@@ -159,7 +159,7 @@ rustup show
 
 * If you get in trouble, see: https://rust-lang.github.io/rustup/overrides.html
 
-You can have different toolchains, but the one already specified must be active in the folder of crema-static-analyzer
+You can have different toolchains, but the one already specified must be active in the folder of `crema-static-analyzer`
 and you can see it with:
 
 ```
@@ -193,7 +193,7 @@ CHECK ENV VAR has been correctly set (go to ENV step above)
 
 # Finally, Build and Run the tool
 
-You must be in this projec dir
+You must be in this project dir
 
 ```bash
 cd crema
@@ -211,7 +211,7 @@ You can run the tool specifying a custom entry point with -f:
 ```bash
 cargo run ./path_to_cargo_project_to_be_analyzed -f -f "<rust::function_name::bb<0,1,..n>"
 ```
-## User can see if the tool is correctly installed looking at RELICATE_RESULTS.md
+## User can see if the tool is correctly installed by looking at RELICATE_RESULTS.md
 
 # MIR SUPPORTED:
 ```
@@ -221,10 +221,10 @@ cargo run ./path_to_cargo_project_to_be_analyzed -f -f "<rust::function_name::bb
 # Future work
 * Improve target cargo projects dependency handling
 * Include more MIR statements in the analysis
-* Improve interprocedulal support
+* Improve interprocedural support
 * Including pointer/alias analysis modules
 * Consider other languages by FFIs 
-* Consider also heap allcoations form C and deallocations in Rust
+* Consider also heap allocations from C and deallocations in Rust
 ------------------------------------------------------------------------------
 
 # Contributions are welcome!
