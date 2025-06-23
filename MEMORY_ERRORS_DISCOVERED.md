@@ -541,7 +541,7 @@ Please provide a port number as an argument
 ### name: lock-free
 ### link: https://github.com/DorukCem/lock-free
 ### type: 1 memory leak
-### how ro replicate: cargo run ../target_repos/lock-free -f "rust::LockFreeStack::<T>::push::bb0"
+### how to replicate: cargo run ../target_repos/lock-free -f "rust::LockFreeStack::<T>::push::bb0"
 ### valgrind output: 
 ```bash
 ==90776== 
