@@ -28,7 +28,7 @@ docker build --tag 'crema' .
 docker run -it crema bash
 ```
 
-----------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------
 
 ### Step 0: build test and GitHub target repositories (FROM crema-rust-static-analyzer main folder)
 
@@ -39,10 +39,10 @@ cd tests_and_target_repos
 
 ```
 ```bash
-chmod +x ./tests_and_target_repos/cargo_build_all_dirs.sh
+chmod +x ./cargo_build_all_dirs.sh
 ```
 ```bash
-./tests_and_target_repos/cargo_build_all_dirs.sh 
+./cargo_build_all_dirs.sh 
 ```
 * Go back to main project directory
 ```bash
