@@ -36,7 +36,7 @@ unsafe {
 
 // CSTRING ::NEW
 
-let c_string = CString::new("foo").unwrap();
+let c_string = CString::new("cane").unwrap();
 
 println!("Original string: {:?}", c_string);
 let ptr = c_string.into_raw();

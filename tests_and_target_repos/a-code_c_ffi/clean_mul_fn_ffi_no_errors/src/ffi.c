@@ -1,27 +1,13 @@
-#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-void free_str(char *str) {
-    if (str != NULL) {
-        free(str);
-    }
-}    
-void cast_and_free_pointer(void *ptr) {
+char* alloc_c_string(const char* msg) {
+    char* buf = malloc(strlen(msg) + 1);
+    strcpy(buf, msg);
+    return buf;
+}
 
-    // cast the void pointer to an integer pointer
-     int *int_ptr = (int *)ptr;
-    // free the allocated memory
-    free(int_ptr);
-     }
-     
-void free_int(void *ptr) {
-     int *int_ptr = (int *)ptr;
-     free(int_ptr);
- }
-
- void free_string(char *str) {
-     if (str != NULL) {
-         free(str);
-     }
- }    
+void free_c_string(char* s) {
+    free(s);
+}
 
