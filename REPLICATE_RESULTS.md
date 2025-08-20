@@ -13,19 +13,13 @@ Follow the instruction in the README.md file to build crema, svf-driver and SVF 
 ```bash
 open https://docs.docker.com/get-started/get-docker/
 ```
-### Step 1: clone this repository and navigate to *crema-static-analyzer* folder
+### Step 1: get crema docker image
 ```bash
-git clone https://github.com/AFx3/crema-static-analyzer
+docker pull andreafranceschi/crema-tool:latest
 ```
+### Step 2: run crema docker image
 ```bash
-cd crema-static-analyzer
-```
-### Step 2: build the Docker image and run the container
-```bash
-docker build --tag 'crema' .
-```
-```bash
-docker run -it crema bash
+docker run -it andreafranceschi/crema-tool:latest bash
 ```
 
 ----------------------------------------------------------------------------------------------------------
