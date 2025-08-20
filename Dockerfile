@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 # stop ubuntu-20 interactive options
 ENV DEBIAN_FRONTEND noninteractive
@@ -20,14 +20,6 @@ ENV build_deps="wget xz-utils git tcl software-properties-common"
 # fetch 
 RUN apt-get update --fix-missing
 RUN apt-get install -y $build_deps $lib_deps
-
-RUN apt-get update && apt-get install -y wget gpg \
- && wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc \
-    | gpg --dearmor -o /usr/share/keyrings/kitware.gpg \
- && echo "deb [signed-by=/usr/share/keyrings/kitware.gpg] https://apt.kitware.com/ubuntu/ jammy main" \
-    > /etc/apt/sources.list.d/kitware.list \
- && apt-get update \
- && apt-get install -y cmake
 
 # eadsnakes PPA for multiple python versions 
 RUN add-apt-repository ppa:deadsnakes/ppa
