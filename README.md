@@ -54,7 +54,7 @@ The working directory must be
 ├── MEMORY_ERRORS_DISCOVERED    (memory errors discovered, including Valgrind outputs)
 ├── LICENSE                     (MIT license)
 ├── SVF-example                 (SVF driver to interact with SVF)      
-├── Dockerfile                  (Dockerfile, run crema easily. Already includes SVF, SVF-driver, crema ...)
+├── CREMA_VS_FFI_CHECKER.md     (Crema and FFIChecker comparison on Rust-C FFI tests)
 ├── SVF                         (SVF, NEED TO BE INSTALLED)   
 └── tests_and_target_repos      (test and target repositories)
 ```
