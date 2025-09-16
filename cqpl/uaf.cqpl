@@ -1,0 +1,13 @@
+# uaf
+***
+taint_src: alloc
+taint_snk: drop
+taint_snk: use
+---
+
+# uaf
+***
+src: alloc
+snk{a}: drop
+snk{b}: use
+global: snk{a} < snk{b}

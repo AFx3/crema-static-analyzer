@@ -1,0 +1,11 @@
+# double_free
+***
+taint_src: alloc()
+taint_snk: drop()
+taint_snk: drop()
+
+---
+# double_free
+***
+taint_src: alloc()
+*@taint_snk: drop()

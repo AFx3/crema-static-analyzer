@@ -1,0 +1,4 @@
+# memory_leak 
+***
+taint_src: alloc()
+*@taint_snk: !drop()
