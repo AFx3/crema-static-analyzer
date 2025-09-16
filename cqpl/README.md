@@ -13,10 +13,11 @@
 ```
 ```bash
 ### file.cqpl:
-# rule                      // name of the rule 
-***                         // variables
-taint_src: <predicate()>    // can avoid to specifiy within the () variables names if ***
-taint_snk: <predicate()>    // same
+# rule                          // name of the rule 
+## domanin: memory || general   // memory è il vecchio, general taint-no_taint (ad esempio per gli union)
+***                             // variables
+taint_src: <predicate()>        // can avoid to specifiy within the () variables names if ***
+taint_snk: <predicate()>        // same
 ```
 ### anche predicati su snk
 - solo un snk:                          taint_snk: ...
