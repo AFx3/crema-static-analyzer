@@ -1,0 +1,13 @@
+id: # union_uaf
+name: Pizza.mozzarella_g
+taint_src: Pizza.alloc(mozzarella_g)    // o instance, con alloc ho che il campo viene creato
+taint_snk*@: f in Pizza.fields != Pizza.mozzarella && f.has_value
+
+---
+Exist f in fields && f.has_value and fields-f.!has_value
+---
+
+# union_uaf
+Pizza.***
+taint_src: Pizza.alloc()    // o instance, con alloc ho che il campo viene creato
+*@taint_snk: f in Pizza.fields != Pizza.alloc() && f.has_value

@@ -1,6 +1,7 @@
 # double_free
-***
-taint_src: alloc()
+Box::*|*|*
+taint_src: alloc(_,)
+taint_snk: drop()
 taint_snk: drop()
 taint_snk: drop()
 
@@ -9,3 +10,5 @@ taint_snk: drop()
 ***
 taint_src: alloc()
 *@taint_snk: drop()
+
+**|*|*
