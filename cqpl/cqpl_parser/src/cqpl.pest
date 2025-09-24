@@ -13,7 +13,7 @@ blank = _{ NEWLINE }
 
 
 domain_decl = { "##" ~ "domain:" ~ (!NEWLINE ~ ANY)* ~ NEWLINE? }
-
+ 
 var_decl = { "v:" ~ WHITESPACE* ~ var_pattern ~ NEWLINE? }
 var_pattern = { (ASCII_ALPHANUMERIC | "*" | "|" )+ }  // supporta pattern tipo **|*|*
 
@@ -34,6 +34,7 @@ wildcard   = { "*" }
 // quant_expr con "in ... && predicate" opzionale
 // ora anche "*@ alloc" senza "in" è accettato
 quant_expr = { "*@" ~ ident ~ ("in" ~ type_access ~ ("!=" ~ field_access)? ~ ("&&" ~ predicate)?)? }
+
 
 predicate = { ident ~ ("(" ~ arg_list? ~ ")" )? }
 arg_list  = { arg ~ ("," ~ arg)* }
