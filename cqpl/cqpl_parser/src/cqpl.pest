@@ -15,7 +15,8 @@ blank = _{ NEWLINE }
 domain_decl = { "##" ~ "domain:" ~ (!NEWLINE ~ ANY)* ~ NEWLINE? }
  
 var_decl = { "v:" ~ WHITESPACE* ~ var_pattern ~ NEWLINE? }
-var_pattern = { (ASCII_ALPHANUMERIC | "*" | "|" )+ }  // supporta pattern tipo **|*|*
+//var_pattern = { (ASCII_ALPHANUMERIC | "*" | "|" )+ }  // supporta pattern tipo **|*|*
+var_pattern = { (ASCII_ALPHANUMERIC | "_" | "*" | "|" )+ }
 
 taint_src_decl = { "taint_src:" ~ logic_expr ~ NEWLINE? }
 taint_snk_decl = { ("taint_snk:" | "@taint_snk:") ~ logic_expr ~ NEWLINE? }
