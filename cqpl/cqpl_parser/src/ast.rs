@@ -229,12 +229,15 @@ fn parse_statement(pair: Pair<Rule>) -> Statement {
 
 
 fn parse_predicate(pair: Pair<Rule>) -> Predicate {
-    let txt = pair.as_str().trim();
-    if txt.starts_with("alloc") { Predicate::Alloc(None) }
-    else if txt.starts_with("drop") { Predicate::Drop(None) }
-    else if txt.starts_with("use") { Predicate::Use(None) }
-    else if txt.starts_with("read") { Predicate::Read(None) }
-    else if txt.starts_with("write") { Predicate::Write(None) }
-    else if txt.starts_with("assign") { Predicate::Assign(None) }
-    else { Predicate::Custom(txt.to_string(), vec![]) }
+    // dont'care if lower or uppercase the pradicate for now, so to_lowercase()
+    let txt = pair.as_str().trim().to_lowercase();
+    match txt {
+        s if s.starts_with("alloc")  => Predicate::Alloc(None),
+        s if s.starts_with("drop")   => Predicate::Drop(None),
+        s if s.starts_with("use")    => Predicate::Use(None),
+        s if s.starts_with("read")   => Predicate::Read(None),
+        s if s.starts_with("write")  => Predicate::Write(None),
+        s if s.starts_with("assign") => Predicate::Assign(None),
+        _ => Predicate::Custom(txt.to_string(), vec![]),
+    }
 }
