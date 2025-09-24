@@ -33,7 +33,8 @@ wildcard   = { "*" }
 
 // quant_expr con "in ... && predicate" opzionale
 // ora anche "*@ alloc" senza "in" è accettato
-quant_expr = { "*@" ~ ident ~ ("in" ~ type_access ~ ("!=" ~ field_access)? ~ ("&&" ~ predicate)?)? }
+//quant_expr = { "*@" ~ ident ~ ("in" ~ type_access ~ ("!=" ~ field_access)? ~ ("&&" ~ predicate)?)? }
+quant_expr = { "*@" ~ (predicate | ident) ~ ("in" ~ type_access ~ ("!=" ~ field_access)? ~ ("&&" ~ predicate)?)? }
 
 
 predicate = { ident ~ ("(" ~ arg_list? ~ ")" )? }
