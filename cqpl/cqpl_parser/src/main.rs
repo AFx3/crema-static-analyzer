@@ -8,6 +8,7 @@ mod ast;
 use crate::ast::{CQPLParser, build_ast, Rule} ;
 
 /// Run:              cargo run      <rule_name>.cqpl    /path/to/cargo/project
+/// e.g.: cargo run mem_leak.cqpl w
 fn main() {
     // now store all the rules in the folder ./example
     let base_rule_path = "./examples/";
