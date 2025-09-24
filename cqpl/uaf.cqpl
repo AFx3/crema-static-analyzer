@@ -1,7 +1,7 @@
 # uaf
-***
+**|*|*
 taint_src: alloc
-taint_snk: drop > 
+taint_snk: drop |> 
 taint_snk: use
 ---
 
