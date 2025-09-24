@@ -19,6 +19,7 @@ pub struct RuleDef {
 
 #[derive(Debug, Clone)]
 pub enum Domain { Memory, General }
+
 #[derive(Debug, Clone)]
 pub struct Variable {
     pub v_type: Option<Type>,
@@ -131,15 +132,24 @@ fn parse_statement(pair: Pair<Rule>) -> Statement {
         }
         Rule::quant_expr => {
             let mut inner = pair.into_inner();
-            let var = inner.next().unwrap().as_str().to_string();
-            let cond = inner.next().map(parse_statement).unwrap_or(Statement::Wildcard);
-            Statement::Quantified {
-                quant: Quantifier::ForAll,
-                var,
-                domain: FieldDomain::FieldsOf { typename: "Any".into() },
-                cond: Box::new(cond),
+            let first = inner.next().unwrap();
+            match first.as_rule() {
+                Rule::predicate => Statement::Predicate(parse_predicate(first)), // caso *@ alloc
+                Rule::ident => {
+                    // caso *@ var in type && predicate
+                    let var = first.as_str().to_string();
+                    let cond = inner.next().map(parse_statement).unwrap_or(Statement::Wildcard);
+                    Statement::Quantified {
+                        quant: Quantifier::ForAll,
+                        var,
+                        domain: FieldDomain::FieldsOf { typename: "Any".to_string() },
+                        cond: Box::new(cond),
+                    }
+                }
+                _ => panic!("Unexpected inner in quant_expr: {:?}", first.as_rule()),
             }
         }
+
         Rule::paren_expr | Rule::logic_expr | Rule::or_expr | Rule::and_expr => {
             parse_statement(pair.into_inner().next().unwrap())
         }
@@ -161,7 +171,9 @@ fn parse_predicate(pair: Pair<Rule>) -> Predicate {
 
 fn main() {
     let path = "./examples/mem_leak.cqpl";
-    if !Path::new(path).exists() { eprintln!("example file not found: {}", path); return; }
+    if !Path::new(path).exists() { eprintln!("example file not found: {}", path); 
+    return; 
+}
 
     let input = fs::read_to_string(path).expect("failed to read example file");
     let parsed = CQPLParser::parse(Rule::file, &input).expect("parse error");
