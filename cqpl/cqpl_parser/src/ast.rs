@@ -23,13 +23,21 @@ pub struct CQPLParser;
 /// taint_src: *@ alloc |
 /// taint_snk: !drop    |
 /// ____________________|
+/// 
+/// Only variable name is case-sensitive
 #[derive(Debug, Clone, Serialize)]
 pub struct RuleDef {
     pub name: Vec<String>,          // rule name (e.g.: # memory_leak)
     pub domain: Domain,             // a_mem || taint
     pub variables: Vec<Variable>,   // vars declared within the rule
-    pub taint_src: Vec<Statement>,  // pre condition
-    pub taint_snk: Vec<Statement>,  // post condition
+    pub taint_src: Vec<TaintBlock>, // pre condition
+    pub taint_snk: Vec<TaintBlock>, // post condition
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TaintBlock {
+    pub statements: Vec<Statement>,
+    pub next_op: Option<SequenceOp>, // corresponds to '|>' in input
 }
 
 // Domain to be specified in the query
@@ -38,6 +46,11 @@ pub enum Domain {
     Memory,     // A_mem lattice (for memory errors)
     General     // T, _|_
 } 
+
+#[derive(Debug, Clone, Serialize)]
+pub enum SequenceOp {
+    Then,
+}
 
 /// Variables can be expressed as follow: v_type|qualifier|name   
 /// with * for any
@@ -61,20 +74,31 @@ pub enum Type { Box, Int, Float, Union, Function, Vec, Enum, Trait, Struct, Refe
 #[derive(Debug, Clone, Serialize)]
 pub enum Qualifier { Imm, Mut, Any }
 
+/// Statements
 #[derive(Debug, Clone, Serialize)]
 pub enum Statement {
     Predicate(Predicate),
     And(Box<Statement>, Box<Statement>),
     Or(Box<Statement>, Box<Statement>),
     Not(Box<Statement>),
+    Then(Box<Statement>, Box<Statement>), // |>
     Wildcard,
-    Quantified { quant: Quantifier, var: String, domain: FieldDomain, cond: Box<Statement> },
+    Quantified { 
+        quant: Quantifier, 
+        var: Option<VarName>,  
+        cond: Box<Statement> },
 }
+/// Quantifiers
 #[derive(Debug, Clone, Serialize)]
-pub enum Quantifier { ForAll, Exists }
+pub enum Quantifier { 
+    ForAll,     // *@ (done)
+    Exists      //  €  (TO DO) 
+}
 
+/// 
 #[derive(Debug, Clone, Serialize)]
 pub enum FieldDomain { FieldsOf { typename: String } }
+
 
 #[derive(Debug, Clone, Serialize)]
 pub enum Predicate {
@@ -84,6 +108,7 @@ pub enum Predicate {
     Read(Option<Term>),
     Write(Option<Term>),
     Assign(Option<Term>),
+    Allocator(Option<Term>),        // TO DO
     Custom(String, Vec<Term>),
 }
 #[derive(Debug, Clone, Serialize)]
@@ -109,14 +134,9 @@ pub fn build_ast(pairs: Pairs<Rule>) -> Vec<RuleDef> {
                     match inner.as_rule() {
                         Rule::rule_header => name.push(inner.as_str().trim().to_string()),
 
-                        //  *|*|*
                         Rule::var_decl => {
                             if let Some((_, pattern)) = inner.as_str().trim().split_once(':') {
                                 let slots: Vec<&str> = pattern.trim().split('|').collect();
-
-                                // 1st slot: Type
-                                // using the to_lowercase returns a temporary String
-                                // need to match the reference s to the temporary String, othrwise (e.g.: as_str()) may not outlive the closure
                                 let v_type = match slots.get(0).map(|s| s.to_lowercase()) {
                                     Some(ref s) if *s == "box" => Some(Type::Box),
                                     Some(ref s) if *s == "int" => Some(Type::Int),
@@ -132,8 +152,6 @@ pub fn build_ast(pairs: Pairs<Rule>) -> Vec<RuleDef> {
                                     None => Some(Type::Any),
                                     _ => Some(Type::Any),
                                 };
-
-                                // 2nd slot: qualifier
                                 let qualifier = match slots.get(1).map(|s| s.to_lowercase()) {
                                     Some(ref s) if *s == "imm" => Some(Qualifier::Imm),
                                     Some(ref s) if *s == "mut" => Some(Qualifier::Mut),
@@ -141,14 +159,10 @@ pub fn build_ast(pairs: Pairs<Rule>) -> Vec<RuleDef> {
                                     None => Some(Qualifier::Any),
                                     _ => Some(Qualifier::Any),
                                 };
-
-                                // 3rd slot: VarName 
-                                // here do not lowercase the variable name since it is case sensitive
                                 let var_name = match slots.get(2).map(|s| *s) {
                                     Some("*") | None => VarName::Any,
                                     Some(name) => VarName::Named(name.to_string()),
                                 };
-
                                 variables.push(Variable {
                                     name: Some(var_name),
                                     v_type,
@@ -162,17 +176,49 @@ pub fn build_ast(pairs: Pairs<Rule>) -> Vec<RuleDef> {
                                 Domain::Memory
                             } else { Domain::General }
                         }
-                      
+                        /*  old with only 1 taint_src
                         Rule::taint_src_decl => {
                             for stmt in inner.into_inner() {
                                 taint_src.push(parse_statement(stmt));
                             }
-                        }
-                        Rule::taint_snk_decl => {
-                            for stmt in inner.into_inner() {
-                                taint_snk.push(parse_statement(stmt));
+                        }*/
+
+                        Rule::taint_src_decl => {
+                            let mut inner_pairs = inner.into_inner().peekable();
+
+                            while let Some(stmt_block) = inner_pairs.next() {
+                                let statements = parse_ordered_statements(stmt_block);
+
+                                // check if next token is a |>
+                                let next_op = if let Some(_) = inner_pairs.peek() {
+                                    Some(SequenceOp::Then)
+                                } else {
+                                    None
+                                };
+
+                                taint_src.push(TaintBlock { statements, next_op });
                             }
                         }
+
+                       
+                        Rule::taint_snk_decl => {
+                            let mut inner_pairs = inner.into_inner().peekable();
+
+                            while let Some(stmt_block) = inner_pairs.next() {
+                                let statements = parse_ordered_statements(stmt_block);
+
+                                // Check if next token is a '|>'
+                                let next_op = if let Some(next_pipe) = inner_pairs.peek() {
+                                    // This is the '|>' connecting blocks
+                                    Some(SequenceOp::Then)
+                                } else {
+                                    None
+                                };
+
+                                taint_snk.push(TaintBlock { statements, next_op });
+                            }
+                        }
+
                         _ => {}
                     }
                 }
@@ -187,9 +233,30 @@ pub fn build_ast(pairs: Pairs<Rule>) -> Vec<RuleDef> {
     rules
 }
 
+fn parse_ordered_statements(pair: Pair<Rule>) -> Vec<Statement> {
+    pair.into_inner().map(|stmt| parse_statement(stmt)).collect()
+}
+
 // Parse a single statement
 fn parse_statement(pair: Pair<Rule>) -> Statement {
     match pair.as_rule() {
+
+         Rule::sequence_expr => {
+            let mut inner = pair.into_inner();
+            let first = parse_statement(inner.next().unwrap());
+            inner.fold(first, |acc, stmt| {
+                Statement::Then(Box::new(acc), Box::new(parse_statement(stmt)))
+            })
+        }
+        Rule::order_expr => {
+            let mut inner = pair.into_inner();
+            let first = parse_statement(inner.next().unwrap());
+            inner.fold(first, |acc, stmt| {
+                Statement::Then(Box::new(acc), Box::new(parse_statement(stmt)))
+            })
+        }
+
+
         Rule::primary => {
             // primary contiene un solo figlio: predicate, quant_expr, wildcard o paren_expr
             parse_statement(pair.into_inner().next().unwrap())
@@ -203,6 +270,7 @@ fn parse_statement(pair: Pair<Rule>) -> Statement {
             for _ in 0..bang_count { stmt = Statement::Not(Box::new(stmt)); }
             stmt
         }
+        /* 
         Rule::quant_expr => {
             let mut inner = pair.into_inner();
             let first = inner.next().unwrap();
@@ -221,7 +289,50 @@ fn parse_statement(pair: Pair<Rule>) -> Statement {
                 }
                 _ => panic!("Unexpected inner in quant_expr: {:?}", first.as_rule()),
             }
+        }*/
+
+        Rule::quant_expr => {
+            let mut inner = pair.into_inner();
+            let first = inner.next().unwrap();
+
+            match first.as_rule() {
+                // case *@ alloc
+                Rule::predicate => {
+                    let pred = parse_predicate(first);
+                    Statement::Quantified {
+                        quant: Quantifier::ForAll,
+                        var: Some(VarName::Any), // no explicit var -> quindi Any
+                        cond: Box::new(Statement::Predicate(pred)),
+                    }
+                }
+
+                // case *@ x in ...
+                Rule::ident => {
+                    let var = first.as_str().to_string();
+                    let cond = inner.next().map(parse_statement).unwrap_or(Statement::Wildcard);
+                    Statement::Quantified {
+                        quant: Quantifier::ForAll,
+                        var: Some(VarName::Named(var)), // explicit var
+                        cond: Box::new(cond),
+                    }
+                }
+
+
+                _ => panic!("Unexpected inner in quant_expr: {:?}", first.as_rule()),
+            }
         }
+
+
+
+         Rule::order_expr => {
+            let mut inner = pair.into_inner();
+            let first = parse_statement(inner.next().unwrap());
+            inner.fold(first, |acc, stmt| {
+                Statement::Then(Box::new(acc), Box::new(parse_statement(stmt)))
+            })
+        }
+
+
 
         Rule::paren_expr | Rule::logic_expr | Rule::or_expr | Rule::and_expr => {
             parse_statement(pair.into_inner().next().unwrap())
