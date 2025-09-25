@@ -3,6 +3,10 @@ use std::fs;
 use pest::Parser;
 use std::env;
 use std::process::exit;
+use std::fs::File;
+use std::io::prelude::*;
+use std::path::Path;
+
 
 mod ast;
 use crate::ast::{CQPLParser, build_ast, Rule} ;
@@ -41,4 +45,22 @@ fn main() {
     println!("Target project {:#?}", project_path);
     println!("Rule path {:#?}", full_rule_path);
     println!("AST: {:#?}", ast);
+
+    let json = serde_json::to_string_pretty(&ast).unwrap();
+
+    let path = Path::new("../ast.json");
+    let display = path.display();
+
+    // Open a file in write-only mode, returns `io::Result<File>`
+    let mut file = match File::create(&path) {
+        Err(why) => panic!("couldn't create {}: {}", display, why),
+        Ok(file) => file,
+    };
+
+    // Write the json to `file`, returns `io::Result<()>`
+    match file.write_all(json.as_bytes()) {
+        Err(why) => panic!("couldn't write to {}: {}", display, why),
+        Ok(_) => println!("successfully wrote to {}", display),
+    }
+    
 }
