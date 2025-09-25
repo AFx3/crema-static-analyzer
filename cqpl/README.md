@@ -48,7 +48,7 @@ at the and of a predicate of a sink I can say that the first snk specified must 
 for example: 
 # uaf
 **|*|*
-taint_src: alloc
+taint_src: *@ alloc
 taint_snk: drop |> 
 taint_snk: use
 ---
