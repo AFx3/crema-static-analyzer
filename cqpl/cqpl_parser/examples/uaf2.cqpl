@@ -1,0 +1,10 @@
+# uaf_2
+## domain: memory
+v: *|*|*
+
+taint_src: *@ alloc
+|>
+taint_src: *@ read
+taint_snk: drop
+|>
+taint_snk: use

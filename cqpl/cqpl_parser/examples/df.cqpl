@@ -1,0 +1,7 @@
+# df
+## domain: memory
+v: *|*|*
+
+taint_src: *@ ALLOC
+taint_snk: DROP
+taint_snk: DROP
