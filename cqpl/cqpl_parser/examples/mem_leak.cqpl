@@ -1,6 +1,6 @@
 # mem_leak
 ## domain: memory
-v: *|*|*
+v: *|imM|_Var_z
 
-taint_src: *@ ALLOC
+taint_src: \forall ALLOC
 taint_snk: !DROP

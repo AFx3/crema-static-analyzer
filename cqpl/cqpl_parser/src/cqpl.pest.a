@@ -1,0 +1,62 @@
+WHITESPACE = _{ " " | "\t" }
+NEWLINE    = _{ "\r\n" | "\n" }
+COMMENT    = _{ "//" ~ (!NEWLINE ~ ANY)* }
+
+file = { SOI ~ (rule_item ~ ("---" ~ NEWLINE)*)* ~ EOI }
+
+
+rule_item = { rule_header ~ (NEWLINE* ~ rule_body_line)* ~ NEWLINE* }
+rule_header = { "#" ~ (ASCII_ALPHANUMERIC | "_" )+ ~ (" " ~ (!NEWLINE ~ ANY)+ )? }
+
+rule_body_line = _{ domain_decl | var_decl | taint_src_decl | taint_snk_decl | blank }
+blank = _{ NEWLINE }
+
+
+domain_decl = { "##" ~ "domain:" ~ (!NEWLINE ~ ANY)* ~ NEWLINE? }
+ 
+var_decl = { "v:" ~ WHITESPACE* ~ var_pattern ~ NEWLINE? }
+//var_pattern = { (ASCII_ALPHANUMERIC | "*" | "|" )+ }  // supporta pattern tipo **|*|*
+var_pattern = { (ASCII_ALPHANUMERIC | "_" | "*" | "|" )+ }
+
+taint_src_decl = { "taint_src:" ~ logic_expr ~ NEWLINE? }
+taint_snk_decl = { ("taint_snk:" | "@taint_snk:") ~ logic_expr ~ NEWLINE? }
+
+
+
+
+
+//logic_expr = { or_expr }
+//or_expr    = { and_expr ~ ("||" ~ and_expr )* }
+//and_expr   = { not_expr ~ ("&&" ~ not_expr )* }
+//not_expr   = { "!"* ~ primary }   // supporta zero o più !
+
+logic_expr = { order_expr }
+
+order_expr = { and_expr ~ ("|>" ~ and_expr )* }
+or_expr    = { and_expr ~ ("||" ~ and_expr )* }
+and_expr   = { not_expr ~ ("&&" ~ not_expr )* }
+not_expr   = { "!"* ~ primary }
+
+
+
+
+// ordine corretto: predicate prima di quant_expr
+primary    = { predicate | quant_expr | wildcard | paren_expr }
+
+paren_expr = { "(" ~ logic_expr ~ ")" }
+wildcard   = { "*" }
+
+// quant_expr con "in ... && predicate" opzionale
+// ora anche "*@ alloc" senza "in" è accettato
+//quant_expr = { "*@" ~ ident ~ ("in" ~ type_access ~ ("!=" ~ field_access)? ~ ("&&" ~ predicate)?)? }
+quant_expr = { "*@" ~ (predicate | ident) ~ ("in" ~ type_access ~ ("!=" ~ field_access)? ~ ("&&" ~ predicate)?)? }
+
+
+predicate = { ident ~ ("(" ~ arg_list? ~ ")" )? }
+arg_list  = { arg ~ ("," ~ arg)* }
+arg       = { field_access | ident }
+
+type_access  = { ident ~ "." ~ "fields" }
+field_access = { ident ~ "." ~ ident }
+
+ident = @{ (ASCII_ALPHANUMERIC | "_" )+ }

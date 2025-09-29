@@ -1,0 +1,57 @@
+[
+  {
+    "name": [
+      "# uaf"
+    ],
+    "domain": "Memory",
+    "variables": [
+      {
+        "v_type": "Any",
+        "qualifier": "Any",
+        "name": {
+          "Named": "var_x"
+        }
+      }
+    ],
+    "taint_src": [
+      {
+        "statements": [
+          {
+            "Quantified": {
+              "quant": "ForAll",
+              "var": "Any",
+              "cond": {
+                "Predicate": {
+                  "Alloc": null
+                }
+              }
+            }
+          }
+        ],
+        "next_op": null
+      }
+    ],
+    "taint_snk": [
+      {
+        "statements": [
+          {
+            "Predicate": {
+              "Drop": null
+            }
+          }
+        ],
+        "next_op": "Then"
+      },
+      {
+        "statements": [
+          {
+            "Predicate": {
+              "Use": null
+            }
+          }
+        ],
+        "next_op": null
+      }
+    ]
+  }
+]

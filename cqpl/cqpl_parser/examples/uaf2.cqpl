@@ -2,9 +2,9 @@
 ## domain: memory
 v: *|*|*
 
-taint_src: *@ alloc
+taint_src: \forall alloc
 |>
-taint_src: *@ read
+taint_src: \forall read
 taint_snk: drop
 |>
 taint_snk: use
