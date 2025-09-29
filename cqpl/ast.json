@@ -1,16 +1,14 @@
 [
   {
     "name": [
-      "# uaf"
+      "# uaf_2"
     ],
     "domain": "Memory",
     "variables": [
       {
         "v_type": "Any",
         "qualifier": "Any",
-        "name": {
-          "Named": "var_x"
-        }
+        "name": "Any"
       }
     ],
     "taint_src": [
@@ -23,6 +21,22 @@
               "cond": {
                 "Predicate": {
                   "Alloc": null
+                }
+              }
+            }
+          }
+        ],
+        "next_op": "Then"
+      },
+      {
+        "statements": [
+          {
+            "Quantified": {
+              "quant": "ForAll",
+              "var": "Any",
+              "cond": {
+                "Predicate": {
+                  "Read": null
                 }
               }
             }
@@ -45,8 +59,14 @@
       {
         "statements": [
           {
-            "Predicate": {
-              "Use": null
+            "Quantified": {
+              "quant": "Exists",
+              "var": "Any",
+              "cond": {
+                "Predicate": {
+                  "Use": null
+                }
+              }
             }
           }
         ],

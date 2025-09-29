@@ -7,4 +7,4 @@ taint_src: \forall alloc
 taint_src: \forall read
 taint_snk: drop
 |>
-taint_snk: use
+taint_snk: \exists use

@@ -91,14 +91,11 @@ pub enum Statement {
 /// Quantifiers
 #[derive(Debug, Clone, Serialize)]
 pub enum Quantifier { 
-    ForAll,     // *@ (done)
-    Exists      //  €  (TO DO) 
+    ForAll,     
+    Exists      
 }
-// TO DO
-// \exists
-// \forall
 
-/// 
+
 #[derive(Debug, Clone, Serialize)]
 pub enum FieldDomain { FieldsOf { typename: String } }
 
@@ -210,11 +207,10 @@ pub fn build_ast(pairs: Pairs<Rule>) -> Vec<RuleDef> {
                             while let Some(stmt_block) = inner_pairs.next() {
                                 let statements = parse_ordered_statements(stmt_block);
 
-                                // Check if next token is a '|>'
-                                let next_op = if let Some(next_pipe) = inner_pairs.peek() {
-                                    // This is the '|>' connecting blocks
-                                    Some(SequenceOp::Then)
-                                } else {
+                                // check if next token is a |>
+                                let next_op = if inner_pairs.peek().is_some() {
+                                        Some(SequenceOp::Then)
+                                    } else {
                                     None
                                 };
 
@@ -273,67 +269,50 @@ fn parse_statement(pair: Pair<Rule>) -> Statement {
             for _ in 0..bang_count { stmt = Statement::Not(Box::new(stmt)); }
             stmt
         }
-        /* 
+ 
         Rule::quant_expr => {
-            let mut inner = pair.into_inner();
-            let first = inner.next().unwrap();
-            match first.as_rule() {
-                Rule::predicate => Statement::Predicate(parse_predicate(first)), // case *@ alloc
-                Rule::ident => {
-                    // case *@ var in type && predicate
-                    let var = first.as_str().to_string();
-                    let cond = inner.next().map(parse_statement).unwrap_or(Statement::Wildcard);
-                    Statement::Quantified {
-                        quant: Quantifier::ForAll,
-                        var,
-                        domain: FieldDomain::FieldsOf { typename: "Any".to_string() },
-                        cond: Box::new(cond),
-                    }
-                }
-                _ => panic!("Unexpected inner in quant_expr: {:?}", first.as_rule()),
-            }
-        }*/
-
-        Rule::quant_expr => {
+            // first take the test, then consume the pair
+            let quantifier_input_str = pair.as_str().trim().to_string();
             let mut inner = pair.into_inner();
             let first = inner.next().unwrap();
 
+            // determine the quantifier
+            let quantifier = if quantifier_input_str.starts_with("\\forall") {
+                Quantifier::ForAll
+            } else if quantifier_input_str.starts_with("\\exists") {
+                Quantifier::Exists
+            } else {
+                panic!("Invalid quantifier. Supported quantifiers: \\forall or \\exists");
+            };
+
             match first.as_rule() {
-                // case *@ alloc
+                // case \forall or \exists 
+                // no variable specified, es all alloc var
                 Rule::predicate => {
                     let pred = parse_predicate(first);
                     Statement::Quantified {
-                        quant: Quantifier::ForAll,
-                        var: Some(VarName::Any), // no explicit var -> quindi Any
+                        quant: quantifier,
+                        var: Some(VarName::Any), // nessuna variabile esplicita
                         cond: Box::new(Statement::Predicate(pred)),
                     }
                 }
 
-                // case *@ x in ...
+                // case \forall x in ... or \exists x in ...
+                // explicit varibale
                 Rule::ident => {
                     let var = first.as_str().to_string();
                     let cond = inner.next().map(parse_statement).unwrap_or(Statement::Wildcard);
                     Statement::Quantified {
-                        quant: Quantifier::ForAll,
-                        var: Some(VarName::Named(var)), // explicit var
+                        quant: quantifier,
+                        var: Some(VarName::Named(var)), 
                         cond: Box::new(cond),
                     }
                 }
-
 
                 _ => panic!("Unexpected inner in quant_expr: {:?}", first.as_rule()),
             }
         }
 
-
-
-         Rule::order_expr => {
-            let mut inner = pair.into_inner();
-            let first = parse_statement(inner.next().unwrap());
-            inner.fold(first, |acc, stmt| {
-                Statement::Then(Box::new(acc), Box::new(parse_statement(stmt)))
-            })
-        }
 
 
 
