@@ -1,12 +1,12 @@
 [
   {
     "name": [
-      "# uaf_2"
+      "# test_and"
     ],
-    "domain": "Memory",
+    "domain": "General",
     "variables": [
       {
-        "v_type": "Any",
+        "v_type": "Vec",
         "qualifier": "Any",
         "name": "Any"
       }
@@ -17,28 +17,10 @@
           {
             "Quantified": {
               "quant": "ForAll",
-              "var": "Any",
-              "cond": {
-                "Predicate": {
-                  "Alloc": null
-                }
-              }
-            }
-          }
-        ],
-        "next_op": "Then"
-      },
-      {
-        "statements": [
-          {
-            "Quantified": {
-              "quant": "ForAll",
-              "var": "Any",
-              "cond": {
-                "Predicate": {
-                  "Read": null
-                }
-              }
+              "var": {
+                "Named": "ALLOC"
+              },
+              "cond": "Wildcard"
             }
           }
         ],
@@ -49,23 +31,24 @@
       {
         "statements": [
           {
-            "Predicate": {
-              "Drop": null
-            }
-          }
-        ],
-        "next_op": "Then"
-      },
-      {
-        "statements": [
-          {
             "Quantified": {
               "quant": "Exists",
-              "var": "Any",
+              "var": {
+                "Named": "x"
+              },
               "cond": {
-                "Predicate": {
-                  "Use": null
-                }
+                "And": [
+                  {
+                    "Predicate": {
+                      "InFields": "Vec"
+                    }
+                  },
+                  {
+                    "Predicate": {
+                      "Drop": null
+                    }
+                  }
+                ]
               }
             }
           }

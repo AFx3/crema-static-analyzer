@@ -30,7 +30,9 @@ primary     = { predicate | quant_expr | wildcard | paren_expr }
 paren_expr  = { "(" ~ logic_expr ~ ")" }
 wildcard    = { "*" }
 
-quant_expr  = { ("\\forall" | "\\exists") ~ (predicate | ident) ~ ("in" ~ type_access ~ ("!=" ~ field_access)? ~ ("&&" ~ predicate)?)? }
+//quant_expr  = { ("\\forall" | "\\exists") ~ (predicate | ident) ~ ("in" ~ type_access ~ ("!=" ~ field_access)? ~ ("&&" ~ predicate)?)? }
+//quant_expr = { ("\\forall" | "\\exists") ~ (predicate | ident)  ~ ("in" ~ type_access ~ ("!=" ~ field_access)? ~ ("&&" ~ predicate)?)? }
+quant_expr  = { ("\\forall" | "\\exists") ~ (ident | predicate) ~ ("in" ~ type_access ~ ("!=" ~ field_access)? ~ ("&&" ~ predicate)?)? }
 
 
 predicate   = { ident ~ ("(" ~ arg_list? ~ ")" )? }

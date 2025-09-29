@@ -1,0 +1,6 @@
+# test_and
+## domain: general
+v: vec|*|*
+
+taint_src: \forall ALLOC
+taint_snk: \exists x in Vec.fields && drop
