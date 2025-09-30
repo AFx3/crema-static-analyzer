@@ -25,7 +25,7 @@ pub struct CQPLParser;
 /// ____________________|
 /// 
 /// Only variable name is case-sensitive
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub struct RuleDef {
     pub name: Vec<String>,          // rule name (e.g.: # memory_leak)
     pub domain: Domain,             // a_mem || taint
@@ -34,48 +34,48 @@ pub struct RuleDef {
     pub taint_snk: Vec<TaintBlock>, // post condition
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub struct TaintBlock {
     pub statements: Vec<Statement>,
     pub next_op: Option<SequenceOp>, // corresponds to '|>' in input
 }
 
 // Domain to be specified in the query
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum Domain { 
     Memory,     // A_mem lattice (for memory errors)
     General     // T, _|_
 } 
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum SequenceOp {
     Then,
 }
 
 /// Variables can be expressed as follow: v_type|qualifier|name   
 /// with * for any
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub struct Variable {
     pub v_type: Option<Type>,           // specified var type ||*
     pub qualifier: Option<Qualifier>,   // imm||mut||*
     pub name: Option<VarName>,          // specified || *
 }
 /// Name of the variable to search in the query can be a soecific name or any
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum VarName { 
     Named(String),  // specific var name
     Any             // any variable
 }
 /// Type of vars to search within the pattern
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum Type { Box, Int, Float, Union, Function, Vec, Enum, Trait, Struct, Reference, Array, String, Tuple, Any }
 
 /// Qualifier associated to variables 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum Qualifier { Imm, Mut, Any }
 
 /// Statements
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum Statement {
     Predicate(Predicate),
     And(Box<Statement>, Box<Statement>),
@@ -89,22 +89,22 @@ pub enum Statement {
         cond: Box<Statement> },
 }
 /// Quantifiers
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum Quantifier { 
     ForAll,     
     Exists      
 }
 
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum FieldDomain { FieldsOf { typename: String } }
 
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum Predicate {
     Alloc(Option<Term>),
     Drop(Option<Term>),
-    Use(Option<Term>),
+    Use(Option<Term>),                      // r, w, instanciate
     Read(Option<Term>),
     Write(Option<Term>),
     Assign(Option<Term>),
@@ -113,15 +113,15 @@ pub enum Predicate {
     Custom(String, Vec<Term>),
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum Language{
     Rust,
     C,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum AllocatorType {
-    Default,        // default
+    Default,        // global allocator default
     Jemalloc,
     Mimalloc,
     Rpmalloc,
@@ -130,8 +130,68 @@ pub enum AllocatorType {
     Dlmalloc,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum Term { Var(String), FieldAccess { base: String, field: String }, Literal(String) }
+
+/// Method on Statement for evaluating a logical stmnt based on a function f that decides whether Predicates are T or F
+/// Params:
+///         - self: the logical stmnt to evaluate
+///         - f   : a function that takes a Predicate and returns a boolean (T or F predicate under some assignment)
+/// It recursively evaluates the logical structure of the Statement
+ 
+impl Statement {
+    pub fn eval<F>(&self, f: &F) -> bool
+    where
+        F: Fn(&Predicate) -> bool,
+    {
+        match self {
+            // Statement type                   Evaluation logic
+            Statement::Predicate(p)     =>      f(p),
+            Statement::Not(inner)       =>      !inner.eval(f),
+            Statement::And(lhs, rhs)    =>      lhs.eval(f) && rhs.eval(f),
+            Statement::Or(lhs, rhs)     =>      lhs.eval(f) || rhs.eval(f),
+            Statement::Wildcard         =>      true, 
+            Statement::Then(lhs, rhs) => lhs.eval(f) && rhs.eval(f), 
+            Statement::Quantified { quant, cond, .. } => match quant {
+                Quantifier::ForAll => {
+                    // Simulate universal quantifier: cond must be true in all assignments
+                    cond.eval(f)
+                }
+                Quantifier::Exists => {
+                    // Simulate existential quantifier: cond must be true in at least one assignment
+                    cond.eval(f)
+                }
+            },
+        }
+    }
+}
+
+/// Test function to check if 2 Statements are logically equivalent across all possible truth assignments of a given set of Predicates
+/// Params:
+///         - stmt1: first logical statement
+///         - stmt2: second logical statement
+///         - preds:  set of predicates (like propositional variables) involved in the stmnts
+///  e.g., is stmt1 logically equivalent to stmt2 over preds?
+pub fn semantically_eq(stmt1: &Statement, stmt2: &Statement, preds: &[Predicate]) -> bool {
+    // let n be the #statements
+    let n = preds.len(); 
+    // iterate over all 2^n possible truth assignments
+    for mask in 0..(1 << n) {
+        // for each assignment, define a closure f: &Predicate -> bool:
+        // returns true or false depending on the current assignment (determined by the bitmask)
+        let f = |p: &Predicate| {
+            let idx = preds.iter().position(|q| q == p).unwrap();
+            (mask & (1 << idx)) != 0
+        };
+        // if any assignment causes them to differ, return false
+        if stmt1.eval(&f) != stmt2.eval(&f) {
+            return false;
+        }
+    }
+    // if all assignments match, return true
+    true
+}
+
 
 /// AST Builder
 /// Input: result of the parser
@@ -171,7 +231,9 @@ pub fn build_ast(pairs: Pairs<Rule>) -> Vec<RuleDef> {
                                     Some(ref s) if *s == "string" => Some(Type::String),
                                     Some(ref s) if *s == "tuple" || *s == "tup"  => Some(Type::Tuple),
 
-                                    Some(ref s) if *s == "*" || *s == "**" => Some(Type::Any),
+                                    Some(ref s) if *s == "*" 
+                                    //|| *s == "**"
+                                     => Some(Type::Any),
                                     None => Some(Type::Any),
                                     _ => Some(Type::Any),
                                 };

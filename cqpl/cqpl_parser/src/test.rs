@@ -136,6 +136,22 @@ mod tests {
         );
     }
 
+
+    #[test]
+    fn test_and_expression_with_var() {
+        let pair = CQPLParser::parse(Rule::and_expr, "read(x) && write(x)").unwrap().next().unwrap();
+        let stmt = parse_statement(pair);
+
+        assert_eq!(
+            stmt,
+            Statement::And(
+                Box::new(Statement::Predicate(Predicate::Read(Some(Term::Var("x".to_string()))))),
+                Box::new(Statement::Predicate(Predicate::Write(Some(Term::Var("x".to_string()))))),
+            )
+        );
+    }
+
+
     #[test]
     fn test_or_expression() {
         let pair = CQPLParser::parse(Rule::or_expr, "read || write").unwrap().next().unwrap();
@@ -146,6 +162,20 @@ mod tests {
             Statement::Or(
                 Box::new(Statement::Predicate(Predicate::Read(None))),
                 Box::new(Statement::Predicate(Predicate::Write(None)))
+            )
+        );
+    }
+
+     #[test]
+    fn test_or_expression_with_var() {
+        let pair = CQPLParser::parse(Rule::or_expr, "read(x) || write(x)").unwrap().next().unwrap();
+        let stmt = parse_statement(pair);
+
+        assert_eq!(
+            stmt,
+            Statement::Or(
+                Box::new(Statement::Predicate(Predicate::Read(Some(Term::Var("x".to_string()))))),
+                Box::new(Statement::Predicate(Predicate::Write(Some(Term::Var("x".to_string()))))),
             )
         );
     }
@@ -188,7 +218,7 @@ mod tests {
     }
 
 
-    ///// TEST ALLOCTORS
+    /// TEST ALLOCTORS
      #[test]
     fn test_allocator_predicates() {
         let languages = vec![("rust", Language::Rust), ("c", Language::C)];
@@ -235,8 +265,83 @@ mod tests {
     }
 
 
+    /// COMMUTATIVITY AND
+    #[test]
+    fn test_and_commutativity() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "read && write").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "write && read").unwrap().next().unwrap());
+        let preds = vec![Predicate::Read(None), Predicate::Write(None)];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds));
+    }
+
+    /// COMMUTATIVITY OR
+    #[test]
+    fn test_or_commutativity() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "read || write").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "write || read").unwrap().next().unwrap());
+        let preds = vec![Predicate::Read(None), Predicate::Write(None)];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds));
+    }
+
+    /// ASSOCIATIVITY AND
+    #[test]
+    fn test_and_associativity() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "read && (write && assign)").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "(read && write) && assign").unwrap().next().unwrap());
+        let preds = vec![Predicate::Read(None), Predicate::Write(None), Predicate::Assign(None)];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds));
+    }
+
+    /// ASSOCIATIVITY OR
+    #[test]
+    fn test_or_associativity() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "read || (write || assign)").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "(read || write) || assign").unwrap().next().unwrap());
+        let preds = vec![Predicate::Read(None), Predicate::Write(None), Predicate::Assign(None)];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds));
+    }
+
+    /// DISTRIBUTIVITY
+    #[test]
+    fn test_distributivity() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "read && (write || assign)").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "(read && write) || (read && assign)").unwrap().next().unwrap());
+        let preds = vec![Predicate::Read(None), Predicate::Write(None), Predicate::Assign(None)];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds));
+    }
+
+    /// DE MORGAN
+    #[test]
+    fn test_de_morgan_and() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "!(read && write)").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "!read || !write").unwrap().next().unwrap());
+        let preds = vec![Predicate::Read(None), Predicate::Write(None)];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds));
+    }
 
 
+    #[test]
+    fn test_de_morgan_or() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "!(read || write)").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "!read && !write").unwrap().next().unwrap());
+        let preds = vec![Predicate::Read(None), Predicate::Write(None)];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds));
+    }
 
+    /// Test quantifiers:
+    #[test]
+    fn test_quantifier_and_commutativity() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "\\forall x read(x) && write(x)").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "\\forall x write(x) && read(x)").unwrap().next().unwrap());
+        let preds = vec![Predicate::Read(None), Predicate::Write(None)];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds));
+    }
 
+    #[test]
+    fn test_nested_quantifiers() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "\\forall x read(x) && \\exists y write(y)").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "\\forall x read(x) && \\exists y write(y)").unwrap().next().unwrap());
+        let preds = vec![Predicate::Read(None), Predicate::Write(None)];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds));
+    }
 }

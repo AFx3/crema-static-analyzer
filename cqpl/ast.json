@@ -1,25 +1,43 @@
 [
   {
     "name": [
-      "# mem_leak"
+      "# uaf_2"
     ],
     "domain": "Memory",
     "variables": [
       {
         "v_type": "Any",
         "qualifier": "Any",
-        "name": {
-          "Named": "x"
-        }
+        "name": "Any"
       }
     ],
     "taint_src": [
       {
         "statements": [
           {
-            "Predicate": {
-              "Alloc": {
-                "Var": "x"
+            "Quantified": {
+              "quant": "ForAll",
+              "var": "Any",
+              "cond": {
+                "Predicate": {
+                  "Alloc": null
+                }
+              }
+            }
+          }
+        ],
+        "next_op": "Then"
+      },
+      {
+        "statements": [
+          {
+            "Quantified": {
+              "quant": "ForAll",
+              "var": "Any",
+              "cond": {
+                "Predicate": {
+                  "Read": null
+                }
               }
             }
           }
@@ -32,8 +50,22 @@
         "statements": [
           {
             "Predicate": {
-              "Drop": {
-                "Var": "x"
+              "Drop": null
+            }
+          }
+        ],
+        "next_op": "Then"
+      },
+      {
+        "statements": [
+          {
+            "Quantified": {
+              "quant": "Exists",
+              "var": "Any",
+              "cond": {
+                "Predicate": {
+                  "Use": null
+                }
               }
             }
           }
