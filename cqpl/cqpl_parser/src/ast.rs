@@ -68,7 +68,7 @@ pub enum VarName {
 }
 /// Type of vars to search within the pattern
 #[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
-pub enum Type { Box, Int, Float, Union, Function, Vec, Enum, Trait, Struct, Reference, Array, String, Tuple, Any }
+pub enum Type { Box, Literal, Union, Function, Vec, Enum, Trait, Struct, Reference, Array, String, Tuple, Any }
 
 /// Qualifier associated to variables 
 #[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
@@ -218,8 +218,8 @@ pub fn build_ast(pairs: Pairs<Rule>) -> Vec<RuleDef> {
                                 let slots: Vec<&str> = pattern.trim().split('|').collect();
                                 let v_type = match slots.get(0).map(|s| s.to_lowercase()) {
                                     Some(ref s) if *s == "box" => Some(Type::Box),
-                                    Some(ref s) if *s == "int" => Some(Type::Int),
-                                    Some(ref s) if *s == "float" => Some(Type::Float),
+            
+                                    Some(ref s) if *s == "literal" => Some(Type::Literal),
                                     Some(ref s) if *s == "union" => Some(Type::Union),
                                     Some(ref s) if *s == "function" => Some(Type::Function),
                                     Some(ref s) if *s == "vec" || *s == "vector"  => Some(Type::Vec),
