@@ -1,0 +1,6 @@
+# aa
+## domain: general
+v: box|*|*
+
+taint_src: \forall alloc
+taint_snk: read()

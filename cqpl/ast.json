@@ -1,12 +1,12 @@
 [
   {
     "name": [
-      "# uaf_2"
+      "# aa"
     ],
-    "domain": "Memory",
+    "domain": "General",
     "variables": [
       {
-        "v_type": "Any",
+        "v_type": "Box",
         "qualifier": "Any",
         "name": "Any"
       }
@@ -26,22 +26,6 @@
             }
           }
         ],
-        "next_op": "Then"
-      },
-      {
-        "statements": [
-          {
-            "Quantified": {
-              "quant": "ForAll",
-              "var": "Any",
-              "cond": {
-                "Predicate": {
-                  "Read": null
-                }
-              }
-            }
-          }
-        ],
         "next_op": null
       }
     ],
@@ -50,23 +34,7 @@
         "statements": [
           {
             "Predicate": {
-              "Drop": null
-            }
-          }
-        ],
-        "next_op": "Then"
-      },
-      {
-        "statements": [
-          {
-            "Quantified": {
-              "quant": "Exists",
-              "var": "Any",
-              "cond": {
-                "Predicate": {
-                  "Use": null
-                }
-              }
+              "Read": null
             }
           }
         ],
