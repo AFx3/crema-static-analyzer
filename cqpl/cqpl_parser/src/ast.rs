@@ -411,7 +411,7 @@ pub fn parse_statement(pair: Pair<Rule>) -> Statement {
 
 
 
-pub fn parse_predicate(pair: Pair<Rule>) -> Predicate {
+/*pub fn parse_predicate(pair: Pair<Rule>) -> Predicate {
     // dont'care if lower or uppercase the pradicate for now, so to_lowercase()
     let txt = pair.as_str().trim().to_lowercase();
     match txt {
@@ -425,4 +425,69 @@ pub fn parse_predicate(pair: Pair<Rule>) -> Predicate {
        
         _ => Predicate::Custom(txt.to_string(), vec![]),
     }
+}*/
+
+
+/// HANDLING PREDICATES: let's suppose predicate is ALLOC
+/// ALLOC || ALLOC() -> Predicate::Alloc(None)
+/// ALLOC(x) -> Predicate::Alloc(Some(Term::Var("x")))
+/// ALLOC(x.y) -> Predicate::Alloc(Some(Term::FieldAccess { base: "x", field: "y" }))
+/// WARNING: put it for the moment; Multiple arguments (ALLOC(x,y)) -> first arg is used (?)
+pub fn parse_predicate(pair: Pair<Rule>) -> Predicate {
+    // get raw string of the predicate and trim whitespace
+    let txt = pair.as_str().trim();
+
+    // separate predicate name and optional args inside parentheses
+    // return a tuple: (name: String, args: Vec<Term>)
+    let (name, args): (String, Vec<Term>) = if let Some(idx) = txt.find('(') {
+        // if there is a ( in the predicate, extract the name before it
+        let name = txt[..idx].to_lowercase(); // handles case insensitive predicate names
+
+        // extract the string inside parentheses (ars)
+        let args_str = &txt[idx + 1..txt.len() - 1]; // remove closing parenthesis )
+
+        // parse arguments
+        let args_vec = if args_str.trim().is_empty() {
+            // EMPTY PARENTHESIS handling, e.g., ALLOC()
+            vec![]
+        } else {
+            args_str
+                .split(',') // handle multiple arguments separated by ,
+                .map(|s| {
+                    let s = s.trim();
+
+                    //  FIELD ACCESS, e.g., x.y
+                    if let Some(dot_idx) = s.find('.') {
+                        let base = &s[..dot_idx];
+                        let field = &s[dot_idx + 1..];
+                        Term::FieldAccess {
+                            base: base.to_string(),
+                            field: field.to_string(),
+                        }
+                    } else {
+                        // VAR ARGUMENT (simple case), e.g., x
+                        Term::Var(s.to_string())
+                    }
+                })
+                .collect()
+        };
+        (name, args_vec)
+    } else {
+        // PREDICATE WITHOUT (), e.g., ALLOC
+        (txt.to_lowercase(), vec![])
+    };
+
+    // Map the predicate name to the corresponding enum variant
+    // If there is an arg, pass the first one; if none, pass None
+    match name.as_str() {
+        "alloc"      => Predicate::Alloc(args.get(0).cloned()),
+        "drop"       => Predicate::Drop(args.get(0).cloned()),
+        "use"        => Predicate::Use(args.get(0).cloned()),
+        "read"       => Predicate::Read(args.get(0).cloned()),
+        "write"      => Predicate::Write(args.get(0).cloned()),
+        "assign"     => Predicate::Assign(args.get(0).cloned()),
+        "allocator"  => Predicate::Allocator(args.get(0).cloned()),
+        _ => panic!("Unknown predicate: {}", name), // // no Custom predicates; UNKNOWN PREDICATES WILL panic
+    }
 }
+

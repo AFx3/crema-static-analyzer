@@ -1,0 +1,6 @@
+# mem_leak
+## domain: memory
+v: *|*|x
+
+taint_src: ALLOC(x)
+taint_snk: DROP(x)

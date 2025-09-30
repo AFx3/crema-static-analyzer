@@ -2,6 +2,7 @@
 mod tests {
     use pest::Parser;
     use crate::ast::*;
+    //use crate::test::tests::Term::Var;
 
     #[test]
     fn test_predicate_alloc() {
@@ -11,6 +12,19 @@ mod tests {
         assert_eq!(
             stmt,
             Statement::Predicate(Predicate::Alloc(None))
+        );
+    }
+
+
+
+    #[test]
+    fn test_predicate_drop() {
+        let pair = CQPLParser::parse(Rule::predicate, "drop").unwrap().next().unwrap();
+        let stmt = parse_statement(pair);
+
+        assert_eq!(
+            stmt,
+            Statement::Predicate(Predicate::Drop(None))
         );
     }
 

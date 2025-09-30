@@ -1,26 +1,26 @@
 [
   {
     "name": [
-      "# test_and"
+      "# mem_leak"
     ],
-    "domain": "General",
+    "domain": "Memory",
     "variables": [
       {
-        "v_type": "Vec",
+        "v_type": "Any",
         "qualifier": "Any",
-        "name": "Any"
+        "name": {
+          "Named": "x"
+        }
       }
     ],
     "taint_src": [
       {
         "statements": [
           {
-            "Quantified": {
-              "quant": "ForAll",
-              "var": {
-                "Named": "ALLOC"
-              },
-              "cond": "Wildcard"
+            "Predicate": {
+              "Alloc": {
+                "Var": "x"
+              }
             }
           }
         ],
@@ -31,24 +31,9 @@
       {
         "statements": [
           {
-            "Quantified": {
-              "quant": "Exists",
-              "var": {
-                "Named": "x"
-              },
-              "cond": {
-                "And": [
-                  {
-                    "Predicate": {
-                      "InFields": "Vec"
-                    }
-                  },
-                  {
-                    "Predicate": {
-                      "Drop": null
-                    }
-                  }
-                ]
+            "Predicate": {
+              "Drop": {
+                "Var": "x"
               }
             }
           }
