@@ -108,10 +108,28 @@ pub enum Predicate {
     Read(Option<Term>),
     Write(Option<Term>),
     Assign(Option<Term>),
-    Allocator(Option<Term>),        // to do
+    Allocator(Language, AllocatorType),        
     InFields(Type),
     Custom(String, Vec<Term>),
 }
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub enum Language{
+    Rust,
+    C,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub enum AllocatorType {
+    Default,        // default
+    Jemalloc,
+    Mimalloc,
+    Rpmalloc,
+    Snmalloc,
+    Weealloc,
+    Dlmalloc,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub enum Term { Var(String), FieldAccess { base: String, field: String }, Literal(String) }
 
@@ -382,8 +400,6 @@ pub fn parse_statement(pair: Pair<Rule>) -> Statement {
 
         }
         
-       
-
         Rule::and_expr => {
             let mut inner = pair.into_inner();
             let first = parse_statement(inner.next().unwrap());
@@ -401,9 +417,6 @@ pub fn parse_statement(pair: Pair<Rule>) -> Statement {
         Rule::paren_expr | Rule::logic_expr  => {
             parse_statement(pair.into_inner().next().unwrap())
         }
-
-
-
 
         _ => panic!("Unexpected rule in parse_statement: {:?}", pair.as_rule()),
     }
@@ -468,7 +481,40 @@ pub fn parse_predicate(pair: Pair<Rule>) -> Predicate {
         "read"       => Predicate::Read(args.get(0).cloned()),
         "write"      => Predicate::Write(args.get(0).cloned()),
         "assign"     => Predicate::Assign(args.get(0).cloned()),
-        "allocator"  => Predicate::Allocator(args.get(0).cloned()),
+        "allocator"  => {
+            
+            // expects exactly 2 args: language and allocator type
+            if args.len() != 2 {
+                panic!("Allocator predicate requires 2 arguments: language and allocator type, got {}", args.len());
+            }
+
+            // parse 1st argt: Language
+            let lang = match &args[0] {
+                Term::Var(s) => match s.to_lowercase().as_str() {
+                    "rust" => Language::Rust,
+                    "c" => Language::C,
+                    other => panic!("Unknown language '{}'", other),
+                },
+                _ => panic!("First argument of allocator must be a language"),
+            };
+
+            // parse 2nd arg: AllocatorType
+            let alloc_type = match &args[1] {
+                Term::Var(s) => match s.to_lowercase().as_str() {
+                    "default" => AllocatorType::Default,
+                    "jemalloc" => AllocatorType::Jemalloc,
+                    "mimalloc" => AllocatorType::Mimalloc,
+                    "rpmalloc" => AllocatorType::Rpmalloc,
+                    "snmalloc" => AllocatorType::Snmalloc,
+                    "weealloc" => AllocatorType::Weealloc,
+                    "dlmalloc" => AllocatorType::Dlmalloc,
+                    other => panic!("Unknown allocator type '{}'", other),
+                },
+                _ => panic!("Second argument of allocator must be an allocator type"),
+            };
+
+            Predicate::Allocator(lang, alloc_type)
+        }
         _ => panic!("Unknown predicate: {}", name), // // no Custom predicates; UNKNOWN PREDICATES WILL panic
     }
 }
