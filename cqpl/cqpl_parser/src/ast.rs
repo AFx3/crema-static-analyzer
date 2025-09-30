@@ -410,24 +410,6 @@ pub fn parse_statement(pair: Pair<Rule>) -> Statement {
 }
 
 
-
-/*pub fn parse_predicate(pair: Pair<Rule>) -> Predicate {
-    // dont'care if lower or uppercase the pradicate for now, so to_lowercase()
-    let txt = pair.as_str().trim().to_lowercase();
-    match txt {
-        s if s.starts_with("alloc")  => Predicate::Alloc(None),
-        s if s.starts_with("drop")   => Predicate::Drop(None),
-        s if s.starts_with("use")    => Predicate::Use(None),
-        s if s.starts_with("read")   => Predicate::Read(None),
-        s if s.starts_with("write")  => Predicate::Write(None),
-        s if s.starts_with("assign") => Predicate::Assign(None),
-        s if s.starts_with("allocator") => Predicate::Allocator(None),
-       
-        _ => Predicate::Custom(txt.to_string(), vec![]),
-    }
-}*/
-
-
 /// HANDLING PREDICATES: let's suppose predicate is ALLOC
 /// ALLOC || ALLOC() -> Predicate::Alloc(None)
 /// ALLOC(x) -> Predicate::Alloc(Some(Term::Var("x")))
