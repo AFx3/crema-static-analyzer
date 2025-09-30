@@ -10,7 +10,7 @@ mod tests {
 
      #[test]
     fn test_predicates() {
-        let predicates = ["alloc", "use", "read", "write", "assign", "allocator"];
+        let predicates = ["alloc", "use", "read", "write", "assign"];
         
         for &p in predicates.iter() {
             // predicates with no ()
@@ -22,7 +22,6 @@ mod tests {
                 "read" => Statement::Predicate(Predicate::Read(None)),
                 "write" => Statement::Predicate(Predicate::Write(None)),
                 "assign" => Statement::Predicate(Predicate::Assign(None)),
-                "allocator" => Statement::Predicate(Predicate::Allocator(None)),
                 _ => unreachable!(),
             };
             assert_eq!(stmt, expect);
@@ -41,7 +40,6 @@ mod tests {
                 "read" => Statement::Predicate(Predicate::Read(Some(Term::Var("x".to_string())))),
                 "write" => Statement::Predicate(Predicate::Write(Some(Term::Var("x".to_string())))),
                 "assign" => Statement::Predicate(Predicate::Assign(Some(Term::Var("x".to_string())))),
-                "allocator" => Statement::Predicate(Predicate::Allocator(Some(Term::Var("x".to_string())))),
                 _ => unreachable!(),
             };
             assert_eq!(stmt, expect);
@@ -56,7 +54,7 @@ mod tests {
                 "read" => Statement::Predicate(Predicate::Read(Some(Term::FieldAccess { base: "x".to_string(), field: "y".to_string() }))),
                 "write" => Statement::Predicate(Predicate::Write(Some(Term::FieldAccess { base: "x".to_string(), field: "y".to_string() }))),
                 "assign" => Statement::Predicate(Predicate::Assign(Some(Term::FieldAccess { base: "x".to_string(), field: "y".to_string() }))),
-                "allocator" => Statement::Predicate(Predicate::Allocator(Some(Term::FieldAccess { base: "x".to_string(), field: "y".to_string() }))),
+               // "allocator" => Statement::Predicate(Predicate::Allocator(Some(Term::FieldAccess { base: "x".to_string(), field: "y".to_string() }))),
                 _ => unreachable!(),
             };
             assert_eq!(stmt, expect);
@@ -188,4 +186,57 @@ mod tests {
 
         assert!(result.is_err()); // only tup, array, vec ecc..
     }
+
+
+    ///// TEST ALLOCTORS
+     #[test]
+    fn test_allocator_predicates() {
+        let languages = vec![("rust", Language::Rust), ("c", Language::C)];
+        let allocator_types = vec![
+            ("default", AllocatorType::Default),
+            ("jemalloc", AllocatorType::Jemalloc),
+            ("mimalloc", AllocatorType::Mimalloc),
+            ("rpmalloc", AllocatorType::Rpmalloc),
+            ("snmalloc", AllocatorType::Snmalloc),
+            ("weealloc", AllocatorType::Weealloc),
+            ("dlmalloc", AllocatorType::Dlmalloc),
+        ];
+
+        for (lang_str, lang_enum) in &languages {
+            for (alloc_str, alloc_enum) in &allocator_types {
+                let input = format!("allocator({}, {})", lang_str, alloc_str);
+                let pair = CQPLParser::parse(Rule::predicate, &input).unwrap().next().unwrap();
+                let stmt = parse_statement(pair);
+
+                assert_eq!(stmt, Statement::Predicate(Predicate::Allocator(lang_enum.clone(), alloc_enum.clone())), "Failed for input: {}", input);
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "Allocator predicate requires 2 arguments")]
+    fn test_allocator_wrong_number_of_args() {
+        let pair = CQPLParser::parse(Rule::predicate, "allocator(rust)").unwrap().next().unwrap();
+        parse_statement(pair); //  panic -> only one argument provided
+    }
+
+    #[test]
+    #[should_panic(expected = "Unknown language")]
+    fn test_allocator_unknown_language() {
+        let pair = CQPLParser::parse(Rule::predicate, "allocator(java, jemalloc)").unwrap().next().unwrap();
+        parse_statement(pair); // panic because is invalid
+    }
+
+    #[test]
+    #[should_panic(expected = "Unknown allocator type")]
+    fn test_allocator_unknown_type() {
+        let pair = CQPLParser::parse(Rule::predicate, "allocator(rust, unknown)").unwrap().next().unwrap();
+        parse_statement(pair); // panic -> unknown is invalid
+    }
+
+
+
+
+
+
 }
