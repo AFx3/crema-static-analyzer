@@ -17,29 +17,13 @@ var_pattern = { (ASCII_ALPHANUMERIC | "_" | "*" | "|" )+ }
 taint_src_decl = { "taint_src:" ~ statement_line ~ (NEWLINE* ~ "|>" ~ NEWLINE* ~ "taint_src:" ~ statement_line)* ~ NEWLINE? }
 taint_snk_decl = { ("taint_snk:" | "@taint_snk:") ~ statement_line ~ (NEWLINE ~ "|>" ~ NEWLINE ~ ("taint_snk:" | "@taint_snk:") ~ statement_line )* ~ NEWLINE? }
 
-
-
 logic_expr  = { order_expr }
 order_expr  = { sequence_expr ~ ("|>" ~ sequence_expr)* }
 sequence_expr = { or_expr }
 or_expr     = { and_expr ~ ("||" ~ and_expr )* }
 and_expr    = { not_expr ~ ("&&" ~ not_expr )* }
-
-
-
 not_expr = { "!"* ~ primary }
-//primary  = { predicate | wildcard | paren_expr | quant_expr }
-//paren_expr = { "(" ~ logic_expr ~ ")" }
-
-
-
 wildcard    = { "*" }
-
-
-//quant_expr  = { ("\\forall" | "\\exists") ~ (ident | predicate) ~ ("in" ~ type_access ~ ("!=" ~ field_access)? ~ ("&&" ~ predicate)?)? }
-
-
-
 
 quant_expr = {
     ("\\forall" | "\\exists") ~ WHITESPACE* ~ ident ~ WHITESPACE* ~ "." ~ WHITESPACE* ~ logic_expr
@@ -47,10 +31,7 @@ quant_expr = {
     | ("\\forall" | "\\exists") ~ WHITESPACE* ~ ident
 }
 primary  = { predicate | wildcard | paren_expr | quant_expr }
-//paren_expr = { "(" ~ logic_expr ~ ")" }
 paren_expr = { "(" ~ WHITESPACE* ~ logic_expr ~ WHITESPACE* ~ ")" }
-
-
 
 predicate   = { ident ~ ("(" ~ arg_list? ~ ")" )? }
 arg_list    = { arg ~ ("," ~ arg)* }
@@ -59,9 +40,7 @@ arg         = { field_access | ident }
 type_access  = { ident ~ "." ~ "fields" }
 field_access = { ident ~ "." ~ ident }
 
-
 ident = @{ (ASCII_ALPHANUMERIC | "_" )+ }
-
 
 ordered_statements = { statement_line ~ (NEWLINE* ~ "|>" ~ NEWLINE* ~ statement_line)* }
 statement_line = { logic_expr }
