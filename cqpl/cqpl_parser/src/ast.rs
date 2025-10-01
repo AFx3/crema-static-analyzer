@@ -136,6 +136,13 @@ pub enum Term { Var(String), FieldAccess { base: String, field: String }, Litera
 // This environment holds the current variable bindings during evaluation
 pub type Env = HashMap<String, String>; // var name -> concrete value
 
+// to do
+/*es access to multiple fields of union:
+Env must provide distinct field names like u.f1, u.f2, etc.
+possible_values passed to quantifiers must include all field names of the union.
+The analysis assumes that reading multiple fields means distinct fields, not just repeated access to the same field (unless field-sensitive)
+ */
+
 impl Statement {
     pub fn eval_with_env<F>(&self, f: &F, env: &Env, variables: &[Variable], possible_values: &Vec<String>) -> bool
     where
@@ -146,7 +153,7 @@ impl Statement {
             Statement::Not(inner) => !inner.eval_with_env(f, env, variables, possible_values),
             Statement::And(lhs, rhs) => lhs.eval_with_env(f, env, variables, possible_values) && rhs.eval_with_env(f, env, variables, possible_values),
             Statement::Or(lhs, rhs) => lhs.eval_with_env(f, env, variables, possible_values) || rhs.eval_with_env(f, env, variables, possible_values),
-            Statement::Then(lhs, rhs) => lhs.eval_with_env(f, env, variables, possible_values) && rhs.eval_with_env(f, env, variables, possible_values),
+            Statement::Then(lhs, rhs) => lhs.eval_with_env(f, env, variables, possible_values) && rhs.eval_with_env(f, env, variables, possible_values), // for the moment
             Statement::Wildcard => true,
 
             Statement::Quantified { quant, var, cond } => {
@@ -175,8 +182,6 @@ impl Statement {
         }
     }
 }
-
-
 
 pub fn semantically_eq<F>(stmt1: &Statement, stmt2: &Statement, preds: &[Predicate], variables: &[Variable], possible_values: &Vec<String>, eval_fn: &F) -> bool
 where
@@ -372,8 +377,8 @@ pub fn parse_statement(pair: Pair<Rule>) -> Statement {
 
         // not_expr: may have more ! in the head of declartion, so count them and wrap the child il figlio in #not as many #! are
         Rule::not_expr => {
-            let text = pair.as_str().to_string(); // salva prima
-            let mut inner = pair.into_inner();    // ora puoi consumarlo
+            let text = pair.as_str().to_string(); // get
+            let mut inner = pair.into_inner();    // consume
             let mut stmt = parse_statement(inner.next().unwrap());
 
             for _ in text.chars().take_while(|c| *c == '!') {
