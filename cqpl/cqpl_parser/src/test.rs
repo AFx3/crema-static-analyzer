@@ -1,4 +1,3 @@
-
 #[cfg(test)]
 mod tests {
     use pest::Parser;
@@ -494,6 +493,137 @@ mod tests {
         let possible_values = vec!["x".to_string(), "y".to_string()];
         assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
     }
+
+    // new tests
+    
+    // - Predicate::Alloc(Some(Term::Var(name))) => true iff env[name] == "alloced"
+    fn sample_eval(pred: &Predicate, env: &Env) -> bool {
+        match pred {
+            Predicate::Alloc(Some(Term::Var(v))) => {
+                env.get(v).map(|s| s == "alloced").unwrap_or(false)
+            }
+            Predicate::Alloc(None) => false,
+            _ => false,
+        }
+    }
+
+    #[test]
+    fn semantically_eq_basic() {
+        let s_x = Statement::Predicate(Predicate::Alloc(Some(Term::Var("x".to_string()))));
+        let s_y = Statement::Predicate(Predicate::Alloc(Some(Term::Var("y".to_string()))));
+
+        // dichiaro una variabile anonima (Any)
+        let vars = vec![Variable { v_type: None, qualifier: None, name: Some(VarName::Any) }];
+
+        let possible = vec!["alloced".to_string(), "not_alloced".to_string()];
+
+        // Con l'interpretazione sample_eval, s_x e s_y sono semanticamente eq su tutte le assegnazioni?
+        // dipende: se x e y sono la stessa variabile anonima
+        // caso easy: confronto s_x con se stesso -> deve essere true
+        assert!(semantically_eq(&s_x, &s_x, &[], &vars, &possible, &sample_eval));
+    }
+    #[test]
+    fn test_eval_predicate_true() {
+        let stmt = Statement::Predicate(Predicate::Alloc(Some(Term::Var("x".to_string()))));
+        let mut env = Env::new();
+        env.insert("x".to_string(), "1".to_string());
+        assert!(stmt.eval_with_env(&dummy_eval, &env, &[], &["0".into(), "1".into()]));
+    }
+    /// TEST THEN (|>)
+    // Caso valido: src |> src
+    #[test]
+    fn test_then_src_src_ok() {
+        let pair = CQPLParser::parse(Rule::logic_expr, "alloc(x) |> alloc(y)").unwrap().next().unwrap();
+        let stmt = parse_statement(pair);
+
+        assert_eq!(
+            stmt,
+            Statement::Then(
+                Box::new(Statement::Predicate(Predicate::Alloc(Some(Term::Var("x".to_string()))))),
+                Box::new(Statement::Predicate(Predicate::Alloc(Some(Term::Var("y".to_string()))))),
+            )
+        );
+    }
+    // Caso valido: snk |> snk
+    #[test]
+    fn test_then_snk_snk_ok() {
+        let pair = CQPLParser::parse(Rule::logic_expr, "drop(x) |> drop(y)").unwrap().next().unwrap();
+        let stmt = parse_statement(pair);
+
+        assert_eq!(
+            stmt,
+            Statement::Then(
+                Box::new(Statement::Predicate(Predicate::Drop(Some(Term::Var("x".to_string()))))),
+                Box::new(Statement::Predicate(Predicate::Drop(Some(Term::Var("y".to_string()))))),
+            )
+        );
+    }
+    // Should painc src |> snk 
+    #[test]
+    #[should_panic]
+    fn test_then_src_snk_should_fail() {
+        let pairs = CQPLParser::parse(Rule::file, r#"
+            # test
+            ## domain: memory
+            v: *|*|*
+            taint_src: alloc(x) |> drop(x)
+        "#).unwrap();
+        let rules = build_ast(pairs);
+        // la validazione interna a build_ast farà panic
+    }
+    /// new
+    #[test]
+    fn test_eval_with_env_alloc() {
+        let stmt = Statement::Predicate(Predicate::Alloc(Some(Term::Var("x".to_string()))));
+        let mut env = Env::new();
+        env.insert("x".into(), "alloced".into());
+
+       
+        assert!(stmt.eval_with_env(&sample_eval, &env, &[], &["alloced".into(), "free".into()]));
+    }
+
+    #[test]
+    fn test_semantically_eq_fail() {
+        let s1 = Statement::Predicate(Predicate::Alloc(Some(Term::Var("x".to_string()))));
+        let s2 = Statement::Predicate(Predicate::Alloc(Some(Term::Var("y".to_string()))));
+
+        let vars = vec![
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("x".into())) },
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("y".into())) },
+        ];
+        let possible = vec!["alloced".into(), "free".into()];
+
+        assert!(!semantically_eq(&s1, &s2, &[], &vars, &possible, &sample_eval));
+    }
+    ///// to check
+    #[test]
+    fn test_forall_semantics() {
+        let stmt = parse_statement(
+            CQPLParser::parse(Rule::logic_expr, "\\forall x. alloc(x)").unwrap().next().unwrap()
+        );
+
+        let vars = vec![Variable { v_type: None, qualifier: None, name: Some(VarName::Named("x".into())) }];
+        let possible = vec!["alloced".into(), "free".into()];
+
+        // sample_eval richiede che x == "alloced" per essere vero
+        // quindi \forall x. alloc(x) deve essere falso
+        assert!(!stmt.eval_with_env(&sample_eval, &Env::new(), &vars, &possible));
+    }
+
+    #[test]
+    fn test_exists_semantics() {
+        let stmt = parse_statement(
+            CQPLParser::parse(Rule::logic_expr, "\\exists x. alloc(x)").unwrap().next().unwrap()
+        );
+
+        let vars = vec![Variable { v_type: None, qualifier: None, name: Some(VarName::Named("x".into())) }];
+        let possible = vec!["alloced".into(), "free".into()];
+
+        // c’è almeno un valore alloced che rende vera alloc(x)
+        assert!(stmt.eval_with_env(&sample_eval, &Env::new(), &vars, &possible));
+    }
+
+
 
 }
 
