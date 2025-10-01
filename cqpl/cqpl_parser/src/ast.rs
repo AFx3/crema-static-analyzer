@@ -25,7 +25,7 @@ pub struct CQPLParser;
 /// ____________________|
 /// 
 /// Only variable name is case-sensitive
-#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd, Hash)]
 pub struct RuleDef {
     pub name: Vec<String>,          // rule name (e.g.: # memory_leak)
     pub domain: Domain,             // a_mem || taint
@@ -33,20 +33,26 @@ pub struct RuleDef {
     pub taint_src: Vec<TaintBlock>, // pre condition
     pub taint_snk: Vec<TaintBlock>, // post condition
 }
-
+/// Kind of block
 #[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
+pub enum BlockKind {
+    Src,
+    Snk,
+}
+/// Taint block
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd, Hash)]
 pub struct TaintBlock {
+    pub kind: BlockKind, 
     pub statements: Vec<Statement>,
     pub next_op: Option<SequenceOp>, // corresponds to '|>' in input
 }
-
-// Domain to be specified in the query
-#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
+/// Domain to be specified in the query
+#[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd, Hash)]
 pub enum Domain { 
     Memory,     // A_mem lattice (for memory errors)
     General     // T, _|_
 } 
-
+/// Sequence between tant src/snk
 #[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum SequenceOp {
     Then,
@@ -93,10 +99,11 @@ pub enum Quantifier {
     ForAll,     
     Exists      
 }
-
+/// Structs, Union, ecc..
 #[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum FieldDomain { FieldsOf { typename: String } }
 
+/// Predicates that are supported 
 #[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum Predicate {
     Alloc(Option<Term>),
@@ -108,6 +115,8 @@ pub enum Predicate {
     Allocator(Language, AllocatorType),        
     InFields(Type),
     Custom(String, Vec<Term>),
+    OwnForg(Option<Term>),  // into_raw
+    OwnBack(Option<Term>),  // from_raw
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
@@ -116,6 +125,7 @@ pub enum Language{
     C,
 }
 
+/// Type of allocators
 #[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum AllocatorType {
     Default,        // global allocator default
@@ -126,7 +136,7 @@ pub enum AllocatorType {
     Weealloc,
     Dlmalloc,
 }
-
+/// Composed
 #[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum Term { Var(String), FieldAccess { base: String, field: String }, Literal(String) }
 
@@ -135,12 +145,585 @@ pub enum Term { Var(String), FieldAccess { base: String, field: String }, Litera
 //  (?) DATO CHE DEVO TESTARE GLI OPERATORI: first-order logic model checker with finite domains (possible_values) to decide equivalence
 //      - eval_with_env(): evaluates a single formula relative to a binding (env). ENV: var name -> concrete value
 //      - semantically_eq(): repeatedly calls eval_with_env() across all environments for all declared variables, ensuring two formulas are the same.
-
-
 // Define a type alias for the environment: a map from variable names (String) to their concrete values (String)
 // This environment holds the current variable bindings during evaluation
 pub type Env = HashMap<String, String>; // var name -> concrete value
 
+/// Kind of statement, depending if its is declred on a src or snk
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StmtKind {
+    Src,
+    Snk,
+    Other,
+}
+
+impl Statement {
+    // Evaluate the formula under the environment env
+    pub fn eval_with_env<F>(
+        &self,                      // stmnt to be evaluated
+        f: &F,                      // external function. It will tell if a predicate is T || F under the env
+        env: &Env,                  // env: variables -> values
+        variables: &[Variable],     // vars declared within the rule
+        possible_values: &[String], // concrete values that each var can assume
+    ) -> bool
+    where
+        F: Fn(&Predicate, &Env) -> bool,
+    {
+        // internal recursive function working in-place on env_mut, acts on tree structure of statements
+        fn rec<F>(
+            stmt: &Statement,
+            f: &F,
+            env_mut: &mut Env,
+            variables: &[Variable],
+            possible_values: &[String],
+            anon_counter: &mut usize,
+        ) -> bool
+        where
+            F: Fn(&Predicate, &Env) -> bool,
+        {
+            match stmt {
+                Statement::Predicate(p) => f(p, env_mut),                                                   // check to f(p,env) if p is true under the current environment env
+                Statement::Not(inner) => !rec(inner, f, env_mut, variables, possible_values, anon_counter), // evaluate the inner stmnt and negates it
+                Statement::And(lhs, rhs) => {                                                               // both stamnts must be T
+                    rec(lhs, f, env_mut, variables, possible_values, anon_counter)  && rec(rhs, f, env_mut, variables, possible_values, anon_counter)
+                }
+                Statement::Or(lhs, rhs) => {                                                                // 1 stmnt must be T
+                    rec(lhs, f, env_mut, variables, possible_values, anon_counter) || rec(rhs, f, env_mut, variables, possible_values, anon_counter)
+                }
+                Statement::Then(lhs, rhs) => {                                                              // |> then operator as sequence
+                // pif lhs is T under the env, then rhs must be T
+                if rec(lhs, f, env_mut, variables, possible_values, anon_counter) {     
+                    rec(rhs, f, env_mut, variables, possible_values, anon_counter)
+                } else { //se lhs if F, the whole formula is false
+                    false
+                }
+            }
+                Statement::Wildcard => true,                                                                // * always T                     
+                Statement::Quantified { quant, var, cond } => {
+                    // Handle quantifiers
+                    // - se Named(name): use proprio name
+                    // - altrimenti (Any/None): genero una chiave unica __quant_i
+                    match quant {
+                        Quantifier::ForAll => { // all elements must be satisfy
+                            possible_values.iter().all(|val| {
+                                // genera chiave unica
+                                let key = match var {
+                                    Some(VarName::Named(name)) => name.clone(),
+                                    Some(VarName::Any) | None => {
+                                        let k = format!("__quant_{}", *anon_counter);
+                                        *anon_counter += 1;
+                                        k
+                                    }
+                                };
+                                // backtracking in-place: salve and insert
+                                let old = env_mut.insert(key.clone(), val.clone());
+                                // valuta la condizione
+                                let res = rec(cond, f, env_mut, variables, possible_values, anon_counter);
+                                // ripristina env (old può essere Some(prev) o None)
+                                match old {
+                                    Some(prev) => { env_mut.insert(key.clone(), prev); }
+                                    None => { env_mut.remove(&key); }
+                                }
+                                res
+                            })
+                        }
+                        Quantifier::Exists => { // at least one must satisfy
+                            possible_values.iter().any(|val| {
+                                let key = match var {
+                                    Some(VarName::Named(name)) => name.clone(),
+                                    Some(VarName::Any) | None => {
+                                        let k = format!("__quant_{}", *anon_counter);
+                                        *anon_counter += 1;
+                                        k
+                                    }
+                                };
+                                let old = env_mut.insert(key.clone(), val.clone());
+                                let res = rec(cond, f, env_mut, variables, possible_values, anon_counter);
+                                match old {
+                                    Some(prev) => { env_mut.insert(key.clone(), prev); }
+                                    None => { env_mut.remove(&key); }
+                                }
+                                res
+                            })
+                        }
+                    }
+                }
+            }
+        }
+        // copia mutabile dell'env di partenza ma non clono dentro i loop (backtracking in-place)
+        let mut env_clone = env.clone();
+        let mut anon_counter: usize = 0;
+        rec(self, f, &mut env_clone, variables, possible_values, &mut anon_counter)
+    }
+}
+
+/// check if 2 statements are semanticalle eq on all over the assignments of vars declared using possible_values
+pub fn semantically_eq<F>(
+    stmt1: &Statement,
+    stmt2: &Statement,
+    _preds: &[Predicate],               
+    variables: &[Variable],
+    possible_values: &[String],
+    eval_fn: &F,
+) -> bool
+where
+    F: Fn(&Predicate, &Env) -> bool,
+{
+    // helper ricorsivo: remaining_vars è la porzione di var rimanenti da instanziare
+    fn helper<F>(
+        stmt1: &Statement,
+        stmt2: &Statement,
+        env: &mut Env,
+        remaining_vars: &[Variable],
+        declared_vars: &[Variable],       // passare le var dichiarate a eval_with_env
+        possible_values: &[String],
+        eval_fn: &F,
+        anon_idx: usize,                  // indice per var anonime (genera __any_i)
+    ) -> bool
+    where
+        F: Fn(&Predicate, &Env) -> bool,
+    {
+        if remaining_vars.is_empty() {
+            // tutte le variabili sono assegnate: valuta i due statement nello stesso env
+            return stmt1.eval_with_env(eval_fn, env, declared_vars, possible_values)
+                == stmt2.eval_with_env(eval_fn, env, declared_vars, possible_values);
+        }
+        let first_var = &remaining_vars[0];
+        let rest_vars = &remaining_vars[1..];
+        // chiave per la current var
+        let key_base = match &first_var.name {
+            Some(VarName::Named(n)) => n.clone(),
+            Some(VarName::Any) | None => format!("__any_{}", anon_idx),
+        };
+        // per ogni valore possibile
+        for val in possible_values.iter() {
+            // inserimento in-place e salvo vecchio valore
+            let old = env.insert(key_base.clone(), val.clone());
+
+            // se la chiamata ricorsiva fallisce per una qualche assegnazione -> false
+            if !helper(
+                stmt1,
+                stmt2,
+                env,
+                rest_vars,
+                declared_vars,
+                possible_values,
+                eval_fn,
+                anon_idx + 1, // increment anon_idx quando consumo una var (anonima o no)
+            ) {
+                // ripristina env prima di tornare
+                match old {
+                    Some(prev) => {
+                        env.insert(key_base.clone(), prev);
+                    }
+                    None => {
+                        env.remove(&key_base);
+                    }
+                }
+                return false;
+            }
+            // ripristina env per provare il prossimo valore
+            match old {
+                Some(prev) => {
+                    env.insert(key_base.clone(), prev);
+                }
+                None => {
+                    env.remove(&key_base);
+                }
+            }
+        }
+        // tutte le assegnazioni per questa variabile hanno passato il test
+        true
+    }
+
+    let mut env = Env::new();
+    helper(
+        stmt1,
+        stmt2,
+        &mut env,
+        variables,
+        variables,          // declared_vars = variables
+        possible_values,
+        eval_fn,
+        0,                  // anon_idx parte da 0
+    )
+}
+/// function to validead kind of taint: src or snk for the |> (because is allowed only on more src or more snk)
+pub fn validate_rule(rule: &RuleDef) {
+    // check taint_src
+    for (i, block) in rule.taint_src.iter().enumerate() {
+        if let Some(SequenceOp::Then) = block.next_op {
+            if let Some(next_block) = rule.taint_src.get(i+1) {
+                if block.kind != next_block.kind {
+                    panic!("Invalid sequence: {:?} |> {:?}", block.kind, next_block.kind);
+                }
+            }
+        }
+    }
+    // check taint_snk
+    for (i, block) in rule.taint_snk.iter().enumerate() {
+        if let Some(SequenceOp::Then) = block.next_op {
+            if let Some(next_block) = rule.taint_snk.get(i+1) {
+                if block.kind != next_block.kind {
+                    panic!("Invalid sequence: {:?} |> {:?}", block.kind, next_block.kind);
+                }
+            }
+        }
+    }
+}
+
+/// AST Builder
+/// Input: result of the parser
+/// recursively visits all pairs of the tree
+/// Output: for each rule_item (i.e.: a rule) returns a vector of rule definition
+pub fn build_ast(pairs: Pairs<Rule>) -> Vec<RuleDef> {
+    let mut rules = Vec::new();
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::file => rules.extend(build_ast(pair.into_inner())),
+            Rule::rule_item => {
+                let mut name = Vec::new();
+                let mut domain = Domain::General;
+                let mut variables = Vec::new();
+                let mut taint_src = Vec::new();
+                let mut taint_snk = Vec::new();
+
+                for inner in pair.into_inner() {
+                    match inner.as_rule() {
+                        Rule::rule_header => name.push(inner.as_str().trim().to_string()),
+                        Rule::var_decl => {
+                            if let Some((_, pattern)) = inner.as_str().trim().split_once(':') {
+                                let slots: Vec<&str> = pattern.trim().split('|').collect();
+                                let v_type = match slots.get(0).map(|s| s.to_lowercase()) {
+                                    Some(ref s) if *s == "box" => Some(Type::Box),
+                                    Some(ref s) if *s == "literal" => Some(Type::Literal),
+                                    Some(ref s) if *s == "union" => Some(Type::Union),
+                                    Some(ref s) if *s == "function" => Some(Type::Function),
+                                    Some(ref s) if *s == "vec" || *s == "vector" => Some(Type::Vec),
+                                    Some(ref s) if *s == "enum" => Some(Type::Enum),
+                                    Some(ref s) if *s == "trait" => Some(Type::Trait),
+                                    Some(ref s) if *s == "struct" => Some(Type::Struct),
+                                    Some(ref s) if *s == "reference" => Some(Type::Reference),
+                                    Some(ref s) if *s == "array" || *s == "arr" => Some(Type::Array),
+                                    Some(ref s) if *s == "string" => Some(Type::String),
+                                    Some(ref s) if *s == "tuple" || *s == "tup" => Some(Type::Tuple),
+                                    Some(ref s) if *s == "*" => Some(Type::Any),
+                                    None => Some(Type::Any),
+                                    _ => Some(Type::Any),
+                                };
+                                let qualifier = match slots.get(1).map(|s| s.to_lowercase()) {
+                                    Some(ref s) if *s == "imm" => Some(Qualifier::Imm),
+                                    Some(ref s) if *s == "mut" => Some(Qualifier::Mut),
+                                    Some(ref s) if *s == "*" => Some(Qualifier::Any),
+                                    None => Some(Qualifier::Any),
+                                    _ => Some(Qualifier::Any),
+                                };
+                                let var_name = match slots.get(2).map(|s| *s) {
+                                    Some("*") | None => VarName::Any,
+                                    Some(name) => VarName::Named(name.to_string()),
+                                };
+                                variables.push(Variable {
+                                    name: Some(var_name),
+                                    v_type,
+                                    qualifier,
+                                });
+                            }
+                        }
+
+                        Rule::domain_decl => {
+                            domain = if inner.as_str().to_lowercase().contains("memory") {
+                                Domain::Memory
+                            } else {
+                                Domain::General
+                            }
+                        }
+                        Rule::taint_src_decl => {
+                            let mut inner_pairs = inner.into_inner().peekable();
+                            while let Some(stmt_block) = inner_pairs.next() {
+                                let statements = parse_ordered_statements(stmt_block);
+
+                                let next_op = if inner_pairs.peek().is_some() {
+                                    Some(SequenceOp::Then)
+                                } else {
+                                    None
+                                };
+
+                                taint_src.push(TaintBlock {
+                                    statements,
+                                    next_op,
+                                    kind: BlockKind::Src,
+                                });
+                            }
+                        }
+                        Rule::taint_snk_decl => {
+                            let mut inner_pairs = inner.into_inner().peekable();
+                            while let Some(stmt_block) = inner_pairs.next() {
+                                let statements = parse_ordered_statements(stmt_block);
+
+                                let next_op = if inner_pairs.peek().is_some() {
+                                    Some(SequenceOp::Then)
+                                } else {
+                                    None
+                                };
+
+                                taint_snk.push(TaintBlock {
+                                    statements,
+                                    next_op,
+                                    kind: BlockKind::Snk,
+                                });
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                if !name.is_empty() {
+                    let rule = RuleDef {
+                        name,
+                        domain,
+                        variables,
+                        taint_src,
+                        taint_snk,
+                    };
+                    validate_rule(&rule);
+                    rules.push(rule);
+                }
+            }
+            _ => {}
+        }
+    }
+    rules
+}
+
+pub fn parse_ordered_statements(pair: Pair<Rule>) -> Vec<Statement> {
+    pair.into_inner().map(|stmt| parse_statement(stmt)).collect()
+}
+
+pub fn parse_statement(pair: Pair<Rule>) -> Statement {
+    match pair.as_rule() {
+        // handle sequence_expr (if present in the grammar)
+        Rule::sequence_expr => {
+            let mut inner = pair.into_inner();
+            let first = parse_statement(inner.next().unwrap());
+            inner.fold(first, |acc, stmt| {
+                Statement::Then(Box::new(acc), Box::new(parse_statement(stmt)))
+            })
+        }
+
+        Rule::order_expr => {
+            let mut inner = pair.into_inner();
+            let first = parse_statement(inner.next().unwrap());
+            inner.fold(first, |acc, stmt| {
+                let rhs = parse_statement(stmt);
+                Statement::Then(Box::new(acc), Box::new(rhs))
+            })
+        }
+        // primary: container node having only one significant child (predicate, quant_expr, wildcard, paren_expr)
+        Rule::primary => {
+            parse_statement(pair.into_inner().next().unwrap())
+        }
+        // if pair is predicate -> construct a Statement::Predicate
+        Rule::predicate => Statement::Predicate(parse_predicate(pair)),
+
+        // wildcard * -> Statement::Wildcard
+        Rule::wildcard => Statement::Wildcard,
+
+        // not_expr: may have more ! in the head of declartion
+        Rule::not_expr => {
+            let text = pair.as_str().to_string();
+            let mut inner = pair.into_inner();
+            let mut stmt = parse_statement(inner.next().unwrap());
+            for _ in text.chars().take_while(|c| *c == '!') {
+                stmt = Statement::Not(Box::new(stmt));
+            }
+            stmt
+        }
+        Rule::quant_expr => {
+            let quantifier_input_str = pair.as_str().trim().to_string();
+            let mut inner = pair.into_inner();
+
+            let quantifier = if quantifier_input_str.starts_with("\\forall") {
+                Quantifier::ForAll
+            } else if quantifier_input_str.starts_with("\\exists") {
+                Quantifier::Exists
+            } else {
+                panic!("Invalid quantifier. Supported: \\forall or \\exists");
+            };
+            let first = inner.next().unwrap();
+            match first.as_rule() {
+                Rule::predicate => Statement::Quantified {
+                    quant: quantifier,
+                    var: Some(VarName::Any),
+                    cond: Box::new(Statement::Predicate(parse_predicate(first))),
+                },
+                Rule::ident => {
+                    let name = first.as_str().to_lowercase();
+                    match name.as_str() {
+                        "alloc" | "drop" | "use" | "read" | "write" | "assign" | "allocator" => {
+                            Statement::Quantified {
+                                quant: quantifier,
+                                var: Some(VarName::Any),
+                                cond: Box::new(Statement::Predicate(parse_predicate(first))),
+                            }
+                        }
+                        _ => {
+                            let var_name = first.as_str().to_string();
+                            let mut cond_parts: Vec<Statement> = Vec::new();
+
+                            if let Some(next) = inner.next() {
+                                match next.as_rule() {
+                                    Rule::type_access => {
+                                        let txt = next.as_str();
+                                        let (ty_str, suffix) = txt.split_once('.').expect("type_access must be in the format Type.fields");
+                                        if suffix != "fields" { panic!("error in declaring type_access: {}", txt); }
+                                        let ty = match ty_str.to_lowercase().as_str() {
+                                            "vec"    => Type::Vec,
+                                            "struct" => Type::Struct,
+                                            "union"  => Type::Union,
+                                            "array"  => Type::Array,
+                                            "tuple"  => Type::Tuple,
+                                            other => panic!("Type '{}' is not allowed for .fields", other),
+                                        };
+
+                                        cond_parts.push(Statement::Predicate(Predicate::InFields(ty)));
+
+                                        if let Some(maybe_pred) = inner.next() {
+                                            if maybe_pred.as_rule() == Rule::predicate {
+                                                cond_parts.push(Statement::Predicate(parse_predicate(maybe_pred)));
+                                            }
+                                        }
+                                    }
+                                    Rule::predicate => {
+                                        cond_parts.push(Statement::Predicate(parse_predicate(next)));
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            let cond_stmt = cond_parts.into_iter().reduce(|a, b| Statement::And(Box::new(a), Box::new(b))).unwrap_or(Statement::Wildcard);
+                            Statement::Quantified {
+                                quant: quantifier,
+                                var: Some(VarName::Named(var_name)),
+                                cond: Box::new(cond_stmt),
+                            }
+                        }
+                    }
+                }
+                other => panic!("Unexpected inner in quant_expr: {:?}", other),
+            }
+        }
+        Rule::and_expr => {
+            let mut inner = pair.into_inner();
+            let first = parse_statement(inner.next().unwrap());
+            inner.fold(first, |acc, stmt| {
+                Statement::And(Box::new(acc), Box::new(parse_statement(stmt)))
+            })
+        }
+        Rule::or_expr => {
+            let mut inner = pair.into_inner();
+            let first = parse_statement(inner.next().unwrap());
+            inner.fold(first, |acc, stmt| {
+                Statement::Or(Box::new(acc), Box::new(parse_statement(stmt)))
+            })
+        }
+        Rule::paren_expr | Rule::logic_expr  => {
+            parse_statement(pair.into_inner().next().unwrap())
+        }
+        _ => panic!("Unexpected rule in parse_statement: {:?}", pair.as_rule()),
+    }
+}
+
+
+pub fn parse_predicate(pair: Pair<Rule>) -> Predicate {
+    // get raw string of the predicate and trim whitespace
+    let txt = pair.as_str().trim();
+    // separate predicate name and optional args inside parentheses
+    // return a tuple: (name: String, args: Vec<Term>)
+    let (name, args): (String, Vec<Term>) = if let Some(idx) = txt.find('(') {
+        // if there is a ( in the predicate, extract the name before it
+        let name = txt[..idx].to_lowercase(); // handles case insensitive predicate names
+        // extract the string inside parentheses (ars)
+        let args_str = &txt[idx + 1..txt.len() - 1]; // remove closing parenthesis )
+        // parse arguments
+        let args_vec = if args_str.trim().is_empty() {
+            // EMPTY PARENTHESIS handling, e.g., ALLOC()
+            vec![]
+        } else {
+            args_str
+                .split(',') // handle multiple arguments separated by ,
+                .map(|s| {
+                    let s = s.trim();
+                    //  FIELD ACCESS, e.g., x.y
+                    if let Some(dot_idx) = s.find('.') {
+                        let base = &s[..dot_idx];
+                        let field = &s[dot_idx + 1..];
+                        Term::FieldAccess {
+                            base: base.to_string(),
+                            field: field.to_string(),
+                        }
+                    } else {
+                        // VAR ARGUMENT (simple case), e.g., x
+                        Term::Var(s.to_string())
+                    }
+                })
+                .collect()
+        };
+        (name, args_vec)
+    } else {
+        // PREDICATE WITHOUT (), e.g., ALLOC
+        (txt.to_lowercase(), vec![])
+    };
+    // map the predicate name to the corresponding enum variant
+    // uf there is an arg, pass the first one; if none, pass None
+    match name.as_str() {
+        "alloc"      => Predicate::Alloc(args.get(0).cloned()),
+        "drop"       => Predicate::Drop(args.get(0).cloned()),
+        "use"        => Predicate::Use(args.get(0).cloned()),
+        "read"       => Predicate::Read(args.get(0).cloned()),
+        "write"      => Predicate::Write(args.get(0).cloned()),
+        "assign"     => Predicate::Assign(args.get(0).cloned()),
+        "own_forg" | "ownforg" => Predicate::OwnForg(args.get(0).cloned()), // to be tested
+        "own_back" | "ownback" => Predicate::OwnBack(args.get(0).cloned()),  // to be tested
+        "allocator"  => {
+            // expects exactly 2 args: language and allocator type
+            if args.len() != 2 {
+                panic!("Allocator predicate requires 2 arguments: language and allocator type, got {}", args.len());
+            }// parse 1st argt: Language
+            let lang = match &args[0] {
+                Term::Var(s) => match s.to_lowercase().as_str() {
+                    "rust" => Language::Rust,
+                    "c" => Language::C,
+                    other => panic!("Unknown language '{}'", other),
+                },
+                _ => panic!("First argument of allocator must be a language"),
+            };// parse 2nd arg: AllocatorType
+            let alloc_type = match &args[1] {
+                Term::Var(s) => match s.to_lowercase().as_str() {
+                    "default" => AllocatorType::Default,
+                    "jemalloc" => AllocatorType::Jemalloc,
+                    "mimalloc" => AllocatorType::Mimalloc,
+                    "rpmalloc" => AllocatorType::Rpmalloc,
+                    "snmalloc" => AllocatorType::Snmalloc,
+                    "weealloc" => AllocatorType::Weealloc,
+                    "dlmalloc" => AllocatorType::Dlmalloc,
+                    other => panic!("Unknown allocator type '{}'", other),
+                },
+                _ => panic!("Second argument of allocator must be an allocator type"),
+            };
+            Predicate::Allocator(lang, alloc_type)
+        }
+        _ => panic!("Unknown predicate: {}", name), // // no Custom predicates; UNKNOWN PREDICATES WILL panic
+    }
+}
+
+
+
+
+
+
+
+
+
+
+/* 
 impl Statement {
     /// Evaluate a logical formula under an environment.
     /// plug in variable bindings, then check the formula truth using f as a semantics oracle for base predicates
@@ -185,19 +768,21 @@ impl Statement {
             }
         }
     }
-}
+}*/
 
-/// Compares two formulas for equivalence: semantically_eq(S1, S2) <==> \forall env, S1(env) = S2(env)
-/// E.g.: check if two Statements are semantically the same
-///     - For every possible assignment of the declared variables to possible_values
-///     - Evaluate both stmt1 and stmt2 with eval_with_env()
-///         If they always agree -> return true
-pub fn semantically_eq<F>(stmt1: &Statement, stmt2: &Statement, preds: &[Predicate], variables: &[Variable], possible_values: &Vec<String>, eval_fn: &F) -> bool
+
+/* 
+pub fn semantically_eq<F>(
+    stmt1: &Statement, stmt2: &Statement,   // statement to check
+    preds: &[Predicate],                    // array of predicates
+    variables: &[Variable],                 // vars from the input
+    possible_values: &Vec<String>,          // set of possible values assumed by
+     eval_fn: &F) -> bool
 where
     F: Fn(&Predicate, &Env) -> bool,
 {
     fn helper<F>(
-        stmt1: &Statement,
+        stmt1: &Statement, 
         stmt2: &Statement,
         env: &Env,
         variables: &[Variable],
@@ -208,8 +793,7 @@ where
         F: Fn(&Predicate, &Env) -> bool,
     {
         if variables.is_empty() {
-            return stmt1.eval_with_env(eval_fn, env, &[], possible_values) ==
-                   stmt2.eval_with_env(eval_fn, env, &[], possible_values);
+            return stmt1.eval_with_env(eval_fn, env, &[], possible_values) == stmt2.eval_with_env(eval_fn, env, &[], possible_values);
         }
 
         let first_var = &variables[0];
@@ -230,371 +814,10 @@ where
         true
     }
     helper(stmt1, stmt2, &HashMap::new(), variables, possible_values, eval_fn)
-}
-
-/// AST Builder
-/// Input: result of the parser
-/// recursively visits all pairs of the tree
-/// Output: for each rule_item (i.e.: a rule) returns a vector of rule definition
-pub fn build_ast(pairs: Pairs<Rule>) -> Vec<RuleDef> {
-    let mut rules = Vec::new();
-    for pair in pairs {
-        match pair.as_rule() {
-            Rule::file => rules.extend(build_ast(pair.into_inner())),
-            Rule::rule_item => {
-                let mut name = Vec::new();
-                let mut domain = Domain::General;
-                let mut variables = Vec::new();
-                let mut taint_src = Vec::new();
-                let mut taint_snk = Vec::new();
-
-                for inner in pair.into_inner() {
-                    match inner.as_rule() {
-                        Rule::rule_header => name.push(inner.as_str().trim().to_string()),
-
-                        Rule::var_decl => {
-                            if let Some((_, pattern)) = inner.as_str().trim().split_once(':') {
-                                let slots: Vec<&str> = pattern.trim().split('|').collect();
-                                let v_type = match slots.get(0).map(|s| s.to_lowercase()) {
-                                    Some(ref s) if *s == "box" => Some(Type::Box),
-                                    Some(ref s) if *s == "literal" => Some(Type::Literal),
-                                    Some(ref s) if *s == "union" => Some(Type::Union),
-                                    Some(ref s) if *s == "function" => Some(Type::Function),
-                                    Some(ref s) if *s == "vec" || *s == "vector"  => Some(Type::Vec),
-                                    Some(ref s) if *s == "enum" => Some(Type::Enum),
-                                    Some(ref s) if *s == "trait" => Some(Type::Trait),
-                                    Some(ref s) if *s == "struct" => Some(Type::Struct),
-                                    Some(ref s) if *s == "reference" => Some(Type::Reference),
-                                    Some(ref s) if *s == "array" || *s == "arr" => Some(Type::Array),
-                                    Some(ref s) if *s == "string" => Some(Type::String),
-                                    Some(ref s) if *s == "tuple" || *s == "tup"  => Some(Type::Tuple),
-
-                                    Some(ref s) if *s == "*" 
-                                    //|| *s == "**"
-                                     => Some(Type::Any),
-                                    None => Some(Type::Any),
-                                    _ => Some(Type::Any),
-                                };
-                                let qualifier = match slots.get(1).map(|s| s.to_lowercase()) {
-                                    Some(ref s) if *s == "imm" => Some(Qualifier::Imm),
-                                    Some(ref s) if *s == "mut" => Some(Qualifier::Mut),
-                                    Some(ref s) if *s == "*" => Some(Qualifier::Any),
-                                    None => Some(Qualifier::Any),
-                                    _ => Some(Qualifier::Any),
-                                };
-                                let var_name = match slots.get(2).map(|s| *s) {
-                                    Some("*") | None => VarName::Any,
-                                    Some(name) => VarName::Named(name.to_string()),
-                                };
-                                variables.push(Variable {
-                                    name: Some(var_name),
-                                    v_type,
-                                    qualifier,
-                                });
-                            }
-                        }
-                        Rule::domain_decl => {
-                            domain = if inner.as_str().to_lowercase().contains("memory") {
-                                Domain::Memory
-                            } else { Domain::General }
-                        }
-                        Rule::taint_src_decl => {
-                            let mut inner_pairs = inner.into_inner().peekable();
-
-                            while let Some(stmt_block) = inner_pairs.next() {
-                                let statements = parse_ordered_statements(stmt_block);
-
-                                // check if next token is a |>
-                                let next_op = if let Some(_) = inner_pairs.peek() {
-                                    Some(SequenceOp::Then)
-                                } else {
-                                    None
-                                };
-                                taint_src.push(TaintBlock { statements, next_op });
-                            }
-                        }
-                        Rule::taint_snk_decl => {
-                            let mut inner_pairs = inner.into_inner().peekable();
-
-                            while let Some(stmt_block) = inner_pairs.next() {
-                                let statements = parse_ordered_statements(stmt_block);
-
-                                // check if next token is a |>
-                                let next_op = if inner_pairs.peek().is_some() {
-                                        Some(SequenceOp::Then)
-                                    } else {
-                                    None
-                                };
-
-                                taint_snk.push(TaintBlock { statements, next_op });
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                if !name.is_empty() {
-                    rules.push(RuleDef { name, domain, variables, taint_src, taint_snk });
-                }
-            }
-            _ => {}
-        }
-    }
-    rules
-}
-
-pub fn parse_ordered_statements(pair: Pair<Rule>) -> Vec<Statement> {
-    pair.into_inner().map(|stmt| parse_statement(stmt)).collect()
-}
+}*/
 
 
-// Parse a single statement
-pub fn parse_statement(pair: Pair<Rule>) -> Statement {
-    // match on the rule in the current pair (enum rule is generated by pest)
-    match pair.as_rule() {
-        // handle sequence_expr (if present in the grammar)
-        Rule::sequence_expr => {
-            // consume the pair and get an iterator on children (remove the children from the pair)
-            let mut inner = pair.into_inner();
-            // take the first child and recursevly handle it as a statement
-            let first = parse_statement(inner.next().unwrap());
-            // for each remaining child, fold creates a nested structure Then(acc, next)
-            inner.fold(first, |acc, stmt| {
-                // parse_statement(stmt) is the new element, Statement::Then sets acc |> new
-                Statement::Then(Box::new(acc), Box::new(parse_statement(stmt)))
-            })
-        }
 
-        // explicitly handle order_expr (|>) ; as above
-        Rule::order_expr => {
-            let mut inner = pair.into_inner();
-            let first = parse_statement(inner.next().unwrap());
-            inner.fold(first, |acc, stmt| {
-                Statement::Then(Box::new(acc), Box::new(parse_statement(stmt)))
-            })
-        }
-        // primary: container node having only one significant child (predicate, quant_expr, wildcard, paren_expr)
-        Rule::primary => {
-            
-            // take that primary child and recursively parse
-            parse_statement(pair.into_inner().next().unwrap())
-        }
-        // if pair is predicate -> construct a Statement::Predicate
-        Rule::predicate => Statement::Predicate(parse_predicate(pair)),
-
-        // wildcard * -> Statement::Wildcard
-        Rule::wildcard => Statement::Wildcard,
-
-        // not_expr: may have more ! in the head of declartion, so count them and wrap the child il figlio in #not as many #! are
-        Rule::not_expr => {
-            let text = pair.as_str().to_string(); // get
-            let mut inner = pair.into_inner();    // consume
-            let mut stmt = parse_statement(inner.next().unwrap());
-
-            for _ in text.chars().take_while(|c| *c == '!') {
-                stmt = Statement::Not(Box::new(stmt));
-            }
-            stmt
-        }
-        Rule::quant_expr => {
-            let quantifier_input_str = pair.as_str().trim().to_string();
-            let mut inner = pair.into_inner();
-
-            let quantifier = if quantifier_input_str.starts_with("\\forall") {
-                Quantifier::ForAll
-            } else if quantifier_input_str.starts_with("\\exists") {
-                Quantifier::Exists
-            } else {
-                panic!("Invalid quantifier. Supported: \\forall or \\exists");
-            };
-
-            let first = inner.next().unwrap();
-
-            match first.as_rule() {
-                Rule::predicate => {
-                    Statement::Quantified {
-                        quant: quantifier,
-                        var: Some(VarName::Any), // no Named("alloc")
-                        cond: Box::new(Statement::Predicate(parse_predicate(first))),
-                    }
-                }
-            Rule::ident => {
-                let name = first.as_str().to_lowercase();
-                // if the ident matches a known predicate, treat it like a predicate
-                match name.as_str() {
-                    "alloc" | "drop" | "use" | "read" | "write" | "assign" | "allocator" => {
-                        Statement::Quantified {
-                            quant: quantifier,
-                            var: Some(VarName::Any),
-                            cond: Box::new(Statement::Predicate(parse_predicate(first))),
-                        }
-                    }
-                    // otherwise, it's a real var name 
-                    _ => {
-                        let var_name = first.as_str().to_string();
-                        let mut cond_parts: Vec<Statement> = Vec::new();
-
-                        if let Some(next) = inner.next() {
-                            match next.as_rule() {
-                                Rule::type_access => {
-                                    let txt = next.as_str();
-                                    let (ty_str, suffix) = txt.split_once('.').expect("type_access must be in the format Type.fields");
-
-                                    if suffix != "fields" {panic!("error in declaring type_access: {}", txt);}
-                                    let ty = match ty_str.to_lowercase().as_str() {
-                                        "vec"    => Type::Vec,
-                                        "struct" => Type::Struct,
-                                        "union"  => Type::Union,
-                                        "array"  => Type::Array,
-                                        "tuple"  => Type::Tuple,
-                                        other => panic!("Type '{}' is not allowed for .fields", other),
-                                    };
-
-                                    cond_parts.push(Statement::Predicate(Predicate::InFields(ty)));
-
-                                    if let Some(maybe_pred) = inner.next() {
-                                        if maybe_pred.as_rule() == Rule::predicate {
-                                            cond_parts.push(Statement::Predicate(parse_predicate(maybe_pred)));
-                                        }
-                                    }
-                                }
-                                Rule::predicate => {
-                                    cond_parts.push(Statement::Predicate(parse_predicate(next)));
-                                }
-                                _ => {}
-                            }
-                        }
-                        let cond_stmt = cond_parts
-                            .into_iter()
-                            .reduce(|a, b| Statement::And(Box::new(a), Box::new(b)))
-                            .unwrap_or(Statement::Wildcard);
-                        
-                        Statement::Quantified {
-                            quant: quantifier,
-                            var: Some(VarName::Named(var_name)),
-                            cond: Box::new(cond_stmt),
-                        }
-                    }
-                }
-            }
-            other => panic!("Unexpected inner in quant_expr: {:?}", other),
-        }
-        }
-        Rule::and_expr => {
-            let mut inner = pair.into_inner();
-            let first = parse_statement(inner.next().unwrap());
-            inner.fold(first, |acc, stmt| {
-                Statement::And(Box::new(acc), Box::new(parse_statement(stmt)))
-            })
-        }
-        Rule::or_expr => {
-            let mut inner = pair.into_inner();
-            let first = parse_statement(inner.next().unwrap());
-            inner.fold(first, |acc, stmt| {
-                Statement::Or(Box::new(acc), Box::new(parse_statement(stmt)))
-            })
-        }
-        Rule::paren_expr | Rule::logic_expr  => {
-            parse_statement(pair.into_inner().next().unwrap())
-        }
-        _ => panic!("Unexpected rule in parse_statement: {:?}", pair.as_rule()),
-    }
-}
-
-/// HANDLING PREDICATES: let's suppose predicate is ALLOC
-/// ALLOC || ALLOC() -> Predicate::Alloc(None)
-/// ALLOC(x) -> Predicate::Alloc(Some(Term::Var("x")))
-/// ALLOC(x.y) -> Predicate::Alloc(Some(Term::FieldAccess { base: "x", field: "y" }))
-/// WARNING: put it for the moment; Multiple arguments (ALLOC(x,y)) -> first arg is used (?)
-pub fn parse_predicate(pair: Pair<Rule>) -> Predicate {
-    // get raw string of the predicate and trim whitespace
-    let txt = pair.as_str().trim();
-
-    // separate predicate name and optional args inside parentheses
-    // return a tuple: (name: String, args: Vec<Term>)
-    let (name, args): (String, Vec<Term>) = if let Some(idx) = txt.find('(') {
-        // if there is a ( in the predicate, extract the name before it
-        let name = txt[..idx].to_lowercase(); // handles case insensitive predicate names
-
-        // extract the string inside parentheses (ars)
-        let args_str = &txt[idx + 1..txt.len() - 1]; // remove closing parenthesis )
-
-        // parse arguments
-        let args_vec = if args_str.trim().is_empty() {
-            // EMPTY PARENTHESIS handling, e.g., ALLOC()
-            vec![]
-        } else {
-            args_str
-                .split(',') // handle multiple arguments separated by ,
-                .map(|s| {
-                    let s = s.trim();
-
-                    //  FIELD ACCESS, e.g., x.y
-                    if let Some(dot_idx) = s.find('.') {
-                        let base = &s[..dot_idx];
-                        let field = &s[dot_idx + 1..];
-                        Term::FieldAccess {
-                            base: base.to_string(),
-                            field: field.to_string(),
-                        }
-                    } else {
-                        // VAR ARGUMENT (simple case), e.g., x
-                        Term::Var(s.to_string())
-                    }
-                })
-                .collect()
-        };
-        (name, args_vec)
-    } else {
-        // PREDICATE WITHOUT (), e.g., ALLOC
-        (txt.to_lowercase(), vec![])
-    };
-
-    // Map the predicate name to the corresponding enum variant
-    // If there is an arg, pass the first one; if none, pass None
-    match name.as_str() {
-        "alloc"      => Predicate::Alloc(args.get(0).cloned()),
-        "drop"       => Predicate::Drop(args.get(0).cloned()),
-        "use"        => Predicate::Use(args.get(0).cloned()),
-        "read"       => Predicate::Read(args.get(0).cloned()),
-        "write"      => Predicate::Write(args.get(0).cloned()),
-        "assign"     => Predicate::Assign(args.get(0).cloned()),
-        "allocator"  => {
-            
-            // expects exactly 2 args: language and allocator type
-            if args.len() != 2 {
-                panic!("Allocator predicate requires 2 arguments: language and allocator type, got {}", args.len());
-            }
-
-            // parse 1st argt: Language
-            let lang = match &args[0] {
-                Term::Var(s) => match s.to_lowercase().as_str() {
-                    "rust" => Language::Rust,
-                    "c" => Language::C,
-                    other => panic!("Unknown language '{}'", other),
-                },
-                _ => panic!("First argument of allocator must be a language"),
-            };
-
-            // parse 2nd arg: AllocatorType
-            let alloc_type = match &args[1] {
-                Term::Var(s) => match s.to_lowercase().as_str() {
-                    "default" => AllocatorType::Default,
-                    "jemalloc" => AllocatorType::Jemalloc,
-                    "mimalloc" => AllocatorType::Mimalloc,
-                    "rpmalloc" => AllocatorType::Rpmalloc,
-                    "snmalloc" => AllocatorType::Snmalloc,
-                    "weealloc" => AllocatorType::Weealloc,
-                    "dlmalloc" => AllocatorType::Dlmalloc,
-                    other => panic!("Unknown allocator type '{}'", other),
-                },
-                _ => panic!("Second argument of allocator must be an allocator type"),
-            };
-
-            Predicate::Allocator(lang, alloc_type)
-        }
-        _ => panic!("Unknown predicate: {}", name), // // no Custom predicates; UNKNOWN PREDICATES WILL panic
-    }
-}
 
 
 /*

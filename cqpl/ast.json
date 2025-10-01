@@ -1,28 +1,29 @@
 [
   {
     "name": [
-      "# multi_union_field_access"
+      "# uaf"
     ],
-    "domain": "General",
+    "domain": "Memory",
     "variables": [
       {
-        "v_type": "Union",
+        "v_type": "Any",
         "qualifier": "Any",
-        "name": "Any"
+        "name": {
+          "Named": "var_x"
+        }
       }
     ],
     "taint_src": [
       {
+        "kind": "Src",
         "statements": [
           {
             "Quantified": {
               "quant": "ForAll",
-              "var": {
-                "Named": "u"
-              },
+              "var": "Any",
               "cond": {
                 "Predicate": {
-                  "InFields": "Union"
+                  "Alloc": null
                 }
               }
             }
@@ -33,30 +34,22 @@
     ],
     "taint_snk": [
       {
+        "kind": "Snk",
         "statements": [
           {
             "Predicate": {
-              "Read": {
-                "FieldAccess": {
-                  "base": "u",
-                  "field": "f1"
-                }
-              }
+              "Drop": null
             }
           }
         ],
         "next_op": "Then"
       },
       {
+        "kind": "Snk",
         "statements": [
           {
             "Predicate": {
-              "Read": {
-                "FieldAccess": {
-                  "base": "u",
-                  "field": "f2"
-                }
-              }
+              "Use": null
             }
           }
         ],
