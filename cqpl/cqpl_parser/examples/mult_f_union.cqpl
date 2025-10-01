@@ -1,0 +1,8 @@
+# multi_union_field_access
+## domain: general
+v: union|*|*
+
+taint_src: \forall u in Union.fields
+taint_snk: read(u.f1)
+|>
+taint_snk: read(u.f2)

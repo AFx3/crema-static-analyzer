@@ -1,0 +1,6 @@
+# use_uninit_field
+## domain: general
+v: Struct|*|*
+
+taint_src: \forall s in Struct.fields && !assign(s.field)
+taint_snk: use(s.field)

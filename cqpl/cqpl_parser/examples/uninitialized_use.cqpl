@@ -1,0 +1,6 @@
+# uninitialized_use
+## domain: general
+v: *|*|*
+
+taint_src: \forall x. !assign(x) && !alloc(x)
+taint_snk: use(x)

@@ -1,0 +1,6 @@
+# null_deref
+## domain: general
+v: *|*|*
+
+taint_src:  \forall x. !assign(x) && !alloc(x)
+taint_snk: read(x)
