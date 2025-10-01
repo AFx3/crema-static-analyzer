@@ -131,37 +131,41 @@ pub enum AllocatorType {
 pub enum Term { Var(String), FieldAccess { base: String, field: String }, Literal(String) }
 
  
-//FAR VEDERE A LILLO E PIERPAOLO X SEMANTICA
+// FAR VEDERE A LILLO E PIERPAOLO X SEMANTICA
+//  (?) DATO CHE DEVO TESTARE GLI OPERATORI: first-order logic model checker with finite domains (possible_values) to decide equivalence
+//      - eval_with_env(): evaluates a single formula relative to a binding (env). ENV: var name -> concrete value
+//      - semantically_eq(): repeatedly calls eval_with_env() across all environments for all declared variables, ensuring two formulas are the same.
+
+
 // Define a type alias for the environment: a map from variable names (String) to their concrete values (String)
 // This environment holds the current variable bindings during evaluation
 pub type Env = HashMap<String, String>; // var name -> concrete value
 
-// to do
-/*es access to multiple fields of union:
-Env must provide distinct field names like u.f1, u.f2, etc.
-possible_values passed to quantifiers must include all field names of the union.
-The analysis assumes that reading multiple fields means distinct fields, not just repeated access to the same field (unless field-sensitive)
- */
-
 impl Statement {
-    pub fn eval_with_env<F>(&self, f: &F, env: &Env, variables: &[Variable], possible_values: &Vec<String>) -> bool
+    /// Evaluate a logical formula under an environment.
+    /// plug in variable bindings, then check the formula truth using f as a semantics oracle for base predicates
+    pub fn eval_with_env<F>(
+        &self, 
+        f: &F,     // a callback that says whether a Predicate (eg alloc(x), drop(y)...) is true given the current env
+        env: &Env, // a map from variable names to concrete values, eg: { "x" -> "ptr1" }
+        variables: &[Variable], // declared variables in scope (at the beginning)
+        possible_values: &Vec<String>  //vall possible concrete values those variables could take
+        )-> bool
     where
         F: Fn(&Predicate, &Env) -> bool,
     {
         match self {
-            Statement::Predicate(p) => f(p, env),
-            Statement::Not(inner) => !inner.eval_with_env(f, env, variables, possible_values),
-            Statement::And(lhs, rhs) => lhs.eval_with_env(f, env, variables, possible_values) && rhs.eval_with_env(f, env, variables, possible_values),
-            Statement::Or(lhs, rhs) => lhs.eval_with_env(f, env, variables, possible_values) || rhs.eval_with_env(f, env, variables, possible_values),
-            Statement::Then(lhs, rhs) => lhs.eval_with_env(f, env, variables, possible_values) && rhs.eval_with_env(f, env, variables, possible_values), // for the moment
-            Statement::Wildcard => true,
-
-            Statement::Quantified { quant, var, cond } => {
+            Statement::Predicate(p) => f(p, env),   // delegates to f(p, env)
+            Statement::Not(inner) => !inner.eval_with_env(f, env, variables, possible_values), // negates inner truth
+            Statement::And(lhs, rhs) => lhs.eval_with_env(f, env, variables, possible_values) && rhs.eval_with_env(f, env, variables, possible_values), // both must be true
+            Statement::Or(lhs, rhs) => lhs.eval_with_env(f, env, variables, possible_values) || rhs.eval_with_env(f, env, variables, possible_values),  // either must be true
+            Statement::Then(lhs, rhs) => lhs.eval_with_env(f, env, variables, possible_values) && rhs.eval_with_env(f, env, variables, possible_values), // NB: for the moment same as And(lhs, rhs)
+            Statement::Wildcard => true, // always true
+            Statement::Quantified { quant, var, cond } => {  // loops over all possible_values, binds them to the quantified var (x, u, etc.) in a fresh copy of env, and evaluates the condition
                 let var_name = match var {
                     Some(VarName::Named(name)) => name,
                     Some(VarName::Any) | None => "__any",
                 };
-
                 match quant {
                     Quantifier::ForAll => {
                         possible_values.iter().all(|val| {
@@ -183,6 +187,11 @@ impl Statement {
     }
 }
 
+/// Compares two formulas for equivalence: semantically_eq(S1, S2) <==> \forall env, S1(env) = S2(env)
+/// E.g.: check if two Statements are semantically the same
+///     - For every possible assignment of the declared variables to possible_values
+///     - Evaluate both stmt1 and stmt2 with eval_with_env()
+///         If they always agree -> return true
 pub fn semantically_eq<F>(stmt1: &Statement, stmt2: &Statement, preds: &[Predicate], variables: &[Variable], possible_values: &Vec<String>, eval_fn: &F) -> bool
 where
     F: Fn(&Predicate, &Env) -> bool,
