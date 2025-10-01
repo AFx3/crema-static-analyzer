@@ -1,0 +1,6 @@
+# aa
+## domain: general
+v: box|*|*
+
+taint_src: \forall ownForg
+taint_snk: *

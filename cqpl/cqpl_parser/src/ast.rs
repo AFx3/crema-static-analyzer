@@ -157,6 +157,7 @@ pub enum StmtKind {
     Other,
 }
 
+
 impl Statement {
     // Evaluate the formula under the environment env
     pub fn eval_with_env<F>(
@@ -174,7 +175,7 @@ impl Statement {
             stmt: &Statement,
             f: &F,
             env_mut: &mut Env,
-            variables: &[Variable],
+            _variables: &[Variable],
             possible_values: &[String],
             anon_counter: &mut usize,
         ) -> bool
@@ -182,52 +183,61 @@ impl Statement {
             F: Fn(&Predicate, &Env) -> bool,
         {
             match stmt {
-                Statement::Predicate(p) => f(p, env_mut),                                                   // check to f(p,env) if p is true under the current environment env
-                Statement::Not(inner) => !rec(inner, f, env_mut, variables, possible_values, anon_counter), // evaluate the inner stmnt and negates it
-                Statement::And(lhs, rhs) => {                                                               // both stamnts must be T
-                    rec(lhs, f, env_mut, variables, possible_values, anon_counter)  && rec(rhs, f, env_mut, variables, possible_values, anon_counter)
+                Statement::Predicate(p) => {
+                    // delegate predicate evaluation to external function
+                    f(p, env_mut)
                 }
-                Statement::Or(lhs, rhs) => {                                                                // 1 stmnt must be T
-                    rec(lhs, f, env_mut, variables, possible_values, anon_counter) || rec(rhs, f, env_mut, variables, possible_values, anon_counter)
+                Statement::Not(inner) => !rec(inner, f, env_mut, _variables, possible_values, anon_counter),
+                Statement::And(lhs, rhs) => {
+                    rec(lhs, f, env_mut, _variables, possible_values, anon_counter)
+                        && rec(rhs, f, env_mut, _variables, possible_values, anon_counter)
                 }
-                Statement::Then(lhs, rhs) => {                                                              // |> then operator as sequence
-                // pif lhs is T under the env, then rhs must be T
-                if rec(lhs, f, env_mut, variables, possible_values, anon_counter) {     
-                    rec(rhs, f, env_mut, variables, possible_values, anon_counter)
-                } else { //se lhs if F, the whole formula is false
-                    false
+                Statement::Or(lhs, rhs) => {
+                    rec(lhs, f, env_mut, _variables, possible_values, anon_counter)
+                        || rec(rhs, f, env_mut, _variables, possible_values, anon_counter)
                 }
-            }
-                Statement::Wildcard => true,                                                                // * always T                     
+                Statement::Then(lhs, rhs) => {
+                    // semantics: if lhs true then rhs must be true; if lhs false, the whole Then is false
+                    if rec(lhs, f, env_mut, _variables, possible_values, anon_counter) {
+                        rec(rhs, f, env_mut, _variables, possible_values, anon_counter)
+                    } else {
+                        false
+                    }
+                }
+                Statement::Wildcard => true,
                 Statement::Quantified { quant, var, cond } => {
-                    // Handle quantifiers
-                    // - se Named(name): use proprio name
-                    // - altrimenti (Any/None): genero una chiave unica __quant_i
                     match quant {
-                        Quantifier::ForAll => { // all elements must be satisfy
+                        Quantifier::ForAll => {
+                            // ForAll: for every possible value, cond must hold
                             possible_values.iter().all(|val| {
-                                // genera chiave unica
+                                // choose key: named var -> use name, otherwise generate fresh anon key
                                 let key = match var {
                                     Some(VarName::Named(name)) => name.clone(),
                                     Some(VarName::Any) | None => {
+                                        // generate unique anon key (will be removed after eval)
                                         let k = format!("__quant_{}", *anon_counter);
                                         *anon_counter += 1;
                                         k
                                     }
                                 };
-                                // backtracking in-place: salve and insert
+
+                                // save old binding (if any)
                                 let old = env_mut.insert(key.clone(), val.clone());
-                                // valuta la condizione
-                                let res = rec(cond, f, env_mut, variables, possible_values, anon_counter);
-                                // ripristina env (old può essere Some(prev) o None)
+
+                                // evaluate condition under this new binding
+                                let res = rec(cond, f, env_mut, _variables, possible_values, anon_counter);
+
+                                // restore old binding
                                 match old {
                                     Some(prev) => { env_mut.insert(key.clone(), prev); }
                                     None => { env_mut.remove(&key); }
                                 }
+
                                 res
                             })
                         }
-                        Quantifier::Exists => { // at least one must satisfy
+                        Quantifier::Exists => {
+                            // Exists: there exists a value such that cond holds
                             possible_values.iter().any(|val| {
                                 let key = match var {
                                     Some(VarName::Named(name)) => name.clone(),
@@ -237,8 +247,9 @@ impl Statement {
                                         k
                                     }
                                 };
+
                                 let old = env_mut.insert(key.clone(), val.clone());
-                                let res = rec(cond, f, env_mut, variables, possible_values, anon_counter);
+                                let res = rec(cond, f, env_mut, _variables, possible_values, anon_counter);
                                 match old {
                                     Some(prev) => { env_mut.insert(key.clone(), prev); }
                                     None => { env_mut.remove(&key); }
@@ -248,9 +259,14 @@ impl Statement {
                         }
                     }
                 }
+                Statement::Or(_, _) | Statement::And(_, _) | Statement::Not(_) | Statement::Then(_, _) | Statement::Predicate(_) | Statement::Wildcard | Statement::Quantified { .. } => {
+               // match is exhaustive above, this branch is unreachable but the compiler shuts up
+                unreachable!()
+                }
             }
         }
-        // copia mutabile dell'env di partenza ma non clono dentro i loop (backtracking in-place)
+
+        // inizializza env mutabile a partire dall'env di input (work on a copy to avoid side-effects)
         let mut env_clone = env.clone();
         let mut anon_counter: usize = 0;
         rec(self, f, &mut env_clone, variables, possible_values, &mut anon_counter)
@@ -322,7 +338,7 @@ where
                 }
                 return false;
             }
-            // ripristina env per provare il prossimo valore
+            // ripristino env per provare il prossimo valore
             match old {
                 Some(prev) => {
                     env.insert(key_base.clone(), prev);
@@ -497,7 +513,7 @@ pub fn build_ast(pairs: Pairs<Rule>) -> Vec<RuleDef> {
 pub fn parse_ordered_statements(pair: Pair<Rule>) -> Vec<Statement> {
     pair.into_inner().map(|stmt| parse_statement(stmt)).collect()
 }
-
+/// Lo sclero
 pub fn parse_statement(pair: Pair<Rule>) -> Statement {
     match pair.as_rule() {
         // handle sequence_expr (if present in the grammar)
@@ -508,7 +524,6 @@ pub fn parse_statement(pair: Pair<Rule>) -> Statement {
                 Statement::Then(Box::new(acc), Box::new(parse_statement(stmt)))
             })
         }
-
         Rule::order_expr => {
             let mut inner = pair.into_inner();
             let first = parse_statement(inner.next().unwrap());
@@ -523,10 +538,8 @@ pub fn parse_statement(pair: Pair<Rule>) -> Statement {
         }
         // if pair is predicate -> construct a Statement::Predicate
         Rule::predicate => Statement::Predicate(parse_predicate(pair)),
-
         // wildcard * -> Statement::Wildcard
         Rule::wildcard => Statement::Wildcard,
-
         // not_expr: may have more ! in the head of declartion
         Rule::not_expr => {
             let text = pair.as_str().to_string();
@@ -538,8 +551,9 @@ pub fn parse_statement(pair: Pair<Rule>) -> Statement {
             stmt
         }
         Rule::quant_expr => {
+            // render inner as iterator so we can inspect following tokens
             let quantifier_input_str = pair.as_str().trim().to_string();
-            let mut inner = pair.into_inner();
+            let mut inner = pair.into_inner().peekable();
 
             let quantifier = if quantifier_input_str.starts_with("\\forall") {
                 Quantifier::ForAll
@@ -548,66 +562,101 @@ pub fn parse_statement(pair: Pair<Rule>) -> Statement {
             } else {
                 panic!("Invalid quantifier. Supported: \\forall or \\exists");
             };
-            let first = inner.next().unwrap();
-            match first.as_rule() {
-                Rule::predicate => Statement::Quantified {
-                    quant: quantifier,
-                    var: Some(VarName::Any),
-                    cond: Box::new(Statement::Predicate(parse_predicate(first))),
-                },
-                Rule::ident => {
-                    let name = first.as_str().to_lowercase();
-                    match name.as_str() {
-                        "alloc" | "drop" | "use" | "read" | "write" | "assign" | "allocator" => {
-                            Statement::Quantified {
-                                quant: quantifier,
-                                var: Some(VarName::Any),
-                                cond: Box::new(Statement::Predicate(parse_predicate(first))),
+            // primi token: il bound_var (obbligatorio nelle alternative della grammatica)
+            let first = inner.next().expect("quant_expr must have at least one child");
+            let bound_name = first.as_str().to_string();
+            let bound_lower = bound_name.to_lowercase();
+
+            // keywords di predicato da interpretare come "no-var" quando non c'è altro come armomento a loro
+            let pred_keywords = ["alloc", "drop", "use", "read", "write", "assign", "allocator"];
+
+            // se non ci sono altri token dopo il bound
+            if inner.peek().is_none() {
+                // caso: \forall alloc -> var = Any, cond = Predicate(alloc())
+                if pred_keywords.contains(&bound_lower.as_str()) {
+                    // costruisco il predicato senza argomenti
+                    let pred = match bound_lower.as_str() {
+                        "alloc" => Predicate::Alloc(None),
+                        "drop" => Predicate::Drop(None),
+                        "use" => Predicate::Use(None),
+                        "read" => Predicate::Read(None),
+                        "write" => Predicate::Write(None),
+                        "assign" => Predicate::Assign(None),
+                        "allocator" => panic!("allocator predicate without args is invalid"),
+                        _ => unreachable!(),
+                    };
+                    Statement::Quantified {
+                        quant: quantifier,
+                        var: Some(VarName::Any),
+                        cond: Box::new(Statement::Predicate(pred)),
+                    }
+                } else {
+                    // nessun corpo: \forall x  -> var x, cond = Wildcard
+                    Statement::Quantified {
+                        quant: quantifier,
+                        var: Some(VarName::Named(bound_name)),
+                        cond: Box::new(Statement::Wildcard),
+                    }
+                }
+            } else {
+                // c'è almeno un token dopo il bound_var => interpretare i possibili casi
+                // next può essere: type_access (in ... fields), predicate, oppure logic_expr / altro
+                let next = inner.next().unwrap();
+
+                match next.as_rule() {
+                    Rule::type_access => {
+                        // tipo come Vec.fields
+                        let txt = next.as_str();
+                        let (ty_str, suffix) = txt.split_once('.').expect("type_access must be in the format Type.fields");
+                        if suffix != "fields" {
+                            panic!("error in declaring type_access: {}", txt);
+                        }
+                        let ty = match ty_str.to_lowercase().as_str() {
+                            "vec" => Type::Vec,
+                            "struct" => Type::Struct,
+                            "union" => Type::Union,
+                            "array" => Type::Array,
+                            "tuple" => Type::Tuple,
+                            other => panic!("Type '{}' is not allowed for .fields", other),
+                        };
+
+                        // se dopo il type_access c'è un predicato (opzionale nella grammatica)
+                        let mut cond_parts: Vec<Statement> = vec![Statement::Predicate(Predicate::InFields(ty))];
+                        if let Some(maybe_pred) = inner.next() {
+                            if maybe_pred.as_rule() == Rule::predicate {
+                                cond_parts.push(Statement::Predicate(parse_predicate(maybe_pred)));
+                            } else {
+                                // se è altro, parse as stmnt
+                                cond_parts.push(parse_statement(maybe_pred));
                             }
                         }
-                        _ => {
-                            let var_name = first.as_str().to_string();
-                            let mut cond_parts: Vec<Statement> = Vec::new();
+                        let cond_stmt = cond_parts.into_iter().reduce(|a, b| Statement::And(Box::new(a), Box::new(b))).unwrap_or(Statement::Wildcard);
+                        Statement::Quantified {
+                            quant: quantifier,
+                            var: Some(VarName::Named(bound_name)),
+                            cond: Box::new(cond_stmt),
+                        }
+                    }
+                    Rule::predicate => {
+                        // case  \forall x. drop   OR  \forall x. alloc(x)  produce predicate 
+                        let pred = parse_predicate(next);
+                        Statement::Quantified {
+                            quant: quantifier,
+                            var: Some(VarName::Named(bound_name)),
+                            cond: Box::new(Statement::Predicate(pred)),
+                        }
+                    }
 
-                            if let Some(next) = inner.next() {
-                                match next.as_rule() {
-                                    Rule::type_access => {
-                                        let txt = next.as_str();
-                                        let (ty_str, suffix) = txt.split_once('.').expect("type_access must be in the format Type.fields");
-                                        if suffix != "fields" { panic!("error in declaring type_access: {}", txt); }
-                                        let ty = match ty_str.to_lowercase().as_str() {
-                                            "vec"    => Type::Vec,
-                                            "struct" => Type::Struct,
-                                            "union"  => Type::Union,
-                                            "array"  => Type::Array,
-                                            "tuple"  => Type::Tuple,
-                                            other => panic!("Type '{}' is not allowed for .fields", other),
-                                        };
-
-                                        cond_parts.push(Statement::Predicate(Predicate::InFields(ty)));
-
-                                        if let Some(maybe_pred) = inner.next() {
-                                            if maybe_pred.as_rule() == Rule::predicate {
-                                                cond_parts.push(Statement::Predicate(parse_predicate(maybe_pred)));
-                                            }
-                                        }
-                                    }
-                                    Rule::predicate => {
-                                        cond_parts.push(Statement::Predicate(parse_predicate(next)));
-                                    }
-                                    _ => {}
-                                }
-                            }
-                            let cond_stmt = cond_parts.into_iter().reduce(|a, b| Statement::And(Box::new(a), Box::new(b))).unwrap_or(Statement::Wildcard);
-                            Statement::Quantified {
-                                quant: quantifier,
-                                var: Some(VarName::Named(var_name)),
-                                cond: Box::new(cond_stmt),
-                            }
+                    // se è un intero logic_expr / paren_expr / altro, recursively parsing
+                    _ => {
+                        let cond_stmt = parse_statement(next);
+                        Statement::Quantified {
+                            quant: quantifier,
+                            var: Some(VarName::Named(bound_name)),
+                            cond: Box::new(cond_stmt),
                         }
                     }
                 }
-                other => panic!("Unexpected inner in quant_expr: {:?}", other),
             }
         }
         Rule::and_expr => {
@@ -630,6 +679,7 @@ pub fn parse_statement(pair: Pair<Rule>) -> Statement {
         _ => panic!("Unexpected rule in parse_statement: {:?}", pair.as_rule()),
     }
 }
+
 
 
 pub fn parse_predicate(pair: Pair<Rule>) -> Predicate {
@@ -714,6 +764,217 @@ pub fn parse_predicate(pair: Pair<Rule>) -> Predicate {
     }
 }
 
+
+
+
+
+
+/* 
+impl Statement {
+    // Evaluate the formula under the environment env
+    pub fn eval_with_env<F>(
+        &self,                      // stmnt to be evaluated
+        f: &F,                      // external function. It will tell if a predicate is T || F under the env
+        env: &Env,                  // env: variables -> values
+        variables: &[Variable],     // vars declared within the rule
+        possible_values: &[String], // concrete values that each var can assume
+    ) -> bool
+    where
+        F: Fn(&Predicate, &Env) -> bool,
+    {
+        // internal recursive function working in-place on env_mut, acts on tree structure of statements
+        fn rec<F>(
+            stmt: &Statement,
+            f: &F,
+            env_mut: &mut Env,
+            variables: &[Variable],
+            possible_values: &[String],
+            anon_counter: &mut usize,
+        ) -> bool
+        where
+            F: Fn(&Predicate, &Env) -> bool,
+        {
+            match stmt {
+                Statement::Predicate(p) => f(p, env_mut),                                                   // check to f(p,env) if p is true under the current environment env
+                Statement::Not(inner) => !rec(inner, f, env_mut, variables, possible_values, anon_counter), // evaluate the inner stmnt and negates it
+                Statement::And(lhs, rhs) => {                                                               // both stamnts must be T
+                    rec(lhs, f, env_mut, variables, possible_values, anon_counter)  && rec(rhs, f, env_mut, variables, possible_values, anon_counter)
+                }
+                Statement::Or(lhs, rhs) => {                                                                // 1 stmnt must be T
+                    rec(lhs, f, env_mut, variables, possible_values, anon_counter) || rec(rhs, f, env_mut, variables, possible_values, anon_counter)
+                }
+                Statement::Then(lhs, rhs) => {                                                              // |> then operator as sequence
+                // pif lhs is T under the env, then rhs must be T
+                if rec(lhs, f, env_mut, variables, possible_values, anon_counter) {     
+                    rec(rhs, f, env_mut, variables, possible_values, anon_counter)
+                } else { //se lhs if F, the whole formula is false
+                    false
+                }
+            }
+                Statement::Wildcard => true,            
+                                                           // * always T 
+/* 
+            Statement::Quantified { quant, var, cond } => {
+    match quant {
+        Quantifier::ForAll => {
+            possible_values.iter().all(|val| {
+                let key = match var {
+                    Some(VarName::Named(name)) => name.clone(),
+                    Some(VarName::Any) | None => {
+                        let k = format!("__quant_{}", *anon_counter);
+                        *anon_counter += 1;
+                        k
+                    }
+                };
+
+                // salva valore precedente (se c'era)
+                let old = env_mut.insert(key.clone(), val.clone());
+
+                let res = rec(cond, f, env_mut, variables, possible_values, anon_counter);
+
+                // ripristina
+                match old {
+                    Some(prev) => { env_mut.insert(key.clone(), prev); }
+                    None => { env_mut.remove(&key); }
+                }
+
+                res
+            })
+        }
+        Quantifier::Exists => {
+            possible_values.iter().any(|val| {
+                let key = match var {
+                    Some(VarName::Named(name)) => name.clone(),
+                    Some(VarName::Any) | None => {
+                        let k = format!("__quant_{}", *anon_counter);
+                        *anon_counter += 1;
+                        k
+                    }
+                };
+
+                let old = env_mut.insert(key.clone(), val.clone());
+                let res = rec(cond, f, env_mut, variables, possible_values, anon_counter);
+
+                match old {
+                    Some(prev) => { env_mut.insert(key.clone(), prev); }
+                    None => { env_mut.remove(&key); }
+                }
+
+                res
+            })
+        }
+    }
+}*/
+       
+
+/* 
+Statement::Quantified { quant, var, cond } => {
+    match quant {
+        Quantifier::ForAll => {
+            possible_values.iter().all(|val| {
+                // ogni iterazione parte da una copia pulita
+                let mut env_local = env_mut.clone();
+
+                // nome della variabile (se Named, usa quello; altrimenti genera chiave unica)
+                let key = match var {
+                    Some(VarName::Named(name)) => name.clone(),
+                    Some(VarName::Any) | None => {
+                        let k = format!("__quant_{}", *anon_counter);
+                        *anon_counter += 1;
+                        k
+                    }
+                };
+
+                // assegna la variabile all'ambiente locale
+                env_local.insert(key, val.clone());
+
+                // valuta la condizione con env locale
+                rec(cond, f, &mut env_local, variables, possible_values, anon_counter)
+            })
+        }
+        Quantifier::Exists => {
+            possible_values.iter().any(|val| {
+                let mut env_local = env_mut.clone();
+
+                let key = match var {
+                    Some(VarName::Named(name)) => name.clone(),
+                    Some(VarName::Any) | None => {
+                        let k = format!("__quant_{}", *anon_counter);
+                        *anon_counter += 1;
+                        k
+                    }
+                };
+
+                env_local.insert(key, val.clone());
+
+                rec(cond, f, &mut env_local, variables, possible_values, anon_counter)
+            })
+        }
+    }
+}
+*/
+
+     
+                Statement::Quantified { quant, var, cond } => {
+                    // Handle quantifiers
+                    // - se Named(name): use proprio name
+                    // - altrimenti (Any/None): genero una chiave unica __quant_i
+                    match quant {
+                        Quantifier::ForAll => { // all elements must be satisfy
+                            possible_values.iter().all(|val| {
+                                // genera chiave unica
+                                let key = match var {
+                                    Some(VarName::Named(name)) => name.clone(),
+                                    Some(VarName::Any) | None => {
+                                        let k = format!("__quant_{}", *anon_counter);
+                                        *anon_counter += 1;
+                                        k
+                                    }
+                                };
+                                // backtracking in-place: salve and insert
+                                let old = env_mut.insert(key.clone(), val.clone());
+                                // valuta la condizione
+                                let res = rec(cond, f, env_mut, variables, possible_values, anon_counter);
+                                // ripristina env (old può essere Some(prev) o None)
+                                match old {
+                                    Some(prev) => { env_mut.insert(key.clone(), prev); }
+                                    None => { env_mut.remove(&key); }
+                                }
+                                res
+                            })
+                        }
+                        Quantifier::Exists => { // at least one must satisfy
+                            possible_values.iter().any(|val| {
+                                let key = match var {
+                                    Some(VarName::Named(name)) => name.clone(),
+                                    Some(VarName::Any) | None => {
+                                        let k = format!("__quant_{}", *anon_counter);
+                                        *anon_counter += 1;
+                                        k
+                                    }
+                                };
+                                let old = env_mut.insert(key.clone(), val.clone());
+                                let res = rec(cond, f, env_mut, variables, possible_values, anon_counter);
+                                match old {
+                                    Some(prev) => { env_mut.insert(key.clone(), prev); }
+                                    None => { env_mut.remove(&key); }
+                                }
+                                res
+                            })
+                        }
+                    }
+                }
+
+
+            }
+        }
+        // copia mutabile dell'env di partenza ma non clono dentro i loop (backtracking in-place)
+        let mut env_clone = env.clone();
+        let mut anon_counter: usize = 0;
+        rec(self, f, &mut env_clone, variables, possible_values, &mut anon_counter)
+    }
+}
+*/
 
 
 
