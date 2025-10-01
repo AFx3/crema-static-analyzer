@@ -135,7 +135,7 @@ pub enum AllocatorType {
 #[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum Term { Var(String), FieldAccess { base: String, field: String }, Literal(String) }
 
-/* 
+ 
 //FAR VEDERE A LILLO E PIERPAOLO X SEMANTICA
 // Define a type alias for the environment: a map from variable names (String) to their concrete values (String)
 // This environment holds the current variable bindings during evaluation
@@ -225,13 +225,7 @@ impl Statement {
 ///
 /// Returns true if `stmt1` and `stmt2` produce identical results for *all* possible
 /// assignments of the variables.
-pub fn semantically_eq<F>(
-    stmt1: &Statement,
-    stmt2: &Statement,
-    preds: &[Predicate],
-    variables: &[String],
-    eval_fn: &F,
-) -> bool
+pub fn semantically_eq<F>(stmt1: &Statement, stmt2: &Statement, preds: &[Predicate], variables: &[String], eval_fn: &F) -> bool
 where
     F: Fn(&Predicate, &Env) -> bool,
 {
@@ -276,7 +270,6 @@ where
     // Call the helper with an empty initial environment.
     helper(stmt1, stmt2, preds, variables, &HashMap::new(), eval_fn)
 }
-*/
 
 
 
@@ -286,6 +279,7 @@ where
 ///         - self: the logical stmnt to evaluate
 ///         - f   : a function that takes a Predicate and returns a boolean (T or F predicate under some assignment)
 /// It recursively evaluates the logical structure of the Statement 
+/* 
 impl Statement {
     pub fn eval<F>(&self, f: &F) -> bool
     where
@@ -338,6 +332,9 @@ pub fn semantically_eq(stmt1: &Statement, stmt2: &Statement, preds: &[Predicate]
     // if all assignments match, return true
     true
 }
+*/
+
+
 
 
 /// AST Builder
@@ -457,6 +454,9 @@ pub fn build_ast(pairs: Pairs<Rule>) -> Vec<RuleDef> {
     }
     rules
 }
+
+
+    
 
 pub fn parse_ordered_statements(pair: Pair<Rule>) -> Vec<Statement> {
     pair.into_inner().map(|stmt| parse_statement(stmt)).collect()

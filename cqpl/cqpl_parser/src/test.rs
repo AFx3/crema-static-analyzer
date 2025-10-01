@@ -1,4 +1,4 @@
-
+/* 
 #[cfg(test)]
 mod tests {
     use pest::Parser;
@@ -439,55 +439,14 @@ mod tests {
         parse_statement(pair); // should panic
     }
 
+*/
 
-
-/* 
+ 
 #[cfg(test)]
 mod tests {
     use pest::Parser;
     use crate::ast::*;
  
-    
-
-    /// A simple evaluation function for tests: 
-    /// returns true for all predicates without a variable, and
-    /// returns true if the variable is bound in env (stub logic).
-    fn simple_eval(pred: &Predicate, env: &Env) -> bool {
-        match pred {
-            Predicate::Alloc(None)
-            | Predicate::Drop(None)
-            | Predicate::Use(None)
-            | Predicate::Read(None)
-            | Predicate::Write(None)
-            | Predicate::Assign(None)
-            | Predicate::InFields(_)
-            | Predicate::Allocator(_, _) => {
-                // predicates with no variable or special ones: accept
-                true
-            }
-            Predicate::Alloc(Some(term))
-            | Predicate::Drop(Some(term))
-            | Predicate::Use(Some(term))
-            | Predicate::Read(Some(term))
-            | Predicate::Write(Some(term))
-            | Predicate::Assign(Some(term)) => {
-                match term {
-                    Term::Var(name) => env.get(name).is_some(),
-                    Term::FieldAccess { base, .. } => env.get(base).is_some(),
-                    Term::Literal(_) => todo!("Handle literal terms"),
-
-                }
-            }
-            // fallback
-            _ => false,
-        }
-    }
-*/
-
-
-
-
-/* 
     #[test]
     fn test_predicates() {
         let predicates = ["alloc", "use", "read", "write", "assign", "drop"];
@@ -995,6 +954,6 @@ mod tests {
         assert!(!semantically_eq(&stmt1, &stmt2, &preds, &vars, &dummy_eval));
 
     }
-*/
+
 
 }
