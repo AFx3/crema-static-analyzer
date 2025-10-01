@@ -1,12 +1,12 @@
 [
   {
     "name": [
-      "# aa"
+      "# multi_union_field_access"
     ],
     "domain": "General",
     "variables": [
       {
-        "v_type": "Box",
+        "v_type": "Union",
         "qualifier": "Any",
         "name": "Any"
       }
@@ -17,10 +17,12 @@
           {
             "Quantified": {
               "quant": "ForAll",
-              "var": "Any",
+              "var": {
+                "Named": "u"
+              },
               "cond": {
                 "Predicate": {
-                  "Alloc": null
+                  "InFields": "Union"
                 }
               }
             }
@@ -34,7 +36,27 @@
         "statements": [
           {
             "Predicate": {
-              "Read": null
+              "Read": {
+                "FieldAccess": {
+                  "base": "u",
+                  "field": "f1"
+                }
+              }
+            }
+          }
+        ],
+        "next_op": "Then"
+      },
+      {
+        "statements": [
+          {
+            "Predicate": {
+              "Read": {
+                "FieldAccess": {
+                  "base": "u",
+                  "field": "f2"
+                }
+              }
             }
           }
         ],

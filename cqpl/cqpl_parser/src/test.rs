@@ -701,6 +701,8 @@ mod tests {
     }
 
 
+
+/* 
    fn dummy_eval(_pred: &Predicate, _vars: &std::collections::HashMap<String, String>) -> bool {
     true
     }
@@ -953,7 +955,253 @@ mod tests {
         // these are NOT semantically equal because quantifier order and scopes differ
         assert!(!semantically_eq(&stmt1, &stmt2, &preds, &vars, &dummy_eval));
 
+    }*/
+
+    fn dummy_eval(_pred: &Predicate, _vars: &std::collections::HashMap<String, String>) -> bool {
+        true
     }
+
+
+
+    #[test]
+    fn test_and_commutativity() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "read && write").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "write && read").unwrap().next().unwrap());
+        let preds = vec![Predicate::Read(None), Predicate::Write(None)];
+        let vars: Vec<Variable> = vec![];
+        let possible_values: Vec<String> = vec![];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
+    }
+
+    #[test]
+    fn test_or_commutativity() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "read || write").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "write || read").unwrap().next().unwrap());
+        let preds = vec![Predicate::Read(None), Predicate::Write(None)];
+        let vars: Vec<Variable> = vec![];
+        let possible_values: Vec<String> = vec![];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
+    }
+
+    #[test]
+    fn test_and_associativity() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "read && (write && assign)").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "(read && write) && assign").unwrap().next().unwrap());
+        let preds = vec![Predicate::Read(None), Predicate::Write(None), Predicate::Assign(None)];
+        let vars: Vec<Variable> = vec![];
+        let possible_values: Vec<String> = vec![];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
+    }
+
+    #[test]
+    fn test_or_associativity() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "read || (write || assign)").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "(read || write) || assign").unwrap().next().unwrap());
+        let preds = vec![Predicate::Read(None), Predicate::Write(None), Predicate::Assign(None)];
+        let vars: Vec<Variable> = vec![];
+        let possible_values: Vec<String> = vec![];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
+    }
+
+    #[test]
+    fn test_distributivity() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "read && (write || assign)").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "(read && write) || (read && assign)").unwrap().next().unwrap());
+        let preds = vec![Predicate::Read(None), Predicate::Write(None), Predicate::Assign(None)];
+        let vars: Vec<Variable> = vec![];
+        let possible_values: Vec<String> = vec![];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
+    }
+
+    #[test]
+    fn test_de_morgan_and() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "!(read && write)").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "!read || !write").unwrap().next().unwrap());
+        let preds = vec![Predicate::Read(None), Predicate::Write(None)];
+        let vars: Vec<Variable> = vec![];
+        let possible_values: Vec<String> = vec![];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
+    }
+
+    #[test]
+    fn test_de_morgan_or() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "!(read || write)").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "!read && !write").unwrap().next().unwrap());
+        let preds = vec![Predicate::Read(None), Predicate::Write(None)];
+        let vars: Vec<Variable> = vec![];
+        let possible_values: Vec<String> = vec![];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
+    }
+
+    // tests with named vars
+    #[test]
+    fn test_and_commutativity_named_vars() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "read(x) && write(y)").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "write(y) && read(x)").unwrap().next().unwrap());
+        let preds = vec![
+            Predicate::Read(Some(Term::Var("x".to_string()))),
+            Predicate::Write(Some(Term::Var("y".to_string()))),
+        ];
+        let vars = vec![
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("x".to_string())) },
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("y".to_string())) },
+        ];
+        let possible_values = vec!["x".to_string(), "y".to_string()];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
+    }
+
+    #[test]
+    fn test_or_commutativity_named_vars() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "read(a) || write(b)").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "write(b) || read(a)").unwrap().next().unwrap());
+        let preds = vec![
+            Predicate::Read(Some(Term::Var("a".to_string()))),
+            Predicate::Write(Some(Term::Var("b".to_string()))),
+        ];
+        let vars = vec![
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("a".to_string())) },
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("b".to_string())) },
+        ];
+        let possible_values = vec!["a".to_string(), "b".to_string()];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
+    }
+
+    #[test]
+    fn test_and_associativity_named_vars() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "read(x) && (write(y) && assign(z))").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "(read(x) && write(y)) && assign(z)").unwrap().next().unwrap());
+        let preds = vec![
+            Predicate::Read(Some(Term::Var("x".to_string()))),
+            Predicate::Write(Some(Term::Var("y".to_string()))),
+            Predicate::Assign(Some(Term::Var("z".to_string()))),
+        ];
+        let vars = vec![
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("x".to_string())) },
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("y".to_string())) },
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("z".to_string())) },
+        ];
+        let possible_values = vec!["x".to_string(), "y".to_string(), "z".to_string()];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
+    }
+
+    #[test]
+    fn test_or_associativity_named_vars() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "read(x) || (write(y) || assign(z))").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "(read(x) || write(y)) || assign(z)").unwrap().next().unwrap());
+        let preds = vec![
+            Predicate::Read(Some(Term::Var("x".to_string()))),
+            Predicate::Write(Some(Term::Var("y".to_string()))),
+            Predicate::Assign(Some(Term::Var("z".to_string()))),
+        ];
+        let vars = vec![
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("x".to_string())) },
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("y".to_string())) },
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("z".to_string())) },
+        ];
+        let possible_values = vec!["x".to_string(), "y".to_string(), "z".to_string()];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
+    }
+
+
+    #[test]
+    fn test_distributivity_named_vars() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "read(x) && (write(y) || assign(z))").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "(read(x) && write(y)) || (read(x) && assign(z))").unwrap().next().unwrap());
+        let preds = vec![
+            Predicate::Read(Some(Term::Var("x".to_string()))),
+            Predicate::Write(Some(Term::Var("y".to_string()))),
+            Predicate::Assign(Some(Term::Var("z".to_string()))),
+        ];
+        let vars = vec![
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("x".to_string())) },
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("y".to_string())) },
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("z".to_string())) },
+        ];
+        let possible_values = vec!["x".to_string(), "y".to_string(), "z".to_string()];
+    assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
+    }
+
+    #[test]
+    fn test_de_morgan_and_named_vars() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "!(read(x) && write(y))").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "!read(x) || !write(y)").unwrap().next().unwrap());
+        let preds = vec![
+            Predicate::Read(Some(Term::Var("x".to_string()))),
+            Predicate::Write(Some(Term::Var("y".to_string()))),
+        ];
+        let vars = vec![
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("x".to_string())) },
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("y".to_string())) },
+        ];
+        let possible_values = vec!["x".to_string(), "y".to_string()];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
+    }
+
+    #[test]
+    fn test_de_morgan_or_named_vars() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "!(read(x) || write(y))").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "!read(x) && !write(y)").unwrap().next().unwrap());
+        let preds = vec![
+            Predicate::Read(Some(Term::Var("x".to_string()))),
+            Predicate::Write(Some(Term::Var("y".to_string()))),
+        ];
+        let vars = vec![
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("x".to_string())) },
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("y".to_string())) },
+        ];
+        let possible_values = vec!["x".to_string(), "y".to_string()];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
+    }
+
+    // --- Quantificatori ---
+    #[test]
+    fn test_forall_commutativity() {
+    let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "\\forall x. \\forall y. read(x) && write(y)").unwrap().next().unwrap());
+    let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "\\forall y. \\forall x. write(y) && read(x)").unwrap().next().unwrap());
+    let preds = vec![
+        Predicate::Read(Some(Term::Var("x".to_string()))),
+        Predicate::Write(Some(Term::Var("y".to_string()))),
+    ];
+    let vars = vec![
+        Variable { v_type: None, qualifier: None, name: Some(VarName::Named("x".to_string())) },
+        Variable { v_type: None, qualifier: None, name: Some(VarName::Named("y".to_string())) },
+    ];
+    let possible_values = vec!["x".to_string(), "y".to_string()];
+    assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
+    }
+
+    #[test]
+    fn test_exists_commutativity() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "\\exists x. \\exists y. read(x) || write(y)").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "\\exists y. \\exists x. write(y) || read(x)").unwrap().next().unwrap());
+        let preds = vec![
+            Predicate::Read(Some(Term::Var("x".to_string()))),
+            Predicate::Write(Some(Term::Var("y".to_string()))),
+        ];
+        let vars = vec![
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("x".to_string())) },
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("y".to_string())) },
+        ];
+        let possible_values = vec!["x".to_string(), "y".to_string()];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
+    }
+
+    #[test]
+    fn test_nested_quantifiers() {
+        let stmt1 = parse_statement(CQPLParser::parse(Rule::logic_expr, "\\forall x. \\exists y. read(x) && write(y)").unwrap().next().unwrap());
+        let stmt2 = parse_statement(CQPLParser::parse(Rule::logic_expr, "\\forall x. \\exists y. write(y) && read(x)").unwrap().next().unwrap());
+        let preds = vec![
+            Predicate::Read(Some(Term::Var("x".to_string()))),
+            Predicate::Write(Some(Term::Var("y".to_string()))),
+        ];
+        let vars = vec![
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("x".to_string())) },
+            Variable { v_type: None, qualifier: None, name: Some(VarName::Named("y".to_string())) },
+        ];
+        let possible_values = vec!["x".to_string(), "y".to_string()];
+        assert!(semantically_eq(&stmt1, &stmt2, &preds, &vars, &possible_values, &dummy_eval));
+    }
+
 
 
 }
