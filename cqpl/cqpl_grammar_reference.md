@@ -343,13 +343,13 @@ ident          ::= [A-Za-z0-9_]+
 
 # CQPL Parser — Detailed Documentation
 
-> This document documents the CQPL parser implementation (Rust + Pest), the grammar used to parse CQPL rules, the AST types, and the key functions that build and evaluate the AST.
+> This document documents the CQPL parser implementation (Rust + Pest), the grammar used to parse CQPL rules, the AST types.
 
 ---
 
 # 1. Overview
 
-This crate implements a parser for a small query language (CQPL) expressed with a Pest grammar. The parser produces an AST (Rust structs/enums) representing rules that have a header, an optional domain, variable declarations, and taint blocks (`taint_src`, `taint_snk`). The AST can be used for further analyses (pattern matching, semantic checks, or later abstract interpretation).
+This crate implements a parser for a query language (CQPL) expressed with a Pest grammar. The parser produces an AST representing rules that have a header, an optional domain, variable declarations, and taint blocks (`taint_src`, `taint_snk`). The AST can be used for further analyses (pattern matching, semantic checks, or abstract interpretation).
 
 Key pieces:
 
@@ -394,12 +394,12 @@ pub struct RuleDef {
     pub name: Vec<String>,          // rule header tokens (human friendly name)
     pub domain: Domain,             // Memory or General
     pub variables: Vec<Variable>,   // declared variables in rule body
-    pub taint_src: Vec<TaintBlock>, // ordered taint source blocks
-    pub taint_snk: Vec<TaintBlock>, // ordered taint sink blocks
+    pub taint_src: Vec<TaintBlock>, // taint source blocks
+    pub taint_snk: Vec<TaintBlock>, // taint sink blocks
 }
 ```
 
-A `RuleDef` is one top-level rule parsed from the input. `taint_src` and `taint_snk` are sequences of `TaintBlock` representing the blocks (possibly chained with `|>`).
+A `RuleDef` is one top-level rule parsed from the input. `taint_src` and `taint_snk` are sequences of `TaintBlock` representing the blocks (possibly chained/ordered with `|>`).
 
 ## 3.2 `BlockKind` and `TaintBlock`
 
