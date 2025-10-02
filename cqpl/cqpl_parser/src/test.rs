@@ -519,7 +519,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn semantically_eq_basic() {
         let s_x = Statement::Predicate(Predicate::Alloc(Some(Term::Var("x".to_string()))));
@@ -571,7 +570,8 @@ mod tests {
             )
         );
     }
-    // Should painc src |> snk 
+
+    // should painc src |> snk 
     #[test]
     #[should_panic]
     fn test_then_src_snk_should_fail() {
@@ -582,7 +582,7 @@ mod tests {
             taint_src: alloc(x) |> drop(x)
         "#).unwrap();
         let _rules = build_ast(pairs);
-        // la validazione interna a build_ast farà panic
+        // internal evaluation on build_ast panics
     }
     /// new
     #[test]
@@ -590,8 +590,6 @@ mod tests {
         let stmt = Statement::Predicate(Predicate::Alloc(Some(Term::Var("x".to_string()))));
         let mut env = Env::new();
         env.insert("x".into(), "allocated".into());
-
-       
         assert!(stmt.eval_with_env(&sample_eval, &env, &[], &["allocated".into(), "free".into()]));
     }
 
@@ -638,8 +636,6 @@ mod tests {
     let possible = vec!["allocated".into(), "free".into()]; 
     // deve essere falso perché non tutti i valori rendono vera alloc(x) 
     assert!(!stmt.eval_with_env(&sample_eval, &Env::new(), &vars, &possible)); }
-
-
 
 
 

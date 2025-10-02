@@ -1,6 +1,7 @@
 // ast.rs
 #![allow(dead_code)]
 #![allow(unused_imports)]
+#![allow(unreachable_patterns)] // momentally for building the ast
 
 use pest::iterators::{Pair, Pairs};
 use pest_derive::Parser;
@@ -272,9 +273,7 @@ pub fn semantically_eq<F>(
     possible_values: &[String],
     eval_fn: &F,
 ) -> bool
-where
-    F: Fn(&Predicate, &Env) -> bool,
-{
+where F: Fn(&Predicate, &Env) -> bool {
     // helper ricorsivo: remaining_vars è la porzione di var rimanenti da instanziare
     fn helper<F>(
         stmt1: &Statement,
@@ -286,9 +285,7 @@ where
         eval_fn: &F,
         anon_idx: usize,                  // indice per var anonime (genera __any_i)
     ) -> bool
-    where
-        F: Fn(&Predicate, &Env) -> bool,
-    {
+    where F: Fn(&Predicate, &Env) -> bool {
         if remaining_vars.is_empty() {
             // tutte le variabili sono assegnate: valuta i due statement nello stesso env
             return stmt1.eval_with_env(eval_fn, env, declared_vars, possible_values)
@@ -354,7 +351,8 @@ where
         0,                  // anon_idx parte da 0
     )
 }
-/// function to validead kind of taint: src or snk for the |> (because is allowed only on more src or more snk)
+
+/// Function to validead kind of taint: src or snk for the |> (because is allowed only on more src or more snk)
 pub fn validate_rule(rule: &RuleDef) {
     // check taint_src
     for (i, block) in rule.taint_src.iter().enumerate() {
@@ -435,7 +433,6 @@ pub fn build_ast(pairs: Pairs<Rule>) -> Vec<RuleDef> {
                                 });
                             }
                         }
-
                         Rule::domain_decl => {
                             domain = if inner.as_str().to_lowercase().contains("memory") {
                                 Domain::Memory
@@ -503,7 +500,7 @@ pub fn build_ast(pairs: Pairs<Rule>) -> Vec<RuleDef> {
 pub fn parse_ordered_statements(pair: Pair<Rule>) -> Vec<Statement> {
     pair.into_inner().map(|stmt| parse_statement(stmt)).collect()
 }
-/// Lo sclero
+/// parsing
 pub fn parse_statement(pair: Pair<Rule>) -> Statement {
     match pair.as_rule() {
         // handle sequence_expr (if present in the grammar)
@@ -557,9 +554,8 @@ pub fn parse_statement(pair: Pair<Rule>) -> Statement {
             let bound_name = first.as_str().to_string();
             let bound_lower = bound_name.to_lowercase();
 
-            // keywords di predicato da interpretare come "no-var" quando non c'è altro come armomento a loro
+            // keywords di predicato da interpretare come "no-var" quando non c'è altro come armomento a
             let pred_keywords = ["alloc", "drop", "use", "read", "write", "assign", "allocator"];
-
             // se non ci sono altri token dopo il bound
             if inner.peek().is_none() {
                 // caso: \forall alloc -> var = Any, cond = Predicate(alloc())
@@ -589,7 +585,7 @@ pub fn parse_statement(pair: Pair<Rule>) -> Statement {
                     }
                 }
             } else {
-                // c'è almeno un token dopo il bound_var => interpretare i possibili casi
+                // c'è almeno un token dopo il bound_var => interpreto i casi possibili
                 // next può essere: type_access (in ... fields), predicate, oppure logic_expr / altro
                 let next = inner.next().unwrap();
 
@@ -598,9 +594,7 @@ pub fn parse_statement(pair: Pair<Rule>) -> Statement {
                         // tipo come Vec.fields
                         let txt = next.as_str();
                         let (ty_str, suffix) = txt.split_once('.').expect("type_access must be in the format Type.fields");
-                        if suffix != "fields" {
-                            panic!("error in declaring type_access: {}", txt);
-                        }
+                        if suffix != "fields" { panic!("error in declaring type_access: {}", txt); }
                         let ty = match ty_str.to_lowercase().as_str() {
                             "vec" => Type::Vec,
                             "struct" => Type::Struct,
@@ -609,7 +603,6 @@ pub fn parse_statement(pair: Pair<Rule>) -> Statement {
                             "tuple" => Type::Tuple,
                             other => panic!("Type '{}' is not allowed for .fields", other),
                         };
-
                         // se dopo il type_access c'è un predicato (opzionale nella grammatica)
                         let mut cond_parts: Vec<Statement> = vec![Statement::Predicate(Predicate::InFields(ty))];
                         if let Some(maybe_pred) = inner.next() {
@@ -628,7 +621,7 @@ pub fn parse_statement(pair: Pair<Rule>) -> Statement {
                         }
                     }
                     Rule::predicate => {
-                        // case  \forall x. drop   OR  \forall x. alloc(x)  produce predicate 
+                        // case  \forall x. drop   OR  \forall x. alloc(x) produce predicate 
                         let pred = parse_predicate(next);
                         Statement::Quantified {
                             quant: quantifier,
@@ -636,7 +629,6 @@ pub fn parse_statement(pair: Pair<Rule>) -> Statement {
                             cond: Box::new(Statement::Predicate(pred)),
                         }
                     }
-
                     // se è un intero logic_expr / paren_expr / altro, recursively parsing
                     _ => {
                         let cond_stmt = parse_statement(next);
@@ -670,8 +662,7 @@ pub fn parse_statement(pair: Pair<Rule>) -> Statement {
     }
 }
 
-
-
+// Parse the predicate
 pub fn parse_predicate(pair: Pair<Rule>) -> Predicate {
     // get raw string of the predicate and trim whitespace
     let txt = pair.as_str().trim();
