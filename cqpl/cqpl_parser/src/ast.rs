@@ -144,10 +144,11 @@ pub enum Term { Var(String), FieldAccess { base: String, field: String }, Litera
  
 // FAR VEDERE A LILLO E PIERPAOLO X SEMANTICA
 //  (?) DATO CHE DEVO TESTARE GLI OPERATORI: first-order logic model checker with finite domains (possible_values) to decide equivalence
-//      - eval_with_env(): evaluates a single formula relative to a binding (env). ENV: var name -> concrete value
+//      - eval_with_env(): evaluates a single formula relative to a binding (env). ENV: var name -> concrete value || obstract
 //      - semantically_eq(): repeatedly calls eval_with_env() across all environments for all declared variables, ensuring two formulas are the same.
 // Define a type alias for the environment: a map from variable names (String) to their concrete values (String)
 // This environment holds the current variable bindings during evaluation
+
 pub type Env = HashMap<String, String>; // var name -> concrete value
 
 /// Kind of statement, depending if its is declred on a src or snk
@@ -312,8 +313,7 @@ where F: Fn(&Predicate, &Env) -> bool {
                 declared_vars,
                 possible_values,
                 eval_fn,
-                anon_idx + 1, // increment anon_idx quando consumo una var (anonima o no)
-            ) {
+                anon_idx + 1) {                     // increment anon_idx quando consumo una var (anonima o no)
                 // ripristina env prima di tornare
                 match old {
                     Some(prev) => {
@@ -338,7 +338,6 @@ where F: Fn(&Predicate, &Env) -> bool {
         // tutte le assegnazioni per questa variabile hanno passato il test
         true
     }
-
     let mut env = Env::new();
     helper(
         stmt1,
@@ -355,7 +354,8 @@ where F: Fn(&Predicate, &Env) -> bool {
 /// Function to validead kind of taint: src or snk for the |> (because is allowed only on more src or more snk)
 pub fn validate_rule(rule: &RuleDef) {
     // check taint_src
-    for (i, block) in rule.taint_src.iter().enumerate() {
+    for (i, block) in rule.taint_src.iter()
+        .enumerate() { // yields the current count and the element during iteration
         if let Some(SequenceOp::Then) = block.next_op {
             if let Some(next_block) = rule.taint_src.get(i+1) {
                 if block.kind != next_block.kind {
@@ -450,7 +450,6 @@ pub fn build_ast(pairs: Pairs<Rule>) -> Vec<RuleDef> {
                                 } else {
                                     None
                                 };
-
                                 taint_src.push(TaintBlock {
                                     statements,
                                     next_op,
@@ -468,7 +467,6 @@ pub fn build_ast(pairs: Pairs<Rule>) -> Vec<RuleDef> {
                                 } else {
                                     None
                                 };
-
                                 taint_snk.push(TaintBlock {
                                     statements,
                                     next_op,
