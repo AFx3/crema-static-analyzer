@@ -82,13 +82,13 @@ pub enum Qualifier { Imm, Mut, Any }
 /// Statements
 #[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
 pub enum Statement {
-    Predicate(Predicate),
-    And(Box<Statement>, Box<Statement>),
-    Or(Box<Statement>, Box<Statement>),
-    Not(Box<Statement>),
-    Then(Box<Statement>, Box<Statement>), // |>
-    Wildcard,
-    Quantified { 
+    Predicate(Predicate),                   // p
+    And(Box<Statement>, Box<Statement>),    // &&
+    Or(Box<Statement>, Box<Statement>),     // ||
+    Not(Box<Statement>),                    // !
+    Then(Box<Statement>, Box<Statement>),   // |>
+    Wildcard,                               // *
+    Quantified {                            // when a statements includd forrall, exists
         quant: Quantifier, 
         var: Option<VarName>,  
         cond: Box<Statement> },
@@ -115,8 +115,8 @@ pub enum Predicate {
     Allocator(Language, AllocatorType),        
     InFields(Type),
     Custom(String, Vec<Term>),
-    OwnForg(Option<Term>),  // into_raw
-    OwnBack(Option<Term>),  // from_raw
+    OwnForg(Option<Term>),                  // into_raw
+    OwnBack(Option<Term>),                  // from_raw
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Ord, Eq, PartialOrd,Hash)]
@@ -157,45 +157,41 @@ pub enum StmtKind {
     Other,
 }
 
-
 impl Statement {
-    // Evaluate the formula under the environment env
+    /// Evaluate the formula under the environment env
+    /// It's generic over <F>: a function type used to interpret the predicates
     pub fn eval_with_env<F>(
-        &self,                      // stmnt to be evaluated
-        f: &F,                      // external function. It will tell if a predicate is T || F under the env
-        env: &Env,                  // env: variables -> values
-        variables: &[Variable],     // vars declared within the rule
-        possible_values: &[String], // concrete values that each var can assume
+        &self,                              // current stmnt to be evaluated
+        f: &F,                              // external function. It evauates if a predicate is T || F under the env (PREDICATE EVALUATOR)
+        env: &Env,                          // env: variables -> values
+        variables: &[Variable],             // vars declared within the rule
+        possible_values: &[String],         // concrete values that each var can assume (Domain of each value, finite set)
     ) -> bool
-    where
-        F: Fn(&Predicate, &Env) -> bool,
-    {
-        // internal recursive function working in-place on env_mut, acts on tree structure of statements
+    // the eval_with_env<F> type will only be defined for types F that satisfies the constraint:
+    where F: Fn(&Predicate, &Env) -> bool{    
+        // define generic internal recursive function that traverse the Statement tree recursively
         fn rec<F>(
-            stmt: &Statement,
-            f: &F,
-            env_mut: &mut Env,
-            _variables: &[Variable],
-            possible_values: &[String],
-            anon_counter: &mut usize,
+            stmt: &Statement,               // subtree to be evaluated
+            f: &F,                          // predicate evaluator    
+            env_mut: &mut Env,              // mutable env -> quantifiers can bind/unbind vars
+            _variables: &[Variable],        // declared var
+            possible_values: &[String],     // domain
+            anon_counter: &mut usize,       // global, incrementing ID generator for fresh variable names used when quantifiers bind anonymous variables (__quant_0, __quant_1, ...) 
+                                            // to generate unique names for anonymous vars when using quantifiers (forall and exists) when the user not explicitly name a variable   
+                                            // e.g.: \forall *. alloc(*) -> no real variable name for the bound var. Internally, need to bind each candidate value into the environment (Env) with some key.
+                                            // To do, generate a fresh unique variable name: First anonymous -> __quant_0; Second anonymous -> __quant_1
         ) -> bool
-        where
-            F: Fn(&Predicate, &Env) -> bool,
-        {
+        where F: Fn(&Predicate, &Env) -> bool {
+            // pattern matching on Statment predicate kind
             match stmt {
-                Statement::Predicate(p) => {
-                    // delegate predicate evaluation to external function
-                    f(p, env_mut)
-                }
-                Statement::Not(inner) => !rec(inner, f, env_mut, _variables, possible_values, anon_counter),
-                Statement::And(lhs, rhs) => {
+                Statement::Predicate(p) => { f(p, env_mut) }    // delegate predicate evaluation to external function f
+                Statement::Not(inner) => !rec(inner, f, env_mut, _variables, possible_values, anon_counter),   // negatetion, flip the result
+                Statement::And(lhs, rhs) => { // AND
                     rec(lhs, f, env_mut, _variables, possible_values, anon_counter)
-                        && rec(rhs, f, env_mut, _variables, possible_values, anon_counter)
-                }
-                Statement::Or(lhs, rhs) => {
+                        && rec(rhs, f, env_mut, _variables, possible_values, anon_counter)}
+                Statement::Or(lhs, rhs) => { // OR
                     rec(lhs, f, env_mut, _variables, possible_values, anon_counter)
-                        || rec(rhs, f, env_mut, _variables, possible_values, anon_counter)
-                }
+                        || rec(rhs, f, env_mut, _variables, possible_values, anon_counter)}
                 Statement::Then(lhs, rhs) => {
                     // semantics: if lhs true then rhs must be true; if lhs false, the whole Then is false
                     if rec(lhs, f, env_mut, _variables, possible_values, anon_counter) {
@@ -204,7 +200,7 @@ impl Statement {
                         false
                     }
                 }
-                Statement::Wildcard => true,
+                Statement::Wildcard => true, // always true
                 Statement::Quantified { quant, var, cond } => {
                     match quant {
                         Quantifier::ForAll => {
@@ -220,19 +216,15 @@ impl Statement {
                                         k
                                     }
                                 };
-
                                 // save old binding (if any)
                                 let old = env_mut.insert(key.clone(), val.clone());
-
                                 // evaluate condition under this new binding
                                 let res = rec(cond, f, env_mut, _variables, possible_values, anon_counter);
-
                                 // restore old binding
                                 match old {
                                     Some(prev) => { env_mut.insert(key.clone(), prev); }
                                     None => { env_mut.remove(&key); }
                                 }
-
                                 res
                             })
                         }
@@ -247,7 +239,6 @@ impl Statement {
                                         k
                                     }
                                 };
-
                                 let old = env_mut.insert(key.clone(), val.clone());
                                 let res = rec(cond, f, env_mut, _variables, possible_values, anon_counter);
                                 match old {
@@ -260,12 +251,11 @@ impl Statement {
                     }
                 }
                 Statement::Or(_, _) | Statement::And(_, _) | Statement::Not(_) | Statement::Then(_, _) | Statement::Predicate(_) | Statement::Wildcard | Statement::Quantified { .. } => {
-               // match is exhaustive above, this branch is unreachable but the compiler shuts up
+                // match is exhaustive above, this branch is unreachable but the compiler shuts up
                 unreachable!()
                 }
             }
         }
-
         // inizializza env mutabile a partire dall'env di input (work on a copy to avoid side-effects)
         let mut env_clone = env.clone();
         let mut anon_counter: usize = 0;
