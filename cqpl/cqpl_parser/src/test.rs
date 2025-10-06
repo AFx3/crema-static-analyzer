@@ -639,6 +639,106 @@ mod tests {
 
 
 
+
+    // Test Then (|>) semantics under abstract interpretation
+    // alloc(x) |> write(x)  should be true if both alloc(x) and write(x) are true in env
+    #[test]
+    fn test_then_semantics_true() {
+        // alloc(x) |> alloc(x) – both true
+        let stmt = parse_statement(
+            CQPLParser::parse(Rule::logic_expr, "alloc(x) |> alloc(x)").unwrap().next().unwrap());
+
+        let mut env = Env::new();
+        env.insert("x".into(), "allocated".into());
+
+        // in this environment, sample_eval returns true for alloc(x)
+        // so alloc(x) |> alloc(x) must hold true
+        assert!(stmt.eval_with_env(&sample_eval, &env, &[], &["allocated".into(), "free".into()]), "Expected alloc(x) |> alloc(x) to evaluate to true");
+    }
+
+
+
+
+
+    // test Then (|>) semantics when lhs is false
+    // alloc(x) |> alloc(y)  should be false if alloc(x) fails
+    #[test]
+    fn test_then_semantics_lhs_false() {
+        let stmt = parse_statement(CQPLParser::parse(Rule::logic_expr, "alloc(x) |> alloc(y)").unwrap().next().unwrap());
+
+        let mut env = Env::new();
+        env.insert("x".into(), "free".into()); // x not allocated
+        env.insert("y".into(), "allocated".into());
+
+        // alloc(x) is false, so temporal composition should fail
+        assert!(!stmt.eval_with_env(&sample_eval, &env, &[], &["allocated".into(), "free".into()]),"Expected alloc(x) |> alloc(y) to evaluate to false when lhs fails");
+    }
+
+    // Test Then (|>) semantics when rhs is false
+    // alloc(x) |> alloc(y) should be false if alloc(y) fails
+    #[test]
+    fn test_then_semantics_rhs_false() {
+        let stmt = parse_statement(
+            CQPLParser::parse(Rule::logic_expr, "alloc(x) |> alloc(y)").unwrap().next().unwrap());
+
+        let mut env = Env::new();
+        env.insert("x".into(), "allocated".into());
+        env.insert("y".into(), "free".into());
+
+        // rhs (alloc(y)) false → whole Then false
+        assert!(!stmt.eval_with_env(&sample_eval, &env, &[], &["allocated".into(), "free".into()]), "Expected alloc(x) |> alloc(y) to evaluate to false when rhs fails");
+    }
+
+    /// test Then (|>) semantics reflexivity
+    /// alloc(x) |> alloc(x) should be equivalent to alloc(x)
+    #[test]
+    fn test_then_semantics_reflexive() {
+        let stmt_then = parse_statement(
+            CQPLParser::parse(Rule::logic_expr, "alloc(x) |> alloc(x)").unwrap().next().unwrap());
+        let stmt_simple = parse_statement(
+            CQPLParser::parse(Rule::logic_expr, "alloc(x)").unwrap().next().unwrap());
+
+        let mut env = Env::new();
+        env.insert("x".into(), "allocated".into());
+        let vars = vec![Variable {
+            v_type: None,
+            qualifier: None,
+            name: Some(VarName::Named("x".into())),
+        }];
+        let possible = vec!["allocated".into(), "free".into()];
+
+        // alloc(x) |> alloc(x) ≡ alloc(x)
+        assert!(semantically_eq(&stmt_then, &stmt_simple, &[], &vars, &possible, &sample_eval), "Expected alloc(x) |> alloc(x) ≡ alloc(x)");
+    }
+
+    // test nested Then (|>) semantics
+    // alloc(x) |> alloc(y) |> alloc(z) should evaluate to true only if all three are allocated
+    #[test]
+    fn test_then_semantics_nested() {
+        let stmt = parse_statement(
+            CQPLParser::parse(Rule::logic_expr, "alloc(x) |> alloc(y) |> alloc(z)").unwrap().next().unwrap());
+
+        let mut env = Env::new();
+        env.insert("x".into(), "allocated".into());
+        env.insert("y".into(), "allocated".into());
+        env.insert("z".into(), "allocated".into());
+
+        assert!(stmt.eval_with_env(&sample_eval, &env, &[], &["allocated".into(), "free".into()]), "Expected nested Then alloc(x)|>alloc(y)|>alloc(z) to evaluate to true");
+
+        env.insert("y".into(), "free".into()); // break middle link
+        assert!(!stmt.eval_with_env(&sample_eval, &env, &[], &["allocated".into(), "free".into()]), "Expected nested Then alloc(x)|>alloc(y)|>alloc(z) to fail if any predicate fails");
+    }
+
+
+
+
+
+
+
+
+
+
+
 }
 
 

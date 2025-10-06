@@ -1,16 +1,14 @@
 [
   {
     "name": [
-      "# uaf"
+      "# df"
     ],
     "domain": "Memory",
     "variables": [
       {
         "v_type": "Any",
         "qualifier": "Any",
-        "name": {
-          "Named": "var_x"
-        }
+        "name": "Any"
       }
     ],
     "taint_src": [
@@ -20,10 +18,14 @@
           {
             "Quantified": {
               "quant": "ForAll",
-              "var": "Any",
+              "var": {
+                "Named": "x"
+              },
               "cond": {
                 "Predicate": {
-                  "Alloc": null
+                  "Alloc": {
+                    "Var": "x"
+                  }
                 }
               }
             }
@@ -38,7 +40,9 @@
         "statements": [
           {
             "Predicate": {
-              "Drop": null
+              "Drop": {
+                "Var": "x"
+              }
             }
           }
         ],
@@ -49,7 +53,9 @@
         "statements": [
           {
             "Predicate": {
-              "Use": null
+              "Drop": {
+                "Var": "x"
+              }
             }
           }
         ],
