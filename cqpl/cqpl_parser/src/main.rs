@@ -68,9 +68,7 @@ fn main() {
     println!("\n>> Inferred analysis kind: {:?}", kind);
     match kind {
         AnalysisKind::MemoryLeak => {
-            println!("Running Memory Leak analysis...");
-            // call your memory leak analysis function here, e.g.:
-            // run_memory_leak_analysis(&project_path, &ast);
+            // call crema
         }
         AnalysisKind::UseAfterFree => {
             println!("Running Use-After-Free analysis...");
@@ -84,8 +82,6 @@ fn main() {
             println!("Unknown or unclassified analysis kind.");
         }
     }
-
-
 
 
     let json = serde_json::to_string_pretty(&ast).unwrap();

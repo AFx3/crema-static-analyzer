@@ -1,0 +1,8 @@
+# uaf
+## domain: memory
+v: *|*|*
+
+taint_src: \forall alloc
+taint_snk: drop
+|> 
+taint_snk: use
