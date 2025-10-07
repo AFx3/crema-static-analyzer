@@ -10,6 +10,7 @@ use std::path::Path;
 
 mod ast;
 mod test;
+mod metainterpreter;
 use crate::ast::{CQPLParser, build_ast, Rule} ;
 
 /// Run:              cargo run      <rule_name>.cqpl    /path/to/cargo/project
