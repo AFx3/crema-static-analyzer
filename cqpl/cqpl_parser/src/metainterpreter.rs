@@ -99,18 +99,15 @@ fn deterministic_pred_eval(pred: &Predicate, env: &Env) -> bool {
 
 /// Evaluate simple syntactic classification for a rule. This function does not consult other rules
 fn syntactic_infer(rule: &RuleDef) -> AnalysisKind {
-
     if rule.domain != Domain::Memory {
         return AnalysisKind::Unknown;
     }
-    let src = rule
-        .taint_src
-        .iter()
-        .flat_map(|b| b.statements.iter())
-        .find(|s| matches!(s, Statement::Predicate(Predicate::Alloc(_))));
-    if src.is_none() {
+
+    // require that the source contains an allocation (supports quantified allocs)
+    if !rule_has_alloc_src(rule) {
         return AnalysisKind::Unknown;
     }
+
     // collect all snk predicates (including negated ones)
     let mut snk_preds: Vec<Predicate> = Vec::new();
     for b in &rule.taint_snk {
@@ -126,13 +123,11 @@ fn syntactic_infer(rule: &RuleDef) -> AnalysisKind {
             }
         }
     }
+
     // classify pattern match
     match snk_preds.as_slice() {
-        // alloc(x) |> !drop(x)  (detect negated drop via helper)
         [Predicate::Drop(_)] if has_not_drop(&rule.taint_snk) => AnalysisKind::MemoryLeak,
-        // alloc(x) |> drop(x) |> drop(x)
         [Predicate::Drop(_), Predicate::Drop(_)] => AnalysisKind::DoubleFree,
-        // alloc(x) |> drop(x) |> use(x)
         [Predicate::Drop(_), Predicate::Use(_)] => AnalysisKind::UseAfterFree,
         [Predicate::Drop(_), Predicate::Read(_)] => AnalysisKind::UseAfterFree,
         [Predicate::Drop(_), Predicate::Write(_)] => AnalysisKind::UseAfterFree,
@@ -140,13 +135,39 @@ fn syntactic_infer(rule: &RuleDef) -> AnalysisKind {
     }
 }
 
-/// Return true if the rule's taint_src contains an Alloc predicate
+
+/// Recursively check whether a Statement (or any nested sub-statement) contains an Alloc predicate.
+fn statement_contains_alloc(stmt: &Statement) -> bool {
+    match stmt {
+        // direct predicate alloc
+        Statement::Predicate(Predicate::Alloc(_)) => true,
+
+        // Not(inner) — check inside
+        Statement::Not(inner) => statement_contains_alloc(&*inner),
+
+        // Or / Then: check both sides
+        Statement::Or(left, right) | Statement::Then(left, right) => {
+            statement_contains_alloc(&*left) || statement_contains_alloc(&*right)
+        }
+
+        // Quantified { cond: Box<Statement>, ... } — check the condition
+        Statement::Quantified { cond, .. } => statement_contains_alloc(&*cond),
+
+        // For safety, handle other statement kinds that may contain nested statements
+        // (if your AST has other variants, add them here similarly)
+        _ => false,
+    }
+}
+
+/// Return true if the rule's taint_src contains an Alloc predicate (recursively).
 fn rule_has_alloc_src(rule: &RuleDef) -> bool {
     rule.taint_src
         .iter()
         .flat_map(|b| b.statements.iter())
-        .any(|s| matches!(s, Statement::Predicate(Predicate::Alloc(_))))
+        .any(|s| statement_contains_alloc(s))
 }
+
+
 
 /// Flatten a Statement built from Then(...) into a Vec of Statements in left-to-right order
 /// For non-Then nodes push the node itself (so Not(Predicate(...)) is preserved)

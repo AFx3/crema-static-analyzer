@@ -11,7 +11,8 @@ use std::path::Path;
 mod ast;
 mod test;
 mod metainterpreter;
-use crate::ast::{CQPLParser, build_ast, Rule} ;
+use crate::ast::{CQPLParser, build_ast, Rule};
+use crate::metainterpreter::*;
 
 /// Run:              cargo run      <rule_name>.cqpl    /path/to/cargo/project
 /// e.g.: cargo run mem_leak.cqpl w
@@ -47,6 +48,45 @@ fn main() {
     println!("Target project {:#?}", project_path);
     println!("Rule path {:#?}", full_rule_path);
     println!("AST: {:#?}", ast);
+
+    // analysis classification:
+    // The AST builder returns Vec<RuleDef> (one per rule in the file)
+    if ast.is_empty() {
+        eprintln!("No rules found in file {}", full_rule_path.display());
+        return;
+    }
+
+    // take the first rule to classify
+    let rule = &ast[0];
+
+    // Register all rules for semantic inference (optional, for equivalence checking)
+    register_rules_for_inference(&ast);
+
+    // Infer which kind of analysis this rule represents
+    let kind = infer_analysis_kind(rule);
+
+    println!("\n>> Inferred analysis kind: {:?}", kind);
+    match kind {
+        AnalysisKind::MemoryLeak => {
+            println!("Running Memory Leak analysis...");
+            // call your memory leak analysis function here, e.g.:
+            // run_memory_leak_analysis(&project_path, &ast);
+        }
+        AnalysisKind::UseAfterFree => {
+            println!("Running Use-After-Free analysis...");
+            // run_uaf_analysis(&project_path, &ast);
+        }
+        AnalysisKind::DoubleFree => {
+            println!("Running Double-Free analysis...");
+            // run_double_free_analysis(&project_path, &ast);
+        }
+        AnalysisKind::Unknown => {
+            println!("Unknown or unclassified analysis kind.");
+        }
+    }
+
+
+
 
     let json = serde_json::to_string_pretty(&ast).unwrap();
 

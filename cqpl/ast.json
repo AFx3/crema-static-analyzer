@@ -1,7 +1,7 @@
 [
   {
     "name": [
-      "# df"
+      "# mem_leak"
     ],
     "domain": "Memory",
     "variables": [
@@ -18,14 +18,10 @@
           {
             "Quantified": {
               "quant": "ForAll",
-              "var": {
-                "Named": "x"
-              },
+              "var": "Any",
               "cond": {
                 "Predicate": {
-                  "Alloc": {
-                    "Var": "x"
-                  }
+                  "Alloc": null
                 }
               }
             }
@@ -39,22 +35,9 @@
         "kind": "Snk",
         "statements": [
           {
-            "Predicate": {
-              "Drop": {
-                "Var": "x"
-              }
-            }
-          }
-        ],
-        "next_op": "Then"
-      },
-      {
-        "kind": "Snk",
-        "statements": [
-          {
-            "Predicate": {
-              "Drop": {
-                "Var": "x"
+            "Not": {
+              "Predicate": {
+                "Drop": null
               }
             }
           }
