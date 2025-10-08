@@ -153,8 +153,7 @@ fn statement_contains_alloc(stmt: &Statement) -> bool {
         // Quantified { cond: Box<Statement>, ... } — check the condition
         Statement::Quantified { cond, .. } => statement_contains_alloc(&*cond),
 
-        // For safety, handle other statement kinds that may contain nested statements
-        // (if your AST has other variants, add them here similarly)
+        // handle other statement kinds that may contain nested statements
         _ => false,
     }
 }
@@ -177,7 +176,7 @@ fn statement_seq(stmt: &Statement, out: &mut Vec<Statement>) {
             statement_seq(left, out);
             statement_seq(right, out);
         }
-        // For Or/Not/Predicate etc, keep the node as-is so Not(...) is preserved
+        // For or/not/predicate ... keep the node as-is so Not(...) is preserved
         other => out.push(other.clone()),
     }
 }
@@ -573,7 +572,7 @@ mod tests {
 
     #[test]
     fn test_semantic_equivalence_with_not_and_or() {
-        // !drop(x) || use(x) should behave similar to leak OR UAF patterns
+        // !drop(x) || use(x) should be mem leak
         let src = vec![Statement::Predicate(Predicate::Alloc(Some(Term::Var("x".into()))))];
         let drop_stmt = Statement::Predicate(Predicate::Drop(Some(Term::Var("x".into()))));
         let not_drop = Statement::Not(Box::new(drop_stmt.clone()));
@@ -591,10 +590,31 @@ mod tests {
 
         // should be recognized as at least one of the known ones
         let inferred = infer_analysis_kind(&rule);
-        assert!(
-            inferred == AnalysisKind::MemoryLeak || inferred == AnalysisKind::UseAfterFree,
-            "Expected OR condition to map to known semantic kind"
-        );
+        assert!(inferred == AnalysisKind::MemoryLeak, "Expected OR condition to map to known mem leak kind");
+    }
+
+
+    #[test]
+    fn test_semantic_equivalence_with_and() {
+        // !drop(x) && use(x) should NOT be mem leak
+        let src = vec![Statement::Predicate(Predicate::Alloc(Some(Term::Var("x".into()))))];
+        let drop_stmt = Statement::Predicate(Predicate::Drop(Some(Term::Var("x".into()))));
+        let not_drop = Statement::Not(Box::new(drop_stmt.clone()));
+        let use_stmt = Statement::Predicate(Predicate::Use(Some(Term::Var("x".into()))));
+        let snk = vec![Statement::And(Box::new(not_drop.clone()), Box::new(use_stmt.clone()))];
+
+        let rule = mk_rule("AND_notdrop_use", src.clone(), snk);
+        let leak_rule = mk_rule("leak", src.clone(), vec![not_drop.clone()]);
+        let uaf_rule = mk_rule("uaf", src.clone(), vec![
+            drop_stmt.clone(),
+            use_stmt.clone()
+        ]);
+
+        register_rules_for_inference(&[leak_rule.clone(), uaf_rule.clone(), rule.clone()]);
+
+        // should be recognized as at least one of the known ones
+        let inferred = infer_analysis_kind(&rule);
+        assert!(inferred == AnalysisKind::Unknown, "Expected unknown case");
     }
 
 
