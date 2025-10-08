@@ -6,7 +6,7 @@ use std::process::exit;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
-
+use std::process::Command;
 
 mod ast;
 mod test;
@@ -64,12 +64,33 @@ fn main() {
 
     // Infer which kind of analysis this rule represents
     let kind = infer_analysis_kind(rule);
-
+    ////////////////////////////////////////// run the analysis
     println!("\n>> Inferred analysis kind: {:?}", kind);
+
     match kind {
         AnalysisKind::MemoryLeak => {
-            // call crema
+            println!("Running Memory-Leak analysis with CREMA...");
+            // go up
+            let project_root = find_cargo_project_root(&project_path).unwrap_or_else(|| {
+                eprintln!("No Cargo.toml found upward from {:?}", project_path);
+                std::process::exit(1);
+            });
+
+            println!("Resolved Cargo project root: {:?}", project_root);
+            let crema_path = Path::new("../../crema");
+            let status = Command::new("cargo")
+                .arg("run")
+                .arg(project_root.to_str().unwrap())
+                .current_dir(&crema_path)
+                .status()
+                .expect("Failed to execute CREMA");
+
+            if !status.success() {
+                eprintln!("CREMA exited with status: {}", status);
+            }
         }
+
+
         AnalysisKind::UseAfterFree => {
             println!("Running Use-After-Free analysis...");
             // run_uaf_analysis(&project_path, &ast);
@@ -101,4 +122,21 @@ fn main() {
         Ok(_) => println!("successfully wrote to {}", display),
     }
     
+}
+
+fn find_cargo_project_root(start_path: &Path) -> Option<PathBuf> {
+    // normalize".." o "."
+    let mut current = fs::canonicalize(start_path).ok()?;
+
+    loop {
+        // if this folder has a cargo.toml, it is the root
+        if current.join("Cargo.toml").exists() {
+            return Some(current);
+        }
+        // go up by 1 folder
+        if !current.pop() {
+            break;
+        }
+    }
+    None
 }
