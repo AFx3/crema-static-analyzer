@@ -4,14 +4,16 @@ use pest::Parser;
 use std::env;
 use std::process::exit;
 use std::fs::File;
-use std::io::prelude::*;
-use std::process::Command;
+use std::io::{prelude::*, BufRead, BufReader};
+use std::process::{Command, Stdio};
 
 mod ast;
 mod test;
 mod metainterpreter;
 use crate::ast::{CQPLParser, build_ast, Rule};
 use crate::metainterpreter::*;
+
+// TO DO: better ouput
 
 /// Run: cargo run <rule_name>.cqpl /path/to/cargo/project
 fn main() {
@@ -55,15 +57,15 @@ fn main() {
     match kind {
         AnalysisKind::MemoryLeak => {
             println!("Running Memory-Leak analysis with CREMA...");
-            run_crema_analysis(&project_path);
+            run_crema_with_filter(&project_path, "MemoryLeak");
         }
         AnalysisKind::UseAfterFree => {
             println!("Running Use-After-Free analysis with CREMA...");
-            run_crema_analysis(&project_path);
+            run_crema_with_filter(&project_path, "UseAfterFree");
         }
         AnalysisKind::DoubleFree => {
             println!("Running Double-Free analysis with CREMA...");
-            run_crema_analysis(&project_path);
+            run_crema_with_filter(&project_path, "DoubleFree");
         }
         AnalysisKind::Unknown => {
             println!("Unknown or unclassified analysis kind.");
@@ -93,25 +95,80 @@ fn find_cargo_project_root(start_path: &Path) -> Option<PathBuf> {
     None
 }
 
-/// Runs the CREMA analysis tool on the Cargo project root
-fn run_crema_analysis(project_path: &Path) {
+/// Runs CREMA and filters its stdout to show only the relevant vulnerability type, header, and warnings
+/// If no issues of that type are found, prints NO Issues detected
+fn run_crema_with_filter(project_path: &Path, vuln_kind: &str) {
     let project_root = find_cargo_project_root(project_path).unwrap_or_else(|| {
         eprintln!("No Cargo.toml found upward from {:?}", project_path);
         std::process::exit(1);
     });
-
     println!("Resolved Cargo project root: {:?}", project_root);
 
     let crema_path = Path::new("../../crema");
-
-    let status = Command::new("cargo")
+    
+    let mut cmd = Command::new("cargo")
         .arg("run")
         .arg(project_root.to_str().unwrap())
         .current_dir(&crema_path)
-        .status()
+        .stdout(Stdio::piped())
+        .spawn()
         .expect("Failed to execute CREMA");
 
-    if !status.success() {
-        eprintln!("CREMA exited with status: {}", status);
+    let stdout = cmd.stdout.take().expect("Failed to capture CREMA stdout");
+    let reader = BufReader::new(stdout);
+
+    let filter_tag = match vuln_kind {
+        "MemoryLeak" => "☢ Never Free Issues",
+        "UseAfterFree" => "☢ Use-After-Free Issues",
+        "DoubleFree" => "☢ Double Free Issues",
+        _ => "",
+    };
+
+    let mut print_block = false;
+    let mut printed_header = false;
+    let mut found_issues = false;
+
+    for line in reader.lines() {
+        let line = line.unwrap();
+
+        // always print warnings
+        if line.contains("⚠") || line.contains("🪲") || line.contains("warning:") || line.contains("WARNING:") {
+            println!("{line}");
+            continue;
+        }
+        // always print the analysis header
+        if line.contains("🤖💬 Potential memory issues detected 🚀:") || line.contains("⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦") {
+            if !printed_header {
+                println!("{line}");
+                printed_header = true;
+            } else if line.contains("🤖💬") {
+                println!("{line}");
+            }
+            continue;
+        }
+        // start printing when the relevant section appears
+        if line.contains(filter_tag) {
+            println!("{line}");
+            print_block = true;
+            found_issues = true;
+            continue;
+        }
+        // stop printing when another unrelated section or separator starts
+        if print_block {
+            if (line.starts_with("☢") && !line.contains(filter_tag))
+                || line.starts_with("⬦")
+            {
+                print_block = false;
+                continue;
+            }
+            println!("{line}");
+        }
+    }
+    let _ = cmd.wait();
+    // if no issues found, print the "NO Issues" header
+    if !found_issues {
+        println!("\n⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦");
+        println!("🤖💬 NO Issues detected: ✅");
+        println!("⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦");
     }
 }

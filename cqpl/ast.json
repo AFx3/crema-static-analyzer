@@ -46,14 +46,14 @@
             }
           }
         ],
-        "next_op": "Then"
+        "next_op": null
       },
       {
         "kind": "Snk",
         "statements": [
           {
             "Predicate": {
-              "Use": {
+              "Drop": {
                 "Var": "x"
               }
             }
