@@ -229,199 +229,49 @@ Proof.
 Qed.
 
 
+(*Derived memory errors formulas and their soundness *)
+Definition MemLeak (x : Var) : Formula :=
+  FAnd (FAtom "alloc" x)
+       (FNot (FThen (FAtom "alloc" x) (FAtom "drop" x))).
 
+Definition DoubleFree (x : Var) : Formula :=
+  FThen (FAtom "drop" x) (FAtom "drop" x).
 
+Definition UseAfterFree (x : Var) : Formula :=
+  FThen (FAtom "drop" x) (FAtom "use" x).
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-(* ================================================================ *)
-(* cqpl_soundness.v                                                 *)
-(* Witness-preserving soundness for the "may" judgment              *)
-(* ================================================================ *)
-(* DINGLE STEP R, NO R+
-From Stdlib Require Import List Bool String.
-Import ListNotations.
-Require Import Classical.
-
-(* --- Basic parameters --- *)
-Parameter Block : Type.
-Parameter Var : Type.
-
-(* Concrete and abstract states *)
-Parameter StateConcrete : Type.
-Parameter StateAbstract : Type.
-
-(* Concretization: from an abstract global state to a list of concrete states *)
-Parameter gamma : StateAbstract -> list StateConcrete.
-
-(* Control-flow relation on blocks (abstract) *)
-Parameter R_B : Block -> Block -> Prop.
-
-(* Valuation of logical variables *)
-Definition Valuation := Var -> nat.
-Parameter update : Valuation -> Var -> nat -> Valuation.
-
-(* --- Syntax of formulas --- *)
-Inductive Formula :=
-  | FAtom   : string -> Var -> Formula
-  | FNot    : Formula -> Formula
-  | FAnd    : Formula -> Formula -> Formula
-  | FOr     : Formula -> Formula -> Formula
-  | FForall : Var -> Formula -> Formula
-  | FExists : Var -> Formula -> Formula
-  | FThen   : Formula -> Formula -> Formula.
-
-(* --- Concrete Kripke structure (and one fixed instance) --- *)
-Parameter K_concrete : Type.
-Parameter Kc : K_concrete.
-
-(* Semantics of atomic predicates at concrete states *)
-Parameter atom_holds_concrete :
-  K_concrete -> StateConcrete -> Block -> Valuation -> string -> Var -> Prop.
-
-(* --- Concrete satisfaction (models) --- *)
-Fixpoint models (Kc : K_concrete) (s : StateConcrete)
-                 (b : Block) (rho : Valuation) (phi : Formula) : Prop :=
-  match phi with
-  | FAtom name x => atom_holds_concrete Kc s b rho name x
-  | FNot p       => ~ models Kc s b rho p
-  | FAnd p q     => models Kc s b rho p /\ models Kc s b rho q
-  | FOr p q      => models Kc s b rho p \/ models Kc s b rho q
-  | FForall x p  => forall v : nat, models Kc s b (update rho x v) p
-  | FExists x p  => exists v : nat, models Kc s b (update rho x v) p
-  | FThen p q    =>
-      exists b', R_B b b' /\ models Kc s b rho p /\ models Kc s b' rho q
-  end.
-
-(* --- Abstract taint predicate (parameterized) --- *)
-Parameter taint_may_holds :
-  StateAbstract -> Block -> Valuation -> string -> Var -> Prop.
-
-(* --- Inductive definition of the "may" judgment --- *)
-Inductive MayJudgment : StateAbstract -> Block -> Valuation -> Formula -> Prop :=
-  | MJ_Atom : forall sigma b rho name x,
-      taint_may_holds sigma b rho name x ->
-      MayJudgment sigma b rho (FAtom name x)
-  | MJ_MayNot : forall sigma b rho phi,
-      (exists s, In s (gamma sigma) /\ ~ models Kc s b rho phi) ->
-      MayJudgment sigma b rho (FNot phi)
-  | MJ_And : forall sigma b rho p q,
-      MayJudgment sigma b rho p ->
-      MayJudgment sigma b rho q ->
-      MayJudgment sigma b rho (FAnd p q)
-  | MJ_OrL : forall sigma b rho p q,
-      MayJudgment sigma b rho p ->
-      MayJudgment sigma b rho (FOr p q)
-  | MJ_OrR : forall sigma b rho p q,
-      MayJudgment sigma b rho q ->
-      MayJudgment sigma b rho (FOr p q)
-  | MJ_Forall : forall sigma b rho x p,
-      (forall v : nat, MayJudgment sigma b (update rho x v) p) ->
-      MayJudgment sigma b rho (FForall x p)
-  | MJ_Exists : forall sigma b rho x p,
-      (exists v, MayJudgment sigma b (update rho x v) p) ->
-      MayJudgment sigma b rho (FExists x p)
-  | MJ_Then : forall sigma b rho p q,
-      MayJudgment sigma b rho p ->
-      (exists b', R_B b b' /\ MayJudgment sigma b' rho q) ->
-      MayJudgment sigma b rho (FThen p q).
-
-(* --- Witness-preserving axioms --- *)
-Axiom and_witness_exists :
-  forall sigma b rho p q,
-    MayJudgment sigma b rho p ->
-    MayJudgment sigma b rho q ->
-    exists s, In s (gamma sigma) /\
-              models Kc s b rho p /\
-              models Kc s b rho q.
-
-Axiom then_witness_glue :
-  forall sigma b b' rho p q,
-    MayJudgment sigma b rho p ->
-    R_B b b' ->
-    MayJudgment sigma b' rho q ->
-    exists s, In s (gamma sigma) /\
-              models Kc s b rho p /\
-              models Kc s b' rho q.
-
-Axiom atom_taint_concrete_witness :
-  forall sigma b rho name x,
-    taint_may_holds sigma b rho name x ->
-    exists s, In s (gamma sigma) /\ atom_holds_concrete Kc s b rho name x.
-
-Axiom forall_witness_family :
-  forall sigma b rho x p,
-    (forall v : nat, MayJudgment sigma b (update rho x v) p) ->
-    forall v, exists s, In s (gamma sigma) /\
-                        models Kc s b (update rho x v) p.
-
-Axiom exists_witness :
-  forall sigma b rho x p,
-    (exists v, MayJudgment sigma b (update rho x v) p) ->
-    exists v s, In s (gamma sigma) /\
-                models Kc s b (update rho x v) p.
-
-(* Additional axiom needed for the Forall case *)
-Axiom forall_witness_uniform :
-  forall sigma b rho x p,
-    (forall v : nat, MayJudgment sigma b (update rho x v) p) ->
-    exists s, In s (gamma sigma) /\ forall v, models Kc s b (update rho x v) p.
-
-(* --- Soundness theorem --- *)
-Theorem may_sound :
-  forall (sigma0 : StateAbstract) (b0 : Block) (rho0 : Valuation) (phi : Formula),
-    MayJudgment sigma0 b0 rho0 phi ->
-    exists s : StateConcrete, In s (gamma sigma0) /\ models Kc s b0 rho0 phi.
+(* Memory Leak *)
+Lemma mem_leak_sound :
+  forall sigma b rho x,
+    MayJudgment sigma b rho (MemLeak x) ->
+    exists s, In s (gamma sigma) /\ models Kc s b rho (MemLeak x).
 Proof.
-  intros sigma0 b0 rho0 phi H.
-  induction H.
-  - (* MJ_Atom *)
-    apply atom_taint_concrete_witness in H.
-    destruct H as [s [Hin Hatom]].
-    exists s. split; [exact Hin|].
-    simpl. exact Hatom.
-  - (* MJ_MayNot *)
-    destruct H as [s [Hin Hnotm]].
-    exists s. split; [exact Hin|].
-    simpl. exact Hnotm.
-  - (* MJ_And *)
-    destruct (and_witness_exists sigma b rho p q H H0) as [s [Hin [Hm1 Hm2]]].
-    exists s. split; [exact Hin|].
-    simpl. split; assumption.
-  - (* MJ_OrL *)
-    destruct IHMayJudgment as [s [Hin Hm]].
-    exists s. split; [exact Hin|].
-    simpl. left; assumption.
-  - (* MJ_OrR *)
-    destruct IHMayJudgment as [s [Hin Hm]].
-    exists s. split; [exact Hin|].
-    simpl. right; assumption.
-  - (* MJ_Forall *)
-    apply forall_witness_uniform in H.
-    destruct H as [s [Hin Hm]].
-    exists s. split; [exact Hin|].
-    simpl. exact Hm.
-  - (* MJ_Exists *)
-    apply exists_witness in H.
-    destruct H as [v [s [Hin Hm]]].
-    exists s. split; [exact Hin|].
-    simpl. exists v. exact Hm.
-  - (* MJ_Then *)
-    destruct H0 as [b' [Rb Hq_may]].
-    apply then_witness_glue with (b' := b') (q := q) in H; [|exact Rb|exact Hq_may].
-    destruct H as [s [Hin [Hm_p Hm_q]]].
-    exists s. split; [exact Hin|].
-    simpl. exists b'. split; [exact Rb|split]; assumption.
-Qed.*)
+  intros sigma b rho x H.
+  inversion H; subst.
+  pose proof (and_witness_exists sigma b rho
+               (FAtom "alloc" x)
+               (FNot (FThen (FAtom "alloc" x) (FAtom "drop" x)))
+               H5 H6)
+    as [s [Hin [Halloc Hnot]]].
+  exists s. split; [exact Hin|simpl; split; assumption].
+Qed.
+
+(* Double Free *)
+Lemma double_free_sound :
+  forall sigma b rho x,
+    MayJudgment sigma b rho (DoubleFree x) ->
+    exists s, In s (gamma sigma) /\ models Kc s b rho (DoubleFree x).
+Proof.
+  intros sigma b rho x H. apply may_sound in H. exact H.
+Qed.
+
+(* UAF *)
+Lemma use_after_free_sound :
+  forall sigma b rho x,
+    MayJudgment sigma b rho (UseAfterFree x) ->
+    exists s, In s (gamma sigma) /\ models Kc s b rho (UseAfterFree x).
+Proof.
+  intros sigma b rho x H. apply may_sound in H. exact H.
+Qed.
+
+
