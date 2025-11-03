@@ -40,7 +40,7 @@ docker run -it andreafranceschi/rust-ffi-checker:latest bash
 | cstr_expect_uaf_and_ub_ffi   | UB/UAF ✅                       | DF ❌ (false positive) - UB/UAF ✅              |UB/UAF            | 0.643s                   | 2.027s                              |
 | cstringcargo_df_ffi          | DF ✅ - UB/UAF ✅               | DF ✅ - UB/UAF ✅ - MemLeak ❌ (false positive) |DF-UB/UAF            | 2.012s                   | 6.703s                              |
 | df_rand_cargo_c_ffi          | DF ✅ - UB/UAF ✅               | DF ✅ - UB/UAF ✅ - MemLeak ❌ (false positive) |DF-UB/UAF            | 1.872s                   | 7.108s                             |
-| for_df_ffi                    | DF ✅ - UB/UAF ✅              | DF ✅ - UB/UAF ✅ - MemLeak ❌ (false positive) |MemLeak              | 1.905s                   | 7.129s                             |
+| for_df_ffi                    | DF ✅ - UB/UAF ✅              | DF ✅ - UB/UAF ✅ - MemLeak ❌ (false positive) |DF-UB/UAF               | 1.905s                   | 7.129s                             |
 | for_memory_leak_ffi          | MemLeak ✅                      | MemLeak ✅                                      |UB/UAF-MemLeak       | 1.936s                   | 7.208s                             | 
 | uaf_mem_leak_ffi             | UB/UAF ✅ - MemLeak ✅          | DF ❌ (false positive) - UB/UAF ✅ - MemLeak ✅ |UB/UAF-MemLeak       | 1.797s                   | 6.932s                             |
 | vuln_only_mem_leak_but_df_brach_overapprox_ffi |  DF ❌ (false positive) - UB/UAF ❌ (false positive) - MemLeak ✅ | DF ❌ (false positive) - UB/UAF ❌ (false positive) - MemLeak ✅ |MemLeak | 1.878s                   | 6.907s     |
