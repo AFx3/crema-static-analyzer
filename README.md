@@ -1,6 +1,10 @@
 <img src="./crema/img/crema_logo6.png" alt="logo"/>
 
-* Crema is a static analysis tool for Rust-C FFI. It detects memory errors (memory leak, double-free and use-after-free) in pure Rust code and Rust interacting with C code.
+Crema is a static analysis tool to detect memory errors in Rust programs using FFI and unsafe blocks. Specifically, it detects memory leaks, double frees, and use-after-frees in pure unsafe Rust code and Rust interacting with C.
+The design and the implementation of Crema are described in the paper:
+>	[A. Franceschi, L. Galletta, P. Degano.Detecting Memory Errors in Rust Programs Including Unsafe Foreign Code](https://doi.org/10.1007/978-3-032-10444-1_11). 23rd International Conference on Software Engineering and Formal Methods (SEFM), 2025.
+
+# Crema highlights
 * Crema constructs an inter-procedural Control Flow Graph (ICFG) capturing the interactions between Rust and C functions. 
 * To build such a graph, crema exploits Rust MIR and LLVM IR (for C representation).
 * The ICFG includes dummyCall and dummyRet nodes storing the association between the two different IRs.
