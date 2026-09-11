@@ -52,91 +52,104 @@ impl fmt::Debug for Allocation {
     }
 }
 //============================================================================
-// CellValue: lattice for heap cell values
-// (_|_, ALLOC, FREED, MB, IMMB, MV, T)
+// CellValue lattice.
+//
+// Theoretical order:
+//   BOTTOM <= every value
+//   ALLOC  <= MB, IMMB, MV
+//   BOXTIMES, FREED, MB, IMMB, MV are pairwise incomparable unless related
+//   by the previous ALLOC edges
+//   every value <= TOP
+//
+// BOXTIMES abstracts scalar / non-heap local values (and the corresponding
+// residual concrete layouts in the formal model).  In particular it is NOT
+// an alias/heap-state marker and is incomparable with ALLOC/FREED/MB/IMMB/MV.
 //============================================================================
-// <=: partial order = {(_|_,ALLOC), (_|_,FREED), (ALLOC, MB), (ALLOC, IMMB), (ALLOC, MV), (MB, T), (IMMB, T), (MV, T), (FREED, T)}
-//============================================================================
-//          T
-//     /    |   \ \  
-//    /     |    \ \
-//   MB   IMMB   MV \
-//     \    |    /   \
-//      \   |   /     \
-//        ALLOC     FREED
-//          \        /
-//           \      /     
-//             _|_
+//
+//                         TOP
+//             /       /    |    \       \
+//            MB     IMMB   MV   FREED   BOXTIMES
+//             \       |    /
+//                    ALLOC
+//                      |
+////                   BOTTOM
 //============================================================================
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum CellValue {
-    BOTTOM, // _|_: undefined, the default (or “no information”) state
-    ALLOC,  // ALLOC: allocated a heap cell
-    FREED,  // FREED: allocated then freed.
-    MB,     // MB: mutable borrow (e.g. passed as an FFI mutable reference)
-    IMMB,   // IMMB: immutable borrow (e.g. passed as an FFI immutable reference)
-    MV,     // MV: moved (ownership forgotten)
-    TOP,    // T: imprecise information (i.e. the unknown state)
+    /// No normally represented concrete state (least element).
+    BOTTOM,
+    /// Scalar / non-heap abstract value from the formal model (\boxtimes).
+    BOXTIMES,
+    /// Owned allocated heap cell.
+    ALLOC,
+    /// Heap cell known to have been freed.
+    FREED,
+    /// Mutable borrow.
+    MB,
+    /// Immutable borrow.
+    IMMB,
+    /// Ownership forgotten / raw.
+    MV,
+    /// Completely imprecise abstract value (greatest element).
+    TOP,
 }
+
 impl CellValue {
-    // joins two cell values to get the least upper bound: s1 [] s2
-    pub fn join(self, other: Self) -> Self{
-        // 1) if the two values are equal, return one of them 
-        if self == other{
-            other
-        } // 2) if one of the values is bottom, return the other value
-         else if self==CellValue::BOTTOM {
-            other
-        } else if other==CellValue::BOTTOM {
-            self
-        } // 3) if one is top, return top
-        else if self==CellValue::TOP || other==CellValue::TOP {
-            CellValue::TOP
-        } else { // check other pairs
-            match (self, other) {
-                (CellValue::ALLOC, CellValue::MB) | (CellValue::MB, CellValue::ALLOC) => CellValue::MB,
-                (CellValue::ALLOC, CellValue::IMMB) | (CellValue::IMMB, CellValue::ALLOC) => CellValue::IMMB,
-                (CellValue::ALLOC, CellValue::MV) | (CellValue::MV, CellValue::ALLOC) => CellValue::MV,
-                //  (_|_ [] FREED) and (T [] FREED) falls in cases 2 and 3 respectively
-                // if the two cell values are siblings that don’t have a direct ordering, then their [] is T
-                (CellValue::ALLOC, CellValue::FREED) | (CellValue::FREED, CellValue::ALLOC)
-                | (CellValue::MB, CellValue::IMMB) | (CellValue::IMMB, CellValue::MB)
-                | (CellValue::MB, CellValue::MV) | (CellValue::MV, CellValue::MB)
-                | (CellValue::IMMB, CellValue::MV) | (CellValue::MV, CellValue::IMMB) => CellValue::TOP,
-                _ => CellValue::TOP,
-            }
+    /// Partial order of the CellValue lattice.
+    pub fn leq(self, other: Self) -> bool {
+        use CellValue::*;
+
+        match (self, other) {
+            (x, y) if x == y => true,
+            (BOTTOM, _) => true,
+            (_, TOP) => true,
+            (ALLOC, MB | IMMB | MV) => true,
+            _ => false,
         }
     }
 
-    // checks if the cell value is bottom
+    /// Least upper bound.
+    ///
+    /// Deriving join from `leq` keeps the implementation synchronized with
+    /// the Hasse diagram: comparable values join to the larger one; all
+    /// remaining incomparable pairs join to TOP.
+    pub fn join(self, other: Self) -> Self {
+        if self.leq(other) {
+            other
+        } else if other.leq(self) {
+            self
+        } else {
+            CellValue::TOP
+        }
+    }
+
+    /// Greatest lower bound.
+    ///
+    /// The only non-trivial incomparable pairs with a common lower bound
+    /// strictly above BOTTOM are pairs among MB/IMMB/MV, whose GLB is ALLOC.
+    pub fn meet(self, other: Self) -> Self {
+        use CellValue::*;
+
+        if self.leq(other) {
+            return self;
+        }
+        if other.leq(self) {
+            return other;
+        }
+
+        match (self, other) {
+            (MB, IMMB) | (IMMB, MB)
+            | (MB, MV) | (MV, MB)
+            | (IMMB, MV) | (MV, IMMB) => ALLOC,
+            _ => BOTTOM,
+        }
+    }
+
     pub fn is_default(self) -> bool {
         self == CellValue::BOTTOM
     }
-
-    // helper for the partial order (self <= other)
-    pub fn leq(self, other: Self) -> bool {
-        // EQUALITY
-        if self == other {
-            true //if both values are the same, by def they are <= to each other
-        // BOTTOM
-        } else if self == CellValue::BOTTOM {
-            true // if self is bottom, it is <= to any other value i.e.: if the left-hand side is bottom, the function returns true
-        // TOP 
-        } else if other == CellValue::TOP {
-            true // if the right-hand side is top, the function returns true since evey element <= T
-        } else {
-            match self {
-                // ALLOC <= MB, IMMB, MV
-                CellValue::ALLOC => matches!(other, CellValue::MB | CellValue::IMMB | CellValue::MV),
-                // FREED <= TOP and has no ordering with MB, IMMB, MV, or ALLOC its only comparisons are via _|_ and T
-                CellValue::FREED => false,
-                // For MB, IMMB, and MV, aside from equality (above), no ordering exists
-                _ => false,
-            }
-        }
-    }
-
 }
+
 // TRAIT 
 impl PartialOrd for CellValue {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -175,128 +188,224 @@ impl fmt::Debug for AbstractMemory {
     }
 }
 
-impl AbstractMemory {
-    // UNION: computes least upper bound (join) of two AbstractMemories in a pointwise manner
-    //      *   for each variable present in either memory, it computes the LUB of their cell values using the join operation
-    //      *   merges the alias sets (allocations) of vars from both memories to track aliased variables
-    // ensures that when two variables (x and y) are aliased, they share memory location, updating one variable’s state in the union also updates the other
-    // NOTE CAN combine abstract states at control flow merge points (e.g., after an if-else block)
-    pub fn union(&self, other: &Self) -> Self {
-        let mut result = AbstractMemory::default();
-        // raccolgo tutti i nomi di variabile presenti in self o in other
-        let mut all_vars = BTreeSet::new();
-        for alloc in self.state.keys() {
-            all_vars.extend(alloc.set.iter().cloned());
+
+/// Preserve the analyzer's existing convention that a projected name also
+/// records its prefixes in the same allocation.
+fn insert_name_and_prefixes(alloc: &mut Allocation, var: &Name) {
+    let parts: Vec<&str> = var.split('.').collect();
+    let mut prefix = String::new();
+
+    for part in parts {
+        if prefix.is_empty() {
+            prefix.push_str(part);
+        } else {
+            prefix.push('.');
+            prefix.push_str(part);
         }
-        for alloc in other.state.keys() {
-            all_vars.extend(alloc.set.iter().cloned());
+        alloc.insert(prefix.clone());
+    }
+}
+
+impl AbstractMemory {
+    /// All locals explicitly represented in this sparse abstract memory.
+    fn all_vars(&self) -> BTreeSet<Name> {
+        self.state
+            .keys()
+            .flat_map(|alloc| alloc.set.iter().cloned())
+            .collect()
+    }
+
+    /// Canonical may-alias pairs represented by this memory.
+    ///
+    /// The implementation stores alias information as equivalence classes.
+    /// We therefore expose all unordered pairs in each class.  This is used
+    /// only to order/join the additional implementation-level alias component;
+    /// it is deliberately separate from the formal CellValue lattice.
+    fn alias_pairs(&self) -> BTreeSet<(Name, Name)> {
+        let mut pairs = BTreeSet::new();
+
+        for alloc in self.state.keys() {
+            let members: Vec<_> = alloc.set.iter().cloned().collect();
+            for i in 0..members.len() {
+                for j in (i + 1)..members.len() {
+                    pairs.insert((members[i].clone(), members[j].clone()));
+                }
+            }
         }
 
-        // per ciascuna var, ricavo la sua cell value in self e in other, joino
-        // e ricostruisco l'allocazione unendo soltanto le due alias‐set originali
-        for var in all_vars {
-            let v_self  = self.get_cell_value(&var);
-            let v_other = other.get_cell_value(&var);
-            let joined  = v_self.join(v_other);
-            if joined == CellValue::BOTTOM {
+        pairs
+    }
+
+    /// Pointwise CellValue order plus inclusion of implementation-level
+    /// may-alias information.
+    ///
+    /// More may-alias pairs means less precision, hence alias-set inclusion
+    /// follows the same direction as the abstract order.
+    pub fn leq(&self, other: &Self) -> bool {
+        let self_vars = self.all_vars();
+        let other_vars = other.all_vars();
+        let all_vars: BTreeSet<Name> =
+            self_vars.union(&other_vars).cloned().collect();
+
+        let values_leq = all_vars
+            .iter()
+            .all(|var| self.get_cell_value(var).leq(other.get_cell_value(var)));
+
+        values_leq && self.alias_pairs().is_subset(&other.alias_pairs())
+    }
+
+    /// Least upper bound of two implementation memories.
+    ///
+    /// Cell values are joined pointwise. Alias information is joined as the
+    /// equivalence closure of the union of the two may-alias relations. Since
+    /// one Allocation carries one CellValue, every resulting alias component
+    /// is assigned the join of the pointwise values of all of its members.
+    ///
+    /// This is conservative: if two paths connect a chain a~b and b~c, the
+    /// implementation represents the merged may-alias component {a,b,c}.
+    pub fn union(&self, other: &Self) -> Self {
+        let self_vars = self.all_vars();
+        let other_vars = other.all_vars();
+        let all_vars: BTreeSet<Name> =
+            self_vars.union(&other_vars).cloned().collect();
+
+        if all_vars.is_empty() {
+            return AbstractMemory::default();
+        }
+
+        // Build the undirected graph induced by alias components from both
+        // incoming memories. Connecting each member to a representative is
+        // sufficient; connected components compute the equivalence closure.
+        let mut adjacency: BTreeMap<Name, BTreeSet<Name>> = all_vars
+            .iter()
+            .cloned()
+            .map(|v| (v, BTreeSet::new()))
+            .collect();
+
+        for mem in [self, other] {
+            for alloc in mem.state.keys() {
+                let mut members = alloc.set.iter();
+                if let Some(first) = members.next() {
+                    for member in members {
+                        adjacency
+                            .entry(first.clone())
+                            .or_default()
+                            .insert(member.clone());
+                        adjacency
+                            .entry(member.clone())
+                            .or_default()
+                            .insert(first.clone());
+                    }
+                }
+            }
+        }
+
+        let mut result = AbstractMemory::default();
+        let mut visited = BTreeSet::new();
+
+        for start in all_vars {
+            if visited.contains(&start) {
                 continue;
             }
-            // trovo le allocazioni di var in self e in other
-            let alloc_self  = self.get_allocation(&var);
-            let alloc_other = other.get_allocation(&var);
-            let merged_alloc = match (alloc_self, alloc_other) {
-                (Some(a1), Some(a2)) => {
-                    // se esistono in entrambe, unisco i due set
-                    let set = a1.set.union(&a2.set).cloned().collect();
-                    Allocation { set }
+
+            let mut component = BTreeSet::new();
+            let mut queue = VecDeque::new();
+            queue.push_back(start.clone());
+            visited.insert(start);
+
+            while let Some(v) = queue.pop_front() {
+                component.insert(v.clone());
+                if let Some(neighbours) = adjacency.get(&v) {
+                    for n in neighbours {
+                        if visited.insert(n.clone()) {
+                            queue.push_back(n.clone());
+                        }
+                    }
                 }
-                (Some(a1), None) => a1,
-                (None, Some(a2)) => a2,
-                (None, None) => Allocation::new(var.clone()),
-            };
-            // inserisco nel result: se più variabili producono la stessa allocation key,
-            // l'ultimo valore joinAvrà comunque v_uno join v_due identico per tutte le var in quella alloc
-            result.state.insert(merged_alloc, joined);
+            }
+
+            // Pointwise value join for each local, followed by a join across
+            // the alias component so that one canonical Allocation has one
+            // sound CellValue.
+            let mut component_value = CellValue::BOTTOM;
+            for var in &component {
+                let pointwise = self
+                    .get_cell_value(var)
+                    .join(other.get_cell_value(var));
+                component_value = component_value.join(pointwise);
+            }
+
+            if component_value != CellValue::BOTTOM {
+                result
+                    .state
+                    .insert(Allocation { set: component }, component_value);
+            }
         }
+
         result
     }
 
-    // SET CELL VALUE
-/* 
-    mod since when setting a cell value for a var, if no allocation already contains that var you also check if there’s an existing allocation with the same cell value.
-    If there is one, merge the new variable into that allocation*/
+    /// Set the state of the allocation containing `var`.
+    ///
+    /// IMPORTANT: equal CellValues do not imply aliasing.  If `var` is not
+    /// currently tracked, a fresh singleton allocation is created.  If `var`
+    /// already belongs to an alias component, changing a non-BOTTOM heap state
+    /// updates that whole component, as aliases denote the same allocation.
+    ///
+    /// Setting a local to BOTTOM removes that local from the component while
+    /// preserving the previous value for the remaining aliases.
     pub fn set_cell_value(&mut self, var: &Name, cell_value: CellValue) {
-        if cell_value == CellValue::BOTTOM {
-            if let Some(alloc) = self.get_allocation(var) {
-                self.state.remove(&alloc);
-                let mut new_alloc = alloc.clone();
-                new_alloc.set.remove(var);
-                if !new_alloc.set.is_empty() {
-                    self.state.insert(new_alloc, cell_value);
+        if let Some(mut alloc) = self.get_allocation(var) {
+            let previous_value = self
+                .state
+                .remove(&alloc)
+                .expect("allocation returned by get_allocation must exist");
+
+            if cell_value == CellValue::BOTTOM {
+                alloc.set.remove(var);
+                if !alloc.set.is_empty() {
+                    self.state.insert(alloc, previous_value);
                 }
+                return;
             }
-        } else {
-            if let Some(mut alloc) = self.get_allocation(var) {
-                // var already in an allocation -> update it
-                self.state.remove(&alloc);
-                let parts: Vec<&str> = var.split('.').collect();
-                let mut s = String::new();
-                for part in parts {
-                    if s.is_empty() {
-                        s.push_str(part);
-                    } else {
-                        s.push('.');
-                        s.push_str(part);
-                    }
-                    alloc.insert(s.clone());
-                }
-                self.state.insert(alloc, cell_value);
-            } else {
-                // var is not present in any allocation
-                // check if there is an existing allocation with the same cell value to merge into
-                let mut found_alloc = None;
-                for (alloc, &val) in self.state.iter() {
-                    if val == cell_value {
-                        found_alloc = Some(alloc.clone());
-                        break;
-                    }
-                }
-                if let Some(mut alloc) = found_alloc {
-                    // merge new variable into the existing allocation
-                    self.state.remove(&alloc);
-                    let parts: Vec<&str> = var.split('.').collect();
-                    let mut s = String::new();
-                    for part in parts {
-                        if s.is_empty() {
-                            s.push_str(part);
-                        } else {
-                            s.push('.');
-                            s.push_str(part);
-                        }
-                        alloc.insert(s.clone());
-                    }
-                    self.state.insert(alloc, cell_value);
-                } else {
-                    // no matching allocation found -> create a new one
-                    let mut alloc = Allocation::new(var.clone());
-                    let parts: Vec<&str> = var.split('.').collect();
-                    let mut s = String::new();
-                    for part in parts {
-                        if s.is_empty() {
-                            s.push_str(part);
-                        } else {
-                            s.push('.');
-                            s.push_str(part);
-                        }
-                        alloc.insert(s.clone());
-                    }
-                    self.state.insert(alloc, cell_value);
-                }
-            }
+
+            // Preserve the existing projection-prefix convention used by the
+            // analyzer, but do not merge unrelated allocations by CellValue.
+            insert_name_and_prefixes(&mut alloc, var);
+            self.state.insert(alloc, cell_value);
+            return;
+        }
+
+        if cell_value != CellValue::BOTTOM {
+            let mut alloc = Allocation::new(var.clone());
+            insert_name_and_prefixes(&mut alloc, var);
+            self.state.insert(alloc, cell_value);
         }
     }
 
-    // returns the cell value for a given variable (defaulting to BOTTOM)
+    /// Explicit local overwrite: detach `var` from any previous alias
+    /// component and create a fresh singleton representation for the new
+    /// local value. This is intentionally distinct from heap-state updates.
+    pub fn assign_local_value(&mut self, var: &Name, cell_value: CellValue) {
+        if let Some(mut old_alloc) = self.get_allocation(var) {
+            let previous_value = self
+                .state
+                .remove(&old_alloc)
+                .expect("allocation returned by get_allocation must exist");
+
+            old_alloc.set.remove(var);
+            if !old_alloc.set.is_empty() {
+                self.state.insert(old_alloc, previous_value);
+            }
+        }
+
+        if cell_value != CellValue::BOTTOM {
+            let mut fresh = Allocation::new(var.clone());
+            insert_name_and_prefixes(&mut fresh, var);
+            self.state.insert(fresh, cell_value);
+        }
+    }
+
     pub fn get_cell_value(&self, var: &Name) -> CellValue {
         for (alloc, &cell_value) in &self.state {
             if alloc.set.contains(var) {
@@ -306,7 +415,6 @@ impl AbstractMemory {
         CellValue::BOTTOM
     }
 
-    // returns the allocation (alias set) that contains var, if any
     pub fn get_allocation(&self, var: &Name) -> Option<Allocation> {
         for alloc in self.state.keys() {
             if alloc.set.contains(var) {
@@ -316,63 +424,78 @@ impl AbstractMemory {
         None
     }
 
-    // propagate the cell value from one variable to another
+    /// Propagate an allocation identity from `from` to `to`.
+    ///
+    /// This operation is used only when the MIR/ICFG semantics provide
+    /// evidence that the two locals denote the same allocation. It never
+    /// infers aliasing merely from equal abstract CellValues.
     pub fn propagate_cell_value(&mut self, from: &Name, to: &Name) {
         debug!("Propagate cell value from {} to {}", from, to);
         debug!("Current state: {:?}", self.state);
-        let from_value = self.get_cell_value(from);
-        if from_value == CellValue::BOTTOM {
-            if let Some(to_alloc) = self.get_allocation(to) {
-                let mem_value = self.state[&to_alloc];
-                let mut new_alloc = to_alloc.clone();
-                new_alloc.set.remove(to);
-                self.state.remove(&to_alloc);
-                if !new_alloc.set.is_empty() {
-                    self.state.insert(new_alloc, mem_value);
-                }
-            }
-        } else {
-            let mut from_alloc = self.get_allocation(from).unwrap();
-            if let Some( to_alloc) = self.get_allocation(to) {
-                self.state.remove(&from_alloc);
-                self.state.remove(&to_alloc);
-                from_alloc.set.extend(to_alloc.set.iter().cloned());
-            } else {
-                self.state.remove(&from_alloc);
-                from_alloc.insert(to.clone());
-            }
-            self.state.insert(from_alloc, from_value);
+
+        if from == to {
+            return;
         }
+
+        let from_value = self.get_cell_value(from);
+
+        if from_value == CellValue::BOTTOM {
+            // No represented source allocation: an assignment/copy from
+            // BOTTOM cannot justify an alias relation. Detach only `to`.
+            self.assign_local_value(to, CellValue::BOTTOM);
+            debug!("After propagation, state: {:?}", self.state);
+            return;
+        }
+
+        let from_alloc = self
+            .get_allocation(from)
+            .expect("non-BOTTOM source must belong to an allocation");
+
+        // Already aliases: nothing to change.
+        if self
+            .get_allocation(to)
+            .as_ref()
+            .is_some_and(|to_alloc| *to_alloc == from_alloc)
+        {
+            return;
+        }
+
+        // Overwriting `to` must detach only `to` from its previous component.
+        // Its old aliases continue to denote the old allocation.
+        if let Some(mut old_to_alloc) = self.get_allocation(to) {
+            let old_to_value = self
+                .state
+                .remove(&old_to_alloc)
+                .expect("allocation returned by get_allocation must exist");
+
+            old_to_alloc.set.remove(to);
+            if !old_to_alloc.set.is_empty() {
+                self.state.insert(old_to_alloc, old_to_value);
+            }
+        }
+
+        // Attach `to` to the source allocation.
+        let mut source_alloc = self
+            .get_allocation(from)
+            .expect("source allocation must still exist after detaching destination");
+        self.state.remove(&source_alloc);
+        source_alloc.insert(to.clone());
+        self.state.insert(source_alloc, from_value);
+
         debug!("After propagation, state: {:?}", self.state);
     }
-
-
 }
 
 impl PartialOrd for AbstractMemory {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        // use the union of all variable names, missing variables default to BOTTOM.
-        let all_vars: BTreeSet<Name> = self.state.keys()
-            .flat_map(|alloc| alloc.set.iter().cloned())
-            .chain(other.state.keys().flat_map(|alloc| alloc.set.iter().cloned()))
-            .collect();
-        let mut all_equal = true;
-        for var in all_vars {
-            let self_val = self.get_cell_value(&var);
-            let other_val = other.get_cell_value(&var);
-            if self_val == other_val {
-                continue;
-            }
-            if self_val.leq(other_val) {
-                all_equal = false;
-            } else {
-                return None;
-            }
-        }
-        if all_equal {
-            Some(Ordering::Equal)
-        } else {
-            Some(Ordering::Less)
+        let self_leq_other = self.leq(other);
+        let other_leq_self = other.leq(self);
+
+        match (self_leq_other, other_leq_self) {
+            (true, true) => Some(Ordering::Equal),
+            (true, false) => Some(Ordering::Less),
+            (false, true) => Some(Ordering::Greater),
+            (false, false) => None,
         }
     }
 }
@@ -402,32 +525,35 @@ impl fmt::Debug for AbstractState {
 
 impl PartialOrd for AbstractState {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        // Get the union of all basic block keys.
-        let all_keys: BTreeSet<&String> = self.state_map.keys()
-            .chain(other.state_map.keys())
-            .collect();
-        let mut all_equal = true;
-        for key in all_keys {
-            let self_mem = self.state_map.get(key).cloned().unwrap_or_default();
-            let other_mem = other.state_map.get(key).cloned().unwrap_or_default();
-            if self_mem == other_mem {
-                continue;
-            }
-            if self_mem <= other_mem {
-                all_equal = false;
-            } else {
-                return None;
-            }
-        }
-        if all_equal {
-            Some(Ordering::Equal)
-        } else {
-            Some(Ordering::Less)
+        let self_leq_other = self.leq(other);
+        let other_leq_self = other.leq(self);
+
+        match (self_leq_other, other_leq_self) {
+            (true, true) => Some(Ordering::Equal),
+            (true, false) => Some(Ordering::Less),
+            (false, true) => Some(Ordering::Greater),
+            (false, false) => None,
         }
     }
 }
 
 impl AbstractState {
+    /// Pointwise order over basic blocks, using the implementation-level
+    /// AbstractMemory order at each block.
+    pub fn leq(&self, other: &Self) -> bool {
+        let all_keys: BTreeSet<&String> = self
+            .state_map
+            .keys()
+            .chain(other.state_map.keys())
+            .collect();
+
+        all_keys.into_iter().all(|key| {
+            let self_mem = self.state_map.get(key).cloned().unwrap_or_default();
+            let other_mem = other.state_map.get(key).cloned().unwrap_or_default();
+            self_mem.leq(&other_mem)
+        })
+    }
+
     // retrieves the abstract memory for a given basic block
     pub fn get(&self, block: &String) -> Option<AbstractMemory> {
         self.state_map.get(block).cloned()
@@ -587,6 +713,51 @@ pub fn full_local_name(var: &str) -> String {
     } else {
         format!("Local({})", var)
     }
+}
+
+// ----------------------------------------------------------------------
+// EXPLICIT std::mem::drop HELPERS
+// ----------------------------------------------------------------------
+// Keep the semantics of explicit drop calls in one place so that the
+// abstract transfer function and the final memory-issue detector agree.
+//
+// Rust raw pointers (*mut T / *const T) do not own the pointee. Calling
+// std::mem::drop on a raw pointer only consumes/copies the pointer value;
+// it does NOT invoke the allocator and therefore must not free the pointee.
+//
+// For non-raw explicit drops, CREMA only changes heap state if the dropped
+// variable already belongs to an allocation tracked by the abstract memory.
+fn is_explicit_mem_drop(s: &str) -> bool {
+    s.contains("std::mem::drop::<") || s.contains("core::mem::drop::<")
+}
+
+fn is_raw_pointer_mem_drop(s: &str) -> bool {
+    const PREFIXES: [&str; 2] = ["std::mem::drop::<", "core::mem::drop::<"];
+
+    for prefix in PREFIXES {
+        if let Some(pos) = s.find(prefix) {
+            let ty = s[pos + prefix.len()..].trim_start();
+            return ty.starts_with("*mut ") || ty.starts_with("*const ");
+        }
+    }
+
+    false
+}
+
+// Extract the MIR local passed to an explicit drop call.
+// Owning values are normally moved; Copy values may appear as `copy`.
+fn explicit_drop_arg_from_details(details: &str) -> Option<Name> {
+    let moved = extract_moved_var(details);
+    if !moved.is_empty() {
+        return Some(full_local_name(&moved));
+    }
+
+    let copied = extract_copied_var(details);
+    if !copied.is_empty() {
+        return Some(full_local_name(&copied));
+    }
+
+    None
 }
 
 pub fn get_node_by_id(icfg: &GlobalICFGOrdered, id: &String) -> GlobalICFGNode {
@@ -953,17 +1124,26 @@ pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place
             CellValue::MV
 
 
-    // FREED (drop)
-    } else if func_call_details.contains("drop")
-   // || func_call_details.contains("std::mem::drop::<") 
+    // EXPLICIT std::mem::drop
+    } else if is_explicit_mem_drop(func_call_details) {
+        // Dropping a raw pointer is a no-op with respect to the pointee:
+        // *mut T / *const T do not own the allocation.
+        if is_raw_pointer_mem_drop(func_call_details) {
+            CellValue::BOTTOM
+        } else {
+            // For an owning value, free ONLY the tracked allocation that
+            // contains the dropped argument. Never mark the entire abstract
+            // memory as FREED.
+            if let Some(full_dropped) = explicit_drop_arg_from_details(func_call_details) {
+                if new_mem.get_allocation(&full_dropped).is_some() {
+                    new_mem = update_state(new_mem, &full_dropped, CellValue::FREED);
+                }
+            }
 
-     {
-    // explict drop calls: update entire abstract memory, all values belonign tho the allocation get freed
-    for alloc in new_mem.state.keys().cloned().collect::<Vec<_>>() {
-        new_mem.state.insert(alloc, CellValue::FREED);
-    }
-    // return FREED as ret val
-    CellValue::FREED
+            // std::mem::drop returns (), so there is no heap value to assign
+            // to its MIR return place.
+            CellValue::BOTTOM
+        }
     } else {
         // default: do nothing
         let full_ret = full_local_name(return_place);
@@ -1210,10 +1390,19 @@ pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term:
 
             } else {
                 // default MIR call handling
-               let (ret_value, updated_mem) = transfer_call(&new_mem, details, return_place);
+                let explicit_drop = is_explicit_mem_drop(function_called);
+                let raw_pointer_drop = is_raw_pointer_mem_drop(function_called);
+
+                let (ret_value, updated_mem) = transfer_call(&new_mem, details, return_place);
                 new_mem = updated_mem;
                 let full_ret_place = full_local_name(return_place);
-                new_mem = update_state(new_mem, &full_ret_place, ret_value);
+
+                // std::mem::drop returns (), and transfer_call already applies
+                // the heap effect to the dropped argument. Do not create/update
+                // an abstract allocation for the call's return place.
+                if !explicit_drop {
+                    new_mem = update_state(new_mem, &full_ret_place, ret_value);
+                }
 
                 // UPDATE TAINT
                 if function_called.contains("NOT_HANDLED") {
@@ -1310,10 +1499,23 @@ pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term:
                         let moved_key = full_local_name(&moved_var);
                         taint.remove(&moved_key);
                     }
-                } else if function_called.contains("std::mem::drop::") {
-                    taint.entry(full_ret_place.clone())
-                        .or_insert_with(HashSet::new)
-                        .insert("assign".to_string());
+                } else if explicit_drop {
+                    // Keep taint semantics aligned with the abstract memory:
+                    // dropping a raw pointer does not free its pointee.
+                    if !raw_pointer_drop {
+                        if let Some(first_arg) = arguments.get(0) {
+                            let dropped_name = extract_arg_name(&first_arg.arg);
+                            let full_dropped = full_local_name(&dropped_name);
+
+                            taint.entry(full_dropped.clone())
+                                .or_insert_with(HashSet::new)
+                                .insert("free".to_string());
+
+                            if let Some(set) = taint.get_mut(&full_dropped) {
+                                set.remove("assign");
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1958,39 +2160,54 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                         println!("Aliased via from_raw: '{}' -> '{}'", src, dst);
                     }
 
-                    // EXPLICIT DROP FUNCTION CALL
-                    if function_called.contains("std::mem::drop::") {
+                    // EXPLICIT std::mem::drop FUNCTION CALL
+                    // Use exactly the same semantics as the transfer function:
+                    //   drop(*mut T / *const T) -> no heap free
+                    //   drop(tracked owning value) -> one Drop free
+                    if is_explicit_mem_drop(function_called)
+                        && !is_raw_pointer_mem_drop(function_called)
+                    {
                         if let Some(arg_struct) = arguments.get(0) {
-                            let raw = &arg_struct.arg; // e.g. "Local(_4) [mutable]"
-                            let base = raw
-                                .split_whitespace()   // take first part, e.g. "Local(_4)"
-                                .next()
-                                .unwrap();
-                            let var_dropped = normalize_name(&base.to_string());
-                           // println!("Found drop pattern in Call terminator (da arg): '{}' -> '{}'", details, var_dropped);
-                            if let Some(info) = var_info.get_mut(&var_dropped) {
-                                if info.drop_free == 0 {
-                                    info.drop_free = 1;
-                                    info.free_span = Some((source_info.clone(), FreeKind::Drop));
+                            let dropped_name = extract_arg_name(&arg_struct.arg);
+                            let var_dropped = full_local_name(&dropped_name);
+
+                            // Count the drop only when this value participates in
+                            // CREMA's tracked heap state (or is already tracked by
+                            // the detector). This avoids manufacturing frees for
+                            // unrelated scalar/non-heap values.
+                            let tracked_heap_value =
+                                abs_state.get_allocation(&var_dropped).is_some()
+                                || var_info.contains_key(&var_dropped);
+
+                            if tracked_heap_value {
+                                if let Some(info) = var_info.get_mut(&var_dropped) {
+                                    if info.drop_free == 0 {
+                                        info.drop_free = 1;
+                                        info.free_span =
+                                            Some((source_info.clone(), FreeKind::Drop));
+                                    } else {
+                                        info.drop_free += 1;
+                                    }
                                 } else {
-                                    info.drop_free += 1;
+                                    var_info.insert(
+                                        var_dropped.clone(),
+                                        VarInfo {
+                                            llvm_free: 0,
+                                            drop_free: 1,
+                                            used: false,
+                                            use_span: None,
+                                            free_span: Some((
+                                                source_info.clone(),
+                                                FreeKind::Drop,
+                                            )),
+                                        },
+                                    );
                                 }
-                              //  println!("Variable '{}' new drop free count: {}", var_dropped, info.drop_free);
-                            } else {
-                              //  println!("No tracked variable found per '{}' -- inserisco nuovo tracking", var_dropped);
-                                var_info.insert(
-                                    var_dropped.clone(),
-                                    VarInfo {
-                                        llvm_free: 0,
-                                        drop_free: 1,
-                                        used: false,
-                                        use_span: None,
-                                        free_span: Some((source_info.clone(), FreeKind::Drop)),
-                                    },
-                                );
                             }
                         }
                     }
+
+
                 }
             },
             GlobalICFGNode::DummyCall(dummy_call) => {
@@ -2462,3 +2679,274 @@ fn print_final_report(alloc_info: &HashMap<String, (usize, bool, Option<String>,
     println!();
 }
 
+#[cfg(test)]
+mod lattice_law_tests {
+    use super::CellValue;
+    use std::cmp::Ordering;
+
+    const ALL: [CellValue; 8] = [
+        CellValue::BOTTOM,
+        CellValue::BOXTIMES,
+        CellValue::ALLOC,
+        CellValue::FREED,
+        CellValue::MB,
+        CellValue::IMMB,
+        CellValue::MV,
+        CellValue::TOP,
+    ];
+
+    #[test]
+    fn boxtimes_has_the_expected_ordering() {
+        use CellValue::*;
+
+        assert!(BOTTOM.leq(BOXTIMES));
+        assert!(BOXTIMES.leq(TOP));
+
+        for x in [ALLOC, FREED, MB, IMMB, MV] {
+            assert!(!BOXTIMES.leq(x), "BOXTIMES must be incomparable with {:?}", x);
+            assert!(!x.leq(BOXTIMES), "{:?} must be incomparable with BOXTIMES", x);
+            assert_eq!(BOXTIMES.join(x), TOP);
+            assert_eq!(BOXTIMES.meet(x), BOTTOM);
+        }
+    }
+
+    #[test]
+    fn partial_order_laws_hold_exhaustively() {
+        // Reflexivity.
+        for x in ALL {
+            assert!(x.leq(x));
+        }
+
+        // Antisymmetry.
+        for x in ALL {
+            for y in ALL {
+                if x.leq(y) && y.leq(x) {
+                    assert_eq!(x, y);
+                }
+            }
+        }
+
+        // Transitivity.
+        for x in ALL {
+            for y in ALL {
+                for z in ALL {
+                    if x.leq(y) && y.leq(z) {
+                        assert!(x.leq(z), "{:?} <= {:?} <= {:?} but {:?} !<= {:?}", x, y, z, x, z);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn join_is_a_lub_exhaustively() {
+        for x in ALL {
+            assert_eq!(x.join(x), x);
+
+            for y in ALL {
+                let j = x.join(y);
+                assert_eq!(j, y.join(x), "join not commutative for {:?}, {:?}", x, y);
+                assert!(x.leq(j), "{:?} is not <= join({:?},{:?})={:?}", x, x, y, j);
+                assert!(y.leq(j), "{:?} is not <= join({:?},{:?})={:?}", y, x, y, j);
+
+                for z in ALL {
+                    if x.leq(z) && y.leq(z) {
+                        assert!(j.leq(z), "join({:?},{:?})={:?} is not least below upper bound {:?}", x, y, j, z);
+                    }
+                }
+            }
+        }
+
+        for x in ALL {
+            for y in ALL {
+                for z in ALL {
+                    assert_eq!(
+                        x.join(y).join(z),
+                        x.join(y.join(z)),
+                        "join not associative for {:?}, {:?}, {:?}",
+                        x, y, z
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn meet_is_a_glb_exhaustively() {
+        for x in ALL {
+            assert_eq!(x.meet(x), x);
+
+            for y in ALL {
+                let m = x.meet(y);
+                assert_eq!(m, y.meet(x), "meet not commutative for {:?}, {:?}", x, y);
+                assert!(m.leq(x), "meet({:?},{:?})={:?} is not <= {:?}", x, y, m, x);
+                assert!(m.leq(y), "meet({:?},{:?})={:?} is not <= {:?}", x, y, m, y);
+
+                for z in ALL {
+                    if z.leq(x) && z.leq(y) {
+                        assert!(z.leq(m), "lower bound {:?} is not <= meet({:?},{:?})={:?}", z, x, y, m);
+                    }
+                }
+            }
+        }
+
+        for x in ALL {
+            for y in ALL {
+                for z in ALL {
+                    assert_eq!(
+                        x.meet(y).meet(z),
+                        x.meet(y.meet(z)),
+                        "meet not associative for {:?}, {:?}, {:?}",
+                        x, y, z
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn partial_cmp_matches_leq() {
+        for x in ALL {
+            for y in ALL {
+                let cmp = x.partial_cmp(&y);
+                match cmp {
+                    Some(Ordering::Equal) => assert_eq!(x, y),
+                    Some(Ordering::Less) => assert!(x.leq(y) && !y.leq(x)),
+                    Some(Ordering::Greater) => assert!(y.leq(x) && !x.leq(y)),
+                    None => assert!(!x.leq(y) && !y.leq(x)),
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod abstract_memory_invariant_tests {
+    use super::{AbstractMemory, Allocation, CellValue};
+    use std::cmp::Ordering;
+
+    fn n(s: &str) -> String {
+        s.to_string()
+    }
+
+    #[test]
+    fn equal_cell_values_do_not_create_aliases() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("x"), CellValue::ALLOC);
+        mem.set_cell_value(&n("y"), CellValue::ALLOC);
+
+        assert_ne!(mem.get_allocation(&n("x")), mem.get_allocation(&n("y")));
+        assert_eq!(mem.state.len(), 2);
+    }
+
+    #[test]
+    fn boxtimes_locals_do_not_alias_just_because_values_match() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("x"), CellValue::BOXTIMES);
+        mem.set_cell_value(&n("y"), CellValue::BOXTIMES);
+
+        assert_ne!(mem.get_allocation(&n("x")), mem.get_allocation(&n("y")));
+        assert_eq!(mem.state.len(), 2);
+    }
+
+    #[test]
+    fn removing_one_alias_preserves_the_other_alias_state() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("x"), CellValue::ALLOC);
+        mem.propagate_cell_value(&n("x"), &n("y"));
+
+        mem.set_cell_value(&n("x"), CellValue::BOTTOM);
+
+        assert_eq!(mem.get_cell_value(&n("x")), CellValue::BOTTOM);
+        assert_eq!(mem.get_cell_value(&n("y")), CellValue::ALLOC);
+    }
+
+    #[test]
+    fn union_computes_alias_equivalence_closure() {
+        let mut left = AbstractMemory::default();
+        left.set_cell_value(&n("a"), CellValue::ALLOC);
+        left.propagate_cell_value(&n("a"), &n("b"));
+
+        let mut right = AbstractMemory::default();
+        right.set_cell_value(&n("b"), CellValue::ALLOC);
+        right.propagate_cell_value(&n("b"), &n("c"));
+
+        let joined = left.union(&right);
+        let expected: std::collections::BTreeSet<_> =
+            ["a", "b", "c"].into_iter().map(n).collect();
+
+        assert_eq!(joined.state.len(), 1);
+        let (alloc, value) = joined.state.iter().next().unwrap();
+        assert_eq!(alloc.set, expected);
+        assert_eq!(*value, CellValue::ALLOC);
+    }
+
+    #[test]
+    fn union_joins_conflicting_states_over_an_alias_component() {
+        let mut left = AbstractMemory::default();
+        left.set_cell_value(&n("a"), CellValue::ALLOC);
+        left.propagate_cell_value(&n("a"), &n("b"));
+
+        let mut right = AbstractMemory::default();
+        right.set_cell_value(&n("b"), CellValue::FREED);
+        right.propagate_cell_value(&n("b"), &n("c"));
+
+        let joined = left.union(&right);
+        let alloc = joined.get_allocation(&n("b")).unwrap();
+
+        assert!(alloc.set.contains("a"));
+        assert!(alloc.set.contains("b"));
+        assert!(alloc.set.contains("c"));
+        assert_eq!(joined.get_cell_value(&n("a")), CellValue::TOP);
+        assert_eq!(joined.get_cell_value(&n("b")), CellValue::TOP);
+        assert_eq!(joined.get_cell_value(&n("c")), CellValue::TOP);
+    }
+
+    #[test]
+    fn propagation_detaches_only_destination_from_its_old_aliases() {
+        let mut mem = AbstractMemory::default();
+
+        mem.set_cell_value(&n("x"), CellValue::ALLOC);
+
+        mem.set_cell_value(&n("y"), CellValue::FREED);
+        mem.propagate_cell_value(&n("y"), &n("z"));
+        assert_eq!(mem.get_allocation(&n("y")), mem.get_allocation(&n("z")));
+
+        // y := x. y must move to x's alias component, while z remains on
+        // the old FREED allocation.
+        mem.propagate_cell_value(&n("x"), &n("y"));
+
+        assert_eq!(mem.get_allocation(&n("x")), mem.get_allocation(&n("y")));
+        assert_ne!(mem.get_allocation(&n("y")), mem.get_allocation(&n("z")));
+        assert_eq!(mem.get_cell_value(&n("x")), CellValue::ALLOC);
+        assert_eq!(mem.get_cell_value(&n("y")), CellValue::ALLOC);
+        assert_eq!(mem.get_cell_value(&n("z")), CellValue::FREED);
+    }
+
+
+    #[test]
+    fn abstract_memory_partial_cmp_reports_greater() {
+        let mut precise = AbstractMemory::default();
+        precise.set_cell_value(&n("x"), CellValue::ALLOC);
+
+        let mut less_precise = AbstractMemory::default();
+        less_precise.set_cell_value(&n("x"), CellValue::MB);
+
+        assert_eq!(precise.partial_cmp(&less_precise), Some(Ordering::Less));
+        assert_eq!(less_precise.partial_cmp(&precise), Some(Ordering::Greater));
+    }
+
+    #[test]
+    fn more_may_alias_information_is_less_precise() {
+        let mut no_alias = AbstractMemory::default();
+        no_alias.set_cell_value(&n("x"), CellValue::ALLOC);
+        no_alias.set_cell_value(&n("y"), CellValue::ALLOC);
+
+        let mut may_alias = AbstractMemory::default();
+        may_alias.set_cell_value(&n("x"), CellValue::ALLOC);
+        may_alias.propagate_cell_value(&n("x"), &n("y"));
+
+        assert!(no_alias.leq(&may_alias));
+        assert!(!may_alias.leq(&no_alias));
+    }
+}
