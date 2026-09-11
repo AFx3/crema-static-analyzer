@@ -587,6 +587,52 @@ impl AbstractState {
 pub type Taint = HashSet<String>;           // e.g. "assign", "free", "use"
 pub type TaintStateMap = HashMap<Name, Taint>; // mapping: variable -> markers (for one basic block)
 pub type TaintState = HashMap<String, TaintStateMap>; // mapping: block ID -> (var -> markers)
+
+
+/// Least upper bound for the auxiliary may-taint/provenance component.
+///
+/// Taint is independent from the CellValue lattice.  In particular, when a
+/// tracked raw allocation (MV) joins a scalar/non-heap value (BOXTIMES), the
+/// CellValue becomes TOP, but the path on which the allocation exists must not
+/// be forgotten.  Therefore markers are joined by set union, not reconstructed
+/// solely from the joined CellValue.
+///
+/// The final loop adds the two markers that are semantically implied by a
+/// precise joined memory value.  It never removes markers already justified by
+/// one incoming path.
+fn join_taint_maps(
+    old_taint: &TaintStateMap,
+    new_taint: &TaintStateMap,
+    joined_mem: &AbstractMemory,
+) -> TaintStateMap {
+    let mut joined = old_taint.clone();
+
+    for (var, tags) in new_taint {
+        joined
+            .entry(var.clone())
+            .or_default()
+            .extend(tags.iter().cloned());
+    }
+
+    for (alloc, &value) in &joined_mem.state {
+        let implied = match value {
+            CellValue::MV => Some("assign"),
+            CellValue::FREED => Some("free"),
+            _ => None,
+        };
+
+        if let Some(tag) = implied {
+            for var in &alloc.set {
+                joined
+                    .entry(var.clone())
+                    .or_default()
+                    .insert(tag.to_string());
+            }
+        }
+    }
+
+    joined
+}
 // method for taint state that takes as input a basic block and returns the taint state for that block
 // takes a reference to the global taint state (TaintState) and a basic block (GlobalICFGNode)
 
@@ -804,16 +850,234 @@ fn extract_arg_from_details(s: &str) -> Option<String> {
     }
     None
 }
-// it will evaluate an rvalue using the current abstract memory
-pub fn eval_rvalue(e: &str, sigma: &AbstractMemory) -> CellValue {
-    let trimmed = e.trim();
-    if trimmed.starts_with("& imm") {
-        CellValue::IMMB
-    } else if trimmed.starts_with("& mut") {
-        CellValue::MB
+// ----------------------------------------------------------------------
+// PHASE 3: BOXTIMES-aware MIR rvalue abstraction
+// ----------------------------------------------------------------------
+//
+// The formal model maps scalar/non-heap values to BOXTIMES. The implementation
+// receives rustc's Debug representation of MIR Rvalues, so this classifier is
+// deliberately positive: BOXTIMES is produced only when the textual MIR form
+// itself is sufficient to establish a scalar/unit result.
+//
+// Rust-specific forms outside this recognized core keep the Phase-2 fallback.
+// We do NOT globally map every unhandled Rvalue to TOP in this phase; that is a
+// separate precision/soundness decision documented in PHASE3_BOTTOM_TOP_AUDIT.
+
+static SCALAR_INT_CONST_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r"^const -?[0-9]+_(?:i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize)$"
+    ).unwrap()
+});
+
+static SCALAR_FLOAT_CONST_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r"^const -?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?_(?:f32|f64)$"
+    ).unwrap()
+});
+
+static SCALAR_CHAR_CONST_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^const '(?:\\.|[^\\'])+'$").unwrap()
+});
+
+static LOCAL_TOKEN_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"_[0-9]+").unwrap()
+});
+
+fn is_scalar_type_name(ty: &str) -> bool {
+    matches!(
+        ty.trim(),
+        "bool"
+            | "char"
+            | "i8"
+            | "i16"
+            | "i32"
+            | "i64"
+            | "i128"
+            | "isize"
+            | "u8"
+            | "u16"
+            | "u32"
+            | "u64"
+            | "u128"
+            | "usize"
+            | "f32"
+            | "f64"
+            | "()"
+    )
+}
+
+fn is_scalar_const_rvalue(e: &str) -> bool {
+    let e = e.trim();
+
+    e == "const true"
+        || e == "const false"
+        || e == "const ()"
+        || SCALAR_INT_CONST_RE.is_match(e)
+        || SCALAR_FLOAT_CONST_RE.is_match(e)
+        || SCALAR_CHAR_CONST_RE.is_match(e)
+}
+
+fn is_scalar_nullary_rvalue(e: &str) -> bool {
+    let e = e.trim();
+
+    // These MIR operations return integer-like scalars independently of the
+    // memory-management abstraction of their operand/type.
+    e.starts_with("SizeOf(")
+        || e.starts_with("AlignOf(")
+        || e.starts_with("Len(")
+        || e.starts_with("Discriminant(")
+}
+
+fn scalar_cast_target(e: &str) -> Option<&str> {
+    // Examples:
+    //   copy _29 as usize (Transmute)
+    //   copy _2 as i64 (IntToInt)
+    //
+    // Pointer targets are intentionally excluded: they may denote tracked
+    // allocations and must not become BOXTIMES merely because they are casts.
+    let (_, after_as) = e.rsplit_once(" as ")?;
+    let target = after_as.split_whitespace().next()?;
+    is_scalar_type_name(target).then_some(target)
+}
+
+fn extract_first_local_token(e: &str) -> Option<String> {
+    LOCAL_TOKEN_RE
+        .find(e)
+        .map(|m| m.as_str().to_string())
+}
+
+fn exact_local_operand(e: &str, keyword: &str) -> Option<String> {
+    let rest = e.trim().strip_prefix(keyword)?.trim();
+
+    // Accept only a direct `_N` operand. Casts, projections and aggregates
+    // have different semantics and must not be mistaken for a direct use.
+    if LOCAL_TOKEN_RE
+        .find(rest)
+        .is_some_and(|m| m.start() == 0 && m.end() == rest.len())
+    {
+        Some(rest.to_string())
     } else {
-        sigma.get_cell_value(&e.to_string())
+        None
     }
+}
+
+fn split_top_level_binary_args(s: &str) -> Option<(&str, &str)> {
+    let mut paren = 0usize;
+    let mut bracket = 0usize;
+    let mut brace = 0usize;
+
+    for (idx, ch) in s.char_indices() {
+        match ch {
+            '(' => paren += 1,
+            ')' => paren = paren.saturating_sub(1),
+            '[' => bracket += 1,
+            ']' => bracket = bracket.saturating_sub(1),
+            '{' => brace += 1,
+            '}' => brace = brace.saturating_sub(1),
+            ',' if paren == 0 && bracket == 0 && brace == 0 => {
+                return Some((s[..idx].trim(), s[idx + 1..].trim()));
+            }
+            _ => {}
+        }
+    }
+
+    None
+}
+
+fn binary_rvalue_args(e: &str) -> Option<(&str, &str)> {
+    const OPS: [&str; 16] = [
+        "Add", "Sub", "Mul", "Div", "Rem",
+        "BitXor", "BitAnd", "BitOr", "Shl", "Shr",
+        "Eq", "Lt", "Le", "Ne", "Ge", "Gt",
+    ];
+
+    let e = e.trim();
+    for op in OPS {
+        let prefix = format!("{}(", op);
+        if e.starts_with(&prefix) && e.ends_with(')') {
+            let inner = &e[prefix.len()..e.len() - 1];
+            return split_top_level_binary_args(inner);
+        }
+    }
+
+    None
+}
+
+fn unary_rvalue_arg(e: &str) -> Option<&str> {
+    const OPS: [&str; 2] = ["Neg", "Not"];
+
+    let e = e.trim();
+    for op in OPS {
+        let prefix = format!("{}(", op);
+        if e.starts_with(&prefix) && e.ends_with(')') {
+            return Some(e[prefix.len()..e.len() - 1].trim());
+        }
+    }
+
+    None
+}
+
+/// Abstract evaluation of a MIR Rvalue for the memory-management domain.
+///
+/// Implemented formal/core cases:
+/// - scalar/unit constants -> BOXTIMES;
+/// - direct copy/move of a local -> abstract value of that local;
+/// - scalar casts and scalar-producing nullary ops -> BOXTIMES;
+/// - unary/binary scalar operations follow the formal BOXTIMES/TOP/BOTTOM rule.
+///
+/// Unknown Rust-specific aggregate/projection forms deliberately retain the old
+/// sparse fallback in this phase. See PHASE3_BOTTOM_TOP_AUDIT.md.
+pub fn eval_rvalue(e: &str, sigma: &AbstractMemory) -> CellValue {
+    use CellValue::*;
+
+    let trimmed = e.trim();
+
+    if is_scalar_const_rvalue(trimmed)
+        || is_scalar_nullary_rvalue(trimmed)
+        || scalar_cast_target(trimmed).is_some()
+    {
+        return BOXTIMES;
+    }
+
+    if let Some(local) = exact_local_operand(trimmed, "copy ") {
+        return sigma.get_cell_value(&full_local_name(&local));
+    }
+
+    if let Some(local) = exact_local_operand(trimmed, "move ") {
+        return sigma.get_cell_value(&full_local_name(&local));
+    }
+
+    // Backward-compatible textual forms already used by the analyzer.
+    if trimmed.starts_with("& imm") {
+        return IMMB;
+    }
+    if trimmed.starts_with("& mut") {
+        return MB;
+    }
+
+    if let Some((lhs, rhs)) = binary_rvalue_args(trimmed) {
+        let lhs = eval_rvalue(lhs, sigma);
+        let rhs = eval_rvalue(rhs, sigma);
+
+        return if lhs == TOP || rhs == TOP {
+            TOP
+        } else if lhs == BOXTIMES && rhs == BOXTIMES {
+            BOXTIMES
+        } else {
+            BOTTOM
+        };
+    }
+
+    if let Some(arg) = unary_rvalue_arg(trimmed) {
+        return match eval_rvalue(arg, sigma) {
+            TOP => TOP,
+            BOXTIMES => BOXTIMES,
+            _ => BOTTOM,
+        };
+    }
+
+    // Phase-2 compatibility for MIR outside the positively recognized core.
+    sigma.get_cell_value(&trimmed.to_string())
 }
 
 // Helper to extract only the variable name string from an argument like "Local(_2) [mutable]"
@@ -1129,7 +1393,9 @@ pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place
         // Dropping a raw pointer is a no-op with respect to the pointee:
         // *mut T / *const T do not own the allocation.
         if is_raw_pointer_mem_drop(func_call_details) {
-            CellValue::BOTTOM
+            // The pointee is untouched; the function result is `()`, a
+            // defined non-heap value represented by BOXTIMES.
+            CellValue::BOXTIMES
         } else {
             // For an owning value, free ONLY the tracked allocation that
             // contains the dropped argument. Never mark the entire abstract
@@ -1140,9 +1406,9 @@ pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place
                 }
             }
 
-            // std::mem::drop returns (), so there is no heap value to assign
-            // to its MIR return place.
-            CellValue::BOTTOM
+            // std::mem::drop returns `()`: no heap allocation is produced,
+            // but the return local contains a defined non-heap/unit value.
+            CellValue::BOXTIMES
         }
     } else {
         // default: do nothing
@@ -1165,24 +1431,38 @@ pub fn apply_mir_statement(mem: &AbstractMemory, taint: &mut TaintStateMap, stmt
                 // e.g. Assign((_4, &_2)) in closure lowering
                 // for example within a closure, the expression Assign((_4, &_2)) merges Local(_2) and Local(_4) into one allocation key
                 if rvalue.starts_with('&') {
-                        if let Some(dest) = &stmt.place {
-                            // extract the var after the &
-                            let src_var = rvalue.trim_start_matches('&').trim();
-                            let src_key = full_local_name(src_var);
-                            let dest_key = full_local_name(dest);
-                            // unify the allocation sets
-                            new_mem.propagate_cell_value(&src_key, &dest_key);
-                            new_mem.propagate_cell_value(&dest_key, &src_key);
-    
-                            // unify taint as well
-                            let t_src = taint.get(&src_key).cloned().unwrap_or_default();
-                            let t_dest = taint.get(&dest_key).cloned().unwrap_or_default();
-                            let joined = t_src.union(&t_dest).cloned().collect::<HashSet<_>>();
-                            taint.insert(src_key.clone(), joined.clone());
-                            taint.insert(dest_key, joined);
+                    if let Some(dest) = &stmt.place {
+                        let dest_key = full_local_name(dest);
+
+                        if let Some(src_var) = extract_first_local_token(rvalue) {
+                            let src_key = full_local_name(&src_var);
+                            let src_value = new_mem.get_cell_value(&src_key);
+
+                            // A reference to a known scalar/non-heap local is a
+                            // location, not the scalar value itself. The formal
+                            // Loc# abstraction cannot represent such a stack
+                            // location precisely in CellValue, hence TOP.
+                            if matches!(src_value, CellValue::BOXTIMES | CellValue::BOTTOM) {
+                                new_mem.assign_local_value(&dest_key, CellValue::TOP);
+                                taint.remove(&dest_key);
+                                return new_mem;
+                            }
+
+                            // Preserve the existing heap/reference behavior
+                            // when the referenced local is a tracked allocation.
+                            if src_value != CellValue::BOTTOM {
+                                new_mem.propagate_cell_value(&src_key, &dest_key);
+
+                                let t_src = taint.get(&src_key).cloned().unwrap_or_default();
+                                let t_dest = taint.get(&dest_key).cloned().unwrap_or_default();
+                                let joined = t_src.union(&t_dest).cloned().collect::<HashSet<_>>();
+                                taint.insert(src_key.clone(), joined.clone());
+                                taint.insert(dest_key, joined);
+                            }
                         }
-                        return new_mem;
                     }
+                    return new_mem;
+                }
 
                 if rvalue.contains("Box::new") || rvalue.contains("vec::new") {
                     if let Some(_var) = &stmt.place {
@@ -1318,9 +1598,47 @@ pub fn apply_mir_statement(mem: &AbstractMemory, taint: &mut TaintStateMap, stmt
                         }
                     } */
                 } else if let Some(var) = &stmt.place {
-                    // Fallback: evaluate the rvalue normally.
-                    let v = eval_rvalue(&stmt.details, mem);
-                    new_mem = update_state(new_mem, &full_local_name(var), v);
+                    // Evaluate the actual MIR Rvalue, not the enclosing
+                    // StatementKind::Assign Debug string.
+                    let dest_key = full_local_name(var);
+                    let v = eval_rvalue(rvalue, mem);
+
+                    // Direct copies of tracked heap-dependent values preserve
+                    // may-alias information. Scalar copies do not create alias
+                    // components merely because they share BOXTIMES.
+                    if let Some(src_var) = exact_local_operand(rvalue, "copy ") {
+                        let src_key = full_local_name(&src_var);
+
+                        if matches!(
+                            v,
+                            CellValue::ALLOC
+                                | CellValue::FREED
+                                | CellValue::MB
+                                | CellValue::IMMB
+                                | CellValue::MV
+                                | CellValue::TOP
+                        ) && mem.get_allocation(&src_key).is_some()
+                        {
+                            new_mem.propagate_cell_value(&src_key, &dest_key);
+
+                            let t_src = taint.get(&src_key).cloned().unwrap_or_default();
+                            taint.entry(dest_key)
+                                .or_insert_with(HashSet::new)
+                                .extend(t_src);
+                        } else {
+                            new_mem.assign_local_value(&dest_key, v);
+                            taint.remove(&dest_key);
+                        }
+                    } else {
+                        // Ordinary assignment overwrites only the destination
+                        // local. It must detach that local from any old alias
+                        // component rather than changing all of its old aliases.
+                        new_mem.assign_local_value(&dest_key, v);
+
+                        if matches!(v, CellValue::BOXTIMES | CellValue::BOTTOM) {
+                            taint.remove(&dest_key);
+                        }
+                    }
                 }
             }
         }
@@ -1397,10 +1715,13 @@ pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term:
                 new_mem = updated_mem;
                 let full_ret_place = full_local_name(return_place);
 
-                // std::mem::drop returns (), and transfer_call already applies
-                // the heap effect to the dropped argument. Do not create/update
-                // an abstract allocation for the call's return place.
-                if !explicit_drop {
+                // transfer_call applies the heap effect of std::mem::drop
+                // to the argument. The MIR destination still receives `()`,
+                // represented by BOXTIMES. Overwrite/detach that local without
+                // manufacturing a heap alias.
+                if explicit_drop {
+                    new_mem.assign_local_value(&full_ret_place, CellValue::BOXTIMES);
+                } else {
                     new_mem = update_state(new_mem, &full_ret_place, ret_value);
                 }
 
@@ -1705,21 +2026,14 @@ pub fn fixed_point_analysis(icfg: &GlobalICFGOrdered) -> (AbstractState, TaintSt
         if let Some(succs) = succs_map.get(&current) {
             for succ in succs {
                 let node = get_node_by_id(icfg, succ);
-                let (new_mem, _new_taint) = transfer_function(&node, &curr_mem, &curr_taint);
+                let (new_mem, new_taint) = transfer_function(&node, &curr_mem, &curr_taint);
 
                 let old_mem   = abs_state.get(succ).unwrap_or_default();
                 let old_taint = taint_state.get(succ).cloned().unwrap_or_default();
 
                 let joined_mem = old_mem.union(&new_mem);
-                let mut joined_taint = TaintStateMap::default();
-                for (alloc, &val) in joined_mem.state.iter() {
-                    for var in &alloc.set {
-                        if matches!(val, CellValue::MV | CellValue::FREED) {
-                            let tag = if val == CellValue::MV { "assign" } else { "free" }.to_string();
-                            joined_taint.entry(var.clone()).or_default().insert(tag);
-                        }
-                    }
-                }
+                let joined_taint =
+                    join_taint_maps(&old_taint, &new_taint, &joined_mem);
 
                 let first = !abs_state.state_map.contains_key(succ) && !taint_state.contains_key(succ);
                 if first || joined_mem != old_mem || joined_taint != old_taint {
@@ -1761,12 +2075,8 @@ pub fn fixed_point_analysis(icfg: &GlobalICFGOrdered) -> (AbstractState, TaintSt
                     let callee_taint = taint_state.get(&current).cloned().unwrap_or_default();
 
                     let joined_mem = call_mem.union(&callee_mem);
-                    let mut joined_taint = call_taint.clone();
-                    for (var, tags) in callee_taint {
-                        joined_taint.entry(var.clone())
-                                        .and_modify(|e| e.extend(tags.clone()))
-                                        .or_insert(tags);
-                    }
+                    let joined_taint =
+                        join_taint_maps(&call_taint, &callee_taint, &joined_mem);
 
                     abs_state.insert(ret_node.clone(), joined_mem);
                     taint_state.insert(ret_node.clone(), joined_taint);
@@ -1870,6 +2180,47 @@ impl VarInfo {
         }
     }
 }
+/// Resolve a MIR local mentioned by a Drop terminator to an already tracked
+/// detector key after the complete alias/free-flow relation is available.
+///
+/// The detector historically accepted both `_N` and `Local(_N)` spellings.
+/// If neither direct spelling is present, use the completed free-flow group and
+/// pick a tracked member of that group.  The result is deterministic because
+/// BTreeMap iteration is ordered.
+fn resolve_drop_tracking_key(
+    dropped: &Name,
+    var_info: &BTreeMap<Name, VarInfo>,
+    free_flow_keys: &BTreeMap<Name, String>,
+) -> Option<Name> {
+    let norm = normalize_name(dropped);
+    let wrapped = normalize_name(&format!("Local({})", norm));
+
+    for candidate in [&norm, &wrapped] {
+        if var_info.contains_key(candidate) {
+            return Some(candidate.clone());
+        }
+    }
+
+    for candidate in [&norm, &wrapped] {
+        if let Some(group) = lookup_free_flow_group(candidate, free_flow_keys) {
+            let members = group
+                .trim_matches(|c| c == '{' || c == '}')
+                .split(',')
+                .map(str::trim);
+
+            for member in members {
+                let member = normalize_name(&member.to_string());
+                if var_info.contains_key(&member) {
+                    return Some(member);
+                }
+            }
+        }
+    }
+
+    None
+}
+
+
 // DETECTION OF MEMORY ISSUES
 pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, abs_state: &AbstractState) -> (MultiSet, MultiSet, MultiSet) {
 
@@ -1912,6 +2263,12 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
     let mut free_flow_vars   = BTreeSet::new();
     let mut free_flow_parent = BTreeMap::new();
     let mut processed_llvm_free = BTreeSet::new();
+
+    // MIR Drop nodes may be encountered before the allocation-producing
+    // from_raw node because GlobalICFG traversal order is not a semantic
+    // execution order.  Record normal drops first and resolve them after the
+    // complete alias/free-flow relation has been constructed.
+    let mut pending_mir_drops: Vec<(Name, String)> = Vec::new();
 
     // find & union per Name
     let find = |x: &Name, parent: &mut BTreeMap<Name, Name>| -> Name {
@@ -2079,50 +2436,43 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
 
                 if let Some(MirTerminator::Drop { details, source_info, .. }) = &mir_block.terminator {
                     if details.contains("drop(") {
-                        ////////////////////////////////////////////////////////////////////////////////////////////////////
-                        // SKIP DROP: DON'T CONSIDER THE DROP INSTRUCTION IF THERE IS AN UNWIND EDGE
-                        // e.g. "unwind" edge in the ICFG
+                        // Preserve the existing unwind policy: a Drop block
+                        // reached through an unwind edge is not counted as a
+                        // normal-path deallocation.
                         let skip_drop = icfg.icfg_edges.iter().any(|e| {
-                            e.destination == node_id && matches!(e.label.as_deref(), Some(label) if label.contains("unwind"))});
+                            e.destination == node_id
+                                && matches!(
+                                    e.label.as_deref(),
+                                    Some(label) if label.contains("unwind")
+                                )
+                        });
+
                         if skip_drop {
-                            println!("-> Skip Drop in '{}' because has an unwind incoming edge", node_id);
-                        } else if details.contains("drop(") {
-                            /////////////////////////////////////////////////////////////////////////////////////////////////
-                            if let Some(start_idx) = details.find("drop(") {
-                                if let Some(end_idx) = details[start_idx..].find(")") {
-                                    let var_dropped = details[start_idx + 5..start_idx + end_idx].trim().to_string();
-                                    let var_dropped = normalize_name(&var_dropped);
-                                    println!("Found drop pattern: '{}' -> '{}'", details, var_dropped);
-                                    if let Some(info) = var_info.get_mut(&var_dropped) {
-                                        if info.drop_free == 0 {
-                                            info.drop_free = 1;
-                                            info.free_span = Some((source_info.clone(), FreeKind::Drop));
-                                        } else {
-                                            // if already registered a drop free, increment (double free if > 1)
-                                            info.drop_free += 1;
-                                        }
-                                       // println!("Variable '{}' new drop free count: {}", var_dropped, info.drop_free);
-                                    } else {
-                                        let alt = format!("Local({})", var_dropped);
-                                        let alt = normalize_name(&alt);
-                                        if let Some(info) = var_info.get_mut(&alt) {
-                                            if info.drop_free == 0 {
-                                                info.drop_free = 1;
-                                                info.free_span = Some((source_info.clone(), FreeKind::Drop));
-                                            } else {
-                                                info.drop_free += 1;
-                                            }
-                                            println!("Alternative '{}' new drop free count: {}", alt, info.drop_free);
-                                        } else {
-                                            println!("No tracked variable found per '{}' o '{}'", var_dropped, alt);
-                                        }
-                                    }
-                                }
+                            println!(
+                                "-> Skip Drop in '{}' because has an unwind incoming edge",
+                                node_id
+                            );
+                        } else if let Some(start_idx) = details.find("drop(") {
+                            if let Some(end_idx) = details[start_idx..].find(')') {
+                                let var_dropped =
+                                    details[start_idx + 5..start_idx + end_idx]
+                                        .trim()
+                                        .to_string();
+                                let var_dropped = normalize_name(&var_dropped);
+
+                                println!(
+                                    "Found drop pattern: '{}' -> '{}'",
+                                    details, var_dropped
+                                );
+
+                                pending_mir_drops.push((
+                                    var_dropped,
+                                    source_info.clone(),
+                                ));
                             }
                         }
                     }
                 }
-
 
 
                 if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return_place, ..}) = &mir_block.terminator {   
@@ -2411,6 +2761,33 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
     for (rep, mut group) in free_flow_groups {
         group.sort();
         free_flow_keys.insert(rep.clone(), format!("{{{}}}", group.join(", ")));
+    }
+
+    // ---- RESOLVE NORMAL MIR DROPS AFTER ALIAS DISCOVERY ----
+    //
+    // This makes free accounting independent from the incidental ICFG traversal
+    // order.  In particular a `Box::from_raw` alias discovered later in the
+    // traversal can still be matched with an earlier `drop(_N)` event.
+    for (var_dropped, source_info) in pending_mir_drops {
+        if let Some(key) =
+            resolve_drop_tracking_key(&var_dropped, &var_info, &free_flow_keys)
+        {
+            if let Some(info) = var_info.get_mut(&key) {
+                if info.drop_free == 0 {
+                    info.drop_free = 1;
+                    info.free_span =
+                        Some((source_info.clone(), FreeKind::Drop));
+                } else {
+                    info.drop_free += 1;
+                }
+            }
+        } else {
+            let alt = normalize_name(&format!("Local({})", var_dropped));
+            println!(
+                "No tracked variable found per '{}' o '{}'",
+                var_dropped, alt
+            );
+        }
     }
 
     // ---- FILTER: retain last visited node variables (of the main) OR having free_count > 0 ----
@@ -2950,3 +3327,338 @@ mod abstract_memory_invariant_tests {
         assert!(!may_alias.leq(&no_alias));
     }
 }
+
+#[cfg(test)]
+mod boxtimes_transfer_tests {
+    use super::{
+        apply_mir_statement, eval_rvalue, AbstractMemory, CellValue, TaintStateMap,
+    };
+    use crate::structs::{MirStatement, SourceInfoData};
+
+    fn n(s: &str) -> String {
+        s.to_string()
+    }
+
+    #[test]
+    fn primitive_scalar_constants_are_boxtimes() {
+        let mem = AbstractMemory::default();
+
+        for rvalue in [
+            "const 42_i32",
+            "const -7_i128",
+            "const 1_usize",
+            "const true",
+            "const false",
+            "const 3.5_f64",
+            "const 'x'",
+            "const ()",
+        ] {
+            assert_eq!(
+                eval_rvalue(rvalue, &mem),
+                CellValue::BOXTIMES,
+                "expected BOXTIMES for {rvalue}"
+            );
+        }
+    }
+
+    #[test]
+    fn promoted_string_and_function_constants_are_not_boxtimes() {
+        let mem = AbstractMemory::default();
+
+        for rvalue in [
+            "const main::promoted[0]",
+            "const SOME_FUNCTION",
+            "const \"hello\"",
+        ] {
+            assert_ne!(
+                eval_rvalue(rvalue, &mem),
+                CellValue::BOXTIMES,
+                "must not classify {rvalue} as BOXTIMES"
+            );
+        }
+    }
+
+    #[test]
+    fn scalar_nullary_operations_are_boxtimes() {
+        let mem = AbstractMemory::default();
+
+        for rvalue in [
+            "SizeOf([i32; 2])",
+            "AlignOf(i32)",
+            "Len(_3)",
+            "Discriminant(_4)",
+        ] {
+            assert_eq!(eval_rvalue(rvalue, &mem), CellValue::BOXTIMES);
+        }
+    }
+
+    #[test]
+    fn scalar_cast_is_boxtimes_but_pointer_cast_is_not() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::MV);
+
+        assert_eq!(
+            eval_rvalue("copy _1 as usize (Transmute)", &mem),
+            CellValue::BOXTIMES
+        );
+
+        assert_ne!(
+            eval_rvalue("copy _1 as *mut i32 (PtrToPtr)", &mem),
+            CellValue::BOXTIMES
+        );
+    }
+
+    #[test]
+    fn direct_scalar_copy_reads_source_value() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::BOXTIMES);
+
+        assert_eq!(eval_rvalue("copy _1", &mem), CellValue::BOXTIMES);
+    }
+
+    #[test]
+    fn binary_scalar_operations_follow_formal_rule() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::BOXTIMES);
+        mem.set_cell_value(&n("Local(_2)"), CellValue::BOXTIMES);
+
+        for rvalue in [
+            "Add(copy _1, copy _2)",
+            "Sub(copy _1, const 1_i32)",
+            "BitAnd(copy _1, copy _2)",
+            "Eq(copy _1, const 0_i32)",
+        ] {
+            assert_eq!(
+                eval_rvalue(rvalue, &mem),
+                CellValue::BOXTIMES,
+                "expected scalar result for {rvalue}"
+            );
+        }
+    }
+
+    #[test]
+    fn binary_rule_propagates_top_and_rejects_non_scalar_mix() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::TOP);
+        mem.set_cell_value(&n("Local(_2)"), CellValue::BOXTIMES);
+        mem.set_cell_value(&n("Local(_3)"), CellValue::ALLOC);
+
+        assert_eq!(
+            eval_rvalue("Add(copy _1, copy _2)", &mem),
+            CellValue::TOP
+        );
+
+        assert_eq!(
+            eval_rvalue("Add(copy _2, copy _3)", &mem),
+            CellValue::BOTTOM
+        );
+    }
+
+    fn assign_stmt(place: &str, rvalue: &str) -> MirStatement {
+        MirStatement {
+            source_info: SourceInfoData {
+                span: "<test>".to_string(),
+                scope: "<test>".to_string(),
+            },
+            kind: "Assign".to_string(),
+            details: format!("Assign(({}, {}))", place, rvalue),
+            place: Some(place.to_string()),
+            is_mutable: Some(true),
+            rvalue: Some(rvalue.to_string()),
+        }
+    }
+
+    #[test]
+    fn scalar_assignment_writes_boxtimes_without_creating_value_based_aliases() {
+        let mem = AbstractMemory::default();
+        let mut taint = TaintStateMap::default();
+
+        let mem = apply_mir_statement(
+            &mem,
+            &mut taint,
+            &assign_stmt("Local(_1)", "const 42_i32"),
+        );
+        let mem = apply_mir_statement(
+            &mem,
+            &mut taint,
+            &assign_stmt("Local(_2)", "const 7_i32"),
+        );
+
+        assert_eq!(mem.get_cell_value(&n("Local(_1)")), CellValue::BOXTIMES);
+        assert_eq!(mem.get_cell_value(&n("Local(_2)")), CellValue::BOXTIMES);
+        assert_ne!(
+            mem.get_allocation(&n("Local(_1)")),
+            mem.get_allocation(&n("Local(_2)"))
+        );
+    }
+
+    #[test]
+    fn scalar_overwrite_detaches_only_destination_from_old_heap_aliases() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::ALLOC);
+        mem.propagate_cell_value(&n("Local(_1)"), &n("Local(_2)"));
+
+        let mut taint = TaintStateMap::default();
+        let mem = apply_mir_statement(
+            &mem,
+            &mut taint,
+            &assign_stmt("Local(_1)", "const 5_i32"),
+        );
+
+        assert_eq!(mem.get_cell_value(&n("Local(_1)")), CellValue::BOXTIMES);
+        assert_eq!(mem.get_cell_value(&n("Local(_2)")), CellValue::ALLOC);
+        assert_ne!(
+            mem.get_allocation(&n("Local(_1)")),
+            mem.get_allocation(&n("Local(_2)"))
+        );
+    }
+
+    #[test]
+    fn borrow_of_scalar_or_untracked_local_is_not_manufactured_as_heap_alias() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::BOXTIMES);
+
+        let mut taint = TaintStateMap::default();
+        let mem = apply_mir_statement(
+            &mem,
+            &mut taint,
+            &assign_stmt("Local(_2)", "&_1"),
+        );
+
+        assert_eq!(mem.get_cell_value(&n("Local(_2)")), CellValue::TOP);
+        assert_ne!(
+            mem.get_allocation(&n("Local(_1)")),
+            mem.get_allocation(&n("Local(_2)"))
+        );
+
+        let mem2 = AbstractMemory::default();
+        let mut taint2 = TaintStateMap::default();
+        let mem2 = apply_mir_statement(
+            &mem2,
+            &mut taint2,
+            &assign_stmt("Local(_4)", "&_3"),
+        );
+
+        assert_eq!(mem2.get_cell_value(&n("Local(_4)")), CellValue::TOP);
+    }
+
+
+    #[test]
+    fn unary_scalar_operations_are_boxtimes() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::BOXTIMES);
+
+        assert_eq!(eval_rvalue("Neg(copy _1)", &mem), CellValue::BOXTIMES);
+        assert_eq!(eval_rvalue("Not(copy _1)", &mem), CellValue::BOXTIMES);
+    }
+}
+
+#[cfg(test)]
+mod phase3_1_stabilization_tests {
+    use super::{
+        join_taint_maps, resolve_drop_tracking_key, AbstractMemory, CellValue,
+        FreeKind, TaintStateMap, VarInfo,
+    };
+    use std::collections::BTreeMap;
+
+    fn n(s: &str) -> String {
+        s.to_string()
+    }
+
+    #[test]
+    fn taint_join_preserves_raw_allocation_provenance_when_value_joins_to_top() {
+        let mut old_mem = AbstractMemory::default();
+        old_mem.set_cell_value(&n("Local(_1)"), CellValue::MV);
+
+        let mut scalar_mem = AbstractMemory::default();
+        scalar_mem.set_cell_value(&n("Local(_1)"), CellValue::BOXTIMES);
+
+        let joined_mem = old_mem.union(&scalar_mem);
+        assert_eq!(
+            joined_mem.get_cell_value(&n("Local(_1)")),
+            CellValue::TOP
+        );
+
+        let mut old_taint = TaintStateMap::default();
+        old_taint
+            .entry(n("Local(_1)"))
+            .or_default()
+            .insert("assign".to_string());
+
+        let new_taint = TaintStateMap::default();
+        let joined_taint =
+            join_taint_maps(&old_taint, &new_taint, &joined_mem);
+
+        assert!(
+            joined_taint
+                .get("Local(_1)")
+                .is_some_and(|tags| tags.contains("assign")),
+            "MV provenance must survive MV ⊔ BOXTIMES = TOP"
+        );
+    }
+
+    #[test]
+    fn taint_join_is_union_and_never_discards_existing_markers() {
+        let mem = AbstractMemory::default();
+
+        let mut left = TaintStateMap::default();
+        left.entry(n("x"))
+            .or_default()
+            .insert("assign".to_string());
+
+        let mut right = TaintStateMap::default();
+        right.entry(n("x"))
+            .or_default()
+            .insert("use".to_string());
+        right.entry(n("y"))
+            .or_default()
+            .insert("free".to_string());
+
+        let joined = join_taint_maps(&left, &right, &mem);
+
+        assert!(joined["x"].contains("assign"));
+        assert!(joined["x"].contains("use"));
+        assert!(joined["y"].contains("free"));
+    }
+
+    #[test]
+    fn deferred_drop_resolves_direct_from_raw_destination() {
+        let mut info = BTreeMap::new();
+        info.insert(n("_8"), VarInfo::new());
+
+        let groups = BTreeMap::new();
+
+        assert_eq!(
+            resolve_drop_tracking_key(&n("_8"), &info, &groups),
+            Some(n("_8"))
+        );
+    }
+
+    #[test]
+    fn deferred_drop_resolves_via_completed_alias_group() {
+        let mut info = BTreeMap::new();
+        info.insert(n("Local(_9) [mutable]"), VarInfo::new());
+
+        let mut groups = BTreeMap::new();
+        groups.insert(
+            n("rep"),
+            n("{Local(_9) [mutable], _8, Local(_8)}"),
+        );
+
+        assert_eq!(
+            resolve_drop_tracking_key(&n("_8"), &info, &groups),
+            Some(n("Local(_9) [mutable]"))
+        );
+    }
+
+    #[test]
+    fn counted_deferred_drop_is_one_normal_free() {
+        let mut info = VarInfo::new();
+        info.drop_free = 1;
+        info.free_span =
+            Some(("<test>".to_string(), FreeKind::Drop));
+
+        assert_eq!(info.effective_free(), 1);
+    }
+}
+
