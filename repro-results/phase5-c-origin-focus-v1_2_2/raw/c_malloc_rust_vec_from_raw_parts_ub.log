@@ -1,0 +1,1791 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:671:59
+    |
+671 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:671:68
+    |
+671 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:3897:50
+     |
+3897 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:653:8
+    |
+653 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 5 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_vec_from_raw_parts_ub`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_vec_from_raw_parts_ub
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_vec_from_raw_parts_ub /home/af/Documenti/a-phd/crema`
+Selected C source for SVF: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_vec_from_raw_parts_ub/src/ffi.c
+LLVM IR compilation finished with status: ExitStatus(unix_wait_status(0))
+
+*********General Stats***************
+################ (program : ffi.pre.bc)###############
+AddrsNum            13
+BBWith2Succ         1
+BBWith3Succ         0
+CallsNum            0
+ConstArrayObj       0
+ConstStructObj      0
+ConstantObj         0
+CopysNum            2
+FIObjNum            0
+FSObjNum            5
+FunctionObjs        2
+GepsNum             4
+GlobalObjs          0
+HeapObjs            2
+IndCallSites        0
+LoadsNum            6
+MaxStructSize       0
+NonPtrObj           4
+ReturnsNum          0
+StackObjs           1
+StoresNum           5
+TotalCallSite       1
+TotalFieldObjects   1
+TotalObjects        6
+TotalPTASVFStmts    18
+TotalPointers       35
+TotalSVFStmts       34
+VarArrayObj         0
+VarStructObj        0
+----------------Time and memory stats--------------------
+LLVMIRTime          0.007
+SVFIRTime           0.001
+SymbolTableTime     0
+#######################################################
+
+*********PTACallGraph Stats (Andersen analysis)***************
+################ (program : ffi.pre.bc)###############
+----------------Numbers stats----------------------------
+CalRetPairInCycle   0
+MaxNodeInCycle      0
+NodeInCycle         0
+TotalCycle          0
+TotalEdge           1
+TotalNode           2
+#######################################################
+
+*********Andersen Pointer Analysis Stats***************
+################ (program : ffi.pre.bc)###############
+----------------Time and memory stats--------------------
+AvgIn/OutAddrEdge   0.181818
+AvgIn/OutCopyEdge   0.636364
+AvgIn/OutEdge       1.13636
+AvgIn/OutLoadEdge   0.272727
+AvgIn/OutStoreEdge  0.0454545
+AvgPtsSetSize       0.369565
+AvgTopLvlPtsSize    0.941176
+CollapseTime        0
+CopyGepTime         0
+LoadStoreTime       0
+MemoryUsageVmrss    244
+MemoryUsageVmsize   0
+SCCDetectTime       0
+SCCMergeTime        0
+TotalTime           0
+UpdateCGTime        0
+----------------Numbers stats----------------------------
+AddrProcessed       4
+CopyProcessed       9
+DummyFieldPtrs      0
+FieldObjs           1
+GepProcessed        4
+IndCallSites        0
+IndEdgeSolved       0
+LoadProcessed       6
+LocalVarInRecur     0
+MaxInAddrEdge       1
+MaxInCopyEdge       1
+MaxInLoadEdge       1
+MaxInStoreEdge      1
+MaxNodesInSCC       0
+MaxOutAddrEdge      1
+MaxOutCopyEdge      6
+MaxOutLoadEdge      6
+MaxOutStoreEdge     1
+MaxPtsSetSize       1
+MemObjects          6
+NodesInCycles       0
+NullPointer         0
+NumOfAddrs          4
+NumOfCGEdge         21
+NumOfCGNode         26
+NumOfCopys          10
+NumOfFieldExpand    0
+NumOfGeps           4
+NumOfLoads          6
+NumOfSCCDetect      2
+NumOfSFRs           0
+NumOfStores         1
+NumOfValidNode      22
+NumOfValidObjNode   4
+Pointers            35
+PointsToBlkPtr      0
+PointsToConstPtr    0
+SolveIterations     2
+StoreProcessed      1
+TotalCycleNum       0
+TotalObjects        7
+TotalPWCCycleNum    0
+TotalPointers       35
+#######################################################
+
+****Persistent Points-To Cache Statistics: Andersen's analysis bitvector****
+################ (program : ffi.pre.bc)###############
+UniquePointsToSets       6
+TotalUnions              17
+PropertyUnions           17
+UniqueUnions             0
+LookupUnions             0
+PreemptiveUnions         0
+TotalComplements         50
+PropertyComplements      50
+UniqueComplements        0
+LookupComplements        0
+PreemptiveComplements    0
+TotalIntersections       7
+PropertyIntersections    7
+UniqueIntersections      0
+LookupIntersections      0
+PreemptiveIntersections  0
+#######################################################
+
+*********PTACallGraph Stats (Andersen analysis)***************
+################ (program : ffi.pre.bc)###############
+----------------Numbers stats----------------------------
+CalRetPairInCycle   0
+MaxNodeInCycle      0
+NodeInCycle         0
+TotalCycle          0
+TotalEdge           1
+TotalNode           2
+#######################################################
+
+*********Andersen Pointer Analysis Stats***************
+################ (program : ffi.pre.bc)###############
+----------------Time and memory stats--------------------
+AvgIn/OutAddrEdge   0.181818
+AvgIn/OutCopyEdge   0.636364
+AvgIn/OutEdge       1.13636
+AvgIn/OutLoadEdge   0.272727
+AvgIn/OutStoreEdge  0.0454545
+AvgPtsSetSize       0.369565
+AvgTopLvlPtsSize    0.941176
+CollapseTime        0
+CopyGepTime         0
+LoadStoreTime       0
+MemoryUsageVmrss    244
+MemoryUsageVmsize   0
+SCCDetectTime       0
+SCCMergeTime        0
+TotalTime           0
+UpdateCGTime        0
+----------------Numbers stats----------------------------
+AddrProcessed       4
+CopyProcessed       9
+DummyFieldPtrs      0
+FieldObjs           1
+GepProcessed        4
+IndCallSites        0
+IndEdgeSolved       0
+LoadProcessed       6
+LocalVarInRecur     0
+MaxInAddrEdge       1
+MaxInCopyEdge       1
+MaxInLoadEdge       1
+MaxInStoreEdge      1
+MaxNodesInSCC       0
+MaxOutAddrEdge      1
+MaxOutCopyEdge      6
+MaxOutLoadEdge      6
+MaxOutStoreEdge     1
+MaxPtsSetSize       1
+MemObjects          6
+NodesInCycles       0
+NullPointer         0
+NumOfAddrs          4
+NumOfCGEdge         21
+NumOfCGNode         26
+NumOfCopys          10
+NumOfFieldExpand    0
+NumOfGeps           4
+NumOfLoads          6
+NumOfSCCDetect      2
+NumOfSFRs           0
+NumOfStores         1
+NumOfValidNode      22
+NumOfValidObjNode   4
+Pointers            35
+PointsToBlkPtr      0
+PointsToConstPtr    0
+SolveIterations     2
+StoreProcessed      1
+TotalCycleNum       0
+TotalObjects        7
+TotalPWCCycleNum    0
+TotalPointers       35
+#######################################################
+Processing Node: 0x603faa67afa0
+Node Info: IntraICFGNode3 {fun: c_alloc_four_i32}
+AddrStmt: [Var7 <-- Var8]	
+ValVar ID: 7
+   %p = alloca ptr, align 8 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e1d40
+Associated SVF Statements:
+  - 0x603faa6bad70
+Processing Node: 0x603faa6750c0
+Node Info: CallICFGNode4 {fun: c_alloc_four_i32}
+AddrStmt: [Var10 <-- Var11]	
+ValVar ID: 10
+   %call = call noalias ptr @malloc(i64 noundef 16) #2 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e1d40
+Associated SVF Statements:
+  - 0x603faa6850f0
+Processing Node: 0x603faa67b1f0
+Node Info: RetICFGNode5 {fun: c_alloc_four_i32}
+   %call = call noalias ptr @malloc(i64 noundef 16) #2 RetICFGNode: 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e1d40
+Processing Node: 0x603faa670930
+Node Info: IntraICFGNode6 {fun: c_alloc_four_i32}
+CopyStmt: [Var15 <-- Var10]	
+ValVar ID: 15
+   %0 = bitcast ptr %call to ptr 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e1d40
+Associated SVF Statements:
+  - 0x603faa69f680
+Processing Node: 0x603faa6b23e0
+Node Info: IntraICFGNode7 {fun: c_alloc_four_i32}
+StoreStmt: [Var7 <-- Var15]	
+ValVar ID: 16
+   store ptr %0, ptr %p, align 8 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e1d40
+Associated SVF Statements:
+  - 0x603faa6ba840
+Processing Node: 0x603faa70a9f0
+Node Info: IntraICFGNode8 {fun: c_alloc_four_i32}
+LoadStmt: [Var17 <-- Var7]	
+ValVar ID: 17
+   %1 = load ptr, ptr %p, align 8 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e1d40
+Associated SVF Statements:
+  - 0x603faa6c3700
+Processing Node: 0x603faa6d7330
+Node Info: IntraICFGNode9 {fun: c_alloc_four_i32}
+CmpStmt: [Var18 <-- (Var17 predicate33 Var0)]	
+ValVar ID: 18
+   %cmp = icmp ne ptr %1, null 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e1d40
+Associated SVF Statements:
+  - 0x603faa6827a0
+Processing Node: 0x603faa6fd450
+Node Info: IntraICFGNode10 {fun: c_alloc_four_i32}
+BranchStmt: [Condition Var18]
+Successor 0 ICFGNode11   Successor 1 ICFGNode12   
+ValVar ID: 19
+   br i1 %cmp, label %if.then, label %if.end 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e1d40
+Associated SVF Statements:
+  - 0x603faa683a10
+Processing Node: 0x603faa6a72b0
+Node Info: IntraICFGNode11 {fun: c_alloc_four_i32}
+LoadStmt: [Var20 <-- Var7]	
+ValVar ID: 20
+   %2 = load ptr, ptr %p, align 8 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e2000
+Associated SVF Statements:
+  - 0x603faa6725b0
+Processing Node: 0x603faa6d7c90
+Node Info: IntraICFGNode12 {fun: c_alloc_four_i32}
+LoadStmt: [Var41 <-- Var7]	
+ValVar ID: 41
+   %6 = load ptr, ptr %p, align 8 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e2290
+Associated SVF Statements:
+  - 0x603faa6dba10
+Processing Node: 0x603faa6a0740
+Node Info: IntraICFGNode13 {fun: c_alloc_four_i32}
+GepStmt: [Var21 <-- Var20]	
+ValVar ID: 21
+   %arrayidx = getelementptr inbounds i32, ptr %2, i64 0 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e2000
+Associated SVF Statements:
+  - 0x603faa6b1150
+Processing Node: 0x603faa6b1940
+Node Info: IntraICFGNode14 {fun: c_alloc_four_i32}
+   ret ptr %6 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e2290
+Processing Node: 0x603faa6b09f0
+Node Info: IntraICFGNode15 {fun: c_alloc_four_i32}
+StoreStmt: [Var21 <-- Var9]	
+ValVar ID: 23
+   store i32 1, ptr %arrayidx, align 4 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e2000
+Associated SVF Statements:
+  - 0x603faa6710e0
+Processing Node: 0x603faa69ebb0
+Node Info: FunExitICFGNode2 {fun: c_alloc_four_i32}
+PhiStmt: [Var6 <-- ([Var41, ICFGNode14],)]	
+ValVar ID: 42
+   ret ptr %6 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e2290
+Associated SVF Statements:
+  - 0x603faa6b1840
+Processing Node: 0x603faa6c2d80
+Node Info: IntraICFGNode16 {fun: c_alloc_four_i32}
+LoadStmt: [Var24 <-- Var7]	
+ValVar ID: 24
+   %3 = load ptr, ptr %p, align 8 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e2000
+Associated SVF Statements:
+  - 0x603faa709240
+Processing Node: 0x603faa6af260
+Node Info: IntraICFGNode17 {fun: c_alloc_four_i32}
+GepStmt: [Var25 <-- Var24]	
+ValVar ID: 25
+   %arrayidx1 = getelementptr inbounds i32, ptr %3, i64 1 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e2000
+Associated SVF Statements:
+  - 0x603faa6df9e0
+Processing Node: 0x603faa6aeb20
+Node Info: IntraICFGNode18 {fun: c_alloc_four_i32}
+StoreStmt: [Var25 <-- Var28]	
+ValVar ID: 27
+   store i32 2, ptr %arrayidx1, align 4 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e2000
+Associated SVF Statements:
+  - 0x603faa6741e0
+Processing Node: 0x603faa672d00
+Node Info: IntraICFGNode19 {fun: c_alloc_four_i32}
+LoadStmt: [Var29 <-- Var7]	
+ValVar ID: 29
+   %4 = load ptr, ptr %p, align 8 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e2000
+Associated SVF Statements:
+  - 0x603faa6e0e30
+Processing Node: 0x603faa6fe490
+Node Info: IntraICFGNode20 {fun: c_alloc_four_i32}
+GepStmt: [Var30 <-- Var29]	
+ValVar ID: 30
+   %arrayidx2 = getelementptr inbounds i32, ptr %4, i64 2 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e2000
+Associated SVF Statements:
+  - 0x603faa685ad0
+Processing Node: 0x603faa6d8230
+Node Info: IntraICFGNode21 {fun: c_alloc_four_i32}
+StoreStmt: [Var30 <-- Var33]	
+ValVar ID: 32
+   store i32 3, ptr %arrayidx2, align 4 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e2000
+Associated SVF Statements:
+  - 0x603faa6b13a0
+Processing Node: 0x603faa6c2380
+Node Info: IntraICFGNode22 {fun: c_alloc_four_i32}
+LoadStmt: [Var34 <-- Var7]	
+ValVar ID: 34
+   %5 = load ptr, ptr %p, align 8 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e2000
+Associated SVF Statements:
+  - 0x603faa6dadf0
+Processing Node: 0x603faa6a6040
+Node Info: IntraICFGNode23 {fun: c_alloc_four_i32}
+GepStmt: [Var35 <-- Var34]	
+ValVar ID: 35
+   %arrayidx3 = getelementptr inbounds i32, ptr %5, i64 3 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e2000
+Associated SVF Statements:
+  - 0x603faa6b0d70
+Processing Node: 0x603faa694000
+Node Info: IntraICFGNode24 {fun: c_alloc_four_i32}
+StoreStmt: [Var35 <-- Var38]	
+ValVar ID: 37
+   store i32 4, ptr %arrayidx3, align 4 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e2000
+Associated SVF Statements:
+  - 0x603faa6e1920
+Processing Node: 0x603faa709cf0
+Node Info: IntraICFGNode25 {fun: c_alloc_four_i32}
+BranchStmt: [ Unconditional branch]
+Successor 0 ICFGNode12   
+ValVar ID: 39
+   br label %if.end 
+Function associated with node: 0x603faa6f02a0
+Basic block associated with node: 0x603faa6e2000
+Associated SVF Statements:
+  - 0x603faa6d91e0
+Writing 'callgraph_initial.dot.dot'...DOT file generated: ./output/c_alloc_four_i32_view_icfg_output_SVF.dot
+DOT file generated: ./output/c_alloc_four_i32_node_and_edges_only_icfg_SVF.dot
+ICFG Traversal Complete for function: c_alloc_four_i32.
+No instructions found in function: malloc.
+svf-driver finished with status: ExitStatus(unix_wait_status(0))
+cargo:rerun-if-changed=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_vec_from_raw_parts_ub/src/ffi.c
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package c_malloc_rust_vec_from_raw_parts_ub target c_malloc_rust_vec_from_raw_parts_ub at /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_vec_from_raw_parts_ub/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_vec_from_raw_parts_ub/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_vec_from_raw_parts_ub/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_vec_from_raw_parts_ub/target/debug",
+    "--extern=cc=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_vec_from_raw_parts_ub/target/debug/deps/libcc-b4624915574c0613.rlib",
+    "--extern=find_msvc_tools=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_vec_from_raw_parts_ub/target/debug/deps/libfind_msvc_tools-cd891f1e36afe5e3.rlib",
+    "--extern=shlex=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_vec_from_raw_parts_ub/target/debug/deps/libshlex-2c989fbdc7d06c87.rlib",
+]
+Loading LLVM JSON file: c_alloc_four_i32_A_FINAL_ICFG.json
+Global ICFG saved to global_icfg.json
+Analyzing package c_malloc_rust_vec_from_raw_parts_ub target build-script-build at /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_vec_from_raw_parts_ub/build.rs
+Skipping unsupported target kind: [CustomBuild]
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+Final Abstract State: {"llvm::c_alloc_four_i32::node105826558508176::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"41@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "llvm::c_alloc_four_i32::node105826558354400::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "dummyRet::rust::main::bb1::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"41@rust::main::bb0"}: TOP, {"6@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP, {"Local(_1)"}: TOP}, "llvm::c_alloc_four_i32::node105826558505776::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "rust::main::bb6": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"41@rust::main::bb0"}: TOP, {"6@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP, {"Local(_1)", "Local(_3)"}: MV, {"Local(_10)"}: TOP, {"Local(_7)"}: TOP}, "llvm::c_alloc_four_i32::node105826558085424::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP}, "llvm::c_alloc_four_i32::node105826558419840::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "llvm::c_alloc_four_i32::node105826558661712::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "llvm::c_alloc_four_i32::node105826558351680::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"41@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "rust::main::bb4": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"41@rust::main::bb0"}: TOP, {"6@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP, {"Local(_1)", "Local(_3)"}: MV, {"Local(_10)"}: TOP}, "rust::main::bb9": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"41@rust::main::bb0"}: TOP, {"6@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP, {"Local(_1)", "Local(_3)"}: FREED, {"Local(_10)"}: TOP, {"Local(_7)"}: TOP}, "rust::main::terminate": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"41@rust::main::bb0"}: TOP, {"6@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP, {"Local(_1)", "Local(_3)"}: FREED, {"Local(_10)"}: TOP, {"Local(_7)"}: TOP}, "llvm::c_alloc_four_i32::node105826558665872::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "llvm::c_alloc_four_i32::node105826558103744::rust::main::bb0": {{"10@rust::main::bb0"}: TOP}, "llvm::c_alloc_four_i32::node105826558713072::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "llvm::c_alloc_four_i32::node105826558347760::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "dummyCall::rust::main::bb0::rust::main::bb0": {}, "llvm::c_alloc_four_i32::node105826558304320::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "llvm::c_alloc_four_i32::node105826558509616::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "llvm::c_alloc_four_i32::node105826558339872::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "llvm::c_alloc_four_i32::node105826558094592::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "llvm::c_alloc_four_i32::node105826558309040::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "rust::main::bb8": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"41@rust::main::bb0"}: TOP, {"6@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP, {"Local(_1)", "Local(_3)"}: TOP, {"Local(_10)"}: TOP, {"Local(_7)"}: TOP}, "llvm::c_alloc_four_i32::node105826558422400::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "llvm::c_alloc_four_i32::node105826558128032::rust::main::bb0": {}, "rust::main::bb2": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"41@rust::main::bb0"}: TOP, {"6@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP, {"Local(_1)"}: TOP}, "rust::main::bb7": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"41@rust::main::bb0"}: TOP, {"6@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP, {"Local(_1)", "Local(_3)"}: FREED, {"Local(_10)"}: TOP, {"Local(_7)"}: TOP}, "rust::main::bb5": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"41@rust::main::bb0"}: TOP, {"6@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP, {"Local(_1)", "Local(_3)"}: MV, {"Local(_10)"}: TOP, {"Local(_7)"}: TOP}, "llvm::c_alloc_four_i32::node105826558128624::rust::main::bb0": {{"10@rust::main::bb0"}: TOP}, "llvm::c_alloc_four_i32::node105826558281536::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "rust::main::bb10": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"41@rust::main::bb0"}: TOP, {"6@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP, {"Local(_1)", "Local(_3)"}: FREED, {"Local(_10)"}: TOP, {"Local(_7)"}: TOP}, "llvm::c_alloc_four_i32::node105826558274480::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"41@rust::main::bb0"}: TOP, {"6@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "llvm::c_alloc_four_i32::node105826558230528::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "llvm::c_alloc_four_i32::node105826558341728::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "rust::main::bb0": {}, "llvm::c_alloc_four_i32::node105826558716400::rust::main::bb0": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP}, "rust::main::bb1": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"41@rust::main::bb0"}: TOP, {"6@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP, {"Local(_1)"}: TOP}, "rust::main::bb3": {{"10@rust::main::bb0"}: TOP, {"15@rust::main::bb0"}: TOP, {"17@rust::main::bb0"}: TOP, {"20@rust::main::bb0"}: TOP, {"21@rust::main::bb0"}: TOP, {"24@rust::main::bb0"}: TOP, {"25@rust::main::bb0"}: TOP, {"29@rust::main::bb0"}: TOP, {"30@rust::main::bb0"}: TOP, {"34@rust::main::bb0"}: TOP, {"35@rust::main::bb0"}: TOP, {"41@rust::main::bb0"}: TOP, {"6@rust::main::bb0"}: TOP, {"7@rust::main::bb0"}: TOP, {"Local(_1)", "Local(_3)"}: MV}}
+Final Taint State: {
+    "llvm::c_alloc_four_i32::node105826558347760::rust::main::bb0": {
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+    },
+    "rust::main::bb4": {
+        "10@rust::main::bb0": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "41@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "Local(_1)": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "Local(_3)": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "6@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "rust::main::bb0": {},
+    "llvm::c_alloc_four_i32::node105826558309040::rust::main::bb0": {
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558103744::rust::main::bb0": {
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558281536::rust::main::bb0": {
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558274480::rust::main::bb0": {
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "6@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "41@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558508176::rust::main::bb0": {
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "41@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558509616::rust::main::bb0": {
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558230528::rust::main::bb0": {
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558354400::rust::main::bb0": {
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "rust::main::bb8": {
+        "10@rust::main::bb0": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "6@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "41@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "Local(_1)": {
+            "alloc_family:c_malloc",
+            "assign",
+            "free",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "Local(_3)": {
+            "free",
+            "alloc_family:c_malloc",
+        },
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "rust::main::bb10": {
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "6@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "41@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "Local(_3)": {
+            "free",
+            "alloc_family:c_malloc",
+        },
+        "Local(_1)": {
+            "assign",
+            "free",
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558085424::rust::main::bb0": {
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558665872::rust::main::bb0": {
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "rust::main::bb1": {
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "6@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "Local(_1)": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "41@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558716400::rust::main::bb0": {
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558128624::rust::main::bb0": {
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+    },
+    "rust::main::terminate": {
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "6@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "Local(_1)": {
+            "alloc_family:c_malloc",
+            "free",
+            "assign",
+        },
+        "41@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "Local(_3)": {
+            "alloc_family:c_malloc",
+            "free",
+        },
+    },
+    "rust::main::bb3": {
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "41@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "Local(_3)": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "Local(_1)": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "6@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558351680::rust::main::bb0": {
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "41@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558661712::rust::main::bb0": {
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558341728::rust::main::bb0": {
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558128032::rust::main::bb0": {},
+    "dummyCall::rust::main::bb0::rust::main::bb0": {},
+    "rust::main::bb7": {
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "Local(_1)": {
+            "assign",
+            "alloc_family:c_malloc",
+            "free",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "41@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "Local(_3)": {
+            "alloc_family:c_malloc",
+            "free",
+        },
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "6@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558505776::rust::main::bb0": {
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "dummyRet::rust::main::bb1::rust::main::bb0": {
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "Local(_1)": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "6@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "41@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558304320::rust::main::bb0": {
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558713072::rust::main::bb0": {
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "rust::main::bb5": {
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "41@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "6@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "Local(_1)": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "Local(_3)": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "rust::main::bb2": {
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "6@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "Local(_1)": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "41@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558094592::rust::main::bb0": {
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "rust::main::bb6": {
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "41@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "Local(_3)": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "6@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "Local(_1)": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "rust::main::bb9": {
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "6@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "35@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "Local(_1)": {
+            "alloc_family:c_malloc",
+            "free",
+            "assign",
+        },
+        "41@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "Local(_3)": {
+            "free",
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558339872::rust::main::bb0": {
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558422400::rust::main::bb0": {
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "alloc_family:c_malloc",
+            "assign",
+        },
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+    "llvm::c_alloc_four_i32::node105826558419840::rust::main::bb0": {
+        "21@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "34@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "15@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "30@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "20@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "24@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "7@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "10@rust::main::bb0": {
+            "assign",
+            "alloc_family:c_malloc",
+        },
+        "17@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "25@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+        "29@rust::main::bb0": {
+            "alloc_family:c_malloc",
+        },
+    },
+}
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558347760::rust::main::bb0' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable '10@rust::main::bb0' from block 'rust::main::bb4' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable 'Local(_1)' from block 'rust::main::bb4' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable 'Local(_3)' from block 'rust::main::bb4' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558309040::rust::main::bb0' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558103744::rust::main::bb0' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558281536::rust::main::bb0' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558274480::rust::main::bb0' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558508176::rust::main::bb0' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558509616::rust::main::bb0' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558230528::rust::main::bb0' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558354400::rust::main::bb0' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'rust::main::bb8' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable 'Local(_1)' from block 'rust::main::bb8' (markers: {"alloc_family:c_malloc", "assign", "free"})
+Tracking variable 'Local(_1)' from block 'rust::main::bb10' (markers: {"assign", "free", "alloc_family:c_malloc"})
+Tracking variable '10@rust::main::bb0' from block 'rust::main::bb10' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558085424::rust::main::bb0' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558665872::rust::main::bb0' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'rust::main::bb1' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable 'Local(_1)' from block 'rust::main::bb1' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558716400::rust::main::bb0' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558128624::rust::main::bb0' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable 'Local(_1)' from block 'rust::main::terminate' (markers: {"alloc_family:c_malloc", "free", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'rust::main::terminate' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable '10@rust::main::bb0' from block 'rust::main::bb3' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable 'Local(_3)' from block 'rust::main::bb3' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable 'Local(_1)' from block 'rust::main::bb3' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558351680::rust::main::bb0' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558661712::rust::main::bb0' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558341728::rust::main::bb0' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable 'Local(_1)' from block 'rust::main::bb7' (markers: {"assign", "alloc_family:c_malloc", "free"})
+Tracking variable '10@rust::main::bb0' from block 'rust::main::bb7' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558505776::rust::main::bb0' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable 'Local(_1)' from block 'dummyRet::rust::main::bb1::rust::main::bb0' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable '10@rust::main::bb0' from block 'dummyRet::rust::main::bb1::rust::main::bb0' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558304320::rust::main::bb0' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558713072::rust::main::bb0' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable '10@rust::main::bb0' from block 'rust::main::bb5' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable 'Local(_1)' from block 'rust::main::bb5' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable 'Local(_3)' from block 'rust::main::bb5' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable 'Local(_1)' from block 'rust::main::bb2' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable '10@rust::main::bb0' from block 'rust::main::bb2' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558094592::rust::main::bb0' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable '10@rust::main::bb0' from block 'rust::main::bb6' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable 'Local(_3)' from block 'rust::main::bb6' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable 'Local(_1)' from block 'rust::main::bb6' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable '10@rust::main::bb0' from block 'rust::main::bb9' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable 'Local(_1)' from block 'rust::main::bb9' (markers: {"alloc_family:c_malloc", "free", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558339872::rust::main::bb0' (markers: {"assign", "alloc_family:c_malloc"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558422400::rust::main::bb0' (markers: {"alloc_family:c_malloc", "assign"})
+Tracking variable '10@rust::main::bb0' from block 'llvm::c_alloc_four_i32::node105826558419840::rust::main::bb0' (markers: {"assign", "alloc_family:c_malloc"})
+-> DummyRet node 'dummyRet::rust::main::bb1::rust::main::bb0': transferring from LLVM var Some("6@rust::main::bb0") to MIR var Some("_1")
+Aliased via from_raw: 'Local(_1)' -> '_3'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_vec_from_raw_parts_ub/src/main.rs:13:5: 13:6 (#0), scope: scope[1] }, kind: drop(_3) -> [return: bb8, unwind continue] }' -> '_3'
+-> Skip Drop in 'rust::main::bb9' because has an unwind incoming edge
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 NO Issues detected: ✅
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+WARNING: C malloc-family allocation 'Local(_1)' reaches a Rust allocator/ownership API whose safety contract is not established at `/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_vec_from_raw_parts_ub/src/main.rs:11:17: 11:45 (#0)`: Vec::from_raw_parts requires Global-allocator provenance plus exact layout/length/capacity invariants; plain C malloc-family provenance does not prove them
+Possible UNDEFINED BEHAVIOUR!

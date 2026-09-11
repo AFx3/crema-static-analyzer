@@ -1,0 +1,855 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2922:50
+     |
+2922 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:640:8
+    |
+640 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 5 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/for_memory_leak_ffi`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/for_memory_leak_ffi
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/for_memory_leak_ffi /home/af/Documenti/a-phd/crema`
+warning: function `print_and` is never used
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/for_memory_leak_ffi/src/main.rs:3:8
+  |
+3 |     fn print_and(ptr: *mut c_char);
+  |        ^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` on by default
+
+warning: function `cast_and_free_pointer` is never used
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/for_memory_leak_ffi/src/main.rs:5:8
+  |
+5 |     fn cast_and_free_pointer(ptr: *mut c_void);
+  |        ^^^^^^^^^^^^^^^^^^^^^
+
+warning: 2 warnings emitted
+
+LLVM IR compilation finished with status: ExitStatus(unix_wait_status(0))
+
+*********General Stats***************
+################ (program : ffi.pre.bc)###############
+AddrsNum            11
+BBWith2Succ         0
+BBWith3Succ         0
+CallsNum            0
+ConstArrayObj       0
+ConstStructObj      0
+ConstantObj         0
+CopysNum            3
+FIObjNum            0
+FSObjNum            10
+FunctionObjs        5
+GepsNum             0
+GlobalObjs          0
+HeapObjs            1
+IndCallSites        0
+LoadsNum            5
+MaxStructSize       0
+NonPtrObj           6
+ReturnsNum          0
+StackObjs           4
+StoresNum           4
+TotalCallSite       4
+TotalFieldObjects   0
+TotalObjects        11
+TotalPTASVFStmts    22
+TotalPointers       34
+TotalSVFStmts       23
+VarArrayObj         0
+VarStructObj        0
+----------------Time and memory stats--------------------
+LLVMIRTime          0.009
+SVFIRTime           0
+SymbolTableTime     0
+#######################################################
+
+*********PTACallGraph Stats (Andersen analysis)***************
+################ (program : ffi.pre.bc)###############
+----------------Numbers stats----------------------------
+CalRetPairInCycle   0
+MaxNodeInCycle      0
+NodeInCycle         0
+TotalCycle          0
+TotalEdge           4
+TotalNode           5
+#######################################################
+
+*********Andersen Pointer Analysis Stats***************
+################ (program : ffi.pre.bc)###############
+----------------Time and memory stats--------------------
+AvgIn/OutAddrEdge   0.3125
+AvgIn/OutCopyEdge   0.375
+AvgIn/OutEdge       0.96875
+AvgIn/OutLoadEdge   0.15625
+AvgIn/OutStoreEdge  0.125
+AvgPtsSetSize       0.188679
+AvgTopLvlPtsSize    0.555556
+CollapseTime        0
+CopyGepTime         0
+LoadStoreTime       0
+MemoryUsageVmrss    244
+MemoryUsageVmsize   0
+SCCDetectTime       0
+SCCMergeTime        0
+TotalTime           0
+UpdateCGTime        0
+----------------Numbers stats----------------------------
+AddrProcessed       10
+CopyProcessed       0
+DummyFieldPtrs      0
+FieldObjs           0
+GepProcessed        0
+IndCallSites        0
+IndEdgeSolved       0
+LoadProcessed       5
+LocalVarInRecur     0
+MaxInAddrEdge       1
+MaxInCopyEdge       1
+MaxInLoadEdge       1
+MaxInStoreEdge      1
+MaxNodesInSCC       0
+MaxOutAddrEdge      1
+MaxOutCopyEdge      2
+MaxOutLoadEdge      2
+MaxOutStoreEdge     1
+MaxPtsSetSize       1
+MemObjects          11
+NodesInCycles       0
+NullPointer         0
+NumOfAddrs          10
+NumOfCGEdge         21
+NumOfCGNode         36
+NumOfCopys          12
+NumOfFieldExpand    0
+NumOfGeps           0
+NumOfLoads          5
+NumOfSCCDetect      2
+NumOfSFRs           0
+NumOfStores         4
+NumOfValidNode      32
+NumOfValidObjNode   10
+Pointers            34
+PointsToBlkPtr      0
+PointsToConstPtr    0
+SolveIterations     2
+StoreProcessed      4
+TotalCycleNum       0
+TotalObjects        11
+TotalPWCCycleNum    0
+TotalPointers       34
+#######################################################
+
+****Persistent Points-To Cache Statistics: Andersen's analysis bitvector****
+################ (program : ffi.pre.bc)###############
+UniquePointsToSets       11
+TotalUnions              10
+PropertyUnions           10
+UniqueUnions             0
+LookupUnions             0
+PreemptiveUnions         0
+TotalComplements         72
+PropertyComplements      72
+UniqueComplements        0
+LookupComplements        0
+PreemptiveComplements    0
+TotalIntersections       9
+PropertyIntersections    9
+UniqueIntersections      0
+LookupIntersections      0
+PreemptiveIntersections  0
+#######################################################
+
+*********PTACallGraph Stats (Andersen analysis)***************
+################ (program : ffi.pre.bc)###############
+----------------Numbers stats----------------------------
+CalRetPairInCycle   0
+MaxNodeInCycle      0
+NodeInCycle         0
+TotalCycle          0
+TotalEdge           4
+TotalNode           5
+#######################################################
+
+*********Andersen Pointer Analysis Stats***************
+################ (program : ffi.pre.bc)###############
+----------------Time and memory stats--------------------
+AvgIn/OutAddrEdge   0.3125
+AvgIn/OutCopyEdge   0.375
+AvgIn/OutEdge       0.96875
+AvgIn/OutLoadEdge   0.15625
+AvgIn/OutStoreEdge  0.125
+AvgPtsSetSize       0.188679
+AvgTopLvlPtsSize    0.555556
+CollapseTime        0
+CopyGepTime         0
+LoadStoreTime       0
+MemoryUsageVmrss    244
+MemoryUsageVmsize   0
+SCCDetectTime       0
+SCCMergeTime        0
+TotalTime           0
+UpdateCGTime        0
+----------------Numbers stats----------------------------
+AddrProcessed       10
+CopyProcessed       0
+DummyFieldPtrs      0
+FieldObjs           0
+GepProcessed        0
+IndCallSites        0
+IndEdgeSolved       0
+LoadProcessed       5
+LocalVarInRecur     0
+MaxInAddrEdge       1
+MaxInCopyEdge       1
+MaxInLoadEdge       1
+MaxInStoreEdge      1
+MaxNodesInSCC       0
+MaxOutAddrEdge      1
+MaxOutCopyEdge      2
+MaxOutLoadEdge      2
+MaxOutStoreEdge     1
+MaxPtsSetSize       1
+MemObjects          11
+NodesInCycles       0
+NullPointer         0
+NumOfAddrs          10
+NumOfCGEdge         21
+NumOfCGNode         36
+NumOfCopys          12
+NumOfFieldExpand    0
+NumOfGeps           0
+NumOfLoads          5
+NumOfSCCDetect      2
+NumOfSFRs           0
+NumOfStores         4
+NumOfValidNode      32
+NumOfValidObjNode   10
+Pointers            34
+PointsToBlkPtr      0
+PointsToConstPtr    0
+SolveIterations     2
+StoreProcessed      4
+TotalCycleNum       0
+TotalObjects        11
+TotalPWCCycleNum    0
+TotalPointers       34
+#######################################################
+Processing Node: 0x6518a9e77f50
+Node Info: IntraICFGNode7 {fun: print_and}
+AddrStmt: [Var9 <-- Var10]	
+ValVar ID: 9
+   %ptr.addr = alloca ptr, align 8 
+Function associated with node: 0x6518a9e8b100
+Basic block associated with node: 0x6518a9e8bc10
+Associated SVF Statements:
+  - 0x6518a9ed9e10
+Processing Node: 0x6518a9eb1070
+Node Info: IntraICFGNode8 {fun: print_and}
+StoreStmt: [Var9 <-- Var8]	
+ValVar ID: 12
+   store ptr %ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x6518a9e8b100
+Basic block associated with node: 0x6518a9e8bc10
+Associated SVF Statements:
+  - 0x6518a9e74fc0
+Processing Node: 0x6518a9e52860
+Node Info: IntraICFGNode9 {fun: print_and}
+LoadStmt: [Var13 <-- Var9]	
+ValVar ID: 13
+   %0 = load ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x6518a9e8b100
+Basic block associated with node: 0x6518a9e8bc10
+Associated SVF Statements:
+  - 0x6518a9e43590
+Processing Node: 0x6518a9ed9bf0
+Node Info: CallICFGNode10 {fun: print_and}
+   %call = call i32 (ptr, ...) @printf(ptr noundef @.str, ptr noundef %0) CallICFGNode: 
+Function associated with node: 0x6518a9e8b100
+Basic block associated with node: 0x6518a9e8bc10
+Processing Node: 0x6518a9e499e0
+Node Info: RetICFGNode11 {fun: print_and}
+   %call = call i32 (ptr, ...) @printf(ptr noundef @.str, ptr noundef %0) RetICFGNode: 
+Function associated with node: 0x6518a9e8b100
+Basic block associated with node: 0x6518a9e8bc10
+Processing Node: 0x6518a9e497f0
+Node Info: IntraICFGNode12 {fun: print_and}
+LoadStmt: [Var17 <-- Var9]	
+ValVar ID: 17
+   %1 = load ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x6518a9e8b100
+Basic block associated with node: 0x6518a9e8bc10
+Associated SVF Statements:
+  - 0x6518a9e73d10
+Processing Node: 0x6518a9ed8540
+Node Info: CallICFGNode13 {fun: print_and}
+   call void @free(ptr noundef %1) #3 CallICFGNode: 
+Function associated with node: 0x6518a9e8b100
+Basic block associated with node: 0x6518a9e8bc10
+Processing Node: 0x6518a9eb19c0
+Node Info: RetICFGNode14 {fun: print_and}
+   call void @free(ptr noundef %1) #3 RetICFGNode: 
+Function associated with node: 0x6518a9e8b100
+Basic block associated with node: 0x6518a9e8bc10
+Processing Node: 0x6518a9e52fc0
+Node Info: IntraICFGNode15 {fun: print_and}
+   ret void 
+Function associated with node: 0x6518a9e8b100
+Basic block associated with node: 0x6518a9e8bc10
+Processing Node: 0x6518a9e6f8a0
+Node Info: FunExitICFGNode2 {fun: print_and}
+Function associated with node: 0x6518a9e8b100
+Basic block associated with node: 0x6518a9e8bc10
+Writing 'callgraph_initial.dot.dot'...DOT file generated: ./output/print_and_view_icfg_output_SVF.dot
+DOT file generated: ./output/print_and_node_and_edges_only_icfg_SVF.dot
+ICFG Traversal Complete for function: print_and.
+Processing Node: 0x6518a9e4c1f0
+Node Info: IntraICFGNode16 {fun: print}
+AddrStmt: [Var31 <-- Var32]	
+ValVar ID: 31
+   %ptr.addr = alloca ptr, align 8 
+Function associated with node: 0x6518a9eb3500
+Basic block associated with node: 0x6518a9e6ed40
+Associated SVF Statements:
+  - 0x6518a9ecf310
+Processing Node: 0x6518a9e9b310
+Node Info: IntraICFGNode17 {fun: print}
+StoreStmt: [Var31 <-- Var30]	
+ValVar ID: 33
+   store ptr %ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x6518a9eb3500
+Basic block associated with node: 0x6518a9e6ed40
+Associated SVF Statements:
+  - 0x6518a9ecd1f0
+Processing Node: 0x6518a9ec1c30
+Node Info: IntraICFGNode18 {fun: print}
+LoadStmt: [Var34 <-- Var31]	
+ValVar ID: 34
+   %0 = load ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x6518a9eb3500
+Basic block associated with node: 0x6518a9e6ed40
+Associated SVF Statements:
+  - 0x6518a9ece120
+Processing Node: 0x6518a9e9b6b0
+Node Info: CallICFGNode19 {fun: print}
+   %call = call i32 (ptr, ...) @printf(ptr noundef @.str, ptr noundef %0) CallICFGNode: 
+Function associated with node: 0x6518a9eb3500
+Basic block associated with node: 0x6518a9e6ed40
+Processing Node: 0x6518a9eb2b00
+Node Info: RetICFGNode20 {fun: print}
+   %call = call i32 (ptr, ...) @printf(ptr noundef @.str, ptr noundef %0) RetICFGNode: 
+Function associated with node: 0x6518a9eb3500
+Basic block associated with node: 0x6518a9e6ed40
+Processing Node: 0x6518a9ea7e70
+Node Info: IntraICFGNode21 {fun: print}
+   ret void 
+Function associated with node: 0x6518a9eb3500
+Basic block associated with node: 0x6518a9e6ed40
+Processing Node: 0x6518a9e4bec0
+Node Info: FunExitICFGNode4 {fun: print}
+Function associated with node: 0x6518a9eb3500
+Basic block associated with node: 0x6518a9e6ed40
+DOT file generated: ./output/print_view_icfg_output_SVF.dot
+DOT file generated: ./output/print_node_and_edges_only_icfg_SVF.dot
+ICFG Traversal Complete for function: print.
+Processing Node: 0x6518a9ea1a90
+Node Info: IntraICFGNode22 {fun: cast_and_free_pointer}
+AddrStmt: [Var41 <-- Var42]	
+ValVar ID: 41
+   %ptr.addr = alloca ptr, align 8 
+Function associated with node: 0x6518a9ec0fa0
+Basic block associated with node: 0x6518a9e6efd0
+Associated SVF Statements:
+  - 0x6518a9ea2000
+Processing Node: 0x6518a9e439d0
+Node Info: IntraICFGNode23 {fun: cast_and_free_pointer}
+AddrStmt: [Var43 <-- Var44]	
+ValVar ID: 43
+   %int_ptr = alloca ptr, align 8 
+Function associated with node: 0x6518a9ec0fa0
+Basic block associated with node: 0x6518a9e6efd0
+Associated SVF Statements:
+  - 0x6518a9e4c3d0
+Processing Node: 0x6518a9e708f0
+Node Info: IntraICFGNode24 {fun: cast_and_free_pointer}
+StoreStmt: [Var41 <-- Var40]	
+ValVar ID: 45
+   store ptr %ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x6518a9ec0fa0
+Basic block associated with node: 0x6518a9e6efd0
+Associated SVF Statements:
+  - 0x6518a9e635d0
+Processing Node: 0x6518a9ecd990
+Node Info: IntraICFGNode25 {fun: cast_and_free_pointer}
+LoadStmt: [Var46 <-- Var41]	
+ValVar ID: 46
+   %0 = load ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x6518a9ec0fa0
+Basic block associated with node: 0x6518a9e6efd0
+Associated SVF Statements:
+  - 0x6518a9e63870
+Processing Node: 0x6518a9ea7890
+Node Info: IntraICFGNode26 {fun: cast_and_free_pointer}
+CopyStmt: [Var47 <-- Var46]	
+ValVar ID: 47
+   %1 = bitcast ptr %0 to ptr 
+Function associated with node: 0x6518a9ec0fa0
+Basic block associated with node: 0x6518a9e6efd0
+Associated SVF Statements:
+  - 0x6518a9ec0890
+Processing Node: 0x6518a9e7a6d0
+Node Info: IntraICFGNode27 {fun: cast_and_free_pointer}
+StoreStmt: [Var43 <-- Var47]	
+ValVar ID: 48
+   store ptr %1, ptr %int_ptr, align 8 
+Function associated with node: 0x6518a9ec0fa0
+Basic block associated with node: 0x6518a9e6efd0
+Associated SVF Statements:
+  - 0x6518a9ec0d70
+Processing Node: 0x6518a9ec2a60
+Node Info: IntraICFGNode28 {fun: cast_and_free_pointer}
+LoadStmt: [Var49 <-- Var43]	
+ValVar ID: 49
+   %2 = load ptr, ptr %int_ptr, align 8 
+Function associated with node: 0x6518a9ec0fa0
+Basic block associated with node: 0x6518a9e6efd0
+Associated SVF Statements:
+  - 0x6518a9e55eb0
+Processing Node: 0x6518a9e754d0
+Node Info: IntraICFGNode29 {fun: cast_and_free_pointer}
+CopyStmt: [Var50 <-- Var49]	
+ValVar ID: 50
+   %3 = bitcast ptr %2 to ptr 
+Function associated with node: 0x6518a9ec0fa0
+Basic block associated with node: 0x6518a9e6efd0
+Associated SVF Statements:
+  - 0x6518a9e9b1c0
+Processing Node: 0x6518a9e567d0
+Node Info: CallICFGNode30 {fun: cast_and_free_pointer}
+   call void @free(ptr noundef %3) #3 CallICFGNode: 
+Function associated with node: 0x6518a9ec0fa0
+Basic block associated with node: 0x6518a9e6efd0
+Processing Node: 0x6518a9eb1d60
+Node Info: RetICFGNode31 {fun: cast_and_free_pointer}
+   call void @free(ptr noundef %3) #3 RetICFGNode: 
+Function associated with node: 0x6518a9ec0fa0
+Basic block associated with node: 0x6518a9e6efd0
+Processing Node: 0x6518a9eb1f60
+Node Info: IntraICFGNode32 {fun: cast_and_free_pointer}
+   ret void 
+Function associated with node: 0x6518a9ec0fa0
+Basic block associated with node: 0x6518a9e6efd0
+Processing Node: 0x6518a9e40930
+Node Info: FunExitICFGNode6 {fun: cast_and_free_pointer}
+Function associated with node: 0x6518a9ec0fa0
+Basic block associated with node: 0x6518a9e6efd0
+DOT file generated: ./output/cast_and_free_pointer_view_icfg_output_SVF.dot
+DOT file generated: ./output/cast_and_free_pointer_node_and_edges_only_icfg_SVF.dot
+ICFG Traversal Complete for function: cast_and_free_pointer.
+No instructions found in function: printf.
+No instructions found in function: free.
+svf-driver finished with status: ExitStatus(unix_wait_status(0))
+cargo:rerun-if-changed=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/for_memory_leak_ffi/src/ffi.c
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package for_cf_cargo target for_cf_cargo at /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/for_memory_leak_ffi/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/for_memory_leak_ffi/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/for_memory_leak_ffi/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/for_memory_leak_ffi/target/debug",
+    "--extern=shlex=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/for_memory_leak_ffi/target/debug/deps/libshlex-f4c3659040844f7b.rlib",
+    "--extern=cc=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/for_memory_leak_ffi/target/debug/deps/libcc-9760a1cdfb073cad.rlib",
+]
+warning: function `print_and` is never used
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/for_memory_leak_ffi/src/main.rs:3:8
+  |
+3 |     fn print_and(ptr: *mut c_char);
+  |        ^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` on by default
+
+warning: function `cast_and_free_pointer` is never used
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/for_memory_leak_ffi/src/main.rs:5:8
+  |
+5 |     fn cast_and_free_pointer(ptr: *mut c_void);
+  |        ^^^^^^^^^^^^^^^^^^^^^
+
+Loading LLVM JSON file: print_A_FINAL_ICFG.json
+Loading LLVM JSON file: cast_and_free_pointer_A_FINAL_ICFG.json
+Loading LLVM JSON file: print_and_A_FINAL_ICFG.json
+Global ICFG saved to global_icfg.json
+warning: 2 warnings emitted
+
+Analyzing package for_cf_cargo target build-script-build at /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/for_memory_leak_ffi/build.rs
+Skipping unsupported target kind: [CustomBuild]
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "llvm::print::node111156603961024::rust::main::bb11", outgoing_edge: "rust::main::bb4", id: "92697bcc5bd97066", mir_var: None, llvm_var: Some("BasicBlock: entry { \"basic block\": entry, \"location\":  }"), is_internal: Some(false) }
+Final Abstract State: {"rust::main::bb0": {{"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "rust::main::bb7": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_13)"}: TOP, {"Local(_17)"}: ALLOC, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "llvm::print::node111156604337776::rust::main::bb11": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_13)"}: TOP, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "rust::main::bb12": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: FREED, {"Local(_13)"}: TOP, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "rust::main::bb5": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_13)"}: TOP, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "llvm::print::node111156604381952::rust::main::bb11": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_13)"}: TOP, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "rust::main::bb13": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: FREED, {"Local(_13)"}: TOP, {"Local(_16)"}: ALLOC, {"Local(_17)"}: ALLOC, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "rust::main::bb3": {{"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "rust::main::bb4": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_13)"}: TOP, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "llvm::print::node111156603961024::rust::main::bb11": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_13)"}: TOP, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "llvm::print::node111156604285712::rust::main::bb11": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_13)"}: TOP, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "rust::main::bb11": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_13)"}: TOP, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "llvm::print::node111156604443696::rust::main::bb11": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_13)"}: TOP, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "rust::main::bb1": {{"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "rust::main::bb6": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_13)"}: TOP, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "rust::main::bb2": {{"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "dummyCall::rust::main::bb11::rust::main::bb11": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_13)"}: TOP, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "rust::main::bb15": {{"Local(_1)"}: ALLOC, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "rust::main::bb8": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: FREED, {"Local(_13)"}: TOP, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "rust::main::terminate": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: FREED, {"Local(_13)"}: TOP, {"Local(_16)"}: ALLOC, {"Local(_17)"}: ALLOC, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "rust::main::bb10": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_13)"}: TOP, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "dummyRet::rust::main::bb4::rust::main::bb11": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_13)"}: TOP, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "llvm::print::node111156604286640::rust::main::bb11": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_13)"}: TOP, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "rust::main::bb14": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: FREED, {"Local(_13)"}: TOP, {"Local(_16)"}: ALLOC, {"Local(_17)"}: ALLOC, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "rust::main::bb9": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_13)"}: TOP, {"Local(_16)"}: ALLOC, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}, "llvm::print::node111156603961840::rust::main::bb11": {{"32@rust::main::bb11", "Local(_20)"}: MV, {"Local(_1)", "Local(_10)"}: ALLOC, {"Local(_13)"}: TOP, {"Local(_23)"}: TOP, {"Local(_24)"}: BOXTIMES, {"Local(_25)"}: BOXTIMES, {"Local(_26)"}: BOXTIMES, {"Local(_27)"}: BOXTIMES, {"Local(_28)"}: BOXTIMES, {"Local(_3)"}: BOXTIMES, {"Local(_4)"}: BOXTIMES}}
+Final Taint State: {
+    "llvm::print::node111156604381952::rust::main::bb11": {
+        "Local(_1)": {},
+        "Local(_20)": {
+            "assign",
+        },
+        "Local(_11)": {},
+        "Local(_10)": {},
+        "32@rust::main::bb11": {
+            "assign",
+        },
+    },
+    "llvm::print::node111156604337776::rust::main::bb11": {
+        "Local(_10)": {},
+        "Local(_20)": {
+            "assign",
+        },
+        "Local(_11)": {},
+        "32@rust::main::bb11": {
+            "assign",
+        },
+        "Local(_1)": {},
+    },
+    "rust::main::bb14": {
+        "Local(_20)": {
+            "assign",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_16)": {},
+        "32@rust::main::bb11": {
+            "assign",
+        },
+        "Local(_10)": {
+            "free",
+        },
+        "Local(_11)": {},
+    },
+    "llvm::print::node111156604285712::rust::main::bb11": {
+        "Local(_11)": {},
+        "32@rust::main::bb11": {
+            "assign",
+        },
+        "Local(_1)": {},
+        "Local(_10)": {},
+        "Local(_20)": {
+            "assign",
+        },
+    },
+    "rust::main::bb13": {
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_16)": {},
+        "Local(_10)": {
+            "free",
+        },
+        "Local(_20)": {
+            "assign",
+        },
+        "Local(_11)": {},
+        "32@rust::main::bb11": {
+            "assign",
+        },
+    },
+    "rust::main::bb12": {
+        "Local(_10)": {
+            "free",
+        },
+        "Local(_11)": {},
+        "Local(_20)": {
+            "assign",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "32@rust::main::bb11": {
+            "assign",
+        },
+    },
+    "rust::main::bb3": {
+        "Local(_11)": {},
+        "Local(_10)": {},
+        "Local(_1)": {},
+    },
+    "rust::main::bb6": {
+        "Local(_10)": {},
+        "Local(_11)": {},
+        "32@rust::main::bb11": {
+            "assign",
+        },
+        "Local(_1)": {},
+        "Local(_20)": {
+            "assign",
+        },
+    },
+    "dummyRet::rust::main::bb4::rust::main::bb11": {
+        "Local(_20)": {
+            "assign",
+        },
+        "Local(_10)": {},
+        "Local(_11)": {},
+        "32@rust::main::bb11": {
+            "assign",
+        },
+        "Local(_1)": {},
+    },
+    "llvm::print::node111156603961024::rust::main::bb11": {
+        "Local(_1)": {},
+        "Local(_10)": {},
+        "Local(_20)": {
+            "assign",
+        },
+        "Local(_11)": {},
+        "32@rust::main::bb11": {
+            "assign",
+        },
+    },
+    "rust::main::bb5": {
+        "Local(_10)": {},
+        "Local(_20)": {
+            "assign",
+        },
+        "32@rust::main::bb11": {
+            "assign",
+        },
+        "Local(_11)": {},
+        "Local(_1)": {},
+    },
+    "rust::main::bb9": {
+        "Local(_16)": {},
+        "32@rust::main::bb11": {
+            "assign",
+        },
+        "Local(_11)": {},
+        "Local(_1)": {},
+        "Local(_10)": {},
+        "Local(_20)": {
+            "assign",
+        },
+    },
+    "rust::main::bb2": {
+        "Local(_1)": {},
+        "Local(_10)": {},
+    },
+    "rust::main::bb0": {},
+    "rust::main::terminate": {
+        "Local(_10)": {
+            "free",
+        },
+        "Local(_11)": {},
+        "Local(_16)": {},
+        "Local(_1)": {
+            "free",
+        },
+        "32@rust::main::bb11": {
+            "assign",
+        },
+        "Local(_20)": {
+            "assign",
+        },
+    },
+    "rust::main::bb7": {
+        "Local(_20)": {
+            "assign",
+        },
+        "32@rust::main::bb11": {
+            "assign",
+        },
+        "Local(_11)": {},
+        "Local(_10)": {},
+        "Local(_1)": {},
+    },
+    "rust::main::bb11": {
+        "Local(_20)": {
+            "assign",
+        },
+        "32@rust::main::bb11": {
+            "assign",
+        },
+        "Local(_11)": {},
+        "Local(_10)": {},
+        "Local(_1)": {},
+    },
+    "llvm::print::node111156604443696::rust::main::bb11": {
+        "Local(_11)": {},
+        "Local(_1)": {},
+        "32@rust::main::bb11": {
+            "assign",
+        },
+        "Local(_20)": {
+            "assign",
+        },
+        "Local(_10)": {},
+    },
+    "rust::main::bb15": {},
+    "rust::main::bb4": {
+        "Local(_1)": {},
+        "32@rust::main::bb11": {
+            "assign",
+        },
+        "Local(_10)": {},
+        "Local(_11)": {},
+        "Local(_20)": {
+            "assign",
+        },
+    },
+    "rust::main::bb8": {
+        "Local(_10)": {
+            "free",
+        },
+        "Local(_11)": {},
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_20)": {
+            "assign",
+        },
+        "32@rust::main::bb11": {
+            "assign",
+        },
+    },
+    "dummyCall::rust::main::bb11::rust::main::bb11": {
+        "Local(_11)": {},
+        "Local(_20)": {
+            "assign",
+        },
+        "32@rust::main::bb11": {
+            "assign",
+        },
+        "Local(_10)": {},
+        "Local(_1)": {},
+    },
+    "llvm::print::node111156603961840::rust::main::bb11": {
+        "Local(_20)": {
+            "assign",
+        },
+        "Local(_1)": {},
+        "Local(_11)": {},
+        "32@rust::main::bb11": {
+            "assign",
+        },
+        "Local(_10)": {},
+    },
+    "rust::main::bb10": {
+        "Local(_10)": {},
+        "Local(_11)": {},
+        "Local(_1)": {},
+        "Local(_20)": {
+            "assign",
+        },
+        "32@rust::main::bb11": {
+            "assign",
+        },
+    },
+    "llvm::print::node111156604286640::rust::main::bb11": {
+        "Local(_11)": {},
+        "Local(_20)": {
+            "assign",
+        },
+        "Local(_10)": {},
+        "32@rust::main::bb11": {
+            "assign",
+        },
+        "Local(_1)": {},
+    },
+    "rust::main::bb1": {},
+}
+Tracking variable 'Local(_20)' from block 'llvm::print::node111156604381952::rust::main::bb11' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'llvm::print::node111156604381952::rust::main::bb11' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'llvm::print::node111156604337776::rust::main::bb11' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'llvm::print::node111156604337776::rust::main::bb11' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'rust::main::bb14' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'rust::main::bb14' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'llvm::print::node111156604285712::rust::main::bb11' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'llvm::print::node111156604285712::rust::main::bb11' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'rust::main::bb13' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'rust::main::bb13' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'rust::main::bb12' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'rust::main::bb12' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'dummyRet::rust::main::bb4::rust::main::bb11' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'dummyRet::rust::main::bb4::rust::main::bb11' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'llvm::print::node111156603961024::rust::main::bb11' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'llvm::print::node111156603961024::rust::main::bb11' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'rust::main::bb5' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'rust::main::bb5' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'rust::main::bb9' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'rust::main::bb9' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'rust::main::terminate' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'rust::main::terminate' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'rust::main::bb7' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'rust::main::bb7' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'rust::main::bb11' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'rust::main::bb11' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'llvm::print::node111156604443696::rust::main::bb11' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'llvm::print::node111156604443696::rust::main::bb11' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'rust::main::bb4' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'rust::main::bb4' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'rust::main::bb8' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'rust::main::bb8' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'dummyCall::rust::main::bb11::rust::main::bb11' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'dummyCall::rust::main::bb11::rust::main::bb11' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'llvm::print::node111156603961840::rust::main::bb11' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'llvm::print::node111156603961840::rust::main::bb11' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'rust::main::bb10' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'rust::main::bb10' (markers: {"assign"})
+Tracking variable 'Local(_20)' from block 'llvm::print::node111156604286640::rust::main::bb11' (markers: {"assign"})
+Tracking variable '32@rust::main::bb11' from block 'llvm::print::node111156604286640::rust::main::bb11' (markers: {"assign"})
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/for_memory_leak_ffi/src/main.rs:63:1: 63:2 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb12, unwind continue] }' -> '_1'
+-> DummyRet node 'dummyRet::rust::main::bb4::rust::main::bb11': transferring from LLVM var Some("BasicBlock: entry { \"basic block\": entry, \"location\":  }") to MIR var None
+-> Skip Drop in 'rust::main::bb13' because has an unwind incoming edge
+No tracked variable found per '_1' o 'Local(_1)'
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{32@rust::main::bb11, Local(_20)}": 1}
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

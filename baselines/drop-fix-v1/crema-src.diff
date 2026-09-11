@@ -1,0 +1,240 @@
+diff --git a/crema/src/abstract_domain.rs b/crema/src/abstract_domain.rs
+index 1a148f0..2cacbc2 100644
+--- a/crema/src/abstract_domain.rs
++++ b/crema/src/abstract_domain.rs
+@@ -589,6 +589,51 @@ pub fn full_local_name(var: &str) -> String {
+     }
+ }
+ 
++// ----------------------------------------------------------------------
++// EXPLICIT std::mem::drop HELPERS
++// ----------------------------------------------------------------------
++// Keep the semantics of explicit drop calls in one place so that the
++// abstract transfer function and the final memory-issue detector agree.
++//
++// Rust raw pointers (*mut T / *const T) do not own the pointee. Calling
++// std::mem::drop on a raw pointer only consumes/copies the pointer value;
++// it does NOT invoke the allocator and therefore must not free the pointee.
++//
++// For non-raw explicit drops, CREMA only changes heap state if the dropped
++// variable already belongs to an allocation tracked by the abstract memory.
++fn is_explicit_mem_drop(s: &str) -> bool {
++    s.contains("std::mem::drop::<") || s.contains("core::mem::drop::<")
++}
++
++fn is_raw_pointer_mem_drop(s: &str) -> bool {
++    const PREFIXES: [&str; 2] = ["std::mem::drop::<", "core::mem::drop::<"];
++
++    for prefix in PREFIXES {
++        if let Some(pos) = s.find(prefix) {
++            let ty = s[pos + prefix.len()..].trim_start();
++            return ty.starts_with("*mut ") || ty.starts_with("*const ");
++        }
++    }
++
++    false
++}
++
++// Extract the MIR local passed to an explicit drop call.
++// Owning values are normally moved; Copy values may appear as `copy`.
++fn explicit_drop_arg_from_details(details: &str) -> Option<Name> {
++    let moved = extract_moved_var(details);
++    if !moved.is_empty() {
++        return Some(full_local_name(&moved));
++    }
++
++    let copied = extract_copied_var(details);
++    if !copied.is_empty() {
++        return Some(full_local_name(&copied));
++    }
++
++    None
++}
++
+ pub fn get_node_by_id(icfg: &GlobalICFGOrdered, id: &String) -> GlobalICFGNode {
+     for (node_id, node) in &icfg.ordered_nodes {
+         if node_id == id {
+@@ -953,17 +998,26 @@ pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place
+             CellValue::MV
+ 
+ 
+-    // FREED (drop)
+-    } else if func_call_details.contains("drop")
+-   // || func_call_details.contains("std::mem::drop::<") 
++    // EXPLICIT std::mem::drop
++    } else if is_explicit_mem_drop(func_call_details) {
++        // Dropping a raw pointer is a no-op with respect to the pointee:
++        // *mut T / *const T do not own the allocation.
++        if is_raw_pointer_mem_drop(func_call_details) {
++            CellValue::BOTTOM
++        } else {
++            // For an owning value, free ONLY the tracked allocation that
++            // contains the dropped argument. Never mark the entire abstract
++            // memory as FREED.
++            if let Some(full_dropped) = explicit_drop_arg_from_details(func_call_details) {
++                if new_mem.get_allocation(&full_dropped).is_some() {
++                    new_mem = update_state(new_mem, &full_dropped, CellValue::FREED);
++                }
++            }
+ 
+-     {
+-    // explict drop calls: update entire abstract memory, all values belonign tho the allocation get freed
+-    for alloc in new_mem.state.keys().cloned().collect::<Vec<_>>() {
+-        new_mem.state.insert(alloc, CellValue::FREED);
+-    }
+-    // return FREED as ret val
+-    CellValue::FREED
++            // std::mem::drop returns (), so there is no heap value to assign
++            // to its MIR return place.
++            CellValue::BOTTOM
++        }
+     } else {
+         // default: do nothing
+         let full_ret = full_local_name(return_place);
+@@ -1210,10 +1264,19 @@ pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term:
+ 
+             } else {
+                 // default MIR call handling
+-               let (ret_value, updated_mem) = transfer_call(&new_mem, details, return_place);
++                let explicit_drop = is_explicit_mem_drop(function_called);
++                let raw_pointer_drop = is_raw_pointer_mem_drop(function_called);
++
++                let (ret_value, updated_mem) = transfer_call(&new_mem, details, return_place);
+                 new_mem = updated_mem;
+                 let full_ret_place = full_local_name(return_place);
+-                new_mem = update_state(new_mem, &full_ret_place, ret_value);
++
++                // std::mem::drop returns (), and transfer_call already applies
++                // the heap effect to the dropped argument. Do not create/update
++                // an abstract allocation for the call's return place.
++                if !explicit_drop {
++                    new_mem = update_state(new_mem, &full_ret_place, ret_value);
++                }
+ 
+                 // UPDATE TAINT
+                 if function_called.contains("NOT_HANDLED") {
+@@ -1310,10 +1373,23 @@ pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term:
+                         let moved_key = full_local_name(&moved_var);
+                         taint.remove(&moved_key);
+                     }
+-                } else if function_called.contains("std::mem::drop::") {
+-                    taint.entry(full_ret_place.clone())
+-                        .or_insert_with(HashSet::new)
+-                        .insert("assign".to_string());
++                } else if explicit_drop {
++                    // Keep taint semantics aligned with the abstract memory:
++                    // dropping a raw pointer does not free its pointee.
++                    if !raw_pointer_drop {
++                        if let Some(first_arg) = arguments.get(0) {
++                            let dropped_name = extract_arg_name(&first_arg.arg);
++                            let full_dropped = full_local_name(&dropped_name);
++
++                            taint.entry(full_dropped.clone())
++                                .or_insert_with(HashSet::new)
++                                .insert("free".to_string());
++
++                            if let Some(set) = taint.get_mut(&full_dropped) {
++                                set.remove("assign");
++                            }
++                        }
++                    }
+                 }
+             }
+         }
+@@ -1958,39 +2034,54 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
+                         println!("Aliased via from_raw: '{}' -> '{}'", src, dst);
+                     }
+ 
+-                    // EXPLICIT DROP FUNCTION CALL
+-                    if function_called.contains("std::mem::drop::") {
++                    // EXPLICIT std::mem::drop FUNCTION CALL
++                    // Use exactly the same semantics as the transfer function:
++                    //   drop(*mut T / *const T) -> no heap free
++                    //   drop(tracked owning value) -> one Drop free
++                    if is_explicit_mem_drop(function_called)
++                        && !is_raw_pointer_mem_drop(function_called)
++                    {
+                         if let Some(arg_struct) = arguments.get(0) {
+-                            let raw = &arg_struct.arg; // e.g. "Local(_4) [mutable]"
+-                            let base = raw
+-                                .split_whitespace()   // take first part, e.g. "Local(_4)"
+-                                .next()
+-                                .unwrap();
+-                            let var_dropped = normalize_name(&base.to_string());
+-                           // println!("Found drop pattern in Call terminator (da arg): '{}' -> '{}'", details, var_dropped);
+-                            if let Some(info) = var_info.get_mut(&var_dropped) {
+-                                if info.drop_free == 0 {
+-                                    info.drop_free = 1;
+-                                    info.free_span = Some((source_info.clone(), FreeKind::Drop));
++                            let dropped_name = extract_arg_name(&arg_struct.arg);
++                            let var_dropped = full_local_name(&dropped_name);
++
++                            // Count the drop only when this value participates in
++                            // CREMA's tracked heap state (or is already tracked by
++                            // the detector). This avoids manufacturing frees for
++                            // unrelated scalar/non-heap values.
++                            let tracked_heap_value =
++                                abs_state.get_allocation(&var_dropped).is_some()
++                                || var_info.contains_key(&var_dropped);
++
++                            if tracked_heap_value {
++                                if let Some(info) = var_info.get_mut(&var_dropped) {
++                                    if info.drop_free == 0 {
++                                        info.drop_free = 1;
++                                        info.free_span =
++                                            Some((source_info.clone(), FreeKind::Drop));
++                                    } else {
++                                        info.drop_free += 1;
++                                    }
+                                 } else {
+-                                    info.drop_free += 1;
++                                    var_info.insert(
++                                        var_dropped.clone(),
++                                        VarInfo {
++                                            llvm_free: 0,
++                                            drop_free: 1,
++                                            used: false,
++                                            use_span: None,
++                                            free_span: Some((
++                                                source_info.clone(),
++                                                FreeKind::Drop,
++                                            )),
++                                        },
++                                    );
+                                 }
+-                              //  println!("Variable '{}' new drop free count: {}", var_dropped, info.drop_free);
+-                            } else {
+-                              //  println!("No tracked variable found per '{}' -- inserisco nuovo tracking", var_dropped);
+-                                var_info.insert(
+-                                    var_dropped.clone(),
+-                                    VarInfo {
+-                                        llvm_free: 0,
+-                                        drop_free: 1,
+-                                        used: false,
+-                                        use_span: None,
+-                                        free_span: Some((source_info.clone(), FreeKind::Drop)),
+-                                    },
+-                                );
+                             }
+                         }
+                     }
++
++
+                 }
+             },
+             GlobalICFGNode::DummyCall(dummy_call) => {
+diff --git a/crema/src/main.rs b/crema/src/main.rs
+index 0ab64b2..94cc56c 100644
+--- a/crema/src/main.rs
++++ b/crema/src/main.rs
+@@ -115,8 +115,8 @@ fn main() {
+         }
+ 
+     let (abstract_state, taint_state) = fixed_point_analysis(&global_icfg);
+-   // println!("Final Abstract State: {:#?}", abstract_state);
+-   // println!("Final Taint State: {:#?}", taint_state);
++    println!("Final Abstract State: {:#?}", abstract_state);
++    println!("Final Taint State: {:#?}", taint_state);
+ 
+     detect_mem_issues(&global_icfg, &taint_state, &abstract_state);
+ }

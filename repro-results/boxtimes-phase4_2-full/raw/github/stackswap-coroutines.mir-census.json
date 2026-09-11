@@ -1,0 +1,249 @@
+{
+  "call_counts": {
+    "<dyn StackBufferAllocator as StackBufferAllocator>::alloc": 1,
+    "<dyn StackBufferAllocator as StackBufferAllocator>::free": 2,
+    "<std::boxed::Box<dyn for<'a> std::ops::FnOnce(&'a mut Stack)> as std::ops::FnOnce<(&mut Stack,)>>::call_once": 1,
+    "<std::iter::Map<std::slice::Iter<'_, Stack>, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:116:45: 116:52}> as std::iter::Iterator>::max": 1,
+    "<std::slice::Iter<'_, Stack> as std::iter::Iterator>::any::<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:345:26: 345:29}>": 1,
+    "<std::slice::Iter<'_, Stack> as std::iter::Iterator>::any::<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:96:22: 96:25}>": 1,
+    "<std::slice::Iter<'_, Stack> as std::iter::Iterator>::map::<u64, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:116:45: 116:52}>": 1,
+    "<std::slice::Iter<'_, Stack> as std::iter::Iterator>::position::<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:84:66: 84:69}>": 1,
+    "<std::vec::Vec<Stack> as std::ops::Deref>::deref": 4,
+    "<std::vec::Vec<Stack> as std::ops::Index<usize>>::index": 1,
+    "<std::vec::Vec<Stack> as std::ops::IndexMut<usize>>::index_mut": 4,
+    "Dispatcher::next": 1,
+    "Dispatcher::next_id": 1,
+    "Dispatcher::take_retrieved_value": 2,
+    "Stack::block": 2,
+    "Stack::cont": 1,
+    "Stack::launch": 1,
+    "Stack::new": 1,
+    "Stack::stack_in": 1,
+    "Stack::stack_out": 1,
+    "core::fmt::rt::Argument::<'_>::new_debug::<std::option::Option<u64>>": 1,
+    "core::fmt::rt::Argument::<'_>::new_display::<u128>": 1,
+    "core::fmt::rt::Argument::<'_>::new_display::<u64>": 7,
+    "core::fmt::rt::Argument::<'_>::new_display::<usize>": 1,
+    "core::fmt::rt::Argument::<'_>::new_pointer::<*mut std::ffi::c_void>": 3,
+    "core::panicking::assert_failed::<u64, u64>": 1,
+    "core::slice::<impl [Stack]>::iter": 4,
+    "core::slice::<impl [u8]>::as_mut_ptr": 1,
+    "setjmp::longjmp": 4,
+    "setjmp::setjmp": 2,
+    "std::alloc::Layout::from_size_align": 2,
+    "std::alloc::alloc_zeroed": 1,
+    "std::alloc::dealloc": 1,
+    "std::alloc::handle_alloc_error": 1,
+    "std::boxed::Box::<F>::new": 1,
+    "std::cmp::max::<usize>": 1,
+    "std::collections::HashMap::<u64, u128>::insert": 1,
+    "std::collections::HashMap::<u64, u128>::new": 1,
+    "std::collections::HashMap::<u64, u128>::remove::<u64>": 1,
+    "std::fmt::Arguments::<'_>::new_const::<1>": 14,
+    "std::fmt::Arguments::<'_>::new_v1::<1, 1>": 2,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 5,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 2>": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<3, 2>": 2,
+    "std::fmt::Formatter::<'_>::debug_struct_field2_finish": 1,
+    "std::intrinsics::copy_nonoverlapping::<std::ffi::c_void>": 2,
+    "std::io::_eprint": 2,
+    "std::io::_print": 5,
+    "std::mem::MaybeUninit::<[setjmp::sys::__jmp_buf_tag; 1]>::as_mut_ptr": 5,
+    "std::mem::MaybeUninit::<[setjmp::sys::__jmp_buf_tag; 1]>::uninit": 3,
+    "std::option::Option::<&StackBuffer>::map_or::<bool, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:195:27: 195:32}>": 1,
+    "std::option::Option::<&StackBuffer>::unwrap": 1,
+    "std::option::Option::<*mut std::ffi::c_void>::expect": 2,
+    "std::option::Option::<StackBuffer>::as_ref": 2,
+    "std::option::Option::<StackBuffer>::take": 2,
+    "std::option::Option::<std::boxed::Box<dyn for<'a> std::ops::FnOnce(&'a mut Stack)>>::take": 1,
+    "std::option::Option::<u128>::take": 1,
+    "std::option::Option::<u64>::is_none": 1,
+    "std::option::Option::<u64>::unwrap": 1,
+    "std::option::Option::<u64>::unwrap_or": 1,
+    "std::ptr::mut_ptr::<impl *mut Dispatcher>::is_null": 5,
+    "std::ptr::mut_ptr::<impl *mut [setjmp::sys::__jmp_buf_tag; 1]>::addr": 1,
+    "std::ptr::mut_ptr::<impl *mut [setjmp::sys::__jmp_buf_tag; 1]>::is_null": 2,
+    "std::ptr::mut_ptr::<impl *mut std::ffi::c_void>::addr": 9,
+    "std::ptr::mut_ptr::<impl *mut std::ffi::c_void>::cast::<std::ffi::c_void>": 1,
+    "std::ptr::mut_ptr::<impl *mut u8>::is_null": 1,
+    "std::ptr::null_mut::<[setjmp::sys::__jmp_buf_tag; 1]>": 1,
+    "std::ptr::null_mut::<std::ffi::c_void>": 1,
+    "std::result::Result::<std::alloc::Layout, std::alloc::LayoutError>::expect": 2,
+    "std::rt::panic_fmt": 16,
+    "std::sync::atomic::AtomicUsize::fetch_add": 1,
+    "std::sync::atomic::AtomicUsize::fetch_sub": 1,
+    "std::sync::atomic::AtomicUsize::load": 1,
+    "std::sync::atomic::AtomicUsize::new": 1,
+    "std::vec::Vec::<Stack>::is_empty": 2,
+    "std::vec::Vec::<Stack>::len": 2,
+    "std::vec::Vec::<Stack>::new": 1,
+    "std::vec::Vec::<Stack>::push": 1,
+    "std::vec::Vec::<Stack>::remove": 1
+  },
+  "call_total": 169,
+  "memory_api_counts": {
+    "alloc": 5,
+    "alloc_zeroed": 1,
+    "borrowed_raw_pointer_view": 1,
+    "box_new": 1,
+    "dealloc": 1
+  },
+  "memory_api_examples": {
+    "alloc": [
+      "std::alloc::Layout::from_size_align",
+      "std::result::Result::<std::alloc::Layout, std::alloc::LayoutError>::expect",
+      "<dyn StackBufferAllocator as StackBufferAllocator>::alloc"
+    ],
+    "alloc_zeroed": [
+      "std::alloc::alloc_zeroed"
+    ],
+    "borrowed_raw_pointer_view": [
+      "core::slice::<impl [u8]>::as_mut_ptr"
+    ],
+    "box_new": [
+      "std::boxed::Box::<F>::new"
+    ],
+    "dealloc": [
+      "std::alloc::dealloc"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "(move _4, move _5)",
+      "[move _18]",
+      "[move _25, move _27]",
+      "[move _44]",
+      "[move _51, move _53]",
+      "[move _61]",
+      "(copy _1,)",
+      "[move _8]"
+    ],
+    "arithmetic_binary": [
+      "Sub(copy _32, const 1_usize)",
+      "BitAnd(copy _31, copy _33)",
+      "Sub(copy _26, const 1_usize)",
+      "BitAnd(copy _25, copy _27)",
+      "BitAnd(move _13, move _16)",
+      "Rem(move _6, move _9)",
+      "BitAnd(move _17, move _19)",
+      "Rem(move _51, const 16_usize)"
+    ],
+    "checked_binary_unhandled": [
+      "AddWithOverflow(copy _2, const 1_u64)",
+      "AddWithOverflow(copy _14, const 15_usize)",
+      "AddWithOverflow(copy _7, const 1_usize)",
+      "SubWithOverflow(copy _8, const Stack::block::STACK_PADDING)",
+      "SubWithOverflow(copy _25, copy _26)",
+      "AddWithOverflow(copy _3, const 15_usize)",
+      "SubWithOverflow(copy _9, copy _10)",
+      "SubWithOverflow(copy _11, copy _12)"
+    ],
+    "comparison": [
+      "Eq(move _9, move _10)",
+      "Eq(move _4, move _5)",
+      "Eq(move _3, move _4)",
+      "Eq(copy _34, const 0_usize)",
+      "Eq(copy _28, const 0_usize)",
+      "Eq(copy _9, const 0_usize)",
+      "Eq(move _54, copy _4)",
+      "Ge(copy _8, const Stack::block::STACK_PADDING)"
+    ],
+    "direct_use": [
+      "move _55",
+      "move _72",
+      "move _80",
+      "move _3",
+      "move _14",
+      "move _52",
+      "move _6",
+      "move _20"
+    ],
+    "pointer_cast": [
+      "move _5 as *mut std::ffi::c_void (PtrToPtr)",
+      "copy _22 as *const () (PtrToPtr)",
+      "copy _23 as *const () (PtrToPtr)",
+      "move _22 as *mut u8 (PtrToPtr)",
+      "copy _16 as *mut std::ffi::c_void (PointerWithExposedProvenance)",
+      "copy _69 as *const () (PtrToPtr)",
+      "copy _70 as *const () (PtrToPtr)",
+      "copy _12 as *mut std::ffi::c_void (PtrToPtr)"
+    ],
+    "ref": [
+      "&((*_1).0: u64)",
+      "&_2",
+      "&_17",
+      "&((*_1).9: std::option::Option<u64>)",
+      "&_24",
+      "&mut (*_81)",
+      "&_38",
+      "&_43"
+    ],
+    "repeat_unhandled": [
+      "[const 0_u8; 512]"
+    ],
+    "scalar_cast": [
+      "copy _30 as usize (Transmute)",
+      "copy _24 as usize (Transmute)",
+      "copy _77 as usize (Transmute)",
+      "copy _71 as usize (Transmute)"
+    ],
+    "scalar_const": [
+      "const false",
+      "const true",
+      "const 4096_usize",
+      "const 0_usize"
+    ],
+    "scalar_nullary": [
+      "AlignOf(Dispatcher)"
+    ],
+    "unary": [
+      "Not(move _6)",
+      "Not(const 15_usize)"
+    ],
+    "unknown_unhandled": [
+      "copy (_3.0: &u64)",
+      "copy (_3.1: &u64)",
+      "copy (*_6)",
+      "copy (*_7)",
+      "core::panicking::AssertKind::Ne",
+      "const Stack::get_yielded::promoted[0]",
+      "std::option::Option::<std::fmt::Arguments<'_>>::Some(move _14)",
+      "const Stack::get_yielded::promoted[6]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 13,
+    "arithmetic_binary": 13,
+    "checked_binary_unhandled": 10,
+    "comparison": 20,
+    "direct_use": 15,
+    "pointer_cast": 10,
+    "ref": 77,
+    "repeat_unhandled": 1,
+    "scalar_cast": 4,
+    "scalar_const": 11,
+    "scalar_nullary": 4,
+    "unary": 5,
+    "unknown_unhandled": 177
+  },
+  "rvalue_total": 360,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 13,
+    "checked_binary_unhandled": 10,
+    "repeat_unhandled": 1,
+    "unknown_unhandled": 177
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "stackswap-coroutines",
+  "terminator_kind_counts": {
+    "Assert": 16,
+    "Call": 169,
+    "Drop": 7,
+    "Goto": 17,
+    "Return": 25,
+    "SwitchInt": 44,
+    "Unreachable": 8,
+    "UnwindResume": 3
+  }
+}

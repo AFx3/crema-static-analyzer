@@ -1,0 +1,47 @@
+=== clean_cstring_no_errors_only_rust ===
+🤖💬 NO Issues detected: ✅
+
+=== cstringcargo_enum_df_only_rust ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstringcargo_enum_df_only_rust/src/main.rs:33:50: 33:51 (#0)
+
+=== struct_point_df_only_rust ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/struct_point_df_only_rust/src/main.rs:44:43: 44:44 (#0)
+
+=== clean_into_from_raw ===
+🤖💬 NO Issues detected: ✅
+
+=== cstring_df_only_rust ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstring_df_only_rust/src/main.rs:21:9: 21:25 (#0)
+
+=== struct_point_mem_leak ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_5)}": 1}
+
+=== clean_struct_point_mem_leak_into_raw_no_errors ===
+🤖💬 NO Issues detected: ✅
+
+=== explicit_drop_df_only_rust ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/explicit_drop_df_only_rust/src/main.rs:7:9: 7:33 (#0)
+
+=== uaf_read_ptr ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/uaf_read_ptr/src/main.rs:11:38: 11:41 (#0)
+
+=== closure_df ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/closure_df/src/main.rs:35:9: 35:33 (#0)
+
+=== std_mem_forget_mem_leak_rust ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_2)}": 1}
+

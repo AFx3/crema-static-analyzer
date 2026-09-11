@@ -1,0 +1,5 @@
+{
+  "ffi_functions": [
+    "c_alloc_string"
+  ]
+}

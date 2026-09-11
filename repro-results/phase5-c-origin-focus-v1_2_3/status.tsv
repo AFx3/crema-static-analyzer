@@ -1,0 +1,17 @@
+key	target	exit_code
+c_calloc_leak_ml	/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_calloc_leak_ml	0
+c_malloc_c_double_free_df	/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_c_double_free_df	0
+c_malloc_c_free_clean	/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_c_free_clean	0
+c_malloc_c_free_then_rust_use_uaf	/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_c_free_then_rust_use_uaf	0
+c_malloc_cstr_borrow_c_free_clean	/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_cstr_borrow_c_free_clean	0
+c_malloc_leak_ml	/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_leak_ml	0
+c_malloc_rust_box_from_raw_ub	/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_box_from_raw_ub	0
+c_malloc_rust_cstring_from_raw_ub	/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_cstring_from_raw_ub	0
+c_malloc_rust_double_free_df	/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_double_free_df	0
+c_malloc_rust_free_clean	/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_free_clean	0
+c_malloc_rust_free_then_use_uaf	/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_free_then_use_uaf	0
+c_malloc_rust_std_dealloc_ub	/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_std_dealloc_ub	0
+c_malloc_rust_string_from_raw_parts_ub	/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_string_from_raw_parts_ub	0
+c_malloc_rust_vec_from_raw_parts_ub	/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_vec_from_raw_parts_ub	0
+c_static_cstr_borrow_clean	/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_static_cstr_borrow_clean	0
+rust_box_direct_c_free_ub	/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/rust_box_direct_c_free_ub	0

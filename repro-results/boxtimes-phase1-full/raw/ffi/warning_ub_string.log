@@ -1,0 +1,914 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2015:50
+     |
+2015 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: variant `BOXTIMES` is never constructed
+  --> src/abstract_domain.rs:82:5
+   |
+78 | pub enum CellValue {
+   |          --------- variant in this enum
+...
+82 |     BOXTIMES,
+   |     ^^^^^^^^
+   |
+   = note: `CellValue` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:481:8
+    |
+481 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 6 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/warning_ub_string`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/warning_ub_string
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/warning_ub_string /home/af/Documenti/a-phd/crema`
+LLVM IR compilation finished with status: ExitStatus(unix_wait_status(0))
+
+*********General Stats***************
+################ (program : ffi.pre.bc)###############
+AddrsNum            14
+BBWith2Succ         3
+BBWith3Succ         0
+CallsNum            0
+ConstArrayObj       0
+ConstStructObj      0
+ConstantObj         0
+CopysNum            5
+FIObjNum            0
+FSObjNum            14
+FunctionObjs        6
+GepsNum             0
+GlobalObjs          0
+HeapObjs            1
+IndCallSites        0
+LoadsNum            10
+MaxStructSize       0
+NonPtrObj           7
+ReturnsNum          0
+StackObjs           7
+StoresNum           7
+TotalCallSite       5
+TotalFieldObjects   0
+TotalObjects        15
+TotalPTASVFStmts    35
+TotalPointers       63
+TotalSVFStmts       45
+VarArrayObj         0
+VarStructObj        0
+----------------Time and memory stats--------------------
+LLVMIRTime          0.007
+SVFIRTime           0
+SymbolTableTime     0
+#######################################################
+
+*********PTACallGraph Stats (Andersen analysis)***************
+################ (program : ffi.pre.bc)###############
+----------------Numbers stats----------------------------
+CalRetPairInCycle   0
+MaxNodeInCycle      0
+NodeInCycle         0
+TotalCycle          0
+TotalEdge           5
+TotalNode           6
+#######################################################
+
+*********Andersen Pointer Analysis Stats***************
+################ (program : ffi.pre.bc)###############
+----------------Time and memory stats--------------------
+AvgIn/OutAddrEdge   0.276596
+AvgIn/OutCopyEdge   0.468085
+AvgIn/OutEdge       1.10638
+AvgIn/OutLoadEdge   0.212766
+AvgIn/OutStoreEdge  0.148936
+AvgPtsSetSize       0.151163
+AvgTopLvlPtsSize    0.464286
+CollapseTime        0
+CopyGepTime         0
+LoadStoreTime       0
+MemoryUsageVmrss    248
+MemoryUsageVmsize   0
+SCCDetectTime       0
+SCCMergeTime        0
+TotalTime           0
+UpdateCGTime        0
+----------------Numbers stats----------------------------
+AddrProcessed       13
+CopyProcessed       0
+DummyFieldPtrs      0
+FieldObjs           0
+GepProcessed        0
+IndCallSites        0
+IndEdgeSolved       0
+LoadProcessed       10
+LocalVarInRecur     0
+MaxInAddrEdge       1
+MaxInCopyEdge       1
+MaxInLoadEdge       1
+MaxInStoreEdge      1
+MaxNodesInSCC       0
+MaxOutAddrEdge      1
+MaxOutCopyEdge      2
+MaxOutLoadEdge      2
+MaxOutStoreEdge     1
+MaxPtsSetSize       1
+MemObjects          15
+NodesInCycles       0
+NullPointer         0
+NumOfAddrs          13
+NumOfCGEdge         39
+NumOfCGNode         50
+NumOfCopys          22
+NumOfFieldExpand    0
+NumOfGeps           0
+NumOfLoads          10
+NumOfSCCDetect      2
+NumOfSFRs           0
+NumOfStores         7
+NumOfValidNode      47
+NumOfValidObjNode   13
+Pointers            63
+PointsToBlkPtr      0
+PointsToConstPtr    0
+SolveIterations     2
+StoreProcessed      7
+TotalCycleNum       0
+TotalObjects        15
+TotalPWCCycleNum    0
+TotalPointers       63
+#######################################################
+
+****Persistent Points-To Cache Statistics: Andersen's analysis bitvector****
+################ (program : ffi.pre.bc)###############
+UniquePointsToSets       14
+TotalUnions              13
+PropertyUnions           13
+UniqueUnions             0
+LookupUnions             0
+PreemptiveUnions         0
+TotalComplements         100
+PropertyComplements      100
+UniqueComplements        0
+LookupComplements        0
+PreemptiveComplements    0
+TotalIntersections       17
+PropertyIntersections    17
+UniqueIntersections      0
+LookupIntersections      0
+PreemptiveIntersections  0
+#######################################################
+
+*********PTACallGraph Stats (Andersen analysis)***************
+################ (program : ffi.pre.bc)###############
+----------------Numbers stats----------------------------
+CalRetPairInCycle   0
+MaxNodeInCycle      0
+NodeInCycle         0
+TotalCycle          0
+TotalEdge           5
+TotalNode           6
+#######################################################
+
+*********Andersen Pointer Analysis Stats***************
+################ (program : ffi.pre.bc)###############
+----------------Time and memory stats--------------------
+AvgIn/OutAddrEdge   0.276596
+AvgIn/OutCopyEdge   0.468085
+AvgIn/OutEdge       1.10638
+AvgIn/OutLoadEdge   0.212766
+AvgIn/OutStoreEdge  0.148936
+AvgPtsSetSize       0.151163
+AvgTopLvlPtsSize    0.464286
+CollapseTime        0
+CopyGepTime         0
+LoadStoreTime       0
+MemoryUsageVmrss    248
+MemoryUsageVmsize   0
+SCCDetectTime       0
+SCCMergeTime        0
+TotalTime           0
+UpdateCGTime        0
+----------------Numbers stats----------------------------
+AddrProcessed       13
+CopyProcessed       0
+DummyFieldPtrs      0
+FieldObjs           0
+GepProcessed        0
+IndCallSites        0
+IndEdgeSolved       0
+LoadProcessed       10
+LocalVarInRecur     0
+MaxInAddrEdge       1
+MaxInCopyEdge       1
+MaxInLoadEdge       1
+MaxInStoreEdge      1
+MaxNodesInSCC       0
+MaxOutAddrEdge      1
+MaxOutCopyEdge      2
+MaxOutLoadEdge      2
+MaxOutStoreEdge     1
+MaxPtsSetSize       1
+MemObjects          15
+NodesInCycles       0
+NullPointer         0
+NumOfAddrs          13
+NumOfCGEdge         39
+NumOfCGNode         50
+NumOfCopys          22
+NumOfFieldExpand    0
+NumOfGeps           0
+NumOfLoads          10
+NumOfSCCDetect      2
+NumOfSFRs           0
+NumOfStores         7
+NumOfValidNode      47
+NumOfValidObjNode   13
+Pointers            63
+PointsToBlkPtr      0
+PointsToConstPtr    0
+SolveIterations     2
+StoreProcessed      7
+TotalCycleNum       0
+TotalObjects        15
+TotalPWCCycleNum    0
+TotalPointers       63
+#######################################################
+Processing Node: 0x5ad8135c1130
+Node Info: IntraICFGNode11 {fun: free_bool}
+AddrStmt: [Var8 <-- Var9]	
+ValVar ID: 8
+   %ptr.addr = alloca ptr, align 8 
+Function associated with node: 0x5ad8135e1440
+Basic block associated with node: 0x5ad8135f7410
+Associated SVF Statements:
+  - 0x5ad8135a2ec0
+Processing Node: 0x5ad813577bf0
+Node Info: IntraICFGNode12 {fun: free_bool}
+StoreStmt: [Var8 <-- Var7]	
+ValVar ID: 11
+   store ptr %ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x5ad8135e1440
+Basic block associated with node: 0x5ad8135f7410
+Associated SVF Statements:
+  - 0x5ad81356d770
+Processing Node: 0x5ad8135f6bc0
+Node Info: IntraICFGNode13 {fun: free_bool}
+LoadStmt: [Var12 <-- Var8]	
+ValVar ID: 12
+   %0 = load ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x5ad8135e1440
+Basic block associated with node: 0x5ad8135f7410
+Associated SVF Statements:
+  - 0x5ad81356cd50
+Processing Node: 0x5ad8135f7d70
+Node Info: IntraICFGNode14 {fun: free_bool}
+CmpStmt: [Var13 <-- (Var12 predicate33 Var0)]	
+ValVar ID: 13
+   %cmp = icmp ne ptr %0, null 
+Function associated with node: 0x5ad8135e1440
+Basic block associated with node: 0x5ad8135f7410
+Associated SVF Statements:
+  - 0x5ad8135bada0
+Processing Node: 0x5ad8135f7800
+Node Info: IntraICFGNode15 {fun: free_bool}
+BranchStmt: [Condition Var13]
+Successor 0 ICFGNode16   Successor 1 ICFGNode17   
+ValVar ID: 14
+   br i1 %cmp, label %if.then, label %if.end 
+Function associated with node: 0x5ad8135e1440
+Basic block associated with node: 0x5ad8135f7410
+Associated SVF Statements:
+  - 0x5ad8135c1810
+Processing Node: 0x5ad8135d2630
+Node Info: IntraICFGNode16 {fun: free_bool}
+LoadStmt: [Var15 <-- Var8]	
+ValVar ID: 15
+   %1 = load ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x5ad8135e1440
+Basic block associated with node: 0x5ad813582af0
+Associated SVF Statements:
+  - 0x5ad8135c1b60
+Processing Node: 0x5ad8135d2430
+Node Info: IntraICFGNode17 {fun: free_bool}
+   ret void 
+Function associated with node: 0x5ad8135e1440
+Basic block associated with node: 0x5ad813582d80
+Processing Node: 0x5ad8135f5b90
+Node Info: CallICFGNode18 {fun: free_bool}
+   call void @free(ptr noundef %1) #2 CallICFGNode: 
+Function associated with node: 0x5ad8135e1440
+Basic block associated with node: 0x5ad813582af0
+Processing Node: 0x5ad813577ea0
+Node Info: FunExitICFGNode2 {fun: free_bool}
+Function associated with node: 0x5ad8135e1440
+Basic block associated with node: 0x5ad813582d80
+Processing Node: 0x5ad8135805d0
+Node Info: RetICFGNode19 {fun: free_bool}
+   call void @free(ptr noundef %1) #2 RetICFGNode: 
+Function associated with node: 0x5ad8135e1440
+Basic block associated with node: 0x5ad813582af0
+Processing Node: 0x5ad813580060
+Node Info: IntraICFGNode20 {fun: free_bool}
+BranchStmt: [ Unconditional branch]
+Successor 0 ICFGNode17   
+ValVar ID: 19
+   br label %if.end 
+Function associated with node: 0x5ad8135e1440
+Basic block associated with node: 0x5ad813582af0
+Associated SVF Statements:
+  - 0x5ad8135bd5c0
+Writing 'callgraph_initial.dot.dot'...DOT file generated: ./output/free_bool_view_icfg_output_SVF.dot
+DOT file generated: ./output/free_bool_node_and_edges_only_icfg_SVF.dot
+ICFG Traversal Complete for function: free_bool.
+Processing Node: 0x5ad8135bbaf0
+Node Info: IntraICFGNode21 {fun: free_str}
+AddrStmt: [Var28 <-- Var29]	
+ValVar ID: 28
+   %str.addr = alloca ptr, align 8 
+Function associated with node: 0x5ad8135bb2f0
+Basic block associated with node: 0x5ad813597850
+Associated SVF Statements:
+  - 0x5ad8135f2b70
+Processing Node: 0x5ad813595ca0
+Node Info: IntraICFGNode22 {fun: free_str}
+StoreStmt: [Var28 <-- Var27]	
+ValVar ID: 30
+   store ptr %str, ptr %str.addr, align 8 
+Function associated with node: 0x5ad8135bb2f0
+Basic block associated with node: 0x5ad813597850
+Associated SVF Statements:
+  - 0x5ad8135bf350
+Processing Node: 0x5ad813567520
+Node Info: IntraICFGNode23 {fun: free_str}
+LoadStmt: [Var31 <-- Var28]	
+ValVar ID: 31
+   %0 = load ptr, ptr %str.addr, align 8 
+Function associated with node: 0x5ad8135bb2f0
+Basic block associated with node: 0x5ad813597850
+Associated SVF Statements:
+  - 0x5ad8135bf640
+Processing Node: 0x5ad8135b3a20
+Node Info: IntraICFGNode24 {fun: free_str}
+CmpStmt: [Var32 <-- (Var31 predicate33 Var0)]	
+ValVar ID: 32
+   %cmp = icmp ne ptr %0, null 
+Function associated with node: 0x5ad8135bb2f0
+Basic block associated with node: 0x5ad813597850
+Associated SVF Statements:
+  - 0x5ad8135777f0
+Processing Node: 0x5ad8135c2a40
+Node Info: IntraICFGNode25 {fun: free_str}
+BranchStmt: [Condition Var32]
+Successor 0 ICFGNode26   Successor 1 ICFGNode27   
+ValVar ID: 33
+   br i1 %cmp, label %if.then, label %if.end 
+Function associated with node: 0x5ad8135bb2f0
+Basic block associated with node: 0x5ad813597850
+Associated SVF Statements:
+  - 0x5ad8135f45f0
+Processing Node: 0x5ad8135a4160
+Node Info: IntraICFGNode26 {fun: free_str}
+LoadStmt: [Var34 <-- Var28]	
+ValVar ID: 34
+   %1 = load ptr, ptr %str.addr, align 8 
+Function associated with node: 0x5ad8135bb2f0
+Basic block associated with node: 0x5ad813561ed0
+Associated SVF Statements:
+  - 0x5ad8135f4970
+Processing Node: 0x5ad813583270
+Node Info: IntraICFGNode27 {fun: free_str}
+   ret void 
+Function associated with node: 0x5ad8135bb2f0
+Basic block associated with node: 0x5ad813562160
+Processing Node: 0x5ad8135bb1b0
+Node Info: CallICFGNode28 {fun: free_str}
+   call void @free(ptr noundef %1) #2 CallICFGNode: 
+Function associated with node: 0x5ad8135bb2f0
+Basic block associated with node: 0x5ad813561ed0
+Processing Node: 0x5ad81358ee50
+Node Info: FunExitICFGNode4 {fun: free_str}
+Function associated with node: 0x5ad8135bb2f0
+Basic block associated with node: 0x5ad813562160
+Processing Node: 0x5ad8135c44c0
+Node Info: RetICFGNode29 {fun: free_str}
+   call void @free(ptr noundef %1) #2 RetICFGNode: 
+Function associated with node: 0x5ad8135bb2f0
+Basic block associated with node: 0x5ad813561ed0
+Processing Node: 0x5ad81356dca0
+Node Info: IntraICFGNode30 {fun: free_str}
+BranchStmt: [ Unconditional branch]
+Successor 0 ICFGNode27   
+ValVar ID: 36
+   br label %if.end 
+Function associated with node: 0x5ad8135bb2f0
+Basic block associated with node: 0x5ad813561ed0
+Associated SVF Statements:
+  - 0x5ad8135971c0
+DOT file generated: ./output/free_str_view_icfg_output_SVF.dot
+DOT file generated: ./output/free_str_node_and_edges_only_icfg_SVF.dot
+ICFG Traversal Complete for function: free_str.
+Processing Node: 0x5ad81357fad0
+Node Info: IntraICFGNode31 {fun: cast_and_free_pointer}
+AddrStmt: [Var43 <-- Var44]	
+ValVar ID: 43
+   %ptr.addr = alloca ptr, align 8 
+Function associated with node: 0x5ad813560b30
+Basic block associated with node: 0x5ad8135f5dd0
+Associated SVF Statements:
+  - 0x5ad8135ebbd0
+Processing Node: 0x5ad813596cf0
+Node Info: IntraICFGNode32 {fun: cast_and_free_pointer}
+AddrStmt: [Var45 <-- Var46]	
+ValVar ID: 45
+   %int_ptr = alloca ptr, align 8 
+Function associated with node: 0x5ad813560b30
+Basic block associated with node: 0x5ad8135f5dd0
+Associated SVF Statements:
+  - 0x5ad8135e8790
+Processing Node: 0x5ad813562bb0
+Node Info: IntraICFGNode33 {fun: cast_and_free_pointer}
+StoreStmt: [Var43 <-- Var42]	
+ValVar ID: 47
+   store ptr %ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x5ad813560b30
+Basic block associated with node: 0x5ad8135f5dd0
+Associated SVF Statements:
+  - 0x5ad8135961d0
+Processing Node: 0x5ad813593330
+Node Info: IntraICFGNode34 {fun: cast_and_free_pointer}
+LoadStmt: [Var48 <-- Var43]	
+ValVar ID: 48
+   %0 = load ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x5ad813560b30
+Basic block associated with node: 0x5ad8135f5dd0
+Associated SVF Statements:
+  - 0x5ad8135bc8e0
+Processing Node: 0x5ad8135ebe60
+Node Info: IntraICFGNode35 {fun: cast_and_free_pointer}
+CopyStmt: [Var49 <-- Var48]	
+ValVar ID: 49
+   %1 = bitcast ptr %0 to ptr 
+Function associated with node: 0x5ad813560b30
+Basic block associated with node: 0x5ad8135f5dd0
+Associated SVF Statements:
+  - 0x5ad8135bcd70
+Processing Node: 0x5ad813578e00
+Node Info: IntraICFGNode36 {fun: cast_and_free_pointer}
+StoreStmt: [Var45 <-- Var49]	
+ValVar ID: 50
+   store ptr %1, ptr %int_ptr, align 8 
+Function associated with node: 0x5ad813560b30
+Basic block associated with node: 0x5ad8135f5dd0
+Associated SVF Statements:
+  - 0x5ad81356abe0
+Processing Node: 0x5ad813578c40
+Node Info: IntraICFGNode37 {fun: cast_and_free_pointer}
+LoadStmt: [Var51 <-- Var45]	
+ValVar ID: 51
+   %2 = load ptr, ptr %int_ptr, align 8 
+Function associated with node: 0x5ad813560b30
+Basic block associated with node: 0x5ad8135f5dd0
+Associated SVF Statements:
+  - 0x5ad8135bbec0
+Processing Node: 0x5ad8135eada0
+Node Info: IntraICFGNode38 {fun: cast_and_free_pointer}
+CopyStmt: [Var52 <-- Var51]	
+ValVar ID: 52
+   %3 = bitcast ptr %2 to ptr 
+Function associated with node: 0x5ad813560b30
+Basic block associated with node: 0x5ad8135f5dd0
+Associated SVF Statements:
+  - 0x5ad8135c30f0
+Processing Node: 0x5ad813582bb0
+Node Info: CallICFGNode39 {fun: cast_and_free_pointer}
+   call void @free(ptr noundef %3) #2 CallICFGNode: 
+Function associated with node: 0x5ad813560b30
+Basic block associated with node: 0x5ad8135f5dd0
+Processing Node: 0x5ad8135f5660
+Node Info: RetICFGNode40 {fun: cast_and_free_pointer}
+   call void @free(ptr noundef %3) #2 RetICFGNode: 
+Function associated with node: 0x5ad813560b30
+Basic block associated with node: 0x5ad8135f5dd0
+Processing Node: 0x5ad8135bb990
+Node Info: IntraICFGNode41 {fun: cast_and_free_pointer}
+   ret void 
+Function associated with node: 0x5ad813560b30
+Basic block associated with node: 0x5ad8135f5dd0
+Processing Node: 0x5ad81358f0f0
+Node Info: FunExitICFGNode6 {fun: cast_and_free_pointer}
+Function associated with node: 0x5ad813560b30
+Basic block associated with node: 0x5ad8135f5dd0
+DOT file generated: ./output/cast_and_free_pointer_view_icfg_output_SVF.dot
+DOT file generated: ./output/cast_and_free_pointer_node_and_edges_only_icfg_SVF.dot
+ICFG Traversal Complete for function: cast_and_free_pointer.
+Processing Node: 0x5ad813572cc0
+Node Info: IntraICFGNode42 {fun: free_int}
+AddrStmt: [Var59 <-- Var60]	
+ValVar ID: 59
+   %ptr.addr = alloca ptr, align 8 
+Function associated with node: 0x5ad81356de70
+Basic block associated with node: 0x5ad8135c1d90
+Associated SVF Statements:
+  - 0x5ad8135a0e30
+Processing Node: 0x5ad8135ca920
+Node Info: IntraICFGNode43 {fun: free_int}
+AddrStmt: [Var61 <-- Var62]	
+ValVar ID: 61
+   %int_ptr = alloca ptr, align 8 
+Function associated with node: 0x5ad81356de70
+Basic block associated with node: 0x5ad8135c1d90
+Associated SVF Statements:
+  - 0x5ad8135a1320
+Processing Node: 0x5ad813595990
+Node Info: IntraICFGNode44 {fun: free_int}
+StoreStmt: [Var59 <-- Var58]	
+ValVar ID: 63
+   store ptr %ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x5ad81356de70
+Basic block associated with node: 0x5ad8135c1d90
+Associated SVF Statements:
+  - 0x5ad8135ef070
+Processing Node: 0x5ad8135683b0
+Node Info: IntraICFGNode45 {fun: free_int}
+LoadStmt: [Var64 <-- Var59]	
+ValVar ID: 64
+   %0 = load ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x5ad81356de70
+Basic block associated with node: 0x5ad8135c1d90
+Associated SVF Statements:
+  - 0x5ad8135cb280
+Processing Node: 0x5ad81357fca0
+Node Info: IntraICFGNode46 {fun: free_int}
+CopyStmt: [Var65 <-- Var64]	
+ValVar ID: 65
+   %1 = bitcast ptr %0 to ptr 
+Function associated with node: 0x5ad81356de70
+Basic block associated with node: 0x5ad8135c1d90
+Associated SVF Statements:
+  - 0x5ad8135cb710
+Processing Node: 0x5ad8135f7fe0
+Node Info: IntraICFGNode47 {fun: free_int}
+StoreStmt: [Var61 <-- Var65]	
+ValVar ID: 66
+   store ptr %1, ptr %int_ptr, align 8 
+Function associated with node: 0x5ad81356de70
+Basic block associated with node: 0x5ad8135c1d90
+Associated SVF Statements:
+  - 0x5ad8135c6eb0
+Processing Node: 0x5ad8135f84e0
+Node Info: IntraICFGNode48 {fun: free_int}
+LoadStmt: [Var67 <-- Var61]	
+ValVar ID: 67
+   %2 = load ptr, ptr %int_ptr, align 8 
+Function associated with node: 0x5ad81356de70
+Basic block associated with node: 0x5ad8135c1d90
+Associated SVF Statements:
+  - 0x5ad8135c7300
+Processing Node: 0x5ad8135f8110
+Node Info: IntraICFGNode49 {fun: free_int}
+CopyStmt: [Var68 <-- Var67]	
+ValVar ID: 68
+   %3 = bitcast ptr %2 to ptr 
+Function associated with node: 0x5ad81356de70
+Basic block associated with node: 0x5ad8135c1d90
+Associated SVF Statements:
+  - 0x5ad8135eb2d0
+Processing Node: 0x5ad8135f59c0
+Node Info: CallICFGNode50 {fun: free_int}
+   call void @free(ptr noundef %3) #2 CallICFGNode: 
+Function associated with node: 0x5ad81356de70
+Basic block associated with node: 0x5ad8135c1d90
+Processing Node: 0x5ad813580260
+Node Info: RetICFGNode51 {fun: free_int}
+   call void @free(ptr noundef %3) #2 RetICFGNode: 
+Function associated with node: 0x5ad81356de70
+Basic block associated with node: 0x5ad8135c1d90
+Processing Node: 0x5ad813572990
+Node Info: IntraICFGNode52 {fun: free_int}
+   ret void 
+Function associated with node: 0x5ad81356de70
+Basic block associated with node: 0x5ad8135c1d90
+Processing Node: 0x5ad81358b9b0
+Node Info: FunExitICFGNode8 {fun: free_int}
+Function associated with node: 0x5ad81356de70
+Basic block associated with node: 0x5ad8135c1d90
+DOT file generated: ./output/free_int_view_icfg_output_SVF.dot
+DOT file generated: ./output/free_int_node_and_edges_only_icfg_SVF.dot
+ICFG Traversal Complete for function: free_int.
+Processing Node: 0x5ad813561420
+Node Info: IntraICFGNode53 {fun: free_string}
+AddrStmt: [Var75 <-- Var76]	
+ValVar ID: 75
+   %str.addr = alloca ptr, align 8 
+Function associated with node: 0x5ad813575860
+Basic block associated with node: 0x5ad81359c5d0
+Associated SVF Statements:
+  - 0x5ad813576d60
+Processing Node: 0x5ad813562250
+Node Info: IntraICFGNode54 {fun: free_string}
+StoreStmt: [Var75 <-- Var74]	
+ValVar ID: 77
+   store ptr %str, ptr %str.addr, align 8 
+Function associated with node: 0x5ad813575860
+Basic block associated with node: 0x5ad81359c5d0
+Associated SVF Statements:
+  - 0x5ad813577280
+Processing Node: 0x5ad813562020
+Node Info: IntraICFGNode55 {fun: free_string}
+LoadStmt: [Var78 <-- Var75]	
+ValVar ID: 78
+   %0 = load ptr, ptr %str.addr, align 8 
+Function associated with node: 0x5ad813575860
+Basic block associated with node: 0x5ad81359c5d0
+Associated SVF Statements:
+  - 0x5ad81359b590
+Processing Node: 0x5ad813582e40
+Node Info: IntraICFGNode56 {fun: free_string}
+CmpStmt: [Var79 <-- (Var78 predicate33 Var0)]	
+ValVar ID: 79
+   %cmp = icmp ne ptr %0, null 
+Function associated with node: 0x5ad813575860
+Basic block associated with node: 0x5ad81359c5d0
+Associated SVF Statements:
+  - 0x5ad81359baa0
+Processing Node: 0x5ad813575670
+Node Info: IntraICFGNode57 {fun: free_string}
+BranchStmt: [Condition Var79]
+Successor 0 ICFGNode58   Successor 1 ICFGNode59   
+ValVar ID: 80
+   br i1 %cmp, label %if.then, label %if.end 
+Function associated with node: 0x5ad813575860
+Basic block associated with node: 0x5ad81359c5d0
+Associated SVF Statements:
+  - 0x5ad81359adc0
+Processing Node: 0x5ad8135ecea0
+Node Info: IntraICFGNode58 {fun: free_string}
+LoadStmt: [Var81 <-- Var75]	
+ValVar ID: 81
+   %1 = load ptr, ptr %str.addr, align 8 
+Function associated with node: 0x5ad813575860
+Basic block associated with node: 0x5ad8135631d0
+Associated SVF Statements:
+  - 0x5ad81359b220
+Processing Node: 0x5ad8135c1f00
+Node Info: IntraICFGNode59 {fun: free_string}
+   ret void 
+Function associated with node: 0x5ad813575860
+Basic block associated with node: 0x5ad813560a70
+Processing Node: 0x5ad8135f57d0
+Node Info: CallICFGNode60 {fun: free_string}
+   call void @free(ptr noundef %1) #2 CallICFGNode: 
+Function associated with node: 0x5ad813575860
+Basic block associated with node: 0x5ad8135631d0
+Processing Node: 0x5ad81355f930
+Node Info: FunExitICFGNode10 {fun: free_string}
+Function associated with node: 0x5ad813575860
+Basic block associated with node: 0x5ad813560a70
+Processing Node: 0x5ad8135f6d00
+Node Info: RetICFGNode61 {fun: free_string}
+   call void @free(ptr noundef %1) #2 RetICFGNode: 
+Function associated with node: 0x5ad813575860
+Basic block associated with node: 0x5ad8135631d0
+Processing Node: 0x5ad8135c7a90
+Node Info: IntraICFGNode62 {fun: free_string}
+BranchStmt: [ Unconditional branch]
+Successor 0 ICFGNode59   
+ValVar ID: 83
+   br label %if.end 
+Function associated with node: 0x5ad813575860
+Basic block associated with node: 0x5ad8135631d0
+Associated SVF Statements:
+  - 0x5ad8135c9f00
+DOT file generated: ./output/free_string_view_icfg_output_SVF.dot
+DOT file generated: ./output/free_string_node_and_edges_only_icfg_SVF.dot
+ICFG Traversal Complete for function: free_string.
+No instructions found in function: free.
+svf-driver finished with status: ExitStatus(unix_wait_status(0))
+cargo:rerun-if-changed=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/warning_ub_string/src/ffi.c
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package warning_UB target warning_UB at /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/warning_ub_string/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/warning_ub_string/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/warning_ub_string/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/warning_ub_string/target/debug",
+    "--extern=cc=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/warning_ub_string/target/debug/deps/libcc-df7468a0b867c4b2.rlib",
+    "--extern=shlex=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/warning_ub_string/target/debug/deps/libshlex-f4c3659040844f7b.rlib",
+]
+Loading LLVM JSON file: free_string_A_FINAL_ICFG.json
+Loading LLVM JSON file: free_str_A_FINAL_ICFG.json
+Loading LLVM JSON file: free_bool_A_FINAL_ICFG.json
+Loading LLVM JSON file: cast_and_free_pointer_A_FINAL_ICFG.json
+Loading LLVM JSON file: free_int_A_FINAL_ICFG.json
+Global ICFG saved to global_icfg.json
+Analyzing package warning_UB target build-script-build at /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/warning_ub_string/build.rs
+Skipping unsupported target kind: [CustomBuild]
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "llvm::free_str::node99884084031056::rust::main::bb2", outgoing_edge: "rust::main::bb3", id: "e10ab3cf690b0638", mir_var: None, llvm_var: Some("BasicBlock: if.end { \"basic block\": if.end, \"location\":  }"), is_internal: Some(false) }
+Final Abstract State: {"llvm::free_str::node99884083982960::rust::main::bb2": {{"29@rust::main::bb2", "Local(_2)"}: MV}, "llvm::free_str::node99884084249792::rust::main::bb2": {{"29@rust::main::bb2", "Local(_2)"}: MV}, "llvm::free_str::node99884084181536::rust::main::bb2": {{"29@rust::main::bb2", "Local(_2)"}: MV}, "llvm::free_str::node99884084031056::rust::main::bb2": {{"29@rust::main::bb2", "Local(_2)"}: MV}, "llvm::free_str::node99884083895456::rust::main::bb2": {{"29@rust::main::bb2", "Local(_2)"}: MV}, "llvm::free_str::node99884084059296::rust::main::bb2": {{"29@rust::main::bb2", "Local(_2)"}: MV}, "llvm::free_str::node99884084243008::rust::main::bb2": {{"29@rust::main::bb2", "Local(_2)"}: MV}, "rust::main::bb0": {{"Local(_1)"}: ALLOC}, "llvm::free_str::node99884084214512::rust::main::bb2": {{"29@rust::main::bb2", "Local(_2)"}: MV}, "llvm::free_str::node99884084117856::rust::main::bb2": {{"29@rust::main::bb2", "Local(_2)"}: MV}, "rust::main::bb3": {{"29@rust::main::bb2", "Local(_2)"}: MV}, "dummyRet::rust::main::bb3::rust::main::bb2": {{"29@rust::main::bb2", "Local(_2)"}: MV}, "dummyCall::rust::main::bb2::rust::main::bb2": {{"29@rust::main::bb2", "Local(_2)"}: MV}, "llvm::free_str::node99884083868960::rust::main::bb2": {{"29@rust::main::bb2", "Local(_2)"}: MV}, "llvm::free_str::node99884084212144::rust::main::bb2": {{"29@rust::main::bb2", "Local(_2)"}: MV}, "rust::main::bb2": {{"Local(_2)"}: MV}, "rust::main::bb1": {{"Local(_3)"}: MV}}
+Final Taint State: {
+    "rust::main::bb2": {
+        "Local(_2)": {
+            "assign",
+        },
+    },
+    "llvm::free_str::node99884083982960::rust::main::bb2": {
+        "Local(_2)": {
+            "assign",
+        },
+        "29@rust::main::bb2": {
+            "assign",
+        },
+    },
+    "llvm::free_str::node99884084117856::rust::main::bb2": {
+        "Local(_2)": {
+            "assign",
+        },
+        "29@rust::main::bb2": {
+            "assign",
+        },
+    },
+    "llvm::free_str::node99884084031056::rust::main::bb2": {
+        "Local(_2)": {
+            "assign",
+        },
+        "29@rust::main::bb2": {
+            "assign",
+        },
+    },
+    "rust::main::bb0": {},
+    "llvm::free_str::node99884084181536::rust::main::bb2": {
+        "29@rust::main::bb2": {
+            "assign",
+        },
+        "Local(_2)": {
+            "assign",
+        },
+    },
+    "llvm::free_str::node99884084212144::rust::main::bb2": {
+        "29@rust::main::bb2": {
+            "assign",
+        },
+        "Local(_2)": {
+            "assign",
+        },
+    },
+    "llvm::free_str::node99884084249792::rust::main::bb2": {
+        "Local(_2)": {
+            "assign",
+        },
+        "29@rust::main::bb2": {
+            "assign",
+        },
+    },
+    "rust::main::bb1": {
+        "Local(_3)": {
+            "assign",
+        },
+    },
+    "rust::main::bb3": {
+        "29@rust::main::bb2": {
+            "assign",
+        },
+        "Local(_2)": {
+            "assign",
+        },
+    },
+    "llvm::free_str::node99884084214512::rust::main::bb2": {
+        "Local(_2)": {
+            "assign",
+        },
+        "29@rust::main::bb2": {
+            "assign",
+        },
+    },
+    "llvm::free_str::node99884084243008::rust::main::bb2": {
+        "29@rust::main::bb2": {
+            "assign",
+        },
+        "Local(_2)": {
+            "assign",
+        },
+    },
+    "llvm::free_str::node99884083868960::rust::main::bb2": {
+        "29@rust::main::bb2": {
+            "assign",
+        },
+        "Local(_2)": {
+            "assign",
+        },
+    },
+    "llvm::free_str::node99884084059296::rust::main::bb2": {
+        "Local(_2)": {
+            "assign",
+        },
+        "29@rust::main::bb2": {
+            "assign",
+        },
+    },
+    "llvm::free_str::node99884083895456::rust::main::bb2": {
+        "Local(_2)": {
+            "assign",
+        },
+        "29@rust::main::bb2": {
+            "assign",
+        },
+    },
+    "dummyRet::rust::main::bb3::rust::main::bb2": {
+        "Local(_2)": {
+            "assign",
+        },
+        "29@rust::main::bb2": {
+            "assign",
+        },
+    },
+    "dummyCall::rust::main::bb2::rust::main::bb2": {
+        "29@rust::main::bb2": {
+            "assign",
+        },
+        "Local(_2)": {
+            "assign",
+        },
+    },
+}
+Tracking variable 'Local(_2)' from block 'rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'llvm::free_str::node99884083982960::rust::main::bb2' (markers: {"assign"})
+Tracking variable '29@rust::main::bb2' from block 'llvm::free_str::node99884083982960::rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'llvm::free_str::node99884084117856::rust::main::bb2' (markers: {"assign"})
+Tracking variable '29@rust::main::bb2' from block 'llvm::free_str::node99884084117856::rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'llvm::free_str::node99884084031056::rust::main::bb2' (markers: {"assign"})
+Tracking variable '29@rust::main::bb2' from block 'llvm::free_str::node99884084031056::rust::main::bb2' (markers: {"assign"})
+Tracking variable '29@rust::main::bb2' from block 'llvm::free_str::node99884084181536::rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'llvm::free_str::node99884084181536::rust::main::bb2' (markers: {"assign"})
+Tracking variable '29@rust::main::bb2' from block 'llvm::free_str::node99884084212144::rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'llvm::free_str::node99884084212144::rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'llvm::free_str::node99884084249792::rust::main::bb2' (markers: {"assign"})
+Tracking variable '29@rust::main::bb2' from block 'llvm::free_str::node99884084249792::rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::main::bb1' (markers: {"assign"})
+Tracking variable '29@rust::main::bb2' from block 'rust::main::bb3' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'rust::main::bb3' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'llvm::free_str::node99884084214512::rust::main::bb2' (markers: {"assign"})
+Tracking variable '29@rust::main::bb2' from block 'llvm::free_str::node99884084214512::rust::main::bb2' (markers: {"assign"})
+Tracking variable '29@rust::main::bb2' from block 'llvm::free_str::node99884084243008::rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'llvm::free_str::node99884084243008::rust::main::bb2' (markers: {"assign"})
+Tracking variable '29@rust::main::bb2' from block 'llvm::free_str::node99884083868960::rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'llvm::free_str::node99884083868960::rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'llvm::free_str::node99884084059296::rust::main::bb2' (markers: {"assign"})
+Tracking variable '29@rust::main::bb2' from block 'llvm::free_str::node99884084059296::rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'llvm::free_str::node99884083895456::rust::main::bb2' (markers: {"assign"})
+Tracking variable '29@rust::main::bb2' from block 'llvm::free_str::node99884083895456::rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'dummyRet::rust::main::bb3::rust::main::bb2' (markers: {"assign"})
+Tracking variable '29@rust::main::bb2' from block 'dummyRet::rust::main::bb3::rust::main::bb2' (markers: {"assign"})
+Tracking variable '29@rust::main::bb2' from block 'dummyCall::rust::main::bb2::rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'dummyCall::rust::main::bb2::rust::main::bb2' (markers: {"assign"})
+-> DummyRet node 'dummyRet::rust::main::bb3::rust::main::bb2': transferring from LLVM var Some("BasicBlock: if.end { \"basic block\": if.end, \"location\":  }") to MIR var None
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 NO Issues detected: ✅
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🪲  WARNING: variable '29@rust::main::bb2' was allocated in Rust and then freed in C (LLVM free) at `CallICFGNode28 {fun: free_str}
+   call void @free(ptr noundef %1) #2 CallICFGNode: `
+Possible UNDEFINED BEHAVIOUR!

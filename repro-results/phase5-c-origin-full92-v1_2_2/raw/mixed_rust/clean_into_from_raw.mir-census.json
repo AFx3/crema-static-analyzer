@@ -1,0 +1,108 @@
+{
+  "call_counts": {
+    "core::fmt::rt::Argument::<'_>::new_display::<i32>": 2,
+    "std::boxed::Box::<i32>::from_raw": 1,
+    "std::boxed::Box::<i32>::into_raw": 1,
+    "std::boxed::Box::<i32>::new": 1,
+    "std::fmt::Arguments::<'_>::new_const::<1>": 2,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 2,
+    "std::io::_print": 4
+  },
+  "call_total": 13,
+  "memory_api_counts": {
+    "box_from_raw": 1,
+    "box_into_raw": 1,
+    "box_new": 1
+  },
+  "memory_api_examples": {
+    "box_from_raw": [
+      "std::boxed::Box::<i32>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<i32>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<i32>::new"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _7]",
+      "[move _23]"
+    ],
+    "arithmetic_binary": [
+      "Sub(copy _36, const 1_usize)",
+      "BitAnd(copy _35, copy _37)",
+      "Sub(copy _30, const 1_usize)",
+      "BitAnd(copy _29, copy _31)"
+    ],
+    "checked_binary_unhandled": [
+      "AddWithOverflow(copy (*_9), const 1_i32)"
+    ],
+    "comparison": [
+      "Eq(copy _38, const 0_usize)",
+      "Eq(copy _32, const 0_usize)"
+    ],
+    "direct_use": [
+      "move _1"
+    ],
+    "pointer_cast": [
+      "copy _9 as *const () (PtrToPtr)"
+    ],
+    "ref": [
+      "&(*_27)",
+      "&_6",
+      "&(*_9)",
+      "&_22"
+    ],
+    "scalar_cast": [
+      "copy _34 as usize (Transmute)",
+      "copy _28 as usize (Transmute)"
+    ],
+    "scalar_const": [
+      "const false",
+      "const true"
+    ],
+    "scalar_nullary": [
+      "AlignOf(i32)"
+    ],
+    "unknown_unhandled": [
+      "const main::promoted[3]",
+      "copy (((_1.0: std::ptr::Unique<i32>).0: std::ptr::NonNull<i32>).0: *const i32)",
+      "const main::promoted[2]",
+      "const main::promoted[0]",
+      "move (_14.0: i32)",
+      "const main::promoted[1]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 2,
+    "arithmetic_binary": 4,
+    "checked_binary_unhandled": 1,
+    "comparison": 2,
+    "direct_use": 1,
+    "pointer_cast": 2,
+    "ref": 4,
+    "scalar_cast": 2,
+    "scalar_const": 4,
+    "scalar_nullary": 2,
+    "unknown_unhandled": 6
+  },
+  "rvalue_total": 30,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 2,
+    "checked_binary_unhandled": 1,
+    "unknown_unhandled": 6
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "clean_into_from_raw",
+  "terminator_kind_counts": {
+    "Assert": 3,
+    "Call": 13,
+    "Drop": 2,
+    "Return": 1,
+    "SwitchInt": 1,
+    "UnwindResume": 1
+  }
+}

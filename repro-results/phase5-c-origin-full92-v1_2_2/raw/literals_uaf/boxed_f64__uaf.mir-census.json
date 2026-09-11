@@ -1,0 +1,104 @@
+{
+  "call_counts": {
+    "core::fmt::rt::Argument::<'_>::new_display::<f64>": 2,
+    "std::boxed::Box::<f64>::from_raw": 1,
+    "std::boxed::Box::<f64>::into_raw": 1,
+    "std::boxed::Box::<f64>::new": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 2,
+    "std::io::_print": 2,
+    "std::mem::drop::<std::boxed::Box<f64>>": 1
+  },
+  "call_total": 10,
+  "memory_api_counts": {
+    "box_from_raw": 1,
+    "box_into_raw": 1,
+    "box_new": 1,
+    "mem_drop": 1
+  },
+  "memory_api_examples": {
+    "box_from_raw": [
+      "std::boxed::Box::<f64>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<f64>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<f64>::new"
+    ],
+    "mem_drop": [
+      "std::mem::drop::<std::boxed::Box<f64>>"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _7]",
+      "[move _19]"
+    ],
+    "arithmetic_binary": [
+      "Sub(copy _25, const 1_usize)",
+      "BitAnd(copy _24, copy _26)"
+    ],
+    "comparison": [
+      "Eq(copy _27, const 0_usize)"
+    ],
+    "direct_deref_use": [
+      "copy (*_9)"
+    ],
+    "direct_use": [
+      "move _1"
+    ],
+    "pointer_cast": [
+      "copy _9 as *const () (PtrToPtr)"
+    ],
+    "ref": [
+      "&(*_22)",
+      "&_6",
+      "&_18",
+      "&_13"
+    ],
+    "scalar_cast": [
+      "copy _23 as usize (Transmute)"
+    ],
+    "scalar_const": [
+      "const false",
+      "const true"
+    ],
+    "scalar_nullary": [
+      "AlignOf(f64)"
+    ],
+    "unknown_unhandled": [
+      "const main::promoted[1]",
+      "copy (((_1.0: std::ptr::Unique<f64>).0: std::ptr::NonNull<f64>).0: *const f64)",
+      "const main::promoted[0]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 2,
+    "arithmetic_binary": 2,
+    "comparison": 1,
+    "direct_deref_use": 1,
+    "direct_use": 1,
+    "pointer_cast": 1,
+    "ref": 4,
+    "scalar_cast": 1,
+    "scalar_const": 4,
+    "scalar_nullary": 1,
+    "unknown_unhandled": 3
+  },
+  "rvalue_total": 21,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 2,
+    "unknown_unhandled": 3
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "boxed_f64__uaf",
+  "terminator_kind_counts": {
+    "Assert": 1,
+    "Call": 10,
+    "Drop": 1,
+    "Return": 1,
+    "SwitchInt": 1,
+    "UnwindResume": 1
+  }
+}

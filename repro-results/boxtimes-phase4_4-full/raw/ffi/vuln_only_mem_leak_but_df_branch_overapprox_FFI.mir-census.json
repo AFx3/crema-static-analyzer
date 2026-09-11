@@ -1,0 +1,81 @@
+{
+  "call_counts": {
+    "core::fmt::rt::Argument::<'_>::new_debug::<*mut i8>": 1,
+    "core::fmt::rt::Argument::<'_>::new_debug::<std::ffi::CString>": 1,
+    "print": 1,
+    "print_and": 1,
+    "std::ffi::CString::from_raw": 1,
+    "std::ffi::CString::into_raw": 2,
+    "std::ffi::CString::new::<&str>": 2,
+    "std::fmt::Arguments::<'_>::new_const::<1>": 2,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 2,
+    "std::io::_print": 4,
+    "std::result::Result::<std::ffi::CString, std::ffi::NulError>::unwrap": 2
+  },
+  "call_total": 19,
+  "memory_api_counts": {
+    "cstring_from_raw": 1,
+    "cstring_into_raw": 2
+  },
+  "memory_api_examples": {
+    "cstring_from_raw": [
+      "std::ffi::CString::from_raw"
+    ],
+    "cstring_into_raw": [
+      "std::ffi::CString::into_raw"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _17]",
+      "[move _29]"
+    ],
+    "comparison": [
+      "Gt(move _6, move _7)"
+    ],
+    "direct_use": [
+      "move _22"
+    ],
+    "ref": [
+      "&_3",
+      "&_16",
+      "&_22",
+      "&_28"
+    ],
+    "scalar_const": [
+      "const false",
+      "const 4_i32",
+      "const 10_i32",
+      "const true"
+    ],
+    "unknown_unhandled": [
+      "const main::promoted[2]",
+      "const main::promoted[1]",
+      "const main::promoted[3]",
+      "const main::promoted[0]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 2,
+    "comparison": 1,
+    "direct_use": 1,
+    "ref": 4,
+    "scalar_const": 6,
+    "unknown_unhandled": 4
+  },
+  "rvalue_total": 18,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 2,
+    "unknown_unhandled": 4
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "vuln_only_mem_leak_but_df_branch_overapprox_FFI",
+  "terminator_kind_counts": {
+    "Call": 19,
+    "Drop": 2,
+    "Return": 1,
+    "SwitchInt": 2,
+    "UnwindResume": 1
+  }
+}

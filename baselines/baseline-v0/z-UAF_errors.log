@@ -1,0 +1,80 @@
+=== boxed_bool ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_bool/src/main.rs:11:23: 11:27 (#0)
+
+=== boxed_char ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_char/src/main.rs:13:23: 13:27 (#0)
+
+=== boxed_f32 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_f32/src/main.rs:13:23: 13:27 (#0)
+
+=== boxed_f64 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_f64/src/main.rs:11:22: 11:26 (#0)
+
+=== boxed_i128 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i128/src/main.rs:12:22: 12:26 (#0)
+
+=== boxed_i16 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i16/src/main.rs:14:24: 14:28 (#0)
+
+=== boxed_i32 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i32/src/main.rs:12:22: 12:26 (#0)
+
+=== boxed_i64 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i64/src/main.rs:11:22: 11:26 (#0)
+
+=== boxed_i8 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i8/src/main.rs:12:24: 12:28 (#0)
+
+=== boxed_isize ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_isize/src/main.rs:13:23: 13:27 (#0)
+
+=== boxed_u128 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u128/src/main.rs:14:24: 14:28 (#0)
+
+=== boxed_u16 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u16/src/main.rs:13:24: 13:28 (#0)
+
+=== boxed_u32 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u32/src/main.rs:12:24: 12:28 (#0)
+
+=== boxed_u64 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u64/src/main.rs:12:24: 12:28 (#0)
+
+=== boxed_u8 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u8/src/main.rs:12:24: 12:28 (#0)
+
+=== boxed_usize ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_usize/src/main.rs:12:24: 12:28 (#0)
+

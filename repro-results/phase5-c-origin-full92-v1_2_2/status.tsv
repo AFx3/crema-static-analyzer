@@ -1,0 +1,93 @@
+key	group	target	entry_point	exit_code
+boxed_bool__df	literals_df	a-code_full_rust/a-double_free_full_rust_literals/boxed_bool		0
+boxed_char__df	literals_df	a-code_full_rust/a-double_free_full_rust_literals/boxed_char		0
+boxed_f32__df	literals_df	a-code_full_rust/a-double_free_full_rust_literals/boxed_f32		0
+boxed_f64__df	literals_df	a-code_full_rust/a-double_free_full_rust_literals/boxed_f64		0
+boxed_i128__df	literals_df	a-code_full_rust/a-double_free_full_rust_literals/boxed_i128		0
+boxed_i16__df	literals_df	a-code_full_rust/a-double_free_full_rust_literals/boxed_i16		0
+boxed_i32__df	literals_df	a-code_full_rust/a-double_free_full_rust_literals/boxed_i32		0
+boxed_i64__df	literals_df	a-code_full_rust/a-double_free_full_rust_literals/boxed_i64		0
+boxed_i8__df	literals_df	a-code_full_rust/a-double_free_full_rust_literals/boxed_i8		0
+boxed_isize__df	literals_df	a-code_full_rust/a-double_free_full_rust_literals/boxed_isize		0
+boxed_u128__df	literals_df	a-code_full_rust/a-double_free_full_rust_literals/boxed_u128		0
+boxed_u16__df	literals_df	a-code_full_rust/a-double_free_full_rust_literals/boxed_u16		0
+boxed_u32__df	literals_df	a-code_full_rust/a-double_free_full_rust_literals/boxed_u32		0
+boxed_u64__df	literals_df	a-code_full_rust/a-double_free_full_rust_literals/boxed_u64		0
+boxed_u8__df	literals_df	a-code_full_rust/a-double_free_full_rust_literals/boxed_u8		0
+boxed_usize__df	literals_df	a-code_full_rust/a-double_free_full_rust_literals/boxed_usize		0
+boxed_bool__ml	literals_ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_bool		0
+boxed_char__ml	literals_ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_char		0
+boxed_f32__ml	literals_ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_f32		0
+boxed_f64__ml	literals_ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_f64		0
+boxed_i128__ml	literals_ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i128		0
+boxed_i16__ml	literals_ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i16		0
+boxed_i32__ml	literals_ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i32		0
+boxed_i64__ml	literals_ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i64		0
+boxed_i8__ml	literals_ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i8		0
+boxed_isize__ml	literals_ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_isize		0
+boxed_u128__ml	literals_ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u128		0
+boxed_u16__ml	literals_ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u16		0
+boxed_u32__ml	literals_ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u32		0
+boxed_u64__ml	literals_ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u64		0
+boxed_u8__ml	literals_ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u8		0
+boxed_usize__ml	literals_ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_usize		0
+boxed_bool__uaf	literals_uaf	a-code_full_rust/a-use_after_free_full_rust_literals/boxed_bool		0
+boxed_char__uaf	literals_uaf	a-code_full_rust/a-use_after_free_full_rust_literals/boxed_char		0
+boxed_f32__uaf	literals_uaf	a-code_full_rust/a-use_after_free_full_rust_literals/boxed_f32		0
+boxed_f64__uaf	literals_uaf	a-code_full_rust/a-use_after_free_full_rust_literals/boxed_f64		0
+boxed_i128__uaf	literals_uaf	a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i128		0
+boxed_i16__uaf	literals_uaf	a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i16		0
+boxed_i32__uaf	literals_uaf	a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i32		0
+boxed_i64__uaf	literals_uaf	a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i64		0
+boxed_i8__uaf	literals_uaf	a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i8		0
+boxed_isize__uaf	literals_uaf	a-code_full_rust/a-use_after_free_full_rust_literals/boxed_isize		0
+boxed_u128__uaf	literals_uaf	a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u128		0
+boxed_u16__uaf	literals_uaf	a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u16		0
+boxed_u32__uaf	literals_uaf	a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u32		0
+boxed_u64__uaf	literals_uaf	a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u64		0
+boxed_u8__uaf	literals_uaf	a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u8		0
+boxed_usize__uaf	literals_uaf	a-code_full_rust/a-use_after_free_full_rust_literals/boxed_usize		0
+clean_cstring_no_errors_only_rust	mixed_rust	a-code_full_rust/clean_cstring_no_errors_only_rust		0
+cstringcargo_enum_df_only_rust	mixed_rust	a-code_full_rust/cstringcargo_enum_df_only_rust		0
+struct_point_df_only_rust	mixed_rust	a-code_full_rust/struct_point_df_only_rust		0
+clean_into_from_raw	mixed_rust	a-code_full_rust/clean_into_from_raw		0
+cstring_df_only_rust	mixed_rust	a-code_full_rust/cstring_df_only_rust		0
+struct_point_mem_leak	mixed_rust	a-code_full_rust/struct_point_mem_leak		0
+clean_struct_point_mem_leak_into_raw_no_errors	mixed_rust	a-code_full_rust/clean_struct_point_mem_leak_into_raw_no_errors		0
+explicit_drop_df_only_rust	mixed_rust	a-code_full_rust/explicit_drop_df_only_rust		0
+uaf_read_ptr	mixed_rust	a-code_full_rust/uaf_read_ptr		0
+closure_df	mixed_rust	a-code_full_rust/closure_df		0
+std_mem_forget_mem_leak_rust	mixed_rust	a-code_full_rust/std_mem_forget_mem_leak_rust		0
+branch_df_mem_leak_ffi	ffi	a-code_c_ffi/branch_df_mem_leak_ffi		0
+clean_mul_fn_ffi_no_errors	ffi	a-code_c_ffi/clean_mul_fn_ffi_no_errors		0
+cstr_cargo_df_ffi	ffi	a-code_c_ffi/cstr_cargo_df_ffi		0
+cstr_expect_uaf_and_ub_ffi	ffi	a-code_c_ffi/cstr_expect_uaf_and_ub_ffi		0
+cstringcargo_df_ffi	ffi	a-code_c_ffi/cstringcargo_df_ffi		0
+df_rand_cargo_c_ffi	ffi	a-code_c_ffi/df_rand_cargo_c_ffi		0
+for_df_ffi	ffi	a-code_c_ffi/for_df_ffi		0
+for_memory_leak_ffi	ffi	a-code_c_ffi/for_memory_leak_ffi		0
+uaf_mem_leak_ffi	ffi	a-code_c_ffi/uaf_mem_leak_ffi		0
+vuln_only_mem_leak_but_df_branch_overapprox_FFI	ffi	a-code_c_ffi/vuln_only_mem_leak_but_df_branch_overapprox_FFI		0
+warning_ub_bool	ffi	a-code_c_ffi/warning_ub_bool		0
+warning_ub_int	ffi	a-code_c_ffi/warning_ub_int		0
+warning_ub_mult	ffi	a-code_c_ffi/warning_ub_mult		0
+warning_ub_string	ffi	a-code_c_ffi/warning_ub_string		0
+noGenerator	github	found vulns/noGenerator		0
+wasm-demo	github	found vulns/wasm-demo	rust::demo_new_state::bb0	0
+skip-list-test	github	found vulns/skip-list-test		0
+rusant	github	found vulns/rusant		0
+napkin-math-test	github	found vulns/napkin-math-test		0
+shared-register	github	found vulns/shared-register		0
+whisper-rs-example	github	found vulns/whisper-rs-example		0
+lock-free	github	found vulns/lock-free	rust::LockFreeStack::::push::bb0	0
+rust_memory	github	no_errors_projects/rust_memory		0
+unsized_struct	github	no_errors_projects/unsized_struct		0
+unsafely-created-owned-type	github	no_errors_projects/unsafely-created-owned-type		0
+lock_free_non_blocking_linked_list	github	no_errors_projects/lock_free_non_blocking_linked_list		0
+c-callback-rust-closure	github	no_errors_projects/c-callback-rust-closure		0
+concurrent-verification	github	no_errors_projects/concurrent-verification		0
+stackswap-coroutines	github	no_errors_projects/stackswap-coroutines		0
+rc-playground	github	no_errors_projects/rc-playground		0
+square	github	no_errors_projects/square		0
+rust_hw3	github	no_errors_projects/rust_hw3		0
+rust-boks	github	no_errors_projects/rust-boks		0

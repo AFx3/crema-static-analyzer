@@ -1,0 +1,11 @@
+key	group	target	exit_code
+boxed_i32__df	df	a-code_full_rust/a-double_free_full_rust_literals/boxed_i32	0
+boxed_i32__ml	ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i32	0
+boxed_i32__uaf	uaf	a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i32	0
+clean_cstring_no_errors_only_rust	mixed	a-code_full_rust/clean_cstring_no_errors_only_rust	0
+cstringcargo_enum_df_only_rust	mixed	a-code_full_rust/cstringcargo_enum_df_only_rust	0
+uaf_read_ptr	mixed	a-code_full_rust/uaf_read_ptr	0
+clean_mul_fn_ffi_no_errors	ffi	a-code_c_ffi/clean_mul_fn_ffi_no_errors	0
+cstr_cargo_df_ffi	ffi	a-code_c_ffi/cstr_cargo_df_ffi	0
+uaf_mem_leak_ffi	ffi	a-code_c_ffi/uaf_mem_leak_ffi	0
+noGenerator	github	found vulns/noGenerator	0

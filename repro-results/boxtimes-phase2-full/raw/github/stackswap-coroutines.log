@@ -1,0 +1,195 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2128:50
+     |
+2128 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: variant `BOXTIMES` is never constructed
+  --> src/abstract_domain.rs:82:5
+   |
+78 | pub enum CellValue {
+   |          --------- variant in this enum
+...
+82 |     BOXTIMES,
+   |     ^^^^^^^^
+   |
+   = note: `CellValue` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:594:8
+    |
+594 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 6 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines /home/af/Documenti/a-phd/crema`
+warning: struct `HeapAllocator` is never constructed
+   --> /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:380:8
+    |
+380 | struct HeapAllocator {
+    |        ^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: associated function `new` is never used
+   --> /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:385:8
+    |
+384 | impl HeapAllocator {
+    | ------------------ associated function in this implementation
+385 |     fn new() -> Self {
+    |        ^^^
+
+warning: 2 warnings emitted
+
+No C files found in the project.
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package stackswap-coroutines target stackswap-coroutines at /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug",
+    "--extern=regex_automata=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libregex_automata-f46d8a8887d8464b.rlib",
+    "--extern=humantime=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libhumantime-8af2b0e3a3445876.rlib",
+    "--extern=strsim=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libstrsim-0fdafd4896546737.rlib",
+    "--extern=lazy_static=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/liblazy_static-8b2339b61f5e2c85.rlib",
+    "--extern=nom=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libnom-3c60c90ee26fcac7.rlib",
+    "--extern=log=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/liblog-f4ca79b41b6a9533.rlib",
+    "--extern=libloading=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/liblibloading-1e7c0722a0c62887.rlib",
+    "--extern=lazycell=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/liblazycell-470586395cc53f3d.rlib",
+    "--extern=cfg_if=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libcfg_if-60660c4445a61b3d.rlib",
+    "--extern=clang_sys=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libclang_sys-294392da53786839.rlib",
+    "--extern=proc_macro2=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libproc_macro2-49ec4c542046af09.rlib",
+    "--extern=version_check=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libversion_check-e31da224a4d92066.rlib",
+    "--extern=ansi_term=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libansi_term-c717512aa2ccfd65.rlib",
+    "--extern=regex_syntax=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libregex_syntax-bfd7acc495db8564.rlib",
+    "--extern=textwrap=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libtextwrap-fb5d1e0566d08fbd.rlib",
+    "--extern=env_logger=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libenv_logger-e977a54d7e27351a.rlib",
+    "--extern=aho_corasick=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libaho_corasick-8495c0b94b87b11c.rlib",
+    "--extern=cexpr=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libcexpr-932fa5c5b031f41e.rlib",
+    "--extern=vec_map=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libvec_map-aafdeae09f65771e.rlib",
+    "--extern=atty=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libatty-6993c647d7087001.rlib",
+    "--extern=memchr=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libmemchr-d0ec46399dfe34e8.rlib",
+    "--extern=shlex=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libshlex-6f93d316719d7feb.rlib",
+    "--extern=regex=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libregex-1207140a0f918928.rlib",
+    "--extern=peeking_take_while=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libpeeking_take_while-ef640934592d134a.rlib",
+    "--extern=cc=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libcc-38a69aeed3d19179.rlib",
+    "--extern=clap=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libclap-f4a01a44853ee06a.rlib",
+    "--extern=unicode_width=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libunicode_width-30c930f75f373c8f.rlib",
+    "--extern=termcolor=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libtermcolor-d5f4a9eec7d5c382.rlib",
+    "--extern=setjmp=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libsetjmp-e120747cfcdc091a.rlib",
+    "--extern=quote=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libquote-4a6833d74ed6c253.rlib",
+    "--extern=libc=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/liblibc-6d8946442dcf11ac.rlib",
+    "--extern=glob=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libglob-ead686df6db2d0d2.rlib",
+    "--extern=rustc_hash=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/librustc_hash-27694c26883e36a3.rlib",
+    "--extern=bindgen=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libbindgen-01bb17fdeb3ad497.rlib",
+    "--extern=quick_error=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libquick_error-14bf640c9704534a.rlib",
+    "--extern=unicode_ident=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libunicode_ident-7b828347d8713ecd.rlib",
+    "--extern=which=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libwhich-1cff6c979809bbfc.rlib",
+    "--extern=bitflags=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/target/debug/deps/libbitflags-6661d73a29bf1c78.rlib",
+]
+warning: struct `HeapAllocator` is never constructed
+   --> /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:380:8
+    |
+380 | struct HeapAllocator {
+    |        ^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: associated function `new` is never used
+   --> /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:385:8
+    |
+384 | impl HeapAllocator {
+    | ------------------ associated function in this implementation
+385 |     fn new() -> Self {
+    |        ^^^
+
+Global ICFG saved to global_icfg.json
+warning: 2 warnings emitted
+
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+Final Abstract State: {"rust::main::bb0": {}}
+Final Taint State: {
+    "rust::main::bb0": {},
+}
+No tracking info per MIR var 'Local(_25) [mutable]'
+-> DummyRet node 'dummyRet::rust::Dispatcher::next::_24::rust::Dispatcher::next::bb15_internal': transferring from LLVM var None to MIR var None
+No tracking info per MIR var 'Local(_44) [mutable]'
+-> DummyRet node 'dummyRet::rust::Dispatcher::next::_43::rust::Dispatcher::next::bb25_internal': transferring from LLVM var None to MIR var None
+-> Skip Drop in 'rust::Dispatcher::new::bb5' because has an unwind incoming edge
+-> Skip Drop in 'rust::Dispatcher::new::bb6' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:27:5: 27:6 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb7, unwind terminate(cleanup)] }' -> '_1'
+No tracked variable found per '_1' o 'Local(_1)'
+-> Skip Drop in 'rust::Stack::new::bb7' because has an unwind incoming edge
+-> DummyRet node 'dummyRet::rust::Stack::block::30::rust::Stack::block::bb30_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_61")
+-> DummyRet node 'dummyRet::rust::Stack::yield_value::0::rust::Stack::yield_value::bb0_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_4")
+No tracking info per MIR var 'Local(_5) [mutable]'
+-> DummyRet node 'dummyRet::rust::Dispatcher::next_id::_4::rust::Dispatcher::next_id::bb2_internal': transferring from LLVM var None to MIR var None
+No tracking info per MIR var 'Local(_4) [mutable]'
+-> DummyRet node 'dummyRet::rust::Dispatcher::next_id::_3::rust::Dispatcher::next_id::bb3_internal': transferring from LLVM var None to MIR var None
+No tracking info per MIR var 'Local(_22) [mutable]'
+-> DummyRet node 'dummyRet::rust::Stack::stack_out::_21::rust::Stack::stack_out::bb13_internal': transferring from LLVM var None to MIR var None
+-> DummyRet node 'dummyRet::rust::Dispatcher::run::5::rust::Dispatcher::run::bb5_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_8")
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:46:55: 46:56 (#0), scope: scope[2] }, kind: drop(_12) -> [return: bb10, unwind continue] }' -> '_12'
+No tracked variable found per '_12' o 'Local(_12)'
+-> DummyRet node 'dummyRet::rust::Dispatcher::run::16::rust::Dispatcher::run::bb16_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_23")
+-> DummyRet node 'dummyRet::rust::Dispatcher::run::17::rust::Dispatcher::run::bb17_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_22")
+-> DummyRet node 'dummyRet::rust::Stack::get_yielded::11::rust::Stack::get_yielded::bb11_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_34")
+-> DummyRet node 'dummyRet::rust::Stack::get_yielded::26::rust::Stack::get_yielded::bb26_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_63")
+-> DummyRet node 'dummyRet::rust::Stack::get_yielded::29::rust::Stack::get_yielded::bb29_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_67")
+No tracking info per MIR var 'Local(_74) [mutable]'
+-> DummyRet node 'dummyRet::rust::Stack::get_yielded::_73::rust::Stack::get_yielded::bb34_internal': transferring from LLVM var None to MIR var None
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:250:5: 250:6 (#0), scope: scope[0] }, kind: drop(_8) -> [return: bb10, unwind continue] }' -> '_8'
+No tracked variable found per '_8' o 'Local(_8)'
+-> DummyRet node 'dummyRet::rust::Stack::cont::5::rust::Stack::cont::bb5_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_10")
+-> DummyRet node 'dummyRet::rust::Stack::spawn::0::rust::Stack::spawn::bb0_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_0")
+-> DummyRet node 'dummyRet::rust::Stack::spawn::2::rust::Stack::spawn::bb2_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_4")
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:367:5: 367:6 (#0), scope: scope[0] }, kind: drop(_2) -> [return: bb5, unwind terminate(cleanup)] }' -> '_2'
+No tracked variable found per '_2' o 'Local(_2)'
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 NO Issues detected: ✅
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

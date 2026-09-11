@@ -1,0 +1,69 @@
+{
+  "call_counts": {
+    "core::fmt::rt::Argument::<'_>::new_display::<i8>": 1,
+    "std::boxed::Box::<i8>::from_raw": 2,
+    "std::boxed::Box::<i8>::into_raw": 1,
+    "std::boxed::Box::<i8>::new": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 1,
+    "std::io::_print": 1
+  },
+  "call_total": 7,
+  "memory_api_counts": {
+    "box_from_raw": 2,
+    "box_into_raw": 1,
+    "box_new": 1
+  },
+  "memory_api_examples": {
+    "box_from_raw": [
+      "std::boxed::Box::<i8>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<i8>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<i8>::new"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _7]"
+    ],
+    "direct_use": [
+      "move _1"
+    ],
+    "ref": [
+      "&(*_14)",
+      "&_6"
+    ],
+    "scalar_const": [
+      "const false",
+      "const true"
+    ],
+    "unknown_unhandled": [
+      "const main::promoted[0]",
+      "copy (((_1.0: std::ptr::Unique<i8>).0: std::ptr::NonNull<i8>).0: *const i8)"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 1,
+    "direct_use": 1,
+    "ref": 2,
+    "scalar_const": 4,
+    "unknown_unhandled": 2
+  },
+  "rvalue_total": 10,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 1,
+    "unknown_unhandled": 2
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "boxed_i8__df",
+  "terminator_kind_counts": {
+    "Call": 7,
+    "Drop": 4,
+    "Return": 1,
+    "SwitchInt": 1,
+    "UnwindResume": 1
+  }
+}

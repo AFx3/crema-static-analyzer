@@ -1,0 +1,244 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2128:50
+     |
+2128 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: variant `BOXTIMES` is never constructed
+  --> src/abstract_domain.rs:82:5
+   |
+78 | pub enum CellValue {
+   |          --------- variant in this enum
+...
+82 |     BOXTIMES,
+   |     ^^^^^^^^
+   |
+   = note: `CellValue` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:594:8
+    |
+594 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 6 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsafely-created-owned-type`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsafely-created-owned-type
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsafely-created-owned-type /home/af/Documenti/a-phd/crema`
+No C files found in the project.
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package unsafe-owned target unsafe-owned at /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsafely-created-owned-type/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsafely-created-owned-type/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsafely-created-owned-type/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsafely-created-owned-type/target/debug",
+]
+Global ICFG saved to global_icfg.json
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb1::rust::main::bb1_internal", outgoing_edge: "rust::main::bb2", id: "9d6bfa87fe144916", mir_var: Some("_2"), llvm_var: Some("Local _0"), is_internal: Some(true) }
+DUMMYRET normalize: '_2'->'Local(2)', 'Local _0'->'Local(_0)'
+BEFORE JOIN: Local(2)=BOTTOM, Local(_0)=BOTTOM
+JOINED Local(2)=BOTTOM
+AFTER SET: mem_ret[Local(2)]=BOTTOM
+TAINT Local(2)={}
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb2::rust::main::bb2_internal", outgoing_edge: "rust::main::bb3", id: "79bdf404100ae1fa", mir_var: Some("_4"), llvm_var: Some("Local _0"), is_internal: Some(true) }
+DUMMYRET normalize: '_4'->'Local(4)', 'Local _0'->'Local(_0)'
+BEFORE JOIN: Local(4)=BOTTOM, Local(_0)=BOTTOM
+JOINED Local(4)=BOTTOM
+AFTER SET: mem_ret[Local(4)]=BOTTOM
+TAINT Local(4)={}
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::<StyleSheetBuf as std::ops::Deref>::deref::bb0::rust::<StyleSheetBuf as std::ops::Deref>::deref::bb0_internal", outgoing_edge: "rust::<StyleSheetBuf as std::ops::Deref>::deref::bb1", id: "b310723c9eb31656", mir_var: Some("_0"), llvm_var: Some("Local _0"), is_internal: Some(true) }
+DUMMYRET normalize: '_0'->'Local(0)', 'Local _0'->'Local(_0)'
+BEFORE JOIN: Local(0)=BOTTOM, Local(_0)=BOTTOM
+JOINED Local(0)=BOTTOM
+AFTER SET: mem_ret[Local(0)]=BOTTOM
+TAINT Local(0)={}
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb3::rust::main::bb3_internal", outgoing_edge: "rust::main::bb4", id: "75b6808edc649056", mir_var: Some("_3"), llvm_var: Some("Local _0"), is_internal: Some(true) }
+DUMMYRET normalize: '_3'->'Local(3)', 'Local _0'->'Local(_0)'
+BEFORE JOIN: Local(3)=BOTTOM, Local(_0)=BOTTOM
+JOINED Local(3)=BOTTOM
+AFTER SET: mem_ret[Local(3)]=BOTTOM
+TAINT Local(3)={}
+Final Abstract State: {"dummyRet::rust::main::2::rust::main::bb2_internal": {{"Local(_3)"}: MV}, "rust::StyleSheetBuf::new::bb1": {{"Local(_3)"}: MV}, "dummyRet::rust::<StyleSheetBuf as std::ops::Deref>::deref::0::rust::<StyleSheetBuf as std::ops::Deref>::deref::bb0_internal": {}, "rust::main::bb4": {{"Local(_2)"}: FREED, {"Local(_3)"}: MV}, "dummyCall::rust::main::bb3::rust::main::bb3_internal": {{"Local(_3)"}: MV}, "rust::main::bb0": {}, "dummyCall::rust::<StyleSheetBuf as std::ops::Deref>::deref::bb0::rust::<StyleSheetBuf as std::ops::Deref>::deref::bb0_internal": {}, "rust::StyleSheetBuf::new::bb3": {{"Local(_3)"}: MV}, "rust::<StyleSheetBuf as std::ops::Deref>::deref::bb1": {}, "rust::StyleSheetBuf::new::bb4": {{"Local(_3)"}: MV}, "rust::main::bb5": {{"Local(_2)"}: FREED, {"Local(_3)"}: MV}, "rust::main::bb7": {{"Local(_2)"}: FREED, {"Local(_3)"}: MV}, "rust::main::terminate": {{"Local(_2)"}: FREED, {"Local(_3)"}: MV}, "rust::print_parsed::bb2": {}, "rust::print_parsed::bb3": {}, "rust::main::bb2": {{"Local(_3)"}: MV}, "rust::print_parsed::bb1": {}, "dummyRet::rust::main::1::rust::main::bb1_internal": {{"Local(_3)"}: MV}, "dummyCall::rust::main::bb1::rust::main::bb1_internal": {}, "rust::main::bb3": {{"Local(_3)"}: MV}, "rust::StyleSheetBuf::new::bb2": {{"Local(_3)"}: MV}, "rust::StyleSheetBuf::sheet::bb1": {}, "rust::main::bb1": {}, "dummyCall::rust::main::bb2::rust::main::bb2_internal": {{"Local(_3)"}: MV}, "rust::main::bb6": {{"Local(_2)"}: FREED, {"Local(_3)"}: MV}, "rust::StyleSheetBuf::sheet::bb2": {}, "dummyRet::rust::main::3::rust::main::bb3_internal": {{"Local(_2)"}: FREED, {"Local(_3)"}: MV}}
+Final Taint State: {
+    "dummyRet::rust::main::1::rust::main::bb1_internal": {
+        "Local(_3)": {
+            "assign",
+        },
+    },
+    "rust::main::bb1": {},
+    "dummyRet::rust::<StyleSheetBuf as std::ops::Deref>::deref::0::rust::<StyleSheetBuf as std::ops::Deref>::deref::bb0_internal": {},
+    "rust::StyleSheetBuf::sheet::bb2": {},
+    "rust::main::bb3": {
+        "Local(_3)": {
+            "assign",
+        },
+    },
+    "rust::main::bb5": {
+        "Local(_3)": {
+            "assign",
+        },
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "dummyCall::rust::main::bb3::rust::main::bb3_internal": {
+        "Local(_3)": {
+            "assign",
+        },
+    },
+    "dummyCall::rust::main::bb2::rust::main::bb2_internal": {
+        "Local(_3)": {
+            "assign",
+        },
+    },
+    "dummyRet::rust::main::2::rust::main::bb2_internal": {
+        "Local(_3)": {
+            "assign",
+        },
+    },
+    "rust::StyleSheetBuf::new::bb4": {
+        "Local(_3)": {
+            "assign",
+        },
+    },
+    "rust::<StyleSheetBuf as std::ops::Deref>::deref::bb1": {},
+    "dummyRet::rust::main::3::rust::main::bb3_internal": {
+        "Local(_3)": {
+            "assign",
+        },
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "rust::main::bb7": {
+        "Local(_3)": {
+            "assign",
+        },
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "rust::print_parsed::bb1": {},
+    "rust::print_parsed::bb2": {},
+    "rust::StyleSheetBuf::new::bb2": {
+        "Local(_3)": {
+            "assign",
+        },
+    },
+    "rust::main::terminate": {
+        "Local(_3)": {
+            "assign",
+        },
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "dummyCall::rust::main::bb1::rust::main::bb1_internal": {},
+    "rust::StyleSheetBuf::new::bb3": {
+        "Local(_3)": {
+            "assign",
+        },
+    },
+    "rust::main::bb6": {
+        "Local(_2)": {
+            "free",
+        },
+        "Local(_3)": {
+            "assign",
+        },
+    },
+    "rust::print_parsed::bb3": {},
+    "rust::main::bb0": {},
+    "rust::main::bb2": {
+        "Local(_3)": {
+            "assign",
+        },
+    },
+    "rust::StyleSheetBuf::new::bb1": {
+        "Local(_3)": {
+            "assign",
+        },
+    },
+    "rust::main::bb4": {
+        "Local(_3)": {
+            "assign",
+        },
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "dummyCall::rust::<StyleSheetBuf as std::ops::Deref>::deref::bb0::rust::<StyleSheetBuf as std::ops::Deref>::deref::bb0_internal": {},
+    "rust::StyleSheetBuf::sheet::bb1": {},
+}
+Tracking variable 'Local(_3)' from block 'dummyRet::rust::main::1::rust::main::bb1_internal' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::main::bb3' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::main::bb5' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'dummyCall::rust::main::bb3::rust::main::bb3_internal' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'dummyCall::rust::main::bb2::rust::main::bb2_internal' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'dummyRet::rust::main::2::rust::main::bb2_internal' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::StyleSheetBuf::new::bb4' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'dummyRet::rust::main::3::rust::main::bb3_internal' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::main::bb7' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::StyleSheetBuf::new::bb2' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::main::terminate' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::StyleSheetBuf::new::bb3' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::StyleSheetBuf::new::bb1' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::main::bb4' (markers: {"assign"})
+-> DummyRet node 'dummyRet::rust::main::1::rust::main::bb1_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_2")
+-> DummyRet node 'dummyRet::rust::main::2::rust::main::bb2_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_4")
+-> DummyRet node 'dummyRet::rust::main::3::rust::main::bb3_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_3")
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsafely-created-owned-type/src/main.rs:8:1: 8:2 (#0), scope: scope[1] }, kind: drop(_2) -> [return: bb5, unwind continue] }' -> '_2'
+No tracked variable found per '_2' o 'Local(_2)'
+-> Skip Drop in 'rust::main::bb6' because has an unwind incoming edge
+-> DummyRet node 'dummyRet::rust::<StyleSheetBuf as std::ops::Deref>::deref::0::rust::<StyleSheetBuf as std::ops::Deref>::deref::bb0_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_0")
+-> DummyRet node 'dummyRet::rust::parse_file::2::rust::parse_file::bb2_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_0")
+Aliased via from_raw: 'Local(_7) [mutable]' -> '_6'
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 NO Issues detected: ✅
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

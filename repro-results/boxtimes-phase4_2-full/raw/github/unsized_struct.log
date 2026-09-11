@@ -1,0 +1,203 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2922:50
+     |
+2922 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:640:8
+    |
+640 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 5 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct /home/af/Documenti/a-phd/crema`
+No C files found in the project.
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package unsized_struct target unsized_struct at /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/target/debug",
+]
+Global ICFG saved to global_icfg.json
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb4::rust::main::bb4_internal", outgoing_edge: "rust::main::bb5", id: "b9ab3d3a4ba7c7e7", mir_var: Some("_11"), llvm_var: Some("Local _0"), is_internal: Some(true) }
+DUMMYRET normalize: '_11'->'Local(11)', 'Local _0'->'Local(_0)'
+BEFORE JOIN: Local(11)=BOTTOM, Local(_0)=BOTTOM
+JOINED Local(11)=BOTTOM
+AFTER SET: mem_ret[Local(11)]=BOTTOM
+TAINT Local(11)={}
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb5::rust::main::bb5_internal", outgoing_edge: "rust::main::bb6", id: "ded352a6807490af", mir_var: Some("_10"), llvm_var: Some("Local _0"), is_internal: Some(true) }
+DUMMYRET normalize: '_10'->'Local(10)', 'Local _0'->'Local(_0)'
+BEFORE JOIN: Local(10)=BOTTOM, Local(_0)=BOTTOM
+JOINED Local(10)=BOTTOM
+AFTER SET: mem_ret[Local(10)]=BOTTOM
+TAINT Local(10)={}
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::MyStructSlice::inc::bb1::rust::MyStructSlice::inc::bb1_internal", outgoing_edge: "rust::MyStructSlice::inc::bb2", id: "6ef1654bb331cda5", mir_var: None, llvm_var: None, is_internal: Some(true) }
+Final Abstract State: {"dummyRet::rust::MyStructSlice::inc::_2::rust::MyStructSlice::inc::bb1_internal": {}, "rust::main::bb10": {{"Local(_1)"}: FREED, {"Local(_12)"}: TOP, {"Local(_16)"}: TOP, {"Local(_19)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::MyStructSlice::inc::{closure#0}::bb1": {}, "rust::main::terminate": {{"Local(_1)"}: FREED, {"Local(_12)"}: TOP, {"Local(_16)"}: TOP, {"Local(_19)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "dummyCall::rust::main::bb4::rust::main::bb4_internal": {{"Local(_12)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::MyStructSlice::inc::{closure#0}::bb0": {}, "rust::main::bb11": {{"Local(_1)"}: FREED, {"Local(_12)"}: TOP, {"Local(_16)"}: TOP, {"Local(_19)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb7": {{"Local(_12)"}: TOP, {"Local(_16)"}: TOP, {"Local(_19)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb8": {{"Local(_12)"}: TOP, {"Local(_16)"}: TOP, {"Local(_19)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb6": {{"Local(_12)"}: TOP, {"Local(_19)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "dummyCall::rust::MyStructSlice::inc::bb1::rust::MyStructSlice::inc::bb1_internal": {}, "rust::<MyStruct as std::ops::DerefMut>::deref_mut::bb1": {}, "rust::main::bb12": {{"Local(_1)"}: FREED, {"Local(_12)"}: TOP, {"Local(_16)"}: TOP, {"Local(_19)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb5": {{"Local(_12)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb0": {}, "rust::main::bb3": {{"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "dummyRet::rust::main::4::rust::main::bb4_internal": {{"Local(_12)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb2": {{"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "dummyRet::rust::main::5::rust::main::bb5_internal": {{"Local(_12)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb1": {{"Local(_9)"}: TOP}, "rust::main::bb4": {{"Local(_12)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "dummyCall::rust::main::bb5::rust::main::bb5_internal": {{"Local(_12)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::MyStructSlice::inc::bb1": {}, "rust::main::bb9": {{"Local(_1)"}: FREED, {"Local(_12)"}: TOP, {"Local(_16)"}: TOP, {"Local(_19)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::MyStructSlice::inc::bb2": {}}
+Final Taint State: {
+    "rust::main::bb9": {
+        "Local(_1)": {
+            "free",
+        },
+        "_2": {},
+        "Local(11)": {},
+        "Local(_2)": {},
+        "Local(10)": {},
+    },
+    "rust::main::bb11": {
+        "Local(11)": {},
+        "Local(_2)": {},
+        "Local(_1)": {
+            "free",
+        },
+        "Local(10)": {},
+        "_2": {},
+    },
+    "rust::main::bb0": {},
+    "rust::main::bb3": {},
+    "rust::MyStructSlice::inc::bb2": {
+        "Local(_2)": {},
+        "_2": {},
+    },
+    "rust::main::bb2": {},
+    "rust::main::bb5": {
+        "Local(11)": {},
+    },
+    "rust::main::bb6": {
+        "Local(10)": {},
+        "_2": {},
+        "Local(11)": {},
+        "Local(_2)": {},
+    },
+    "rust::main::bb4": {},
+    "rust::MyStructSlice::inc::{closure#0}::bb1": {
+        "_2": {},
+        "Local(_2)": {},
+    },
+    "rust::main::bb1": {},
+    "rust::main::bb10": {
+        "_2": {},
+        "Local(11)": {},
+        "Local(10)": {},
+        "Local(_2)": {},
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb8": {
+        "Local(10)": {},
+        "_2": {},
+        "Local(11)": {},
+        "Local(_2)": {},
+    },
+    "rust::main::terminate": {
+        "Local(_1)": {
+            "free",
+        },
+        "Local(11)": {},
+        "Local(_2)": {},
+        "Local(10)": {},
+        "_2": {},
+    },
+    "rust::MyStructSlice::inc::{closure#0}::bb0": {
+        "_2": {},
+    },
+    "rust::MyStructSlice::inc::bb1": {},
+    "dummyCall::rust::MyStructSlice::inc::bb1::rust::MyStructSlice::inc::bb1_internal": {
+        "_2": {},
+        "Local(_3)": {},
+    },
+    "dummyCall::rust::main::bb5::rust::main::bb5_internal": {
+        "Local(11)": {},
+    },
+    "dummyRet::rust::MyStructSlice::inc::_2::rust::MyStructSlice::inc::bb1_internal": {
+        "Local(_2)": {},
+        "_2": {},
+    },
+    "dummyRet::rust::main::5::rust::main::bb5_internal": {
+        "Local(11)": {},
+        "Local(_2)": {},
+        "_2": {},
+    },
+    "rust::main::bb12": {
+        "Local(_2)": {},
+        "_2": {},
+        "Local(11)": {},
+        "Local(10)": {},
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "dummyCall::rust::main::bb4::rust::main::bb4_internal": {},
+    "dummyRet::rust::main::4::rust::main::bb4_internal": {},
+    "rust::<MyStruct as std::ops::DerefMut>::deref_mut::bb1": {},
+    "rust::main::bb7": {
+        "_2": {},
+        "Local(_2)": {},
+        "Local(11)": {},
+        "Local(10)": {},
+    },
+}
+Aliased via from_raw: 'Local(_2) [mutable]' -> '_0'
+-> DummyRet node 'dummyRet::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::0::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_0")
+-> DummyRet node 'dummyRet::rust::main::4::rust::main::bb4_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_11")
+-> DummyRet node 'dummyRet::rust::main::5::rust::main::bb5_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_10")
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:101:1: 101:2 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb10, unwind continue] }' -> '_1'
+-> Skip Drop in 'rust::main::bb11' because has an unwind incoming edge
+No tracking info per MIR var 'Local(_3) [mutable]'
+-> DummyRet node 'dummyRet::rust::MyStructSlice::inc::_2::rust::MyStructSlice::inc::bb1_internal': transferring from LLVM var None to MIR var None
+Aliased via from_raw: 'Local(_2) [mutable]' -> '_0'
+No tracked variable found per '_1' o 'Local(_1)'
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_0), Local(_2) [mutable], _0}": 1}
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

@@ -1,0 +1,7 @@
+{
+  "cstr_cargo_df_ffi": [
+    "DF",
+    "UAF",
+    "UB_FFI"
+  ]
+}

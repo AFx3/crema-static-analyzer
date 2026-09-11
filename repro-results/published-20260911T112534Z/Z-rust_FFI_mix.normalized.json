@@ -1,0 +1,55 @@
+{
+  "branch_df_mem_leak_ffi": [
+    "DF",
+    "ML",
+    "UB_FFI"
+  ],
+  "clean_mul_fn_ffi_no_errors": [],
+  "cstr_cargo_df_ffi": [
+    "DF",
+    "UAF",
+    "UB_FFI"
+  ],
+  "cstr_expect_uaf_and_ub_ffi": [
+    "UAF",
+    "UB_FFI"
+  ],
+  "cstringcargo_df_ffi": [
+    "DF",
+    "UB_FFI"
+  ],
+  "df_rand_cargo_c_ffi": [
+    "DF",
+    "UAF",
+    "UB_FFI"
+  ],
+  "for_df_ffi": [
+    "DF",
+    "UB_FFI"
+  ],
+  "for_memory_leak_ffi": [
+    "ML"
+  ],
+  "uaf_mem_leak_ffi": [
+    "ML",
+    "UAF",
+    "UB_FFI"
+  ],
+  "vuln_only_mem_leak_but_df_branch_overapprox_FFI": [
+    "DF",
+    "ML",
+    "UB_FFI"
+  ],
+  "warning_ub_bool": [
+    "UB_FFI"
+  ],
+  "warning_ub_int": [
+    "UB_FFI"
+  ],
+  "warning_ub_mult": [
+    "UB_FFI"
+  ],
+  "warning_ub_string": [
+    "UB_FFI"
+  ]
+}

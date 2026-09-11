@@ -1,0 +1,160 @@
+{
+  "call_counts": {
+    "<std::boxed::Box<Node<T>> as std::ops::Drop>::drop": 1,
+    "<std::iter::Map<std::ops::Range<i32>, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/lock-free/src/main.rs:86:18: 86:21}> as std::iter::Iterator>::collect::<std::vec::Vec<std::thread::JoinHandle<()>>>": 1,
+    "<std::ops::Range<i32> as std::iter::IntoIterator>::into_iter": 1,
+    "<std::ops::Range<i32> as std::iter::Iterator>::map::<std::thread::JoinHandle<()>, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/lock-free/src/main.rs:86:18: 86:21}>": 1,
+    "<std::ops::Range<i32> as std::iter::Iterator>::next": 1,
+    "<std::vec::IntoIter<std::thread::JoinHandle<()>> as std::iter::Iterator>::next": 1,
+    "<std::vec::Vec<std::thread::JoinHandle<()>> as std::iter::IntoIterator>::into_iter": 1,
+    "LockFreeStack::<i32>::len": 1,
+    "LockFreeStack::<i32>::new": 1,
+    "LockFreeStack::<i32>::pop": 1,
+    "LockFreeStack::<i32>::push": 1,
+    "core::fmt::rt::Argument::<'_>::new_debug::<std::option::Option<i32>>": 1,
+    "core::fmt::rt::Argument::<'_>::new_display::<u64>": 1,
+    "std::boxed::Box::<LockFreeStack<i32>>::leak::<'_>": 1,
+    "std::boxed::Box::<LockFreeStack<i32>>::new": 1,
+    "std::boxed::Box::<Node<T>>::from_raw": 1,
+    "std::boxed::Box::<Node<T>>::into_raw": 1,
+    "std::boxed::Box::<Node<T>>::new": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 2,
+    "std::io::_print": 2,
+    "std::ptr::mut_ptr::<impl *mut Node<T>>::is_null": 2,
+    "std::ptr::mut_ptr::<impl *mut Node<T>>::read": 1,
+    "std::ptr::mut_ptr::<impl *mut Node<T>>::read_volatile": 1,
+    "std::ptr::null_mut::<Node<T>>": 2,
+    "std::result::Result::<(), std::boxed::Box<dyn std::any::Any + std::marker::Send>>::unwrap": 1,
+    "std::result::Result::<*mut Node<T>, *mut Node<T>>::is_ok": 2,
+    "std::sync::atomic::AtomicPtr::<Node<T>>::compare_exchange_weak": 2,
+    "std::sync::atomic::AtomicPtr::<Node<T>>::load": 3,
+    "std::sync::atomic::AtomicPtr::<Node<T>>::new": 1,
+    "std::thread::JoinHandle::<()>::join": 1,
+    "std::thread::spawn::<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/lock-free/src/main.rs:87:23: 87:30}, ()>": 1
+  },
+  "call_total": 39,
+  "memory_api_counts": {
+    "box_from_raw": 1,
+    "box_into_raw": 1,
+    "box_leak": 1,
+    "box_new": 2
+  },
+  "memory_api_examples": {
+    "box_from_raw": [
+      "std::boxed::Box::<Node<T>>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<Node<T>>::into_raw"
+    ],
+    "box_leak": [
+      "std::boxed::Box::<LockFreeStack<i32>>::leak::<'_>"
+    ],
+    "box_new": [
+      "std::boxed::Box::<LockFreeStack<i32>>::new",
+      "std::boxed::Box::<Node<T>>::new"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _23]",
+      "[move _31]"
+    ],
+    "arithmetic_binary": [
+      "Sub(copy _19, const 1_usize)",
+      "BitAnd(copy _18, copy _20)",
+      "Sub(copy _21, const 1_usize)",
+      "BitAnd(copy _20, copy _22)"
+    ],
+    "checked_binary_unhandled": [
+      "AddWithOverflow(copy _5, const 1_u64)"
+    ],
+    "closure_aggregate": [
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/lock-free/src/main.rs:86:18: 86:21} { stack: move _9 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/lock-free/src/main.rs:87:23: 87:30} { stack: copy (*_4), i: copy _2 }"
+    ],
+    "comparison": [
+      "Eq(copy _21, const 0_usize)",
+      "Eq(copy _23, const 0_usize)"
+    ],
+    "copy_for_deref": [
+      "deref_copy ((*_1).0: &&LockFreeStack<i32>)",
+      "deref_copy (_1.0: &LockFreeStack<i32>)"
+    ],
+    "direct_use": [
+      "move _10",
+      "move _2",
+      "copy _8",
+      "copy _2",
+      "copy _5",
+      "move _9"
+    ],
+    "pointer_cast": [
+      "copy _7 as *const () (PtrToPtr)",
+      "copy _18 as *const () (PtrToPtr)"
+    ],
+    "ref": [
+      "&(*_2)",
+      "&_1",
+      "&mut _11",
+      "&_25",
+      "&_22",
+      "&_33",
+      "&_30",
+      "&((*_1).0: std::sync::atomic::AtomicPtr<Node<T>>)"
+    ],
+    "scalar_cast": [
+      "copy _17 as usize (Transmute)",
+      "copy _19 as usize (Transmute)"
+    ],
+    "scalar_const": [
+      "const 0_u64"
+    ],
+    "scalar_nullary": [
+      "AlignOf(Node<T>)"
+    ],
+    "unknown_unhandled": [
+      "std::ops::Range::<i32> { start: const 0_i32, end: const 10_i32 }",
+      "discriminant(_12)",
+      "move ((_12 as Some).0: std::thread::JoinHandle<()>)",
+      "const main::promoted[1]",
+      "const main::promoted[0]",
+      "Node::<T> { data: move _5, next: move _6 }",
+      "std::sync::atomic::Ordering::SeqCst",
+      "std::ops::Range::<i32> { start: const 0_i32, end: const 1000_i32 }"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 2,
+    "arithmetic_binary": 4,
+    "checked_binary_unhandled": 1,
+    "closure_aggregate": 2,
+    "comparison": 2,
+    "copy_for_deref": 2,
+    "direct_use": 8,
+    "pointer_cast": 2,
+    "ref": 16,
+    "scalar_cast": 2,
+    "scalar_const": 1,
+    "scalar_nullary": 2,
+    "unknown_unhandled": 24
+  },
+  "rvalue_total": 68,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 2,
+    "checked_binary_unhandled": 1,
+    "unknown_unhandled": 24
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "lock-free",
+  "terminator_kind_counts": {
+    "Assert": 3,
+    "Call": 39,
+    "Drop": 5,
+    "Goto": 6,
+    "Return": 7,
+    "SwitchInt": 6,
+    "Unreachable": 2,
+    "UnwindResume": 2
+  }
+}

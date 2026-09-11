@@ -68,7 +68,7 @@ fn main() {
             run_crema_with_filter(&project_path, "DoubleFree");
         }
         AnalysisKind::Unknown => {
-            println!("Unknown or unclassified analysis kind.");
+            println!("THIS ANALYSIS IS NOT SUPPORTED, poorly...");
         }
     }
 
@@ -105,7 +105,7 @@ fn run_crema_with_filter(project_path: &Path, vuln_kind: &str) {
     println!("Resolved Cargo project root: {:?}", project_root);
 
     let crema_path = Path::new("../../crema");
-    
+
     let mut cmd = Command::new("cargo")
         .arg("run")
         .arg(project_root.to_str().unwrap())

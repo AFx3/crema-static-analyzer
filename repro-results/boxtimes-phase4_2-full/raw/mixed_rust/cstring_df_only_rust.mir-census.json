@@ -1,0 +1,38 @@
+{
+  "call_counts": {
+    "std::ffi::CString::from_raw": 2,
+    "std::ffi::CString::into_raw": 1,
+    "std::ffi::CString::new::<&str>": 1,
+    "std::mem::drop::<std::ffi::CString>": 1,
+    "std::result::Result::<std::ffi::CString, std::ffi::NulError>::unwrap": 1
+  },
+  "call_total": 6,
+  "memory_api_counts": {
+    "cstring_from_raw": 2,
+    "cstring_into_raw": 1,
+    "mem_drop": 1
+  },
+  "memory_api_examples": {
+    "cstring_from_raw": [
+      "std::ffi::CString::from_raw"
+    ],
+    "cstring_into_raw": [
+      "std::ffi::CString::into_raw"
+    ],
+    "mem_drop": [
+      "std::mem::drop::<std::ffi::CString>"
+    ]
+  },
+  "rvalue_examples": {},
+  "rvalue_kind_counts": {},
+  "rvalue_total": 0,
+  "rvalue_unhandled_counts": {},
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "cstring_df_only_rust",
+  "terminator_kind_counts": {
+    "Call": 6,
+    "Drop": 1,
+    "Return": 1
+  }
+}

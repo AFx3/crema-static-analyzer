@@ -1,0 +1,16 @@
+{
+  "README.md": "941b1b11dfbd7a069bb548fa223691149907a0b2e64691f127fcb9b3eae8376b",
+  "__pycache__/compare_crema_semantics_92.cpython-313.pyc": "db6b9ca488779e29a34debe73e3006877538d9c19bd08be28e1ec4aaedce09dc",
+  "__pycache__/mir_census.cpython-313.pyc": "4c61f006db06c65425153cbd754008942081cbff8f42629d01614986b3dbd881",
+  "__pycache__/normalize_results.cpython-313.pyc": "391ec1d457d142d4d9fe33d0a955d6a78fa20eb77eebf5e3bb88890e8c98fdc2",
+  "__pycache__/report_mir_census.cpython-313.pyc": "c228f97577310fcc05f91ec592dd2f1844da9ad401d09be01bbc708968a4390f",
+  "compare_crema_semantics_92.py": "5f435ced4fe493ed62e4d696bc097a34b9d1a87cef8ffbf032f76c98583b7a6f",
+  "mir_census.py": "0e998e6b790e139ed5528e440961e9185047511bd3ef43b1ad46d68d827487f6",
+  "normalize_results.py": "fd583fb130671e8b47b1d85530445cc95abfa3c1d4cf6538e12a7c7bf314e434",
+  "oracle.json": "6698abd9e06f89da20fb2f0bf525d9d697073d01426585052f7aca18b1411c27",
+  "report_mir_census.py": "5c08f644b2c0215e843a178cb6f16ecee9d0ec6c1bc9a928d5d851e7c04a651e",
+  "run_crema_isolated_full.sh": "bcbf0d2a26dcf1eabfb013b2fca09a11a1374814fde1e1539fe7dd756f20f146",
+  "run_crema_isolated_smoke.sh": "43c12507d99dace328edb31719f95eb9e90e6c52e86afcec83ab026a95ef9ab4",
+  "run_crema_published.sh": "44cbbb77f9040cd3ce8a3d505835278266ee60455acfe36e00faa70c01acba5d",
+  "validate_phase4_4_full.py": "c888b402647fcb79dc064914acdbdee6e28d3a0a38b1f5c01f14d97a7475a8ef"
+}

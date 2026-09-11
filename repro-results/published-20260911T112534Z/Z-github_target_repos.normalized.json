@@ -1,0 +1,52 @@
+{
+  "c-callback-rust-closure": [
+    "NO_CLASSIFIER_OUTPUT"
+  ],
+  "concurrent-verification": [
+    "ML"
+  ],
+  "lock-free": [
+    "ML"
+  ],
+  "lock_free_non_blocking_linked_list": [],
+  "napkin-math-test": [
+    "NO_CLASSIFIER_OUTPUT"
+  ],
+  "noGenerator": [
+    "ML"
+  ],
+  "openapi-client-gen": [
+    "NO_CLASSIFIER_OUTPUT"
+  ],
+  "rc-playground": [],
+  "rusant": [
+    "NO_CLASSIFIER_OUTPUT"
+  ],
+  "rust-boks": [],
+  "rust_hw3": [],
+  "rust_memory": [
+    "NO_CLASSIFIER_OUTPUT"
+  ],
+  "shared-register": [
+    "NO_CLASSIFIER_OUTPUT"
+  ],
+  "skip-list-test": [
+    "ML"
+  ],
+  "square": [
+    "NO_CLASSIFIER_OUTPUT"
+  ],
+  "stackswap-coroutines": [
+    "NO_CLASSIFIER_OUTPUT"
+  ],
+  "unsafely-created-owned-type": [],
+  "unsized_struct": [
+    "ML"
+  ],
+  "wasm-demo": [
+    "ML"
+  ],
+  "whisper-rs-example": [
+    "NO_CLASSIFIER_OUTPUT"
+  ]
+}

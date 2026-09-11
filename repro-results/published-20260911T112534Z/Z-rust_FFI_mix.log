@@ -1,0 +1,127 @@
+=== branch_df_mem_leak_ffi ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Double Free Issues ☢:
+Free detected at source line: CallICFGNode11 {fun: print_and}
+   call void @free(ptr noundef %1) #3 CallICFGNode: 
+☢ Never Free Issues ☢:
+{"{32@rust::main::bb20, Local(_31)}": 1}
+🪲  WARNING: variable '10@rust::main::bb3' was allocated in Rust and then freed in C (LLVM free) at `CallICFGNode11 {fun: print_and}
+   call void @free(ptr noundef %1) #3 CallICFGNode: `
+Possible UNDEFINED BEHAVIOUR!
+
+=== clean_mul_fn_ffi_no_errors ===
+(no memory‑issues detected)
+
+=== cstr_cargo_df_ffi ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/cstr_cargo_df_ffi/src/main.rs:43:35: 43:38 (#0)
+{"{10@rust::main::bb9, Local(_16), Local(_4), Local(_6), _16}": 1}
+☢ Double Free Issues ☢:
+Free detected at source line: CallICFGNode9 {fun: print_e_free}
+   call void @free(ptr noundef %1) CallICFGNode: 
+🪲  WARNING: variable '10@rust::main::bb9' was allocated in Rust and then freed in C (LLVM free) at `CallICFGNode9 {fun: print_e_free}
+   call void @free(ptr noundef %1) CallICFGNode: `
+Possible UNDEFINED BEHAVIOUR!
+
+=== cstr_expect_uaf_and_ub_ffi ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/cstr_expect_uaf_and_ub_ffi/src/main.rs:19:35: 19:38 (#0)
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🪲  WARNING: variable '10@rust::main::bb9' was allocated in Rust and then freed in C (LLVM free) at `CallICFGNode9 {fun: print_e_free}
+   call void @free(ptr noundef %1) CallICFGNode: `
+Possible UNDEFINED BEHAVIOUR!
+
+=== cstringcargo_df_ffi ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Double Free Issues ☢:
+Free detected at source line: CallICFGNode17 {fun: modify_and_free_string}
+   call void @free(ptr noundef %3) #3 CallICFGNode: 
+🪲  WARNING: variable '11@rust::main::bb6' was allocated in Rust and then freed in C (LLVM free) at `CallICFGNode17 {fun: modify_and_free_string}
+   call void @free(ptr noundef %3) #3 CallICFGNode: `
+Possible UNDEFINED BEHAVIOUR!
+
+=== df_rand_cargo_c_ffi ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/df_rand_cargo_c_ffi/src/main.rs:26:40: 26:57 (#0)
+{"{14@rust::main::bb2, Local(_19), Local(_2), Local(_20), Local(_20) [mutable], _19}": 1}
+☢ Double Free Issues ☢:
+Free detected at source line: CallICFGNode21 {fun: cast}
+   call void @free(ptr noundef %6) #3 CallICFGNode: 
+🪲  WARNING: variable '14@rust::main::bb2' was allocated in Rust and then freed in C (LLVM free) at `CallICFGNode21 {fun: cast}
+   call void @free(ptr noundef %6) #3 CallICFGNode: `
+Possible UNDEFINED BEHAVIOUR!
+
+=== for_df_ffi ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Double Free Issues ☢:
+Free detected at source line: CallICFGNode13 {fun: print_and}
+   call void @free(ptr noundef %1) #3 CallICFGNode: 
+🪲  WARNING: variable '10@rust::main::bb11' was allocated in Rust and then freed in C (LLVM free) at `CallICFGNode13 {fun: print_and}
+   call void @free(ptr noundef %1) #3 CallICFGNode: `
+Possible UNDEFINED BEHAVIOUR!
+
+=== for_memory_leak_ffi ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{32@rust::main::bb11, Local(_20)}": 1}
+
+
+=== uaf_mem_leak_ffi ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/uaf_mem_leak_ffi/src/main.rs:11:57: 11:78 (#0)
+{"{47@rust::main::bb5, Local(_12), Local(_14), Local(_2)}": 1}
+☢ Never Free Issues ☢:
+{"{Local(_23)}": 1}
+🪲  WARNING: variable '47@rust::main::bb5' was allocated in Rust and then freed in C (LLVM free) at `CallICFGNode44 {fun: free_int}
+   call void @free(ptr noundef %5) #3 CallICFGNode: `
+Possible UNDEFINED BEHAVIOUR!
+
+=== vuln_only_mem_leak_but_df_branch_overapprox_FFI ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Double Free Issues ☢:
+Free detected at source line: CallICFGNode11 {fun: print_and}
+   call void @free(ptr noundef %1) #3 CallICFGNode: 
+☢ Never Free Issues ☢:
+{"{32@rust::main::bb20, Local(_31)}": 1}
+🪲  WARNING: variable '10@rust::main::bb3' was allocated in Rust and then freed in C (LLVM free) at `CallICFGNode11 {fun: print_and}
+   call void @free(ptr noundef %1) #3 CallICFGNode: `
+Possible UNDEFINED BEHAVIOUR!
+
+=== warning_ub_bool ===
+🪲  WARNING: variable '29@rust::main::bb2' was allocated in Rust and then freed in C (LLVM free) at `CallICFGNode28 {fun: free_bool}
+   call void @free(ptr noundef %1) #2 CallICFGNode: `
+Possible UNDEFINED BEHAVIOUR!
+
+=== warning_ub_int ===
+🪲  WARNING: variable '45@rust::main::bb2' was allocated in Rust and then freed in C (LLVM free) at `CallICFGNode38 {fun: free_int}
+   call void @free(ptr noundef %3) #2 CallICFGNode: `
+Possible UNDEFINED BEHAVIOUR!
+
+=== warning_ub_mult ===
+🪲  WARNING: variable '9@rust::main::bb2' was allocated in Rust and then freed in C (LLVM free) at `CallICFGNode18 {fun: free_bool}
+   call void @free(ptr noundef %1) #2 CallICFGNode: `
+Possible UNDEFINED BEHAVIOUR!
+🪲  WARNING: variable '60@rust::main::bb5' was allocated in Rust and then freed in C (LLVM free) at `CallICFGNode50 {fun: free_int}
+   call void @free(ptr noundef %3) #2 CallICFGNode: `
+Possible UNDEFINED BEHAVIOUR!
+🪲  WARNING: variable '29@rust::main::bb9' was allocated in Rust and then freed in C (LLVM free) at `CallICFGNode28 {fun: free_str}
+   call void @free(ptr noundef %1) #2 CallICFGNode: `
+Possible UNDEFINED BEHAVIOUR!
+
+=== warning_ub_string ===
+🪲  WARNING: variable '29@rust::main::bb2' was allocated in Rust and then freed in C (LLVM free) at `CallICFGNode28 {fun: free_str}
+   call void @free(ptr noundef %1) #2 CallICFGNode: `
+Possible UNDEFINED BEHAVIOUR!
+

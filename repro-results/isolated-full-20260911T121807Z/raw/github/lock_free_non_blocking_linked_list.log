@@ -1,0 +1,421 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+    |                                                           ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+    |                                                                    ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2002:50
+     |
+2002 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return_place, ..}) = &mir_block.terminator {   
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: method `is_default` is never used
+   --> src/abstract_domain.rs:112:12
+    |
+81  | impl CellValue {
+    | -------------- method in this implementation
+...
+112 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:468:8
+    |
+468 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintStateMap {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 5 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list /home/af/Documenti/a-phd/crema`
+No C files found in the project.
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package lock_free_non_blocking_linked_list target lock_free_non_blocking_linked_list at /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list/target/debug",
+]
+Global ICFG saved to global_icfg.json
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb15::rust::main::bb15_internal", outgoing_edge: "rust::main::bb16", id: "eff3f7491041dbe8", mir_var: None, llvm_var: None, is_internal: Some(true) }
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb14::rust::main::bb14_internal", outgoing_edge: "rust::main::bb15", id: "eb13e0cf02737d73", mir_var: None, llvm_var: None, is_internal: Some(true) }
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::{closure#0}::bb1::rust::main::{closure#0}::bb1_internal", outgoing_edge: "rust::main::{closure#0}::bb2", id: "1a9d66ff03c13202", mir_var: None, llvm_var: None, is_internal: Some(true) }
+Final Abstract State: {"dummyRet::rust::main::_21::rust::main::bb14_internal": {{"Local(_1)"}: FREED}, "rust::main::bb27": {{"Local(_1)", "Local(_18)", "Local(_26)", "Local(_38)"}: FREED}, "rust::main::bb28": {{"Local(_1)", "Local(_18)", "Local(_26)", "Local(_38)"}: FREED}, "rust::main::bb35": {{"Local(_1)", "Local(_18)"}: FREED}, "rust::main::bb30": {{"Local(_1)", "Local(_18)", "Local(_26)", "Local(_38)"}: FREED}, "rust::main::{closure#0}::{closure#0}::bb4": {{"Local(_1)"}: FREED}, "rust::main::{closure#0}::{closure#0}::bb2": {{"Local(_1)"}: FREED}, "rust::main::bb8": {}, "rust::main::bb14": {}, "rust::main::bb21": {{"Local(_1)", "Local(_18)"}: FREED}, "rust::main::bb18": {{"Local(_1)", "Local(_18)"}: FREED}, "rust::main::bb3": {}, "rust::main::bb10": {}, "rust::main::bb0": {}, "rust::main::bb15": {{"Local(_1)"}: FREED}, "rust::main::bb20": {{"Local(_1)", "Local(_18)"}: FREED}, "rust::main::{closure#0}::{closure#0}::terminate": {{"Local(_1)"}: FREED}, "rust::main::bb2": {}, "rust::main::bb5": {}, "rust::main::{closure#0}::{closure#0}::bb5": {{"Local(_1)"}: FREED}, "rust::main::bb7": {}, "rust::main::bb29": {{"Local(_1)", "Local(_18)", "Local(_26)", "Local(_38)"}: FREED}, "rust::main::bb9": {}, "rust::main::bb32": {{"Local(_1)", "Local(_18)", "Local(_26)", "Local(_38)"}: FREED}, "rust::main::{closure#0}::bb2": {{"Local(_1)"}: FREED}, "rust::main::bb17": {{"Local(_1)", "Local(_18)"}: FREED}, "rust::main::bb23": {{"Local(_1)", "Local(_18)"}: FREED}, "dummyCall::rust::main::bb14::rust::main::bb14_internal": {}, "rust::main::{closure#0}::{closure#0}::bb0": {{"Local(_1)"}: FREED}, "rust::main::bb25": {{"Local(_1)", "Local(_18)", "Local(_26)"}: FREED}, "dummyRet::rust::main::_20::rust::main::bb15_internal": {{"Local(_1)", "Local(_18)", "Local(_26)"}: FREED}, "rust::main::bb11": {}, "rust::main::bb19": {{"Local(_1)", "Local(_18)"}: FREED}, "rust::main::{closure#0}::{closure#0}::bb1": {{"Local(_1)"}: FREED}, "rust::main::bb16": {{"Local(_1)", "Local(_18)", "Local(_26)"}: FREED}, "rust::main::bb6": {}, "rust::main::bb12": {}, "dummyCall::rust::main::bb15::rust::main::bb15_internal": {{"Local(_1)"}: FREED}, "rust::main::bb13": {}, "rust::main::bb34": {{"Local(_1)", "Local(_18)", "Local(_26)", "Local(_38)"}: FREED}, "rust::main::{closure#0}::{closure#0}::bb3": {{"Local(_1)"}: FREED}, "dummyRet::rust::main::{closure#0}::_0::rust::main::{closure#0}::bb1_internal": {{"Local(_1)"}: FREED}, "rust::main::bb4": {}, "rust::main::bb31": {{"Local(_1)", "Local(_18)", "Local(_26)"}: FREED}, "rust::main::bb22": {{"Local(_1)", "Local(_18)", "Local(_26)"}: FREED}, "rust::main::bb24": {{"Local(_1)", "Local(_18)", "Local(_26)"}: FREED}, "rust::main::terminate": {{"Local(_1)", "Local(_18)", "Local(_26)", "Local(_38)"}: FREED}, "rust::main::bb1": {}, "rust::main::bb26": {{"Local(_1)", "Local(_18)", "Local(_26)", "Local(_38)"}: FREED}, "rust::main::bb33": {{"Local(_1)", "Local(_18)", "Local(_26)", "Local(_38)"}: FREED}}
+Final Taint State: {
+    "rust::main::bb2": {},
+    "rust::main::{closure#0}::{closure#0}::bb4": {
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "dummyRet::rust::main::{closure#0}::_0::rust::main::{closure#0}::bb1_internal": {
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb0": {},
+    "dummyRet::rust::main::_20::rust::main::bb15_internal": {
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_26)": {
+            "free",
+        },
+        "Local(_18)": {
+            "free",
+        },
+    },
+    "rust::main::bb28": {
+        "Local(_18)": {
+            "free",
+        },
+        "Local(_26)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::{closure#0}::terminate": {
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb5": {},
+    "rust::main::{closure#0}::{closure#0}::bb3": {
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb26": {
+        "Local(_26)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_18)": {
+            "free",
+        },
+    },
+    "rust::main::bb22": {
+        "Local(_18)": {
+            "free",
+        },
+        "Local(_26)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb24": {
+        "Local(_26)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_18)": {
+            "free",
+        },
+    },
+    "rust::main::bb19": {
+        "Local(_18)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb9": {},
+    "rust::main::bb11": {},
+    "rust::main::bb20": {
+        "Local(_18)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb23": {
+        "Local(_18)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb35": {
+        "Local(_18)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb1": {},
+    "rust::main::bb14": {},
+    "rust::main::bb3": {},
+    "dummyRet::rust::main::_21::rust::main::bb14_internal": {
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb13": {},
+    "rust::main::bb29": {
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_18)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_26)": {
+            "free",
+        },
+    },
+    "rust::main::bb34": {
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_26)": {
+            "free",
+        },
+        "Local(_18)": {
+            "free",
+        },
+    },
+    "rust::main::bb8": {},
+    "rust::main::bb18": {
+        "Local(_18)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb27": {
+        "Local(_26)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_18)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+    },
+    "rust::main::bb21": {
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_18)": {
+            "free",
+        },
+    },
+    "rust::main::bb16": {
+        "Local(_26)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_18)": {
+            "free",
+        },
+    },
+    "rust::main::bb33": {
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_26)": {
+            "free",
+        },
+        "Local(_18)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb7": {},
+    "rust::main::bb12": {},
+    "rust::main::bb31": {
+        "Local(_18)": {
+            "free",
+        },
+        "Local(_26)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb6": {},
+    "rust::main::{closure#0}::{closure#0}::bb5": {
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb32": {
+        "Local(_18)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_26)": {
+            "free",
+        },
+    },
+    "dummyCall::rust::main::bb14::rust::main::bb14_internal": {},
+    "rust::main::{closure#0}::{closure#0}::bb2": {
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb30": {
+        "Local(_26)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_18)": {
+            "free",
+        },
+    },
+    "rust::main::bb10": {},
+    "rust::main::{closure#0}::{closure#0}::bb1": {
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::{closure#0}::bb0": {
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::bb2": {
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb4": {},
+    "dummyCall::rust::main::bb15::rust::main::bb15_internal": {
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb25": {
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_18)": {
+            "free",
+        },
+        "Local(_26)": {
+            "free",
+        },
+    },
+    "rust::main::bb17": {
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_18)": {
+            "free",
+        },
+    },
+    "rust::main::terminate": {
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_18)": {
+            "free",
+        },
+        "Local(_26)": {
+            "free",
+        },
+    },
+    "rust::main::bb15": {
+        "Local(_1)": {
+            "free",
+        },
+    },
+}
+-> Skip Drop in 'rust::LockFreeLinkedList::<T>::insert::bb10' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list/src/main.rs:87:13: 87:14 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb3, unwind continue] }' -> '_1'
+No tracked variable found per '_1' o 'Local(_1)'
+-> Skip Drop in 'rust::main::{closure#0}::{closure#0}::bb4' because has an unwind incoming edge
+Aliased via from_raw: 'Local(_11) [mutable]' -> '_10'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list/src/main.rs:61:47: 61:48 (#0), scope: scope[2] }, kind: drop(_10) -> [return: bb7, unwind continue] }' -> '_10'
+No tracking info per MIR var 'Local(_22) [mutable]'
+-> DummyRet node 'dummyRet::rust::main::_21::rust::main::bb14_internal': transferring from LLVM var None to MIR var None
+No tracking info per MIR var 'Local(_21) [mutable]'
+-> DummyRet node 'dummyRet::rust::main::_20::rust::main::bb15_internal': transferring from LLVM var None to MIR var None
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list/src/main.rs:93:5: 93:6 (#28), scope: scope[3] }, kind: drop(_26) -> [return: bb24, unwind: bb32] }' -> '_26'
+No tracked variable found per '_26' o 'Local(_26)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list/src/main.rs:98:1: 98:2 (#0), scope: scope[1] }, kind: drop(_18) -> [return: bb29, unwind: bb33] }' -> '_18'
+No tracked variable found per '_18' o 'Local(_18)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list/src/main.rs:98:1: 98:2 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb30, unwind continue] }' -> '_1'
+No tracked variable found per '_1' o 'Local(_1)'
+-> Skip Drop in 'rust::main::bb31' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb32' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb33' because has an unwind incoming edge
+No tracking info per MIR var 'Local(_4) [mutable]'
+-> DummyRet node 'dummyRet::rust::main::{closure#0}::_0::rust::main::{closure#0}::bb1_internal': transferring from LLVM var None to MIR var None
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 NO Issues detected: ✅
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

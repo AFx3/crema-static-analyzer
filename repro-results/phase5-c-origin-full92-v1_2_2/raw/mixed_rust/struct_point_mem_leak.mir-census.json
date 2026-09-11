@@ -1,0 +1,108 @@
+{
+  "call_counts": {
+    "build_boxed_point": 2,
+    "build_rectangle": 1,
+    "core::fmt::rt::Argument::<'_>::new_display::<i8>": 4,
+    "std::boxed::Box::<Point>::new": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<3, 2>": 2,
+    "std::io::_print": 2,
+    "std::mem::forget::<std::boxed::Box<Point>>": 1
+  },
+  "call_total": 13,
+  "memory_api_counts": {
+    "box_new": 1,
+    "mem_forget": 1
+  },
+  "memory_api_examples": {
+    "box_new": [
+      "std::boxed::Box::<Point>::new"
+    ],
+    "mem_forget": [
+      "std::mem::forget::<std::boxed::Box<Point>>"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _13, move _15]",
+      "[move _22, move _24]"
+    ],
+    "arithmetic_binary": [
+      "Sub(copy _37, const 1_usize)",
+      "BitAnd(copy _36, copy _38)",
+      "Sub(copy _31, const 1_usize)",
+      "BitAnd(copy _30, copy _32)"
+    ],
+    "comparison": [
+      "Eq(copy _39, const 0_usize)",
+      "Eq(copy _33, const 0_usize)"
+    ],
+    "direct_deref_use": [
+      "copy (*_1)",
+      "copy (*_28)",
+      "copy (*_27)"
+    ],
+    "direct_use": [
+      "move _1"
+    ],
+    "pointer_cast": [
+      "copy _27 as *const () (PtrToPtr)",
+      "copy _28 as *const () (PtrToPtr)"
+    ],
+    "ref": [
+      "&((_7.0: Point).0: i8)",
+      "&((_7.0: Point).1: i8)",
+      "&_12",
+      "&((_7.1: Point).0: i8)",
+      "&((_7.1: Point).1: i8)",
+      "&_21"
+    ],
+    "scalar_cast": [
+      "copy _35 as usize (Transmute)",
+      "copy _29 as usize (Transmute)"
+    ],
+    "scalar_const": [
+      "const false",
+      "const true"
+    ],
+    "scalar_nullary": [
+      "AlignOf(Point)"
+    ],
+    "unknown_unhandled": [
+      "Point { x: copy _1, y: copy _2 }",
+      "copy (((_1.0: std::ptr::Unique<Point>).0: std::ptr::NonNull<Point>).0: *const Point)",
+      "const main::promoted[1]",
+      "const main::promoted[0]",
+      "copy (((_2.0: std::ptr::Unique<Point>).0: std::ptr::NonNull<Point>).0: *const Point)",
+      "Rectangle { top_left: copy _1, bottom_right: copy _2 }"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 2,
+    "arithmetic_binary": 4,
+    "comparison": 2,
+    "direct_deref_use": 3,
+    "direct_use": 1,
+    "pointer_cast": 2,
+    "ref": 6,
+    "scalar_cast": 2,
+    "scalar_const": 4,
+    "scalar_nullary": 2,
+    "unknown_unhandled": 6
+  },
+  "rvalue_total": 34,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 2,
+    "unknown_unhandled": 6
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "struct_point_mem_leak",
+  "terminator_kind_counts": {
+    "Assert": 2,
+    "Call": 13,
+    "Drop": 3,
+    "Return": 4,
+    "SwitchInt": 1,
+    "UnwindResume": 1
+  }
+}

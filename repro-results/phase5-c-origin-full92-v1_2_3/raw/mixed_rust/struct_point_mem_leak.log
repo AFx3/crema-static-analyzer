@@ -1,0 +1,369 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:671:59
+    |
+671 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+    |                                                           ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:671:68
+    |
+671 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+    |                                                                    ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:3920:50
+     |
+3920 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return_place, ..}) = &mir_block.terminator {   
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:676:8
+    |
+676 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintStateMap {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 5 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/struct_point_mem_leak`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/struct_point_mem_leak
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/struct_point_mem_leak /home/af/Documenti/a-phd/crema`
+No C files found in the project.
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package struct_point target struct_point at /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/struct_point_mem_leak/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/struct_point_mem_leak/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/struct_point_mem_leak/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/struct_point_mem_leak/target/debug",
+]
+Global ICFG saved to global_icfg.json
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+Final Abstract State: {"rust::main::bb15": {{"Local(_1)"}: FREED, {"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "rust::main::bb12": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "rust::main::bb2": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "rust::main::bb17": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "rust::main::bb8": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "rust::main::bb19": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "rust::main::bb3": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "dummyCall::rust::main::bb1::rust::main::bb1_internal": {{"Local(_26)"}: BOXTIMES}, "rust::main::bb9": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "rust::main::bb0": {{"Local(_26)"}: BOXTIMES}, "rust::main::bb1": {{"Local(_26)"}: BOXTIMES}, "rust::main::bb13": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "dummyCall::rust::main::bb3::rust::main::bb3_internal": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "dummyCall::rust::main::bb0::rust::main::bb0_internal": {{"Local(_26)"}: BOXTIMES}, "rust::main::bb4": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "rust::main::bb16": {{"Local(_1)"}: FREED, {"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "rust::main::bb6": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "rust::main::bb5": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "dummyRet::rust::main::1::rust::main::bb1_internal": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "rust::main::bb18": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "rust::main::terminate": {{"Local(_1)"}: FREED, {"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "dummyRet::rust::main::0::rust::main::bb0_internal": {{"Local(_26)"}: BOXTIMES}, "dummyRet::rust::main::3::rust::main::bb3_internal": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "rust::build_boxed_point::bb1": {}, "rust::main::bb7": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "rust::main::bb10": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "rust::main::bb11": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}, "rust::main::bb14": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_16)"}: TOP, {"Local(_2)"}: FREED, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_26)"}: BOXTIMES, {"Local(_29)"}: TOP, {"Local(_3)"}: TOP, {"Local(_30)"}: BOXTIMES, {"Local(_31)"}: BOXTIMES, {"Local(_32)"}: BOXTIMES, {"Local(_33)"}: BOXTIMES, {"Local(_34)"}: BOXTIMES, {"Local(_35)"}: TOP, {"Local(_36)"}: BOXTIMES, {"Local(_37)"}: BOXTIMES, {"Local(_38)"}: BOXTIMES, {"Local(_39)"}: BOXTIMES, {"Local(_4)"}: TOP, {"Local(_40)"}: BOXTIMES, {"Local(_5)"}: BOXTIMES}}
+Final Taint State: {
+    "rust::main::bb0": {},
+    "rust::main::bb12": {
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(2)": {},
+        "Local(_2)": {
+            "free",
+        },
+        "Local(7)": {},
+        "Local(1)": {},
+    },
+    "rust::main::bb5": {
+        "Local(7)": {},
+        "Local(_2)": {
+            "free",
+        },
+        "Local(2)": {},
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(1)": {},
+    },
+    "rust::main::bb3": {
+        "Local(7)": {},
+        "Local(2)": {},
+        "Local(_2)": {
+            "free",
+        },
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(1)": {},
+    },
+    "rust::main::bb8": {
+        "Local(7)": {},
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(_2)": {
+            "free",
+        },
+        "Local(2)": {},
+        "Local(1)": {},
+    },
+    "dummyCall::rust::main::bb1::rust::main::bb1_internal": {
+        "Local(1)": {},
+    },
+    "rust::main::bb16": {
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(_2)": {
+            "free",
+        },
+        "Local(7)": {},
+        "Local(_1)": {
+            "free",
+        },
+        "Local(1)": {},
+        "Local(2)": {},
+    },
+    "dummyRet::rust::main::0::rust::main::bb0_internal": {},
+    "rust::main::bb14": {
+        "Local(_2)": {
+            "free",
+        },
+        "Local(2)": {},
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(1)": {},
+        "Local(7)": {},
+    },
+    "dummyCall::rust::main::bb0::rust::main::bb0_internal": {},
+    "rust::main::bb10": {
+        "Local(7)": {},
+        "Local(_2)": {
+            "free",
+        },
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(1)": {},
+        "Local(2)": {},
+    },
+    "rust::main::bb18": {
+        "Local(7)": {},
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(_2)": {
+            "free",
+        },
+        "Local(2)": {},
+        "Local(1)": {},
+    },
+    "rust::main::bb6": {
+        "Local(1)": {},
+        "Local(_2)": {
+            "free",
+        },
+        "Local(7)": {},
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(2)": {},
+    },
+    "dummyCall::rust::main::bb3::rust::main::bb3_internal": {
+        "Local(7)": {},
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(2)": {},
+        "Local(1)": {},
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "rust::main::bb15": {
+        "Local(_1)": {
+            "free",
+        },
+        "Local(7)": {},
+        "Local(2)": {},
+        "Local(_2)": {
+            "free",
+        },
+        "Local(1)": {},
+        "Leak(Local(_6))": {
+            "assign",
+        },
+    },
+    "rust::main::bb13": {
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(2)": {},
+        "Local(7)": {},
+        "Local(1)": {},
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "rust::build_boxed_point::bb1": {},
+    "rust::main::terminate": {
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(_2)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(7)": {},
+        "Local(1)": {},
+        "Local(2)": {},
+    },
+    "dummyRet::rust::main::3::rust::main::bb3_internal": {
+        "Local(7)": {},
+        "Local(2)": {},
+        "Local(_2)": {
+            "free",
+        },
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(1)": {},
+    },
+    "rust::main::bb19": {
+        "Local(1)": {},
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(2)": {},
+        "Local(7)": {},
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "rust::main::bb11": {
+        "Local(_2)": {
+            "free",
+        },
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(7)": {},
+        "Local(1)": {},
+        "Local(2)": {},
+    },
+    "rust::main::bb9": {
+        "Local(1)": {},
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(2)": {},
+        "Local(7)": {},
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "rust::main::bb1": {
+        "Local(1)": {},
+    },
+    "rust::main::bb4": {
+        "Local(_2)": {
+            "free",
+        },
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(7)": {},
+        "Local(1)": {},
+        "Local(2)": {},
+    },
+    "rust::main::bb7": {
+        "Local(2)": {},
+        "Local(_2)": {
+            "free",
+        },
+        "Local(1)": {},
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(7)": {},
+    },
+    "rust::main::bb2": {
+        "Local(1)": {},
+        "Local(2)": {},
+        "Local(_2)": {
+            "free",
+        },
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(7)": {},
+    },
+    "rust::main::bb17": {
+        "Local(2)": {},
+        "Local(7)": {},
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(1)": {},
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "dummyRet::rust::main::1::rust::main::bb1_internal": {
+        "Local(2)": {},
+        "Local(_2)": {
+            "free",
+        },
+        "Local(1)": {},
+        "Leak(Local(_6))": {
+            "assign",
+        },
+        "Local(7)": {},
+    },
+}
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb12' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb5' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb3' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb8' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb16' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb14' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb10' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb18' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'dummyCall::rust::main::bb3::rust::main::bb3_internal' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb15' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb13' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::terminate' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'dummyRet::rust::main::3::rust::main::bb3_internal' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb19' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb11' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb9' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb4' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb7' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'rust::main::bb17' (markers: {"assign"})
+Tracking variable 'Leak(Local(_6))' from block 'dummyRet::rust::main::1::rust::main::bb1_internal' (markers: {"assign"})
+-> DummyRet node 'dummyRet::rust::main::0::rust::main::bb0_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_1")
+-> DummyRet node 'dummyRet::rust::main::1::rust::main::bb1_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_2")
+-> DummyRet node 'dummyRet::rust::main::3::rust::main::bb3_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_7")
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/struct_point_mem_leak/src/main.rs:43:1: 43:2 (#0), scope: scope[1] }, kind: drop(_2) -> [return: bb13, unwind: bb17] }' -> '_2'
+-> Skip Drop in 'rust::main::bb14' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/struct_point_mem_leak/src/main.rs:43:1: 43:2 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb15, unwind terminate(cleanup)] }' -> '_1'
+No tracked variable found per '_2' o 'Local(_2)'
+No tracked variable found per '_1' o 'Local(_1)'
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"Leak(Local(_6))": 1}
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

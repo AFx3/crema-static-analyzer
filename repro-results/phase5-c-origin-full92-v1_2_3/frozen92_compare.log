@@ -1,0 +1,4 @@
+excluded:       openapi-client-gen
+baseline keys:  92
+candidate keys: 92
+mismatches:     0

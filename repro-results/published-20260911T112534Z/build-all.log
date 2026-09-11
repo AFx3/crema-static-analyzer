@@ -1,0 +1,94 @@
+Building cargo project at: no_errors_projects/square
+Building cargo project at: no_errors_projects/rust_hw3
+Building cargo project at: no_errors_projects/rust-boks
+Building cargo project at: no_errors_projects/openapi-client-gen
+Building cargo project at: no_errors_projects/unsized_struct
+Building cargo project at: no_errors_projects/stackswap-coroutines
+Building cargo project at: no_errors_projects/c-callback-rust-closure
+Building cargo project at: no_errors_projects/lock_free_non_blocking_linked_list
+Building cargo project at: no_errors_projects/concurrent-verification
+Building cargo project at: no_errors_projects/unsafely-created-owned-type
+Building cargo project at: no_errors_projects/rc-playground
+Building cargo project at: no_errors_projects/rust_memory
+Building cargo project at: a-code_full_rust/clean_into_from_raw
+Building cargo project at: a-code_full_rust/struct_point_mem_leak
+Building cargo project at: a-code_full_rust/cstringcargo_enum_df_only_rust
+Building cargo project at: a-code_full_rust/cstring_df_only_rust
+Building cargo project at: a-code_full_rust/a-double_free_full_rust_literals/boxed_u8
+Building cargo project at: a-code_full_rust/a-double_free_full_rust_literals/boxed_i128
+Building cargo project at: a-code_full_rust/a-double_free_full_rust_literals/boxed_isize
+Building cargo project at: a-code_full_rust/a-double_free_full_rust_literals/boxed_i8
+Building cargo project at: a-code_full_rust/a-double_free_full_rust_literals/boxed_f64
+Building cargo project at: a-code_full_rust/a-double_free_full_rust_literals/boxed_u128
+Building cargo project at: a-code_full_rust/a-double_free_full_rust_literals/boxed_char
+Building cargo project at: a-code_full_rust/a-double_free_full_rust_literals/boxed_u32
+Building cargo project at: a-code_full_rust/a-double_free_full_rust_literals/boxed_i32
+Building cargo project at: a-code_full_rust/a-double_free_full_rust_literals/boxed_u16
+Building cargo project at: a-code_full_rust/a-double_free_full_rust_literals/boxed_usize
+Building cargo project at: a-code_full_rust/a-double_free_full_rust_literals/boxed_bool
+Building cargo project at: a-code_full_rust/a-double_free_full_rust_literals/boxed_i16
+Building cargo project at: a-code_full_rust/a-double_free_full_rust_literals/boxed_i64
+Building cargo project at: a-code_full_rust/a-double_free_full_rust_literals/boxed_u64
+Building cargo project at: a-code_full_rust/a-double_free_full_rust_literals/boxed_f32
+Building cargo project at: a-code_full_rust/clean_cstring_no_errors_only_rust
+Building cargo project at: a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u8
+Building cargo project at: a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i128
+Building cargo project at: a-code_full_rust/a-use_after_free_full_rust_literals/boxed_isize
+Building cargo project at: a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i8
+Building cargo project at: a-code_full_rust/a-use_after_free_full_rust_literals/boxed_f64
+Building cargo project at: a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u128
+Building cargo project at: a-code_full_rust/a-use_after_free_full_rust_literals/boxed_char
+Building cargo project at: a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u32
+Building cargo project at: a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i32
+Building cargo project at: a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u16
+Building cargo project at: a-code_full_rust/a-use_after_free_full_rust_literals/boxed_usize
+Building cargo project at: a-code_full_rust/a-use_after_free_full_rust_literals/boxed_bool
+Building cargo project at: a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i16
+Building cargo project at: a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i64
+Building cargo project at: a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u64
+Building cargo project at: a-code_full_rust/a-use_after_free_full_rust_literals/boxed_f32
+Building cargo project at: a-code_full_rust/closure_df
+Building cargo project at: a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u8
+Building cargo project at: a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i128
+Building cargo project at: a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_isize
+Building cargo project at: a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i8
+Building cargo project at: a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_f64
+Building cargo project at: a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u128
+Building cargo project at: a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_char
+Building cargo project at: a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u32
+Building cargo project at: a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i32
+Building cargo project at: a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u16
+Building cargo project at: a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_usize
+Building cargo project at: a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_bool
+Building cargo project at: a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i16
+Building cargo project at: a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i64
+Building cargo project at: a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u64
+Building cargo project at: a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_f32
+Building cargo project at: a-code_full_rust/clean_struct_point_mem_leak_into_raw_no_errors
+Building cargo project at: a-code_full_rust/uaf_read_ptr
+Building cargo project at: a-code_full_rust/struct_point_df_only_rust
+Building cargo project at: a-code_full_rust/std_mem_forget_mem_leak_rust
+Building cargo project at: a-code_full_rust/explicit_drop_df_only_rust
+Building cargo project at: found vulns/napkin-math-test
+Building cargo project at: found vulns/wasm-demo
+Building cargo project at: found vulns/whisper-rs-example
+Building cargo project at: found vulns/shared-register
+Building cargo project at: found vulns/rusant
+Building cargo project at: found vulns/skip-list-test
+Building cargo project at: found vulns/noGenerator
+Building cargo project at: found vulns/lock-free
+Building cargo project at: a-code_c_ffi/clean_mul_fn_ffi_no_errors
+Building cargo project at: a-code_c_ffi/for_df_ffi
+Building cargo project at: a-code_c_ffi/warning_ub_bool
+Building cargo project at: a-code_c_ffi/uaf_mem_leak_ffi
+Building cargo project at: a-code_c_ffi/warning_ub_int
+Building cargo project at: a-code_c_ffi/warning_ub_string
+Building cargo project at: a-code_c_ffi/for_memory_leak_ffi
+Building cargo project at: a-code_c_ffi/df_rand_cargo_c_ffi
+Building cargo project at: a-code_c_ffi/vuln_only_mem_leak_but_df_branch_overapprox_FFI
+Building cargo project at: a-code_c_ffi/warning_ub_mult
+Building cargo project at: a-code_c_ffi/branch_df_mem_leak_ffi
+Building cargo project at: a-code_c_ffi/cstringcargo_df_ffi
+Building cargo project at: a-code_c_ffi/cstr_cargo_df_ffi
+Building cargo project at: a-code_c_ffi/cstr_expect_uaf_and_ub_ffi
+All built.

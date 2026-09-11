@@ -1,0 +1,65 @@
+{
+  "call_counts": {
+    "<std::ffi::CString as std::ops::Deref>::deref": 1,
+    "alloc_c_string": 1,
+    "core::fmt::rt::Argument::<'_>::new_display::<&str>": 1,
+    "free_c_string": 1,
+    "std::ffi::CStr::as_ptr": 1,
+    "std::ffi::CStr::from_ptr::<'_>": 1,
+    "std::ffi::CStr::to_str": 1,
+    "std::ffi::CString::new::<&str>": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 1,
+    "std::io::_print": 1,
+    "std::result::Result::<&str, std::str::Utf8Error>::unwrap": 1,
+    "std::result::Result::<std::ffi::CString, std::ffi::NulError>::unwrap": 1
+  },
+  "call_total": 12,
+  "memory_api_counts": {
+    "borrowed_raw_pointer_view": 1,
+    "cstr_from_ptr": 1
+  },
+  "memory_api_examples": {
+    "borrowed_raw_pointer_view": [
+      "std::ffi::CStr::as_ptr"
+    ],
+    "cstr_from_ptr": [
+      "std::ffi::CStr::from_ptr::<'_>"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _12]"
+    ],
+    "pointer_cast": [
+      "copy _3 as *const i8 (PtrToPtr)"
+    ],
+    "ref": [
+      "&_1",
+      "&_14",
+      "&_11"
+    ],
+    "unknown_unhandled": [
+      "const main::promoted[0]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 1,
+    "pointer_cast": 1,
+    "ref": 3,
+    "unknown_unhandled": 1
+  },
+  "rvalue_total": 6,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 1,
+    "unknown_unhandled": 1
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "clean_mul_fn_ffi_no_errors",
+  "terminator_kind_counts": {
+    "Call": 12,
+    "Drop": 2,
+    "Return": 1,
+    "UnwindResume": 1
+  }
+}

@@ -1,0 +1,174 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+    |                                                           ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+    |                                                                    ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2478:50
+     |
+2478 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return_place, ..}) = &mir_block.terminator {   
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:640:8
+    |
+640 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintStateMap {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 5 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/uaf_read_ptr`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/uaf_read_ptr
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/uaf_read_ptr /home/af/Documenti/a-phd/crema`
+No C files found in the project.
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package uaf_read_ptr target uaf_read_ptr at /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/uaf_read_ptr/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/uaf_read_ptr/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/uaf_read_ptr/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/uaf_read_ptr/target/debug",
+]
+Global ICFG saved to global_icfg.json
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+Final Abstract State: {"rust::main::bb1": {{"Local(_1)"}: ALLOC}, "rust::main::bb7": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_4)", "Local(_7)"}: MV, {"Local(_5)"}: FREED}, "rust::main::bb3": {{"Local(_4)"}: MV, {"Local(_5)"}: MV}, "rust::main::bb0": {{"Local(_2)"}: ALLOC}, "rust::main::bb9": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_4)", "Local(_7)"}: MV, {"Local(_5)"}: FREED}, "rust::main::bb8": {{"Local(_11)"}: TOP, {"Local(_14)"}: TOP, {"Local(_4)", "Local(_7)"}: MV, {"Local(_5)"}: FREED}, "rust::main::bb2": {{"Local(_4)"}: MV}, "rust::main::bb5": {{"Local(_4)", "Local(_7)"}: MV, {"Local(_5)"}: FREED}, "rust::main::bb6": {{"Local(_14)"}: TOP, {"Local(_4)", "Local(_7)"}: MV, {"Local(_5)"}: FREED}, "rust::main::bb4": {{"Local(_4)"}: MV, {"Local(_5)"}: FREED}}
+Final Taint State: {
+    "rust::main::bb3": {
+        "Local(_5)": {
+            "assign",
+        },
+        "Local(_4)": {
+            "assign",
+        },
+    },
+    "rust::main::bb4": {
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_4)": {
+            "assign",
+        },
+    },
+    "rust::main::bb1": {
+        "Local(_1)": {},
+    },
+    "rust::main::bb2": {
+        "Local(_4)": {
+            "assign",
+        },
+    },
+    "rust::main::bb7": {
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_4)": {
+            "assign",
+        },
+        "Local(_7)": {
+            "assign",
+        },
+    },
+    "rust::main::bb8": {
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_4)": {
+            "assign",
+        },
+        "Local(_7)": {
+            "assign",
+        },
+    },
+    "rust::main::bb0": {},
+    "rust::main::bb9": {
+        "Local(_7)": {
+            "assign",
+        },
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_4)": {
+            "assign",
+        },
+    },
+    "rust::main::bb5": {
+        "Local(_7)": {
+            "assign",
+        },
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_4)": {
+            "assign",
+        },
+    },
+    "rust::main::bb6": {
+        "Local(_7)": {
+            "assign",
+        },
+        "Local(_4)": {
+            "assign",
+        },
+        "Local(_5)": {
+            "free",
+        },
+    },
+}
+Tracking variable 'Local(_5)' from block 'rust::main::bb3' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::main::bb3' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::main::bb4' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::main::bb7' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::main::bb7' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::main::bb8' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::main::bb8' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::main::bb9' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::main::bb9' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::main::bb5' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::main::bb5' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::main::bb6' (markers: {"assign"})
+Aliased via from_raw: 'Local(_4)' -> '_5'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/uaf_read_ptr/src/main.rs:10:40: 10:41 (#0), scope: scope[2] }, kind: drop(_5) -> [return: bb5, unwind continue] }' -> '_5'
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Use-After-Free Issues / Undefined behaviour ☢:
+Use detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/uaf_read_ptr/src/main.rs:11:38: 11:41 (#0)
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

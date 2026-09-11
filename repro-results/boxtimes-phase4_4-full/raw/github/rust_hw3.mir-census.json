@@ -1,0 +1,133 @@
+{
+  "call_counts": {
+    "<MyRc<i32> as std::clone::Clone>::clone": 1,
+    "<MyRc<i32> as std::ops::Deref>::deref": 2,
+    "<std::cell::RefMut<'_, std::vec::Vec<T>> as std::ops::DerefMut>::deref_mut": 2,
+    "<std::cell::RefMut<'_, usize> as std::ops::Deref>::deref": 1,
+    "<std::cell::RefMut<'_, usize> as std::ops::DerefMut>::deref_mut": 2,
+    "MyRc::<i32>::new": 1,
+    "SimpleStack::<i32>::new": 1,
+    "SimpleStack::<i32>::pop": 5,
+    "SimpleStack::<i32>::push": 4,
+    "core::fmt::rt::Argument::<'_>::new_debug::<std::collections::HashMap<&str, i32>>": 1,
+    "core::fmt::rt::Argument::<'_>::new_debug::<std::option::Option<i32>>": 5,
+    "core::fmt::rt::Argument::<'_>::new_display::<i32>": 2,
+    "std::boxed::Box::<MyBox<T>>::from_raw": 1,
+    "std::boxed::Box::<MyBox<T>>::into_raw": 1,
+    "std::boxed::Box::<MyBox<T>>::new": 1,
+    "std::cell::RefCell::<std::vec::Vec<T>>::borrow_mut": 2,
+    "std::cell::RefCell::<std::vec::Vec<T>>::new": 1,
+    "std::cell::RefCell::<usize>::borrow_mut": 3,
+    "std::cell::RefCell::<usize>::new": 1,
+    "std::collections::HashMap::<&str, i32>::insert": 3,
+    "std::collections::HashMap::<&str, i32>::new": 1,
+    "std::fmt::Arguments::<'_>::new_const::<1>": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 8,
+    "std::io::_print": 9,
+    "std::mem::drop::<std::boxed::Box<MyBox<T>>>": 1,
+    "std::ptr::NonNull::<MyBox<T>>::as_ptr": 5,
+    "std::ptr::NonNull::<MyBox<T>>::new_unchecked": 1,
+    "std::vec::Vec::<T>::new": 1,
+    "std::vec::Vec::<T>::pop": 1,
+    "std::vec::Vec::<T>::push": 1
+  },
+  "call_total": 69,
+  "memory_api_counts": {
+    "borrowed_raw_pointer_view": 5,
+    "box_from_raw": 1,
+    "box_into_raw": 1,
+    "box_new": 1,
+    "mem_drop": 1
+  },
+  "memory_api_examples": {
+    "borrowed_raw_pointer_view": [
+      "std::ptr::NonNull::<MyBox<T>>::as_ptr"
+    ],
+    "box_from_raw": [
+      "std::boxed::Box::<MyBox<T>>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<MyBox<T>>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<MyBox<T>>::new"
+    ],
+    "mem_drop": [
+      "std::mem::drop::<std::boxed::Box<MyBox<T>>>"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _19]",
+      "[move _33]",
+      "[move _42]",
+      "[move _53]",
+      "[move _62]",
+      "[move _71]",
+      "[move _83]",
+      "[move _91]"
+    ],
+    "checked_binary_unhandled": [
+      "AddWithOverflow(copy (*_2), const 1_usize)",
+      "SubWithOverflow(copy (*_13), const 1_usize)"
+    ],
+    "direct_deref_use": [
+      "copy (*_3)"
+    ],
+    "direct_use": [
+      "move _5",
+      "move _1",
+      "move _2"
+    ],
+    "ref": [
+      "&(*_3)",
+      "&((*_2).0: T)",
+      "&((*_1).0: std::cell::RefCell<std::vec::Vec<T>>)",
+      "&mut _4",
+      "&mut _5",
+      "&_4",
+      "&_18",
+      "&_21"
+    ],
+    "scalar_const": [
+      "const false",
+      "const true"
+    ],
+    "unknown_unhandled": [
+      "copy ((*_1).0: std::ptr::NonNull<MyBox<T>>)",
+      "SimpleStack::<T> { stack: move _1 }",
+      "const main::promoted[8]",
+      "const \"two\"",
+      "const \"three\"",
+      "const main::promoted[7]",
+      "const main::promoted[6]",
+      "const main::promoted[5]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 8,
+    "checked_binary_unhandled": 2,
+    "direct_deref_use": 1,
+    "direct_use": 3,
+    "ref": 41,
+    "scalar_const": 3,
+    "unknown_unhandled": 23
+  },
+  "rvalue_total": 81,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 8,
+    "checked_binary_unhandled": 2,
+    "unknown_unhandled": 23
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "rust_hw3",
+  "terminator_kind_counts": {
+    "Assert": 2,
+    "Call": 69,
+    "Drop": 22,
+    "Return": 8,
+    "SwitchInt": 2,
+    "UnwindResume": 6
+  }
+}

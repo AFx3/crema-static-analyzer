@@ -1,0 +1,352 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:671:59
+    |
+671 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:671:68
+    |
+671 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:3920:50
+     |
+3920 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:676:8
+    |
+676 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 5 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_static_cstr_borrow_clean`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_static_cstr_borrow_clean
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_static_cstr_borrow_clean /home/af/Documenti/a-phd/crema`
+Selected C source for SVF: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_static_cstr_borrow_clean/src/ffi.c
+LLVM IR compilation finished with status: ExitStatus(unix_wait_status(0))
+
+*********General Stats***************
+################ (program : ffi.pre.bc)###############
+AddrsNum            2
+BBWith2Succ         0
+BBWith3Succ         0
+CallsNum            0
+ConstArrayObj       0
+ConstStructObj      0
+ConstantObj         0
+CopysNum            1
+FIObjNum            0
+FSObjNum            2
+FunctionObjs        1
+GepsNum             0
+GlobalObjs          0
+HeapObjs            1
+IndCallSites        0
+LoadsNum            0
+MaxStructSize       0
+NonPtrObj           2
+ReturnsNum          0
+StackObjs           0
+StoresNum           0
+TotalCallSite       0
+TotalFieldObjects   0
+TotalObjects        3
+TotalPTASVFStmts    4
+TotalPointers       3
+TotalSVFStmts       4
+VarArrayObj         0
+VarStructObj        0
+----------------Time and memory stats--------------------
+LLVMIRTime          0.007
+SVFIRTime           0
+SymbolTableTime     0
+#######################################################
+
+*********PTACallGraph Stats (Andersen analysis)***************
+################ (program : ffi.pre.bc)###############
+----------------Numbers stats----------------------------
+CalRetPairInCycle   0
+MaxNodeInCycle      0
+NodeInCycle         0
+TotalCycle          0
+TotalEdge           0
+TotalNode           1
+#######################################################
+
+*********Andersen Pointer Analysis Stats***************
+################ (program : ffi.pre.bc)###############
+----------------Time and memory stats--------------------
+AvgIn/OutAddrEdge   0.285714
+AvgIn/OutCopyEdge   0.285714
+AvgIn/OutEdge       0.571429
+AvgIn/OutLoadEdge   0
+AvgIn/OutStoreEdge  0
+AvgPtsSetSize       0.333333
+AvgTopLvlPtsSize    0.75
+CollapseTime        0
+CopyGepTime         0
+LoadStoreTime       0
+MemoryUsageVmrss    244
+MemoryUsageVmsize   0
+SCCDetectTime       0
+SCCMergeTime        0
+TotalTime           0
+UpdateCGTime        0
+----------------Numbers stats----------------------------
+AddrProcessed       2
+CopyProcessed       1
+DummyFieldPtrs      0
+FieldObjs           0
+GepProcessed        0
+IndCallSites        0
+IndEdgeSolved       0
+LoadProcessed       0
+LocalVarInRecur     0
+MaxInAddrEdge       1
+MaxInCopyEdge       1
+MaxInLoadEdge       0
+MaxInStoreEdge      0
+MaxNodesInSCC       0
+MaxOutAddrEdge      1
+MaxOutCopyEdge      1
+MaxOutLoadEdge      0
+MaxOutStoreEdge     0
+MaxPtsSetSize       1
+MemObjects          3
+NodesInCycles       0
+NullPointer         0
+NumOfAddrs          2
+NumOfCGEdge         2
+NumOfCGNode         8
+NumOfCopys          2
+NumOfFieldExpand    0
+NumOfGeps           0
+NumOfLoads          0
+NumOfSCCDetect      1
+NumOfSFRs           0
+NumOfStores         0
+NumOfValidNode      7
+NumOfValidObjNode   2
+Pointers            3
+PointsToBlkPtr      0
+PointsToConstPtr    0
+SolveIterations     1
+StoreProcessed      0
+TotalCycleNum       0
+TotalObjects        3
+TotalPWCCycleNum    0
+TotalPointers       3
+#######################################################
+
+****Persistent Points-To Cache Statistics: Andersen's analysis bitvector****
+################ (program : ffi.pre.bc)###############
+UniquePointsToSets       3
+TotalUnions              3
+PropertyUnions           3
+UniqueUnions             0
+LookupUnions             0
+PreemptiveUnions         0
+TotalComplements         8
+PropertyComplements      8
+UniqueComplements        0
+LookupComplements        0
+PreemptiveComplements    0
+TotalIntersections       0
+PropertyIntersections    0
+UniqueIntersections      0
+LookupIntersections      0
+PreemptiveIntersections  0
+#######################################################
+
+*********PTACallGraph Stats (Andersen analysis)***************
+################ (program : ffi.pre.bc)###############
+----------------Numbers stats----------------------------
+CalRetPairInCycle   0
+MaxNodeInCycle      0
+NodeInCycle         0
+TotalCycle          0
+TotalEdge           0
+TotalNode           1
+#######################################################
+
+*********Andersen Pointer Analysis Stats***************
+################ (program : ffi.pre.bc)###############
+----------------Time and memory stats--------------------
+AvgIn/OutAddrEdge   0.285714
+AvgIn/OutCopyEdge   0.285714
+AvgIn/OutEdge       0.571429
+AvgIn/OutLoadEdge   0
+AvgIn/OutStoreEdge  0
+AvgPtsSetSize       0.333333
+AvgTopLvlPtsSize    0.75
+CollapseTime        0
+CopyGepTime         0
+LoadStoreTime       0
+MemoryUsageVmrss    244
+MemoryUsageVmsize   0
+SCCDetectTime       0
+SCCMergeTime        0
+TotalTime           0
+UpdateCGTime        0
+----------------Numbers stats----------------------------
+AddrProcessed       2
+CopyProcessed       1
+DummyFieldPtrs      0
+FieldObjs           0
+GepProcessed        0
+IndCallSites        0
+IndEdgeSolved       0
+LoadProcessed       0
+LocalVarInRecur     0
+MaxInAddrEdge       1
+MaxInCopyEdge       1
+MaxInLoadEdge       0
+MaxInStoreEdge      0
+MaxNodesInSCC       0
+MaxOutAddrEdge      1
+MaxOutCopyEdge      1
+MaxOutLoadEdge      0
+MaxOutStoreEdge     0
+MaxPtsSetSize       1
+MemObjects          3
+NodesInCycles       0
+NullPointer         0
+NumOfAddrs          2
+NumOfCGEdge         2
+NumOfCGNode         8
+NumOfCopys          2
+NumOfFieldExpand    0
+NumOfGeps           0
+NumOfLoads          0
+NumOfSCCDetect      1
+NumOfSFRs           0
+NumOfStores         0
+NumOfValidNode      7
+NumOfValidObjNode   2
+Pointers            3
+PointsToBlkPtr      0
+PointsToConstPtr    0
+SolveIterations     1
+StoreProcessed      0
+TotalCycleNum       0
+TotalObjects        3
+TotalPWCCycleNum    0
+TotalPointers       3
+#######################################################
+Processing Node: 0x5e515f4466f0
+Node Info: IntraICFGNode3 {fun: c_static_string}
+   ret ptr @.str 
+Function associated with node: 0x5e515f48b2f0
+Basic block associated with node: 0x5e515f42c9e0
+Processing Node: 0x5e515f44fd40
+Node Info: FunExitICFGNode2 {fun: c_static_string}
+PhiStmt: [Var7 <-- ([Var4, ICFGNode3],)]	
+ValVar ID: 8
+   ret ptr @.str 
+Function associated with node: 0x5e515f48b2f0
+Basic block associated with node: 0x5e515f42c9e0
+Associated SVF Statements:
+  - 0x5e515f425100
+Writing 'callgraph_initial.dot.dot'...DOT file generated: ./output/c_static_string_view_icfg_output_SVF.dot
+DOT file generated: ./output/c_static_string_node_and_edges_only_icfg_SVF.dot
+ICFG Traversal Complete for function: c_static_string.
+svf-driver finished with status: ExitStatus(unix_wait_status(0))
+cargo:rerun-if-changed=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_static_cstr_borrow_clean/src/ffi.c
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package c_static_cstr_borrow_clean target c_static_cstr_borrow_clean at /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_static_cstr_borrow_clean/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_static_cstr_borrow_clean/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_static_cstr_borrow_clean/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_static_cstr_borrow_clean/target/debug",
+    "--extern=cc=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_static_cstr_borrow_clean/target/debug/deps/libcc-b4624915574c0613.rlib",
+    "--extern=find_msvc_tools=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_static_cstr_borrow_clean/target/debug/deps/libfind_msvc_tools-cd891f1e36afe5e3.rlib",
+    "--extern=shlex=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_static_cstr_borrow_clean/target/debug/deps/libshlex-2c989fbdc7d06c87.rlib",
+]
+Loading LLVM JSON file: c_static_string_A_FINAL_ICFG.json
+Global ICFG saved to global_icfg.json
+Analyzing package c_static_cstr_borrow_clean target build-script-build at /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_static_cstr_borrow_clean/build.rs
+Skipping unsupported target kind: [CustomBuild]
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+Final Abstract State: {"rust::main::bb9": {{"Local(_10)"}: FREED, {"Local(_11)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "dummyRet::rust::main::bb1::rust::main::bb0": {}, "rust::main::bb8": {{"Local(_10)"}: FREED, {"Local(_11)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb1": {}, "rust::main::bb6": {{"Local(_11)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::terminate": {{"Local(_10)"}: FREED, {"Local(_11)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb10": {{"Local(_10)"}: FREED, {"Local(_11)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb4": {{"Local(_11)"}: TOP}, "rust::main::bb11": {{"Local(_10)"}: FREED, {"Local(_11)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb5": {{"Local(_11)"}: TOP, {"Local(_9)"}: TOP}, "dummyCall::rust::main::bb0::rust::main::bb0": {}, "rust::main::bb0": {}, "llvm::c_static_string::node103703583680240::rust::main::bb0": {}, "llvm::c_static_string::node103703583718720::rust::main::bb0": {}, "rust::main::bb2": {}, "rust::main::bb3": {{"Local(_11)"}: TOP}, "rust::main::bb7": {{"Local(_11)"}: TOP, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}}
+Final Taint State: {
+    "rust::main::bb8": {
+        "Local(_10)": {
+            "free",
+        },
+    },
+    "rust::main::bb6": {},
+    "rust::main::bb10": {
+        "Local(_10)": {
+            "free",
+        },
+    },
+    "llvm::c_static_string::node103703583680240::rust::main::bb0": {},
+    "dummyCall::rust::main::bb0::rust::main::bb0": {},
+    "rust::main::bb2": {},
+    "rust::main::terminate": {
+        "Local(_10)": {
+            "free",
+        },
+    },
+    "dummyRet::rust::main::bb1::rust::main::bb0": {},
+    "rust::main::bb0": {},
+    "rust::main::bb1": {},
+    "rust::main::bb9": {
+        "Local(_10)": {
+            "free",
+        },
+    },
+    "rust::main::bb3": {},
+    "rust::main::bb4": {},
+    "rust::main::bb5": {},
+    "rust::main::bb7": {},
+    "rust::main::bb11": {
+        "Local(_10)": {
+            "free",
+        },
+    },
+    "llvm::c_static_string::node103703583718720::rust::main::bb0": {},
+}
+-> DummyRet node 'dummyRet::rust::main::bb1::rust::main::bb0': transferring from LLVM var Some("7@rust::main::bb0") to MIR var Some("_1")
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:62: 143:63 (#5), scope: scope[1] }, kind: drop(_10) -> [return: bb9, unwind continue] }' -> '_10'
+-> Skip Drop in 'rust::main::bb10' because has an unwind incoming edge
+No tracked variable found per '_10' o 'Local(_10)'
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 NO Issues detected: ✅
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

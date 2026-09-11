@@ -1,0 +1,6 @@
+{
+  "c_malloc_rust_std_dealloc_ub": [
+    "ML",
+    "UB_FFI"
+  ]
+}

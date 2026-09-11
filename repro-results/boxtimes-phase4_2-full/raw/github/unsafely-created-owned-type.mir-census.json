@@ -1,0 +1,86 @@
+{
+  "call_counts": {
+    "<StyleSheetBuf as std::ops::Deref>::deref": 1,
+    "<std::string::String as std::convert::From<&str>>::from": 1,
+    "StyleSheet::<'_>::parse": 1,
+    "StyleSheetBuf::new": 2,
+    "StyleSheetBuf::sheet": 1,
+    "core::fmt::rt::Argument::<'_>::new_debug::<&str>": 1,
+    "core::str::<impl str>::trim": 1,
+    "print_parsed": 1,
+    "std::boxed::Box::<std::string::String>::from_raw": 1,
+    "std::boxed::Box::<std::string::String>::into_raw": 1,
+    "std::boxed::Box::<std::string::String>::new": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 1,
+    "std::fs::read_to_string::<&str>": 1,
+    "std::io::_print": 1,
+    "std::mem::drop::<std::boxed::Box<std::string::String>>": 1,
+    "std::mem::drop::<std::option::Option<StyleSheet<'_>>>": 1,
+    "std::option::Option::<&StyleSheet<'_>>::unwrap": 1,
+    "std::option::Option::<StyleSheet<'_>>::as_ref": 1,
+    "std::option::Option::<StyleSheet<'_>>::take": 1,
+    "std::result::Result::<std::string::String, std::io::Error>::unwrap": 1,
+    "std::string::String::as_str": 1
+  },
+  "call_total": 22,
+  "memory_api_counts": {
+    "box_from_raw": 1,
+    "box_into_raw": 1,
+    "box_new": 1,
+    "mem_drop": 2
+  },
+  "memory_api_examples": {
+    "box_from_raw": [
+      "std::boxed::Box::<std::string::String>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<std::string::String>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<std::string::String>::new"
+    ],
+    "mem_drop": [
+      "std::mem::drop::<std::option::Option<StyleSheet<'_>>>",
+      "std::mem::drop::<std::boxed::Box<std::string::String>>"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _7]"
+    ],
+    "ref": [
+      "&_2",
+      "&(*_3)",
+      "&mut ((*_1).1: std::option::Option<StyleSheet<'_>>)",
+      "&((*_1).0: &str)",
+      "&_6",
+      "&((*_1).1: std::option::Option<StyleSheet<'_>>)"
+    ],
+    "unknown_unhandled": [
+      "std::option::Option::<StyleSheet<'_>>::Some(move _6)",
+      "StyleSheetBuf { source_ptr: copy _3, sheet: move _7 }",
+      "copy ((*_1).0: *mut std::string::String)",
+      "const print_parsed::promoted[0]",
+      "StyleSheet::<'_> { parsed: copy _2 }"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 1,
+    "ref": 6,
+    "unknown_unhandled": 5
+  },
+  "rvalue_total": 12,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 1,
+    "unknown_unhandled": 5
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "unsafely-created-owned-type",
+  "terminator_kind_counts": {
+    "Call": 22,
+    "Drop": 2,
+    "Return": 9,
+    "UnwindResume": 1
+  }
+}

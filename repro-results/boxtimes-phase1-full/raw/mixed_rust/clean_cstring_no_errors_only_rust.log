@@ -1,0 +1,179 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2015:50
+     |
+2015 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: variant `BOXTIMES` is never constructed
+  --> src/abstract_domain.rs:82:5
+   |
+78 | pub enum CellValue {
+   |          --------- variant in this enum
+...
+82 |     BOXTIMES,
+   |     ^^^^^^^^
+   |
+   = note: `CellValue` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:481:8
+    |
+481 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 6 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/clean_cstring_no_errors_only_rust`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/clean_cstring_no_errors_only_rust
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/clean_cstring_no_errors_only_rust /home/af/Documenti/a-phd/crema`
+warning: unused import: `process::abort`
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/clean_cstring_no_errors_only_rust/src/main.rs:1:25
+  |
+1 | use std::{ffi::CString, process::abort};
+  |                         ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `std::ptr`
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/clean_cstring_no_errors_only_rust/src/main.rs:3:5
+  |
+3 | use std::ptr;
+  |     ^^^^^^^^
+
+warning: unused import: `std::ffi::CStr`
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/clean_cstring_no_errors_only_rust/src/main.rs:4:5
+  |
+4 | use std::ffi::CStr;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `std::ffi::c_char`
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/clean_cstring_no_errors_only_rust/src/main.rs:5:5
+  |
+5 | use std::ffi::c_char;
+  |     ^^^^^^^^^^^^^^^^
+
+warning: 4 warnings emitted
+
+No C files found in the project.
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package cstring_test2_cargo target cstring_test2_cargo at /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/clean_cstring_no_errors_only_rust/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/clean_cstring_no_errors_only_rust/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/clean_cstring_no_errors_only_rust/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/clean_cstring_no_errors_only_rust/target/debug",
+]
+warning: unused import: `process::abort`
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/clean_cstring_no_errors_only_rust/src/main.rs:1:25
+  |
+1 | use std::{ffi::CString, process::abort};
+  |                         ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `std::ptr`
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/clean_cstring_no_errors_only_rust/src/main.rs:3:5
+  |
+3 | use std::ptr;
+  |     ^^^^^^^^
+
+warning: unused import: `std::ffi::CStr`
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/clean_cstring_no_errors_only_rust/src/main.rs:4:5
+  |
+4 | use std::ffi::CStr;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `std::ffi::c_char`
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/clean_cstring_no_errors_only_rust/src/main.rs:5:5
+  |
+5 | use std::ffi::c_char;
+  |     ^^^^^^^^^^^^^^^^
+
+Global ICFG saved to global_icfg.json
+warning: 4 warnings emitted
+
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+Final Abstract State: {"rust::main::bb4": {{"Local(_2)"}: ALLOC, {"Local(_3)"}: MV, {"Local(_4)"}: FREED}, "rust::main::bb5": {{"Local(_2)"}: ALLOC, {"Local(_3)"}: MV, {"Local(_4)"}: FREED}, "rust::main::bb2": {{"Local(_2)"}: ALLOC, {"Local(_3)"}: MV}, "rust::main::bb0": {{"Local(_2)"}: ALLOC}, "rust::main::bb3": {{"Local(_2)"}: ALLOC, {"Local(_3)"}: MV, {"Local(_4)"}: MV}, "rust::main::bb1": {{"Local(_2)"}: ALLOC}}
+Final Taint State: {
+    "rust::main::bb3": {
+        "Local(_3)": {
+            "assign",
+        },
+        "Local(_4)": {
+            "assign",
+        },
+    },
+    "rust::main::bb0": {},
+    "rust::main::bb5": {
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_3)": {
+            "assign",
+        },
+    },
+    "rust::main::bb1": {},
+    "rust::main::bb2": {
+        "Local(_3)": {
+            "assign",
+        },
+    },
+    "rust::main::bb4": {
+        "Local(_3)": {
+            "assign",
+        },
+        "Local(_4)": {
+            "free",
+        },
+    },
+}
+Tracking variable 'Local(_3)' from block 'rust::main::bb3' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::main::bb3' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::main::bb5' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::main::bb4' (markers: {"assign"})
+Aliased via from_raw: 'Local(_3)' -> '_4'
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 NO Issues detected: ✅
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

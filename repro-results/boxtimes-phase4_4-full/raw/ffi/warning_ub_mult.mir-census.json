@@ -1,0 +1,55 @@
+{
+  "call_counts": {
+    "<str as std::string::ToString>::to_string": 1,
+    "free_bool": 1,
+    "free_int": 1,
+    "free_str": 1,
+    "std::boxed::Box::<bool>::into_raw": 1,
+    "std::boxed::Box::<bool>::new": 1,
+    "std::boxed::Box::<i32>::into_raw": 1,
+    "std::boxed::Box::<i32>::new": 1,
+    "std::boxed::Box::<std::string::String>::into_raw": 1,
+    "std::boxed::Box::<std::string::String>::new": 1
+  },
+  "call_total": 10,
+  "memory_api_counts": {
+    "box_into_raw": 3,
+    "box_new": 3
+  },
+  "memory_api_examples": {
+    "box_into_raw": [
+      "std::boxed::Box::<bool>::into_raw",
+      "std::boxed::Box::<i32>::into_raw",
+      "std::boxed::Box::<std::string::String>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<bool>::new",
+      "std::boxed::Box::<i32>::new",
+      "std::boxed::Box::<std::string::String>::new"
+    ]
+  },
+  "rvalue_examples": {
+    "pointer_cast": [
+      "move _3 as *mut std::ffi::c_void (PtrToPtr)",
+      "move _12 as *mut i8 (PtrToPtr)"
+    ],
+    "unknown_unhandled": [
+      "const \"test\""
+    ]
+  },
+  "rvalue_kind_counts": {
+    "pointer_cast": 2,
+    "unknown_unhandled": 1
+  },
+  "rvalue_total": 3,
+  "rvalue_unhandled_counts": {
+    "unknown_unhandled": 1
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "warning_ub_mult",
+  "terminator_kind_counts": {
+    "Call": 10,
+    "Return": 1
+  }
+}

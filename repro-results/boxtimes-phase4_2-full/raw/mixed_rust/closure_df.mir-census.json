@@ -1,0 +1,57 @@
+{
+  "call_counts": {
+    "<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/closure_df/src/main.rs:33:23: 33:25} as std::ops::Fn<()>>::call": 1,
+    "std::boxed::Box::<i32>::from_raw": 2,
+    "std::boxed::Box::<i32>::into_raw": 1,
+    "std::boxed::Box::<i32>::new": 1,
+    "std::mem::drop::<std::boxed::Box<i32>>": 2
+  },
+  "call_total": 7,
+  "memory_api_counts": {
+    "box_from_raw": 2,
+    "box_into_raw": 1,
+    "box_new": 1,
+    "mem_drop": 2
+  },
+  "memory_api_examples": {
+    "box_from_raw": [
+      "std::boxed::Box::<i32>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<i32>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<i32>::new"
+    ],
+    "mem_drop": [
+      "std::mem::drop::<std::boxed::Box<i32>>"
+    ]
+  },
+  "rvalue_examples": {
+    "ref": [
+      "&_2",
+      "&_3"
+    ],
+    "unknown_unhandled": [
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/closure_df/src/main.rs:33:23: 33:25} { ptr: move _4 }",
+      "deref_copy ((*_1).0: &*mut i32)",
+      "copy (*_8)",
+      "copy (*_9)"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "ref": 2,
+    "unknown_unhandled": 5
+  },
+  "rvalue_total": 7,
+  "rvalue_unhandled_counts": {
+    "unknown_unhandled": 5
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "closure_df",
+  "terminator_kind_counts": {
+    "Call": 7,
+    "Return": 2
+  }
+}

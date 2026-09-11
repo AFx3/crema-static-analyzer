@@ -1,0 +1,124 @@
+timestamp_utc=2026-09-11T11:25:34Z
+repo_root=/home/af/Documenti/a-phd
+git_commit=d5adfeb7ae909868f86b774e0bce09034f409a80
+git_status:
+ M cqpl/ast.json
+ M cqpl/cqpl_parser/src/main.rs
+ M cqpl/cqpl_parser/src/metainterpreter.rs
+ M crema/src/abstract_domain.rs
+ M crema/src/main.rs
+?? .main.dot
+?? SVF-example/callgraph_initial.dot.dot
+?? SVF-example/ffi.pre.bc
+?? SVF-example/ffi.pre.svf.bc
+?? SVF-example/output/
+?? SVF/
+?? cargo_project_test/
+?? crema/Z-only_rust_mix.log
+?? crema/Z-rust_FFI_mix.log
+?? crema/ffi_functions.json
+?? crema/global_icfg.json
+?? crema/global_icfg_nodes_edges.dot
+?? crema/z-DF_errors.log
+?? crema/z-ML_errors.log
+?? crema/z-UAF_errors.log
+?? crema_repro_baseline_clean/
+?? df
+?? df.c
+?? df.ll
+?? es-test/
+?? leak
+?? leak.c
+?? repro-results/
+?? rustc_mir_callback/
+?? tests_and_target_repos/a-code_c_ffi/branch_df_mem_leak_ffi/target/
+?? tests_and_target_repos/a-code_c_ffi/clean_mul_fn_ffi_no_errors/target/
+?? tests_and_target_repos/a-code_c_ffi/cstr_cargo_df_ffi/target/
+?? tests_and_target_repos/a-code_c_ffi/cstr_expect_uaf_and_ub_ffi/target/
+?? tests_and_target_repos/a-code_c_ffi/cstringcargo_df_ffi/target/
+?? tests_and_target_repos/a-code_c_ffi/df_rand_cargo_c_ffi/target/
+?? tests_and_target_repos/a-code_c_ffi/for_df_ffi/target/
+?? tests_and_target_repos/a-code_c_ffi/for_memory_leak_ffi/target/
+?? tests_and_target_repos/a-code_c_ffi/vuln_only_mem_leak_but_df_branch_overapprox_FFI/target/
+?? tests_and_target_repos/a-code_c_ffi/warning_ub_bool/target/
+?? tests_and_target_repos/a-code_c_ffi/warning_ub_int/target/
+?? tests_and_target_repos/a-code_c_ffi/warning_ub_mult/target/
+?? tests_and_target_repos/a-code_c_ffi/warning_ub_string/target/
+?? tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_bool/target/
+?? tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_char/target/
+?? tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_f32/target/
+?? tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_f64/target/
+?? tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_i128/target/
+?? tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_i16/target/
+?? tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_i32/target/
+?? tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_i64/target/
+?? tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_i8/target/
+?? tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_isize/target/
+?? tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_u128/target/
+?? tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_u16/target/
+?? tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_u32/target/
+?? tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_u64/target/
+?? tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_u8/target/
+?? tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_usize/target/
+?? tests_and_target_repos/a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_bool/target/
+?? tests_and_target_repos/a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_char/target/
+?? tests_and_target_repos/a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_f32/target/
+?? tests_and_target_repos/a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_f64/target/
+?? tests_and_target_repos/a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i128/target/
+?? tests_and_target_repos/a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i16/target/
+?? tests_and_target_repos/a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i32/target/
+?? tests_and_target_repos/a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i64/target/
+?? tests_and_target_repos/a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i8/target/
+?? tests_and_target_repos/a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_isize/target/
+?? tests_and_target_repos/a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u128/target/
+?? tests_and_target_repos/a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u16/target/
+?? tests_and_target_repos/a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u32/target/
+?? tests_and_target_repos/a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u64/target/
+?? tests_and_target_repos/a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u8/target/
+?? tests_and_target_repos/a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_usize/target/
+?? tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_bool/target/
+?? tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_char/target/
+?? tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_f32/target/
+?? tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_f64/target/
+?? tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i128/target/
+?? tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i16/target/
+?? tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i32/target/
+?? tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i64/target/
+?? tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i8/target/
+?? tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_isize/target/
+?? tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u128/target/
+?? tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u16/target/
+?? tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u32/target/
+?? tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u64/target/
+?? tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u8/target/
+?? tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_usize/target/
+?? tests_and_target_repos/a-code_full_rust/clean_cstring_no_errors_only_rust/target/
+?? tests_and_target_repos/a-code_full_rust/clean_into_from_raw/target/
+?? tests_and_target_repos/a-code_full_rust/clean_struct_point_mem_leak_into_raw_no_errors/target/
+?? tests_and_target_repos/a-code_full_rust/closure_df/target/
+?? tests_and_target_repos/a-code_full_rust/cstring_df_only_rust/target/
+?? tests_and_target_repos/a-code_full_rust/explicit_drop_df_only_rust/target/
+?? tests_and_target_repos/a-code_full_rust/std_mem_forget_mem_leak_rust/target/
+?? tests_and_target_repos/a-code_full_rust/struct_point_df_only_rust/target/
+?? tests_and_target_repos/a-code_full_rust/struct_point_mem_leak/target/
+?? tests_and_target_repos/a-code_full_rust/uaf_read_ptr/target/
+?? "tests_and_target_repos/found vulns/napkin-math-test/target/"
+?? "tests_and_target_repos/found vulns/noGenerator/target/"
+?? "tests_and_target_repos/found vulns/rusant/target/"
+?? uaf
+?? uaf.c
+?? "z -presentation.md"
+rustc=rustc 1.97.1 (8bab26f4f 2026-07-14)
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+binary: rustc
+commit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452
+commit-date: 2026-07-14
+host: x86_64-unknown-linux-gnu
+release: 1.97.1
+LLVM version: 22.1.6
+active_toolchain=stable-x86_64-unknown-linux-gnu (default)
+sysroot=/mnt/dara/dara-dev/toolchains/rustup/toolchains/stable-x86_64-unknown-linux-gnu
+clang=Ubuntu clang version 14.0.0-1ubuntu1.1
+SVF_DIR=/home/af/Documenti/a-phd/SVF
+LLVM_DIR=/home/af/Documenti/a-phd/SVF/llvm-16.0.0.obj
+Z3_DIR=/home/af/Documenti/a-phd/SVF/z3.obj

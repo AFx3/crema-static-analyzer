@@ -1,0 +1,118 @@
+{
+  "call_counts": {
+    "<F as std::ops::Fn<()>>::call": 1,
+    "<V as std::ops::FnMut<(&mut T,)>>::call_mut": 1,
+    "BenchmarkResult::print_results": 1,
+    "benchmark::<(), {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:63:9: 63:11}, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:64:9: 64:16}>": 1,
+    "core::fmt::rt::Argument::<'_>::new_display::<&str>": 2,
+    "core::fmt::rt::Argument::<'_>::new_display::<u128>": 1,
+    "core::fmt::rt::Argument::<'_>::new_display::<usize>": 1,
+    "core::fmt::rt::Argument::<'_>::new_pointer::<*mut libc::rusage>": 1,
+    "libc::getrusage": 1,
+    "std::boxed::Box::<libc::rusage>::into_raw": 1,
+    "std::boxed::Box::<libc::rusage>::new": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<3, 2>": 2,
+    "std::io::_print": 3,
+    "std::result::Result::<BenchmarkResult, ()>::unwrap": 1,
+    "std::thread::sleep": 1,
+    "std::time::Duration::as_millis": 1,
+    "std::time::Duration::from_secs": 1,
+    "std::time::Instant::elapsed": 1,
+    "std::time::Instant::now": 1,
+    "syscall_getrusage": 1
+  },
+  "call_total": 25,
+  "memory_api_counts": {
+    "box_into_raw": 1,
+    "box_new": 1
+  },
+  "memory_api_examples": {
+    "box_into_raw": [
+      "std::boxed::Box::<libc::rusage>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<libc::rusage>::new"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "(copy _10,)",
+      "[move _17]",
+      "[move _9, move _11]",
+      "[move _18, move _20]"
+    ],
+    "checked_binary_unhandled": [
+      "AddWithOverflow(copy _6, const 1_usize)"
+    ],
+    "closure_aggregate": [
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:64:9: 64:16} { ptr: move _8 }"
+    ],
+    "comparison": [
+      "Ge(move _13, const 1_usize)"
+    ],
+    "copy_for_deref": [
+      "deref_copy ((*_1).0: &*mut libc::rusage)"
+    ],
+    "direct_deref_use": [
+      "copy (*_5)"
+    ],
+    "direct_use": [
+      "copy _6"
+    ],
+    "ref": [
+      "&_1",
+      "&mut _2",
+      "&mut _3",
+      "&_5",
+      "&_4",
+      "&_16",
+      "&_2",
+      "&((*_1).0: usize)"
+    ],
+    "scalar_const": [
+      "const 0_usize",
+      "const true"
+    ],
+    "unknown_unhandled": [
+      "move (_11.0: usize)",
+      "BenchmarkResult { iterations: move _17, duration: copy _14, cycles: const 0_u64 }",
+      "std::result::Result::<BenchmarkResult, ()>::Ok(move _16)",
+      "libc::timeval { tv_sec: const 0_i64, tv_usec: const 0_i64 }",
+      "libc::rusage { ru_utime: copy _1, ru_stime: copy _1, ru_maxrss: const 0_i64, ru_ixrss: const 0_i64, ru_idrss: const 0_i64, ru_isrss: const 0_i64, ru_minflt: const 0_i64, ru_majflt: const 0_i64, ru_nswap: const 0_i64, ru_inblock: const 0_i64, ru_oublock: const 0_i64, ru_msgsnd: const 0_i64, ru_msgrcv: const 0_i64, ru_nsignals: const 0_i64, ru_nvcsw: const 0_i64, ru_nivcsw: const 0_i64 }",
+      "const \"Sycall getrusage(2)\"",
+      "const syscall_getrusage::promoted[0]",
+      "const BenchmarkResult::print_results::promoted[1]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 4,
+    "checked_binary_unhandled": 1,
+    "closure_aggregate": 1,
+    "comparison": 1,
+    "copy_for_deref": 1,
+    "direct_deref_use": 1,
+    "direct_use": 2,
+    "ref": 15,
+    "scalar_const": 2,
+    "unknown_unhandled": 9
+  },
+  "rvalue_total": 37,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 4,
+    "checked_binary_unhandled": 1,
+    "unknown_unhandled": 9
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "napkin-math-test",
+  "terminator_kind_counts": {
+    "Assert": 1,
+    "Call": 25,
+    "Drop": 6,
+    "Goto": 1,
+    "Return": 6,
+    "SwitchInt": 2,
+    "UnwindResume": 1
+  }
+}

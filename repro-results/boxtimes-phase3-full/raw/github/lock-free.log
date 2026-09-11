@@ -1,0 +1,94 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2403:50
+     |
+2403 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:594:8
+    |
+594 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 5 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/crema '/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/lock-free' -f 'rust::LockFreeStack::::push::bb0'`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/lock-free
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction '/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/lock-free' /home/af/Documenti/a-phd/crema`
+No C files found in the project.
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package lock-free target lock-free at /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/lock-free/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/lock-free/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/lock-free/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/lock-free/target/debug",
+]
+Global ICFG saved to global_icfg.json
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::LockFreeStack::::push::bb0
+Final Abstract State: {"rust::LockFreeStack::::push::bb0": {}}
+Final Taint State: {
+    "rust::LockFreeStack::::push::bb0": {},
+}
+No tracking info per MIR var 'Local(_3) [mutable]'
+-> DummyRet node 'dummyRet::rust::main::{closure#0}::_0::rust::main::{closure#0}::bb0_internal': transferring from LLVM var None to MIR var None
+No tracking info per MIR var 'Local(_7) [mutable]'
+-> DummyRet node 'dummyRet::rust::main::_6::rust::main::bb3_internal': transferring from LLVM var None to MIR var None
+No tracking info per MIR var 'Local(_6) [mutable]'
+-> DummyRet node 'dummyRet::rust::main::_5::rust::main::bb4_internal': transferring from LLVM var None to MIR var None
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/lock-free/src/main.rs:97:9: 97:10 (#29), scope: scope[2] }, kind: drop(_11) -> [return: bb13, unwind continue] }' -> '_11'
+No tracked variable found per '_11' o 'Local(_11)'
+-> Skip Drop in 'rust::main::bb22' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/lock-free/src/main.rs:78:9: 78:10 (#0), scope: scope[2] }, kind: drop(_10) -> [return: bb2, unwind continue] }' -> '_10'
+No tracked variable found per '_10' o 'Local(_10)'
+-> Skip Drop in 'rust::LockFreeStack::<T>::push::bb8' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/lock-free/src/main.rs:56:61: 56:62 (#0), scope: scope[1] }, kind: drop(_7) -> [return: bb7, unwind continue] }' -> '_7'
+No tracked variable found per '_7' o 'Local(_7)'
+Aliased via from_raw: 'Local(_2)' -> '_14'
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_14), Local(_2), _14}": 1}
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

@@ -1,0 +1,89 @@
+{
+  "call_counts": {
+    "build_boxed_point": 2,
+    "build_rectangle": 1,
+    "core::fmt::rt::Argument::<'_>::new_display::<i8>": 4,
+    "std::boxed::Box::<Point>::from_raw": 3,
+    "std::boxed::Box::<Point>::into_raw": 2,
+    "std::boxed::Box::<Point>::new": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<3, 2>": 2,
+    "std::io::_print": 2,
+    "std::ptr::read::<Point>": 2
+  },
+  "call_total": 19,
+  "memory_api_counts": {
+    "box_from_raw": 3,
+    "box_into_raw": 2,
+    "box_new": 1,
+    "ptr_read": 2
+  },
+  "memory_api_examples": {
+    "box_from_raw": [
+      "std::boxed::Box::<Point>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<Point>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<Point>::new"
+    ],
+    "ptr_read": [
+      "std::ptr::read::<Point>"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _17, move _19]",
+      "[move _26, move _28]"
+    ],
+    "direct_use": [
+      "move _1",
+      "move _2"
+    ],
+    "pointer_cast": [
+      "copy _3 as *const Point (PtrToPtr)",
+      "copy _5 as *const Point (PtrToPtr)"
+    ],
+    "ref": [
+      "&((_11.0: Point).0: i8)",
+      "&((_11.0: Point).1: i8)",
+      "&_16",
+      "&((_11.1: Point).0: i8)",
+      "&((_11.1: Point).1: i8)",
+      "&_25"
+    ],
+    "scalar_const": [
+      "const false",
+      "const true"
+    ],
+    "unknown_unhandled": [
+      "Rectangle { top_left: move _1, bottom_right: move _2 }",
+      "const main::promoted[1]",
+      "const main::promoted[0]",
+      "Point { x: copy _1, y: copy _2 }"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 2,
+    "direct_use": 2,
+    "pointer_cast": 2,
+    "ref": 6,
+    "scalar_const": 8,
+    "unknown_unhandled": 4
+  },
+  "rvalue_total": 24,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 2,
+    "unknown_unhandled": 4
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "struct_point_df_only_rust",
+  "terminator_kind_counts": {
+    "Call": 19,
+    "Drop": 5,
+    "Return": 3,
+    "SwitchInt": 2,
+    "UnwindResume": 1
+  }
+}

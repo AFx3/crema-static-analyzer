@@ -1,0 +1,31 @@
+{
+  "call_counts": {
+    "free_int": 1,
+    "std::boxed::Box::<i32>::into_raw": 1,
+    "std::boxed::Box::<i32>::new": 1
+  },
+  "call_total": 3,
+  "memory_api_counts": {
+    "box_into_raw": 1,
+    "box_new": 1
+  },
+  "memory_api_examples": {
+    "box_into_raw": [
+      "std::boxed::Box::<i32>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<i32>::new"
+    ]
+  },
+  "rvalue_examples": {},
+  "rvalue_kind_counts": {},
+  "rvalue_total": 0,
+  "rvalue_unhandled_counts": {},
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "warning_ub_int",
+  "terminator_kind_counts": {
+    "Call": 3,
+    "Return": 1
+  }
+}

@@ -1,0 +1,180 @@
+{
+	"edges" : 
+	[
+		{
+			"destination" : 95668351351152,
+			"edge_type" : "intra",
+			"source" : 95668351353136
+		},
+		{
+			"destination" : 95668351206256,
+			"edge_type" : "intra",
+			"source" : 95668351351152
+		},
+		{
+			"destination" : 95668351451472,
+			"edge_type" : "intra",
+			"source" : 95668351206256
+		}
+	],
+	"nodes" : 
+	[
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95668351774336,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95668351189024,
+			"function_name" : "main",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95668351353136,
+					"edge_type" : "intra",
+					"source" : 95668351375968
+				}
+			],
+			"info" : "IntraICFGNode3 {fun: main}\nAddrStmt: [Var7 <-- Var8]\t\nValVar ID: 7\n   %retval = alloca i32, align 4 ",
+			"node_id" : 95668351353136,
+			"node_kind" : 0,
+			"node_kind_string" : "IntraBlock",
+			"node_source_loc" : "",
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95668351351152,
+					"edge_type" : "intra",
+					"source" : 95668351353136
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"edge_id" : 4,
+					"lhs_var_id" : 7,
+					"pta_edge" : true,
+					"rhs_var_id" : 8,
+					"stmt_id" : 95668351338176,
+					"stmt_info" : "AddrStmt: [Var7 <-- Var8]\t\nValVar ID: 7\n   %retval = alloca i32, align 4 ",
+					"stmt_type" : "AddrStmt"
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95668351774336,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95668351189024,
+			"function_name" : "main",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95668351351152,
+					"edge_type" : "intra",
+					"source" : 95668351353136
+				}
+			],
+			"info" : "IntraICFGNode4 {fun: main}\nStoreStmt: [Var7 <-- Var11]\t\nValVar ID: 10\n   store i32 0, ptr %retval, align 4 ",
+			"node_id" : 95668351351152,
+			"node_kind" : 0,
+			"node_kind_string" : "IntraBlock",
+			"node_source_loc" : "",
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95668351206256,
+					"edge_type" : "intra",
+					"source" : 95668351351152
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"edge_id" : 5,
+					"lhs_var_id" : 7,
+					"pta_edge" : false,
+					"rhs_var_id" : 11,
+					"stmt_id" : 95668351788896,
+					"stmt_info" : "StoreStmt: [Var7 <-- Var11]\t\nValVar ID: 10\n   store i32 0, ptr %retval, align 4 ",
+					"stmt_type" : "StoreStmt"
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95668351774336,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95668351189024,
+			"function_name" : "main",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95668351206256,
+					"edge_type" : "intra",
+					"source" : 95668351351152
+				}
+			],
+			"info" : "IntraICFGNode5 {fun: main}\n   ret i32 0 ",
+			"node_id" : 95668351206256,
+			"node_kind" : 0,
+			"node_kind_string" : "IntraBlock",
+			"node_source_loc" : "",
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95668351451472,
+					"edge_type" : "intra",
+					"source" : 95668351206256
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95668351774336,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95668351189024,
+			"function_name" : "main",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95668351451472,
+					"edge_type" : "intra",
+					"source" : 95668351206256
+				}
+			],
+			"info" : "FunExitICFGNode2 {fun: main}\nPhiStmt: [Var6 <-- ([Var11, ICFGNode5],)]\t\nValVar ID: 12\n   ret i32 0 ",
+			"node_id" : 95668351451472,
+			"node_kind" : 3,
+			"node_kind_string" : "FunExitBlock",
+			"node_source_loc" : "function ret: ",
+			"node_type" : false,
+			"outgoing_edges" : [],
+			"svf_statements" : 
+			[
+				{
+					"edge_id" : 6,
+					"lhs_var_id" : 6,
+					"operand_var_ids" : 
+					[
+						11
+					],
+					"operand_vars" : 
+					[
+						{
+							"icfg_node" : 95668351206256,
+							"op_var_id" : 11
+						}
+					],
+					"pta_edge" : false,
+					"res_var_id" : 6,
+					"stmt_id" : 95668351461360,
+					"stmt_info" : "PhiStmt: [Var6 <-- ([Var11, ICFGNode5],)]\t\nValVar ID: 12\n   ret i32 0 ",
+					"stmt_type" : "PhiStmt"
+				}
+			]
+		}
+	]
+}

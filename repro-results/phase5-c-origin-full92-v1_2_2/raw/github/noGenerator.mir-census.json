@@ -1,0 +1,124 @@
+{
+  "call_counts": {
+    "<std::iter::Filter<std::str::Chars<'_>, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/noGenerator/src/main.rs:1:108: 1:118}> as std::iter::Iterator>::map::<u32, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/noGenerator/src/main.rs:1:153: 1:162}>": 1,
+    "<std::iter::Map<std::iter::Filter<std::str::Chars<'_>, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/noGenerator/src/main.rs:1:108: 1:118}>, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/noGenerator/src/main.rs:1:153: 1:162}> as std::iter::Iterator>::product::<u32>": 1,
+    "<std::str::Chars<'_> as std::iter::Iterator>::filter::<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/noGenerator/src/main.rs:1:108: 1:118}>": 1,
+    "<std::string::String as std::ops::Deref>::deref": 1,
+    "<usize as std::string::ToString>::to_string": 1,
+    "alloc::alloc::exchange_malloc": 1,
+    "core::fmt::rt::Argument::<'_>::new_display::<u32>": 1,
+    "core::str::<impl str>::chars": 1,
+    "std::boxed::Box::<std::vec::Vec<char>>::into_raw": 1,
+    "std::boxed::Box::<std::vec::Vec<char>>::new": 1,
+    "std::char::methods::<impl char>::is_digit": 1,
+    "std::char::methods::<impl char>::to_digit": 1,
+    "std::f64::<impl f64>::sqrt": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 1,
+    "std::io::_print": 1,
+    "std::option::Option::<u32>::unwrap": 1,
+    "std::slice::<impl [char]>::into_vec::<std::alloc::Global>": 1
+  },
+  "call_total": 17,
+  "memory_api_counts": {
+    "alloc": 2,
+    "box_into_raw": 1,
+    "box_new": 1
+  },
+  "memory_api_examples": {
+    "alloc": [
+      "alloc::alloc::exchange_malloc",
+      "std::slice::<impl [char]>::into_vec::<std::alloc::Global>"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<std::vec::Vec<char>>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<std::vec::Vec<char>>::new"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _33]",
+      "[const ' ']"
+    ],
+    "arithmetic_binary": [
+      "Sub(copy _38, const 1_usize)",
+      "BitAnd(copy _37, copy _39)",
+      "Mul(move _23, const std::f64::consts::PI)",
+      "Add(const 1f64, move _25)",
+      "Mul(move _22, move _24)",
+      "Div(move _21, const 2f64)",
+      "Rem(move _19, const 100_u32)"
+    ],
+    "comparison": [
+      "Eq(copy _40, const 0_usize)",
+      "Eq(const 100_u32, const 0_u32)",
+      "Ne(move _5, const '0')"
+    ],
+    "direct_deref_use": [
+      "copy (*_2)"
+    ],
+    "direct_use": [
+      "copy _18"
+    ],
+    "pointer_cast": [
+      "copy _35 as *const () (PtrToPtr)"
+    ],
+    "ref": [
+      "&_9",
+      "&_7",
+      "&_27",
+      "&_32"
+    ],
+    "scalar_cast": [
+      "copy _36 as usize (Transmute)",
+      "move _10 as usize (PointerExposeProvenance)",
+      "copy _1 as f64 (IntToFloat)",
+      "move _20 as u32 (FloatToInt)"
+    ],
+    "scalar_const": [
+      "const 1_u32",
+      "const false"
+    ],
+    "scalar_nullary": [
+      "SizeOf([char; 1])",
+      "AlignOf([char; 1])"
+    ],
+    "unknown_unhandled": [
+      "ShallowInitBox(move _16, [char; 1])",
+      "copy (((_17.0: std::ptr::Unique<[char; 1]>).0: std::ptr::NonNull<[char; 1]>).0: *const [char; 1])",
+      "const main::promoted[0]",
+      "move _17 as std::boxed::Box<[char]> (PointerCoercion(Unsize, Implicit))"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 2,
+    "arithmetic_binary": 7,
+    "comparison": 3,
+    "direct_deref_use": 2,
+    "direct_use": 1,
+    "pointer_cast": 1,
+    "ref": 4,
+    "scalar_cast": 4,
+    "scalar_const": 2,
+    "scalar_nullary": 3,
+    "unknown_unhandled": 4
+  },
+  "rvalue_total": 33,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 2,
+    "unknown_unhandled": 4
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "noGenerator",
+  "terminator_kind_counts": {
+    "Assert": 2,
+    "Call": 17,
+    "Drop": 2,
+    "Goto": 4,
+    "Return": 3,
+    "SwitchInt": 2,
+    "UnwindResume": 1
+  }
+}

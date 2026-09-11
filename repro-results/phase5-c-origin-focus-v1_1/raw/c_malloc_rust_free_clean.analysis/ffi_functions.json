@@ -1,0 +1,6 @@
+{
+  "ffi_functions": [
+    "c_alloc_i32",
+    "free"
+  ]
+}

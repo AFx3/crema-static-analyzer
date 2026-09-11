@@ -1,0 +1,863 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2403:50
+     |
+2403 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:594:8
+    |
+594 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 5 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/crema '/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register'`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction '/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register' /home/af/Documenti/a-phd/crema`
+No C files found in the project.
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package shared-register target shared_register at /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/lib.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/lib.rs",
+    "--crate-type",
+    "lib",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug",
+    "--extern=hyper_tls=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libhyper_tls-81528dd8af8aa24c.rlib",
+    "--extern=idna_adapter=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libidna_adapter-1c0625673d5e5458.rlib",
+    "--extern=icu_collections=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libicu_collections-c3ffe4fffa7c1483.rlib",
+    "--extern=pin_utils=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libpin_utils-76c2785263cdb1c1.rlib",
+    "--extern=httpdate=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libhttpdate-cec10d4fe91818dd.rlib",
+    "--extern=idna=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libidna-91648b53697989e7.rlib",
+    "--extern=ryu=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libryu-9ac960ab829e07f4.rlib",
+    "--extern=openssl_probe=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libopenssl_probe-3896864bd857aff0.rlib",
+    "--extern=shared_register=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libshared_register-09391fa24e209714.rlib",
+    "--extern=native_tls=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libnative_tls-56238387fef5f85e.rlib",
+    "--extern=sync_wrapper=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libsync_wrapper-e6943188b4be07f5.rlib",
+    "--extern=itoa=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libitoa-e14358a371fd4efa.rlib",
+    "--extern=fnv=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libfnv-574dedeaa4c89e1d.rlib",
+    "--extern=zerovec=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libzerovec-e275de887be1b157.rlib",
+    "--extern=icu_normalizer_data=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libicu_normalizer_data-fc5dff68c94cf6da.rlib",
+    "--extern=foreign_types_shared=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libforeign_types_shared-451e418c5f5a784d.rlib",
+    "--extern=try_lock=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libtry_lock-c81c639303c73d15.rlib",
+    "--extern=tinystr=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libtinystr-1c15c507db8d14fb.rlib",
+    "--extern=once_cell=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libonce_cell-7d8771cc0add5777.rlib",
+    "--extern=icu_properties_data=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libicu_properties_data-1cd7d57e70679f7c.rlib",
+    "--extern=ipnet=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libipnet-e7c1305d45e760f0.rlib",
+    "--extern=cfg_if=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libcfg_if-57bf25c23e31efdb.rlib",
+    "--extern=icu_normalizer=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libicu_normalizer-81660d62e4a18907.rlib",
+    "--extern=zerotrie=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libzerotrie-7092e48cc006c25f.rlib",
+    "--extern=utf8_iter=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libutf8_iter-7b46fdc8748b2bd7.rlib",
+    "--extern=url=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/liburl-a7aab9d653523e31.rlib",
+    "--extern=bitflags=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libbitflags-2c956c8f2382bd75.rlib",
+    "--extern=percent_encoding=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libpercent_encoding-a400589552762a21.rlib",
+    "--extern=writeable=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libwriteable-f75361801c43fbd4.rlib",
+    "--extern=tracing_core=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libtracing_core-d50a3068f8efa7f8.rlib",
+    "--extern=memchr=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libmemchr-c7ff0286392b94eb.rlib",
+    "--extern=form_urlencoded=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libform_urlencoded-07a2dedb236e9598.rlib",
+    "--extern=futures_core=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libfutures_core-3267ce8fda4a14eb.rlib",
+    "--extern=potential_utf=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libpotential_utf-07c7e0aec45ee59f.rlib",
+    "--extern=want=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libwant-e685d7a406130720.rlib",
+    "--extern=autocfg=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libautocfg-2c35fac7e550c966.rlib",
+    "--extern=hyper=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libhyper-675cdd2a515a6f1a.rlib",
+    "--extern=tokio_native_tls=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libtokio_native_tls-81f023031006702a.rlib",
+    "--extern=httparse=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libhttparse-7ba539a21f5d4e53.rlib",
+    "--extern=pin_project_lite=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libpin_project_lite-add54b4dc95dda79.rlib",
+    "--extern=cc=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libcc-df7468a0b867c4b2.rlib",
+    "--extern=mime=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libmime-34c62d26cca01717.rlib",
+    "--extern=reqwest=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libreqwest-f2b12e23925dfea3.rlib",
+    "--extern=openssl=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libopenssl-a8c68038e3ccba77.rlib",
+    "--extern=shlex=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libshlex-f4c3659040844f7b.rlib",
+    "--extern=vcpkg=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libvcpkg-65f69b1e115cb203.rlib",
+    "--extern=tower_service=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libtower_service-44dbed632a843492.rlib",
+    "--extern=tokio=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libtokio-53862c3132261733.rlib",
+    "--extern=h2=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libh2-419f01263601005e.rlib",
+    "--extern=stable_deref_trait=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libstable_deref_trait-94bc1fab9293791f.rlib",
+    "--extern=unicode_ident=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libunicode_ident-926027468c5cecb0.rlib",
+    "--extern=futures_util=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libfutures_util-68e9b8d788461e24.rlib",
+    "--extern=mio=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libmio-bd9a71f0a7c8087a.rlib",
+    "--extern=bytes=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libbytes-d79173a98068d6fe.rlib",
+    "--extern=futures_sink=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libfutures_sink-96446479240e3330.rlib",
+    "--extern=litemap=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/liblitemap-691ff3dffc8c0449.rlib",
+    "--extern=icu_provider=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libicu_provider-39694fa07e6cdeb4.rlib",
+    "--extern=proc_macro2=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libproc_macro2-19ad94d276bd2f51.rlib",
+    "--extern=foreign_types=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libforeign_types-635c4831cecdaa17.rlib",
+    "--extern=futures_task=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libfutures_task-6b7e7a881f61604a.rlib",
+    "--extern=quote=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libquote-7628da49504cd79b.rlib",
+    "--extern=openssl_sys=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libopenssl_sys-5534f970db773f47.rlib",
+    "--extern=libc=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/liblibc-65703ed3ad25655b.rlib",
+    "--extern=equivalent=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libequivalent-bf738b088bb070ea.rlib",
+    "--extern=indexmap=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libindexmap-00a983fb4eac1743.rlib",
+    "--extern=pkg_config=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libpkg_config-45eec787deeabbcc.rlib",
+    "--extern=serde=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libserde-89fb024451e0eba7.rlib",
+    "--extern=icu_properties=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libicu_properties-67712fb5c6995c25.rlib",
+    "--extern=serde_urlencoded=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libserde_urlencoded-d5377f23f66a5340.rlib",
+    "--extern=hashbrown=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libhashbrown-17cd116cc92f20eb.rlib",
+    "--extern=futures_io=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libfutures_io-124a01bb0b35f096.rlib",
+    "--extern=synstructure=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libsynstructure-5a543fb59acef13f.rlib",
+    "--extern=slab=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libslab-d637e80c635d9ae6.rlib",
+    "--extern=base64=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libbase64-309ef582bd843d33.rlib",
+    "--extern=rustls_pemfile=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/librustls_pemfile-ca091fbd60718fb1.rlib",
+    "--extern=smallvec=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libsmallvec-1240bba53c4d8b41.rlib",
+    "--extern=encoding_rs=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libencoding_rs-87763af8bd0f20d8.rlib",
+    "--extern=serde_json=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libserde_json-c1600a23bec27d25.rlib",
+    "--extern=icu_locale_core=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libicu_locale_core-cd8675229404f150.rlib",
+    "--extern=futures_channel=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libfutures_channel-481fc5026c84318a.rlib",
+    "--extern=yoke=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libyoke-4f5af76527f44a14.rlib",
+    "--extern=log=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/liblog-628dc7f2e448385a.rlib",
+    "--extern=syn=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libsyn-aff7033902ff5994.rlib",
+    "--extern=zerofrom=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libzerofrom-ab7436602307b269.rlib",
+    "--extern=socket2=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libsocket2-e4fd750688c2ffbc.rlib",
+    "--extern=tracing=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libtracing-21f5af5260bf4d7d.rlib",
+    "--extern=http_body=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libhttp_body-6b86469c6fb13f79.rlib",
+    "--extern=tokio_util=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libtokio_util-c6a84c3aa619fdc7.rlib",
+    "--extern=http=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libhttp-d3b7325b5386d7e2.rlib",
+]
+Global ICFG saved to global_icfg.json
+Analyzing package shared-register target shared-register at /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug",
+    "--extern=hyper_tls=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libhyper_tls-81528dd8af8aa24c.rlib",
+    "--extern=idna_adapter=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libidna_adapter-1c0625673d5e5458.rlib",
+    "--extern=icu_collections=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libicu_collections-c3ffe4fffa7c1483.rlib",
+    "--extern=pin_utils=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libpin_utils-76c2785263cdb1c1.rlib",
+    "--extern=httpdate=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libhttpdate-cec10d4fe91818dd.rlib",
+    "--extern=idna=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libidna-91648b53697989e7.rlib",
+    "--extern=ryu=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libryu-9ac960ab829e07f4.rlib",
+    "--extern=openssl_probe=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libopenssl_probe-3896864bd857aff0.rlib",
+    "--extern=shared_register=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libshared_register-09391fa24e209714.rlib",
+    "--extern=native_tls=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libnative_tls-56238387fef5f85e.rlib",
+    "--extern=sync_wrapper=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libsync_wrapper-e6943188b4be07f5.rlib",
+    "--extern=itoa=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libitoa-e14358a371fd4efa.rlib",
+    "--extern=fnv=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libfnv-574dedeaa4c89e1d.rlib",
+    "--extern=zerovec=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libzerovec-e275de887be1b157.rlib",
+    "--extern=icu_normalizer_data=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libicu_normalizer_data-fc5dff68c94cf6da.rlib",
+    "--extern=foreign_types_shared=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libforeign_types_shared-451e418c5f5a784d.rlib",
+    "--extern=try_lock=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libtry_lock-c81c639303c73d15.rlib",
+    "--extern=tinystr=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libtinystr-1c15c507db8d14fb.rlib",
+    "--extern=once_cell=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libonce_cell-7d8771cc0add5777.rlib",
+    "--extern=icu_properties_data=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libicu_properties_data-1cd7d57e70679f7c.rlib",
+    "--extern=ipnet=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libipnet-e7c1305d45e760f0.rlib",
+    "--extern=cfg_if=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libcfg_if-57bf25c23e31efdb.rlib",
+    "--extern=icu_normalizer=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libicu_normalizer-81660d62e4a18907.rlib",
+    "--extern=zerotrie=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libzerotrie-7092e48cc006c25f.rlib",
+    "--extern=utf8_iter=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libutf8_iter-7b46fdc8748b2bd7.rlib",
+    "--extern=url=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/liburl-a7aab9d653523e31.rlib",
+    "--extern=bitflags=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libbitflags-2c956c8f2382bd75.rlib",
+    "--extern=percent_encoding=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libpercent_encoding-a400589552762a21.rlib",
+    "--extern=writeable=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libwriteable-f75361801c43fbd4.rlib",
+    "--extern=tracing_core=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libtracing_core-d50a3068f8efa7f8.rlib",
+    "--extern=memchr=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libmemchr-c7ff0286392b94eb.rlib",
+    "--extern=form_urlencoded=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libform_urlencoded-07a2dedb236e9598.rlib",
+    "--extern=futures_core=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libfutures_core-3267ce8fda4a14eb.rlib",
+    "--extern=potential_utf=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libpotential_utf-07c7e0aec45ee59f.rlib",
+    "--extern=want=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libwant-e685d7a406130720.rlib",
+    "--extern=autocfg=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libautocfg-2c35fac7e550c966.rlib",
+    "--extern=hyper=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libhyper-675cdd2a515a6f1a.rlib",
+    "--extern=tokio_native_tls=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libtokio_native_tls-81f023031006702a.rlib",
+    "--extern=httparse=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libhttparse-7ba539a21f5d4e53.rlib",
+    "--extern=pin_project_lite=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libpin_project_lite-add54b4dc95dda79.rlib",
+    "--extern=cc=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libcc-df7468a0b867c4b2.rlib",
+    "--extern=mime=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libmime-34c62d26cca01717.rlib",
+    "--extern=reqwest=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libreqwest-f2b12e23925dfea3.rlib",
+    "--extern=openssl=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libopenssl-a8c68038e3ccba77.rlib",
+    "--extern=shlex=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libshlex-f4c3659040844f7b.rlib",
+    "--extern=vcpkg=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libvcpkg-65f69b1e115cb203.rlib",
+    "--extern=tower_service=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libtower_service-44dbed632a843492.rlib",
+    "--extern=tokio=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libtokio-53862c3132261733.rlib",
+    "--extern=h2=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libh2-419f01263601005e.rlib",
+    "--extern=stable_deref_trait=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libstable_deref_trait-94bc1fab9293791f.rlib",
+    "--extern=unicode_ident=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libunicode_ident-926027468c5cecb0.rlib",
+    "--extern=futures_util=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libfutures_util-68e9b8d788461e24.rlib",
+    "--extern=mio=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libmio-bd9a71f0a7c8087a.rlib",
+    "--extern=bytes=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libbytes-d79173a98068d6fe.rlib",
+    "--extern=futures_sink=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libfutures_sink-96446479240e3330.rlib",
+    "--extern=litemap=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/liblitemap-691ff3dffc8c0449.rlib",
+    "--extern=icu_provider=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libicu_provider-39694fa07e6cdeb4.rlib",
+    "--extern=proc_macro2=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libproc_macro2-19ad94d276bd2f51.rlib",
+    "--extern=foreign_types=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libforeign_types-635c4831cecdaa17.rlib",
+    "--extern=futures_task=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libfutures_task-6b7e7a881f61604a.rlib",
+    "--extern=quote=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libquote-7628da49504cd79b.rlib",
+    "--extern=openssl_sys=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libopenssl_sys-5534f970db773f47.rlib",
+    "--extern=libc=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/liblibc-65703ed3ad25655b.rlib",
+    "--extern=equivalent=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libequivalent-bf738b088bb070ea.rlib",
+    "--extern=indexmap=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libindexmap-00a983fb4eac1743.rlib",
+    "--extern=pkg_config=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libpkg_config-45eec787deeabbcc.rlib",
+    "--extern=serde=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libserde-89fb024451e0eba7.rlib",
+    "--extern=icu_properties=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libicu_properties-67712fb5c6995c25.rlib",
+    "--extern=serde_urlencoded=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libserde_urlencoded-d5377f23f66a5340.rlib",
+    "--extern=hashbrown=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libhashbrown-17cd116cc92f20eb.rlib",
+    "--extern=futures_io=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libfutures_io-124a01bb0b35f096.rlib",
+    "--extern=synstructure=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libsynstructure-5a543fb59acef13f.rlib",
+    "--extern=slab=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libslab-d637e80c635d9ae6.rlib",
+    "--extern=base64=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libbase64-309ef582bd843d33.rlib",
+    "--extern=rustls_pemfile=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/librustls_pemfile-ca091fbd60718fb1.rlib",
+    "--extern=smallvec=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libsmallvec-1240bba53c4d8b41.rlib",
+    "--extern=encoding_rs=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libencoding_rs-87763af8bd0f20d8.rlib",
+    "--extern=serde_json=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libserde_json-c1600a23bec27d25.rlib",
+    "--extern=icu_locale_core=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libicu_locale_core-cd8675229404f150.rlib",
+    "--extern=futures_channel=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libfutures_channel-481fc5026c84318a.rlib",
+    "--extern=yoke=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libyoke-4f5af76527f44a14.rlib",
+    "--extern=log=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/liblog-628dc7f2e448385a.rlib",
+    "--extern=syn=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libsyn-aff7033902ff5994.rlib",
+    "--extern=zerofrom=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libzerofrom-ab7436602307b269.rlib",
+    "--extern=socket2=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libsocket2-e4fd750688c2ffbc.rlib",
+    "--extern=tracing=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libtracing-21f5af5260bf4d7d.rlib",
+    "--extern=http_body=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libhttp_body-6b86469c6fb13f79.rlib",
+    "--extern=tokio_util=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libtokio_util-c6a84c3aa619fdc7.rlib",
+    "--extern=http=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/target/debug/deps/libhttp-d3b7325b5386d7e2.rlib",
+]
+Global ICFG saved to global_icfg.json
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb5::rust::main::bb5_internal", outgoing_edge: "rust::main::bb6", id: "d1a6ce515a32a8bf", mir_var: None, llvm_var: None, is_internal: Some(true) }
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb4::rust::main::bb4_internal", outgoing_edge: "rust::main::bb5", id: "f48e864d92026d8", mir_var: None, llvm_var: None, is_internal: Some(true) }
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb27::rust::main::bb27_internal", outgoing_edge: "rust::main::bb28", id: "bdb1a977538455e2", mir_var: None, llvm_var: None, is_internal: Some(true) }
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb25::rust::main::bb25_internal", outgoing_edge: "rust::main::bb26", id: "67c125f34255658b", mir_var: Some("_34"), llvm_var: Some("Local _0"), is_internal: Some(true) }
+DUMMYRET normalize: '_34'->'Local(34)', 'Local _0'->'Local(_0)'
+BEFORE JOIN: Local(34)=BOTTOM, Local(_0)=BOTTOM
+JOINED Local(34)=BOTTOM
+AFTER SET: mem_ret[Local(34)]=BOTTOM
+TAINT Local(34)={}
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb5::rust::main::bb5_internal", outgoing_edge: "rust::main::bb6", id: "d1a6ce515a32a8bf", mir_var: None, llvm_var: None, is_internal: Some(true) }
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb4::rust::main::bb4_internal", outgoing_edge: "rust::main::bb5", id: "f48e864d92026d8", mir_var: None, llvm_var: None, is_internal: Some(true) }
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb27::rust::main::bb27_internal", outgoing_edge: "rust::main::bb28", id: "bdb1a977538455e2", mir_var: None, llvm_var: None, is_internal: Some(true) }
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb25::rust::main::bb25_internal", outgoing_edge: "rust::main::bb26", id: "67c125f34255658b", mir_var: Some("_34"), llvm_var: Some("Local _0"), is_internal: Some(true) }
+DUMMYRET normalize: '_34'->'Local(34)', 'Local _0'->'Local(_0)'
+BEFORE JOIN: Local(34)=BOTTOM, Local(_0)=BOTTOM
+JOINED Local(34)=BOTTOM
+AFTER SET: mem_ret[Local(34)]=BOTTOM
+TAINT Local(34)={}
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb5::rust::main::bb5_internal", outgoing_edge: "rust::main::bb6", id: "d1a6ce515a32a8bf", mir_var: None, llvm_var: None, is_internal: Some(true) }
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb4::rust::main::bb4_internal", outgoing_edge: "rust::main::bb5", id: "f48e864d92026d8", mir_var: None, llvm_var: None, is_internal: Some(true) }
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb27::rust::main::bb27_internal", outgoing_edge: "rust::main::bb28", id: "bdb1a977538455e2", mir_var: None, llvm_var: None, is_internal: Some(true) }
+Final Abstract State: {"dummyRet::rust::main::_39::rust::main::bb27_internal": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb5": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "dummyRet::rust::main::_1::rust::main::bb5_internal": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb32": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "dummyCall::rust::main::bb5::rust::main::bb5_internal": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb16": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb35": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb17": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb6": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb11": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb18": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb20": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb36": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_35)"}: FREED, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb21": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb24": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb33": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb42": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb3": {{"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: ALLOC, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb25": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb15": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb40": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_18)"}: ALLOC, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_35)"}: FREED, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb30": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb12": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb13": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::terminate": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_18)"}: ALLOC, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_35)"}: FREED, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb0": {{"Local(_43)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb4": {{"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: ALLOC, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb23": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "dummyCall::rust::main::bb25::rust::main::bb25_internal": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "dummyRet::rust::main::_2::rust::main::bb4_internal": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb26": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb27": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "dummyCall::rust::main::bb27::rust::main::bb27_internal": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb22": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb34": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb41": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_35)"}: FREED, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb8": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_18)"}: ALLOC, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb10": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "dummyCall::rust::main::bb4::rust::main::bb4_internal": {{"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: ALLOC, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb43": {{"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_50)"}: BOXTIMES, {"Local(_6)"}: ALLOC, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb14": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::{closure#0}::bb1": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb2": {{"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: ALLOC, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "dummyRet::rust::main::25::rust::main::bb25_internal": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb37": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_35)"}: FREED, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb19": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb31": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb28": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb9": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb38": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_18)"}: ALLOC, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_35)"}: FREED, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb7": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb39": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: FREED, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb29": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::bb1": {{"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}, "rust::main::{closure#0}::bb0": {{"Local(_1)", "Local(_36)"}: TOP, {"Local(_15)", "Local(_38)"}: TOP, {"Local(_17)"}: MV, {"Local(_21)", "Local(_25)", "Local(_29)"}: TOP, {"Local(_43)"}: BOXTIMES, {"Local(_46)"}: BOXTIMES, {"Local(_47)"}: BOXTIMES, {"Local(_48)"}: BOXTIMES, {"Local(_49)"}: BOXTIMES, {"Local(_5)", "Local(_6)"}: TOP, {"Local(_50)"}: BOXTIMES, {"Local(_8)"}: BOXTIMES, {"Local(_9)"}: BOXTIMES}}
+Final Taint State: {
+    "rust::main::bb21": {
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_5)": {
+            "free",
+        },
+    },
+    "rust::main::bb36": {
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_35)": {
+            "free",
+        },
+    },
+    "rust::main::bb9": {
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_5)": {
+            "free",
+        },
+    },
+    "rust::main::bb14": {
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_5)": {
+            "free",
+        },
+    },
+    "rust::main::terminate": {
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_35)": {
+            "free",
+        },
+    },
+    "dummyRet::rust::main::25::rust::main::bb25_internal": {
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_6)": {
+            "free",
+        },
+    },
+    "dummyCall::rust::main::bb25::rust::main::bb25_internal": {
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_6)": {
+            "free",
+        },
+    },
+    "rust::main::bb16": {
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_5)": {
+            "free",
+        },
+    },
+    "rust::main::bb37": {
+        "Local(_35)": {
+            "free",
+        },
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb38": {
+        "Local(_35)": {
+            "free",
+        },
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb8": {
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_5)": {
+            "free",
+        },
+    },
+    "rust::main::bb43": {},
+    "dummyRet::rust::main::_2::rust::main::bb4_internal": {
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb11": {
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_6)": {
+            "free",
+        },
+    },
+    "rust::main::bb13": {
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_6)": {
+            "free",
+        },
+    },
+    "rust::main::bb18": {
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_5)": {
+            "free",
+        },
+    },
+    "rust::main::bb19": {
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_6)": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::bb0": {
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb30": {
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb6": {
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_5)": {
+            "free",
+        },
+    },
+    "rust::main::bb35": {
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "dummyRet::rust::main::_1::rust::main::bb5_internal": {
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb5": {
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb24": {
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_5)": {
+            "free",
+        },
+    },
+    "rust::main::bb32": {
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb10": {
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb17": {
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_5)": {
+            "free",
+        },
+    },
+    "rust::main::bb22": {
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_5)": {
+            "free",
+        },
+    },
+    "dummyCall::rust::main::bb4::rust::main::bb4_internal": {},
+    "rust::main::bb4": {},
+    "rust::main::bb2": {},
+    "rust::main::bb0": {},
+    "rust::main::bb39": {
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_5)": {
+            "free",
+        },
+    },
+    "rust::main::bb25": {
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_6)": {
+            "free",
+        },
+    },
+    "rust::main::bb33": {
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_6)": {
+            "free",
+        },
+    },
+    "dummyRet::rust::main::_39::rust::main::bb27_internal": {
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb1": {},
+    "rust::main::bb29": {
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb12": {
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_5)": {
+            "free",
+        },
+    },
+    "rust::main::bb42": {
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb28": {
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb26": {
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb27": {
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb34": {
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb7": {
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_6)": {
+            "free",
+        },
+    },
+    "rust::main::bb15": {
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_6)": {
+            "free",
+        },
+    },
+    "dummyCall::rust::main::bb27::rust::main::bb27_internal": {
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb31": {
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb41": {
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_35)": {
+            "free",
+        },
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_5)": {
+            "free",
+        },
+    },
+    "dummyCall::rust::main::bb5::rust::main::bb5_internal": {
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb20": {
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_6)": {
+            "free",
+        },
+    },
+    "rust::main::bb3": {},
+    "rust::main::bb23": {
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_5)": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::bb1": {
+        "Local(_17)": {
+            "assign",
+        },
+    },
+    "rust::main::bb40": {
+        "Local(_17)": {
+            "assign",
+        },
+        "Local(_35)": {
+            "free",
+        },
+    },
+}
+Tracking variable 'Local(_17)' from block 'rust::main::bb21' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb36' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb9' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb14' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::terminate' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'dummyRet::rust::main::25::rust::main::bb25_internal' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'dummyCall::rust::main::bb25::rust::main::bb25_internal' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb16' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb37' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb38' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb8' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'dummyRet::rust::main::_2::rust::main::bb4_internal' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb11' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb13' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb18' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb19' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::{closure#0}::bb0' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb30' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb35' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'dummyRet::rust::main::_1::rust::main::bb5_internal' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb5' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb24' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb32' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb10' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb17' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb22' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb39' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb25' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb33' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'dummyRet::rust::main::_39::rust::main::bb27_internal' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb29' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb12' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb42' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb28' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb26' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb27' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb34' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb7' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb15' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'dummyCall::rust::main::bb27::rust::main::bb27_internal' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb31' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb41' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'dummyCall::rust::main::bb5::rust::main::bb5_internal' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb20' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb23' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::{closure#0}::bb1' (markers: {"assign"})
+Tracking variable 'Local(_17)' from block 'rust::main::bb40' (markers: {"assign"})
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/shared_register.rs:37:5: 37:6 (#0), scope: scope[0] }, kind: drop(_15) -> [return: bb11, unwind continue] }' -> '_15'
+No tracked variable found per '_15' o 'Local(_15)'
+-> Skip Drop in 'rust::shared_register::AtomicRegister::read::bb12' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/server.rs:58:1: 58:2 (#0), scope: scope[0] }, kind: drop(_10) -> [return: bb25, unwind: bb29] }' -> '_10'
+No tracked variable found per '_10' o 'Local(_10)'
+No tracking info per MIR var 'Local(_33) [mutable]'
+-> DummyRet node 'dummyRet::rust::server::start_server::_32::rust::server::start_server::bb19_internal': transferring from LLVM var None to MIR var None
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/server.rs:51:19: 51:20 (#0), scope: scope[6] }, kind: drop(_32) -> [return: bb21, unwind: bb32] }' -> '_32'
+No tracked variable found per '_32' o 'Local(_32)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/server.rs:55:13: 55:14 (#0), scope: scope[4] }, kind: drop(_34) -> [return: bb12, unwind: bb28] }' -> '_34'
+No tracked variable found per '_34' o 'Local(_34)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/server.rs:58:1: 58:2 (#0), scope: scope[0] }, kind: drop(_2) -> [return: bb26, unwind continue] }' -> '_2'
+No tracked variable found per '_2' o 'Local(_2)'
+-> Skip Drop in 'rust::server::start_server::bb27' because has an unwind incoming edge
+-> Skip Drop in 'rust::server::start_server::bb28' because has an unwind incoming edge
+-> Skip Drop in 'rust::server::start_server::bb29' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/server.rs:52:13: 52:14 (#0), scope: scope[4] }, kind: drop(_29) -> [return: bb28, unwind terminate(cleanup)] }' -> '_29'
+No tracked variable found per '_29' o 'Local(_29)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/shared_register.rs:53:5: 53:6 (#0), scope: scope[0] }, kind: drop(_2) -> [return: bb16, unwind terminate(cleanup)] }' -> '_2'
+No tracked variable found per '_2' o 'Local(_2)'
+-> DummyRet node 'dummyRet::rust::server::start_server::{closure#0}::0::rust::server::start_server::{closure#0}::bb0_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_2")
+-> Skip Drop in 'rust::<shared_register::AtomicRegister as std::clone::Clone>::clone::bb3' because has an unwind incoming edge
+-> DummyRet node 'dummyRet::rust::server::handle_client::23::rust::server::handle_client::bb23_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_29")
+-> DummyRet node 'dummyRet::rust::server::handle_client::30::rust::server::handle_client::bb30_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_42")
+-> DummyRet node 'dummyRet::rust::server::handle_client::37::rust::server::handle_client::bb37_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_54")
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/server.rs:39:1: 39:2 (#0), scope: scope[5] }, kind: drop(_29) -> [return: bb47, unwind: bb53] }' -> '_29'
+No tracked variable found per '_29' o 'Local(_29)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/server.rs:39:1: 39:2 (#0), scope: scope[2] }, kind: drop(_12) -> [return: bb48, unwind: bb54] }' -> '_12'
+No tracked variable found per '_12' o 'Local(_12)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/server.rs:39:1: 39:2 (#0), scope: scope[1] }, kind: drop(_9) -> [return: bb49, unwind: bb55] }' -> '_9'
+No tracked variable found per '_9' o 'Local(_9)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/server.rs:39:1: 39:2 (#0), scope: scope[0] }, kind: drop(_2) -> [return: bb50, unwind: bb56] }' -> '_2'
+No tracked variable found per '_2' o 'Local(_2)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/server.rs:39:1: 39:2 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb51, unwind continue] }' -> '_1'
+No tracked variable found per '_1' o 'Local(_1)'
+-> Skip Drop in 'rust::server::handle_client::bb52' because has an unwind incoming edge
+-> Skip Drop in 'rust::server::handle_client::bb53' because has an unwind incoming edge
+-> Skip Drop in 'rust::server::handle_client::bb54' because has an unwind incoming edge
+-> Skip Drop in 'rust::server::handle_client::bb55' because has an unwind incoming edge
+-> Skip Drop in 'rust::server::handle_client::bb56' because has an unwind incoming edge
+No tracking info per MIR var 'Local(_3) [mutable]'
+-> DummyRet node 'dummyRet::rust::main::_2::rust::main::bb4_internal': transferring from LLVM var None to MIR var None
+No tracking info per MIR var 'Local(_2) [mutable]'
+-> DummyRet node 'dummyRet::rust::main::_1::rust::main::bb5_internal': transferring from LLVM var None to MIR var None
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/main.rs:16:19: 16:20 (#0), scope: scope[0] }, kind: drop(_6) -> [return: bb7, unwind: bb38] }' -> '_6'
+No tracked variable found per '_6' o 'Local(_6)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/main.rs:35:1: 35:2 (#0), scope: scope[2] }, kind: drop(_21) -> [return: bb33, unwind: bb37] }' -> '_21'
+No tracked variable found per '_21' o 'Local(_21)'
+-> DummyRet node 'dummyRet::rust::main::25::rust::main::bb25_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_34")
+No tracking info per MIR var 'Local(_40) [mutable]'
+-> DummyRet node 'dummyRet::rust::main::_39::rust::main::bb27_internal': transferring from LLVM var None to MIR var None
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/main.rs:35:1: 35:2 (#0), scope: scope[2] }, kind: drop(_21) -> [return: bb31, unwind: bb37] }' -> '_21'
+No tracked variable found per '_21' o 'Local(_21)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/main.rs:35:1: 35:2 (#0), scope: scope[1] }, kind: drop(_15) -> [return: bb32, unwind: bb38] }' -> '_15'
+No tracked variable found per '_15' o 'Local(_15)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/main.rs:35:1: 35:2 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb35, unwind continue] }' -> '_1'
+No tracked variable found per '_1' o 'Local(_1)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/main.rs:35:1: 35:2 (#0), scope: scope[1] }, kind: drop(_15) -> [return: bb34, unwind: bb38] }' -> '_15'
+No tracked variable found per '_15' o 'Local(_15)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/main.rs:35:1: 35:2 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb35, unwind continue] }' -> '_1'
+No tracked variable found per '_1' o 'Local(_1)'
+-> Skip Drop in 'rust::main::bb36' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb37' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb38' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb39' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/main.rs:28:93: 28:94 (#0), scope: scope[4] }, kind: drop(_35) -> [return: bb36, unwind terminate(cleanup)] }' -> '_35'
+No tracked variable found per '_35' o 'Local(_35)'
+-> DummyRet node 'dummyRet::rust::main::{closure#1}::0::rust::main::{closure#1}::bb0_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_2")
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/shared_register.rs:74:49: 74:50 (#0), scope: scope[12] }, kind: drop(_51) -> [return: bb34, unwind: bb66] }' -> '_51'
+No tracked variable found per '_51' o 'Local(_51)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/shared_register.rs:75:13: 75:14 (#0), scope: scope[9] }, kind: drop(_40) -> [return: bb35, unwind: bb67] }' -> '_40'
+No tracked variable found per '_40' o 'Local(_40)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/shared_register.rs:75:13: 75:14 (#0), scope: scope[8] }, kind: drop(_32) -> [return: bb36, unwind: bb68] }' -> '_32'
+No tracked variable found per '_32' o 'Local(_32)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/shared_register.rs:76:9: 76:10 (#0), scope: scope[6] }, kind: drop(_20) -> [return: bb5, unwind: bb69] }' -> '_20'
+No tracked variable found per '_20' o 'Local(_20)'
+-> DummyRet node 'dummyRet::rust::shared_register::AtomicRegister::write_with_quorum::53::rust::shared_register::AtomicRegister::write_with_quorum::bb53_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_85")
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/shared_register.rs:92:34: 92:35 (#0), scope: scope[14] }, kind: drop(_85) -> [return: bb56, unwind: bb69] }' -> '_85'
+No tracked variable found per '_85' o 'Local(_85)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/shared_register.rs:105:5: 105:6 (#0), scope: scope[1] }, kind: drop(_4) -> [return: bb65, unwind: bb74] }' -> '_4'
+No tracked variable found per '_4' o 'Local(_4)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/shared_register.rs:105:5: 105:6 (#0), scope: scope[1] }, kind: drop(_4) -> [return: bb64, unwind: bb74] }' -> '_4'
+No tracked variable found per '_4' o 'Local(_4)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/shared_register.rs:105:5: 105:6 (#0), scope: scope[0] }, kind: drop(_2) -> [return: bb65, unwind continue] }' -> '_2'
+No tracked variable found per '_2' o 'Local(_2)'
+-> Skip Drop in 'rust::shared_register::AtomicRegister::write_with_quorum::bb66' because has an unwind incoming edge
+-> Skip Drop in 'rust::shared_register::AtomicRegister::write_with_quorum::bb67' because has an unwind incoming edge
+-> Skip Drop in 'rust::shared_register::AtomicRegister::write_with_quorum::bb68' because has an unwind incoming edge
+-> Skip Drop in 'rust::shared_register::AtomicRegister::write_with_quorum::bb69' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/shared_register.rs:69:40: 69:41 (#0), scope: scope[11] }, kind: drop(_46) -> [return: bb66, unwind terminate(cleanup)] }' -> '_46'
+No tracked variable found per '_46' o 'Local(_46)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/shared_register.rs:105:5: 105:6 (#0), scope: scope[0] }, kind: drop(_2) -> [return: bb70, unwind terminate(cleanup)] }' -> '_2'
+No tracked variable found per '_2' o 'Local(_2)'
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_17)}": 1}
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

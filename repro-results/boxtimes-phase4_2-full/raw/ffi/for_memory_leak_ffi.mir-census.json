@@ -1,0 +1,94 @@
+{
+  "call_counts": {
+    "<&std::vec::Vec<&str> as std::iter::IntoIterator>::into_iter": 1,
+    "<std::slice::Iter<'_, &str> as std::iter::Iterator>::next": 1,
+    "alloc::alloc::exchange_malloc": 1,
+    "print": 1,
+    "std::ffi::CString::into_raw": 1,
+    "std::ffi::CString::new::<&str>": 1,
+    "std::result::Result::<std::ffi::CString, std::ffi::NulError>::expect": 1,
+    "std::slice::<impl [&str]>::into_vec::<std::alloc::Global>": 1
+  },
+  "call_total": 8,
+  "memory_api_counts": {
+    "alloc": 2,
+    "cstring_into_raw": 1
+  },
+  "memory_api_examples": {
+    "alloc": [
+      "alloc::alloc::exchange_malloc",
+      "std::slice::<impl [&str]>::into_vec::<std::alloc::Global>"
+    ],
+    "cstring_into_raw": [
+      "std::ffi::CString::into_raw"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[const \"Alfa\", move _7, move _8]"
+    ],
+    "arithmetic_binary": [
+      "Sub(copy _25, const 1_usize)",
+      "BitAnd(copy _24, copy _26)"
+    ],
+    "comparison": [
+      "Eq(copy _27, const 0_usize)"
+    ],
+    "direct_use": [
+      "move _9"
+    ],
+    "pointer_cast": [
+      "copy _22 as *const () (PtrToPtr)"
+    ],
+    "ref": [
+      "&_1",
+      "&mut _11"
+    ],
+    "scalar_cast": [
+      "copy _23 as usize (Transmute)"
+    ],
+    "scalar_nullary": [
+      "SizeOf([&str; 3])",
+      "AlignOf([&str; 3])"
+    ],
+    "unknown_unhandled": [
+      "ShallowInitBox(move _5, [&str; 3])",
+      "const \"Beta\"",
+      "const \"Gamma\"",
+      "copy (((_6.0: std::ptr::Unique<[&str; 3]>).0: std::ptr::NonNull<[&str; 3]>).0: *const [&str; 3])",
+      "discriminant(_12)",
+      "copy ((_12 as Some).0: &&str)",
+      "copy (*_15)",
+      "const \"CString::new failed\""
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 1,
+    "arithmetic_binary": 2,
+    "comparison": 1,
+    "direct_use": 1,
+    "pointer_cast": 1,
+    "ref": 2,
+    "scalar_cast": 1,
+    "scalar_nullary": 3,
+    "unknown_unhandled": 9
+  },
+  "rvalue_total": 21,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 1,
+    "unknown_unhandled": 9
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "for_memory_leak_ffi",
+  "terminator_kind_counts": {
+    "Assert": 1,
+    "Call": 8,
+    "Drop": 2,
+    "Goto": 1,
+    "Return": 1,
+    "SwitchInt": 1,
+    "Unreachable": 1,
+    "UnwindResume": 1
+  }
+}

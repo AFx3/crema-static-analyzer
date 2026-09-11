@@ -1,5 +1,8 @@
-### CQPL
 
+ python3 crema_repro_baseline_clean_v4/report_mir_census.py \
+  repro-results/boxtimes-phase4_4-full/mir-census.aggregate.json
+
+### CQPL
 ## Notes:
 
 - dividere i concetti di taint souce e taint sink, così non è ambiguo il fatto che si debba matchare la condizione sullo statement o sul path 

@@ -1,0 +1,74 @@
+=== noGenerator ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_10)}": 1, "{Local(_8), Local(_9)}": 1}
+
+
+=== wasm-demo ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_0)}": 1}
+
+
+=== skip-list-test ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_1)}": 1, "{Local(_29)}": 1, "{Local(_21)}": 1, "{Local(_25)}": 1, "{Local(_17)}": 1, "{Local(_9)}": 1, "{Local(_33)}": 1, "{Local(_37)}": 1, "{Local(_13)}": 1, "{Local(_5)}": 1}
+
+
+=== rusant ===
+
+=== napkin-math-test ===
+
+=== shared-register ===
+
+=== whisper-rs-example ===
+
+=== lock-free ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_14), Local(_2), _14}": 1}
+
+
+=== rust_memory ===
+
+=== unsized_struct ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_0), Local(_2) [mutable], _0}": 1}
+
+
+=== unsafely-created-owned-type ===
+🤖💬 NO Issues detected: ✅
+
+
+=== lock_free_non_blocking_linked_list ===
+🤖💬 NO Issues detected: ✅
+
+
+=== c-callback-rust-closure ===
+
+=== concurrent-verification ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_10), Local(_6), _10}": 1, "{Local(_2), Local(_31), _31}": 1}
+
+
+=== stackswap-coroutines ===
+
+=== rc-playground ===
+🤖💬 NO Issues detected: ✅
+
+
+=== square ===
+
+=== rust_hw3 ===
+🤖💬 NO Issues detected: ✅
+
+
+=== openapi-client-gen ===
+
+=== rust-boks ===
+🤖💬 NO Issues detected: ✅
+
+

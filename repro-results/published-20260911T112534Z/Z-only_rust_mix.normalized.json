@@ -1,0 +1,8 @@
+{
+  "clean_cstring_no_errors_only_rust": [
+    "ML"
+  ],
+  "cstringcargo_enum_df_only_rust": [
+    "NO_CLASSIFIER_OUTPUT"
+  ]
+}

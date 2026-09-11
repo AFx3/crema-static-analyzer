@@ -817,17 +817,28 @@ void outputFinalICFGJson(SVF::ICFG* icfg, const SVF::ICFGNode* startNode, const 
             // PhiStmt 
             else if (const auto* phiStmt = llvm::dyn_cast<SVF::PhiStmt>(stmt)) {
                 stmtJson["stmt_type"] = "PhiStmt";
-                stmtJson["res_var_id"] = phiStmt->getResID();
+
+                // Keep the historical fields for backward compatibility, but
+                // also emit the canonical scalar/vector schema consumed by
+                // CREMA Phase 5.  Existing archived JSON therefore remains
+                // readable and newly generated JSON is self-consistent.
+                const auto resultVar = phiStmt->getResID();
+                stmtJson["res_var_id"] = resultVar;
+                stmtJson["lhs_var_id"] = resultVar;
 
                 Json::Value operandsJson(Json::arrayValue);
+                Json::Value operandIdsJson(Json::arrayValue);
                 for (u32_t i = 0; i < phiStmt->getOpVarNum(); ++i) {
+                    const auto opVar = phiStmt->getOpVarID(i);
                     Json::Value operandJson;
-                    operandJson["op_var_id"] = phiStmt->getOpVarID(i);
+                    operandJson["op_var_id"] = opVar;
                     operandJson["icfg_node"] = (uintptr_t)phiStmt->getOpICFGNode(i);
                     operandsJson.append(operandJson);
+                    operandIdsJson.append(opVar);
                 }
-                    stmtJson["operand_vars"] = operandsJson;
-                }       
+                stmtJson["operand_vars"] = operandsJson;
+                stmtJson["operand_var_ids"] = operandIdsJson;
+            }
 
             // BinaryOPStmt
             else if (const auto* binOpStmt = llvm::dyn_cast<SVF::BinaryOPStmt>(stmt)) {

@@ -1,0 +1,354 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2922:50
+     |
+2922 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:640:8
+    |
+640 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 5 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/crema '/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test'`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction '/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test' /home/af/Documenti/a-phd/crema`
+warning: unused variable: `size_of_type`
+  --> /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:14:41
+   |
+14 |     fn print_results(&self, name: &str, size_of_type: usize) {
+   |                                         ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_size_of_type`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: field `cycles` is never read
+  --> /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:10:5
+   |
+7  | struct BenchmarkResult {
+   |        --------------- field in this struct
+...
+10 |     cycles: u64,
+   |     ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: 2 warnings emitted
+
+No C files found in the project.
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package napkin-math-test target napkin-math-test at /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/target/debug",
+    "--extern=num_format=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/target/debug/deps/libnum_format-d3860584b8cd1ad0.rlib",
+    "--extern=itoa=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/target/debug/deps/libitoa-e14358a371fd4efa.rlib",
+    "--extern=byte_unit=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/target/debug/deps/libbyte_unit-d047d0d5f5f1f3e4.rlib",
+    "--extern=libc=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/target/debug/deps/liblibc-65703ed3ad25655b.rlib",
+    "--extern=arrayvec=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/target/debug/deps/libarrayvec-58dbe950eacc1ab1.rlib",
+]
+warning: unused variable: `size_of_type`
+  --> /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:14:41
+   |
+14 |     fn print_results(&self, name: &str, size_of_type: usize) {
+   |                                         ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_size_of_type`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: field `cycles` is never read
+  --> /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:10:5
+   |
+7  | struct BenchmarkResult {
+   |        --------------- field in this struct
+...
+10 |     cycles: u64,
+   |     ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+Global ICFG saved to global_icfg.json
+warning: 2 warnings emitted
+
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb0::rust::main::bb0_internal", outgoing_edge: "rust::main::bb1", id: "ddf9337e99e30f9b", mir_var: Some("_1"), llvm_var: Some("Local _0"), is_internal: Some(true) }
+DUMMYRET normalize: '_1'->'Local(1)', 'Local _0'->'Local(_0)'
+BEFORE JOIN: Local(1)=BOTTOM, Local(_0)=BOTTOM
+JOINED Local(1)=BOTTOM
+AFTER SET: mem_ret[Local(1)]=BOTTOM
+TAINT Local(1)={}
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::syscall_getrusage::bb2::rust::syscall_getrusage::bb2_internal", outgoing_edge: "rust::syscall_getrusage::bb3", id: "31e8c91915032601", mir_var: None, llvm_var: None, is_internal: Some(true) }
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::syscall_getrusage::bb4::rust::syscall_getrusage::bb4_internal", outgoing_edge: "rust::syscall_getrusage::bb5", id: "ff3123dd7f69ed0c", mir_var: Some("_9"), llvm_var: Some("Local _0"), is_internal: Some(true) }
+DUMMYRET normalize: '_9'->'Local(9)', 'Local _0'->'Local(_0)'
+BEFORE JOIN: Local(9)=BOTTOM, Local(_0)=BOTTOM
+JOINED Local(9)=BOTTOM
+AFTER SET: mem_ret[Local(9)]=BOTTOM
+TAINT Local(9)={}
+Final Abstract State: {"dummyRet::rust::syscall_getrusage::4::rust::syscall_getrusage::bb4_internal": {{"Local(_10)"}: TOP, {"Local(_12)"}: TOP, {"Local(_16)"}: TOP, {"Local(_19)"}: TOP, {"Local(_21)"}: TOP, {"Local(_23)"}: TOP, {"Local(_4)", "Local(_7)"}: TOP}, "rust::main::bb0": {}, "rust::main::bb2": {}, "rust::BenchmarkResult::print_results::bb4": {{"Local(_12)"}: TOP, {"Local(_19)"}: TOP, {"Local(_7)"}: TOP}, "rust::BenchmarkResult::print_results::bb9": {{"Local(_12)"}: TOP, {"Local(_16)"}: TOP, {"Local(_19)"}: TOP, {"Local(_21)"}: TOP, {"Local(_23)"}: TOP, {"Local(_7)"}: TOP}, "rust::syscall_getrusage::bb2": {{"Local(_4)", "Local(_7)"}: MV}, "rust::syscall_getrusage::{closure#0}::bb0": {{"Local(_4)", "Local(_7)"}: MV}, "rust::syscall_getrusage::bb8": {{"Local(_10)"}: TOP, {"Local(_12)"}: TOP, {"Local(_15)"}: TOP, {"Local(_18)", "Local(_4)", "Local(_7)"}: TOP, {"Local(_19)"}: TOP, {"Local(_21)"}: TOP, {"Local(_23)"}: TOP}, "rust::main::bb3": {}, "rust::syscall_getrusage::bb1": {{"Local(_4)"}: MV}, "rust::BenchmarkResult::print_results::bb8": {{"Local(_12)"}: TOP, {"Local(_16)"}: TOP, {"Local(_19)"}: TOP, {"Local(_21)"}: TOP, {"Local(_23)"}: TOP, {"Local(_7)"}: TOP}, "dummyCall::rust::syscall_getrusage::bb2::rust::syscall_getrusage::bb2_internal": {{"Local(_4)", "Local(_7)"}: MV}, "rust::BenchmarkResult::print_results::bb6": {{"Local(_12)"}: TOP, {"Local(_19)"}: TOP, {"Local(_21)"}: TOP, {"Local(_23)"}: TOP, {"Local(_7)"}: TOP}, "rust::BenchmarkResult::print_results::bb2": {{"Local(_12)"}: TOP, {"Local(_7)"}: TOP}, "rust::BenchmarkResult::print_results::bb1": {{"Local(_12)"}: TOP}, "dummyCall::rust::main::bb0::rust::main::bb0_internal": {}, "rust::syscall_getrusage::bb3": {{"Local(_4)", "Local(_7)"}: MV}, "rust::syscall_getrusage::bb5": {{"Local(_10)"}: TOP, {"Local(_12)"}: TOP, {"Local(_16)"}: TOP, {"Local(_18)", "Local(_4)", "Local(_7)"}: TOP, {"Local(_19)"}: TOP, {"Local(_21)"}: TOP, {"Local(_23)"}: TOP}, "rust::syscall_getrusage::bb6": {{"Local(_10)"}: TOP, {"Local(_12)"}: TOP, {"Local(_15)"}: TOP, {"Local(_18)", "Local(_4)", "Local(_7)"}: TOP, {"Local(_19)"}: TOP, {"Local(_21)"}: TOP, {"Local(_23)"}: TOP}, "dummyRet::rust::main::0::rust::main::bb0_internal": {}, "dummyRet::rust::syscall_getrusage::_6::rust::syscall_getrusage::bb2_internal": {{"Local(_4)", "Local(_7)"}: MV}, "rust::syscall_getrusage::bb7": {{"Local(_10)"}: TOP, {"Local(_12)"}: TOP, {"Local(_15)"}: TOP, {"Local(_18)", "Local(_4)", "Local(_7)"}: TOP, {"Local(_19)"}: TOP, {"Local(_21)"}: TOP, {"Local(_23)"}: TOP}, "dummyCall::rust::syscall_getrusage::bb4::rust::syscall_getrusage::bb4_internal": {{"Local(_10)"}: TOP, {"Local(_4)", "Local(_7)"}: MV}, "rust::main::bb1": {}, "rust::syscall_getrusage::{closure#0}::bb1": {{"Local(_4)", "Local(_7)"}: MV}, "rust::BenchmarkResult::print_results::bb3": {{"Local(_12)"}: TOP, {"Local(_7)"}: TOP}, "rust::BenchmarkResult::print_results::bb7": {{"Local(_12)"}: TOP, {"Local(_16)"}: TOP, {"Local(_19)"}: TOP, {"Local(_21)"}: TOP, {"Local(_23)"}: TOP, {"Local(_7)"}: TOP}, "rust::BenchmarkResult::print_results::bb5": {{"Local(_12)"}: TOP, {"Local(_19)"}: TOP, {"Local(_23)"}: TOP, {"Local(_7)"}: TOP}, "rust::syscall_getrusage::bb4": {{"Local(_10)"}: TOP, {"Local(_4)", "Local(_7)"}: MV}}
+Final Taint State: {
+    "rust::BenchmarkResult::print_results::bb1": {},
+    "rust::syscall_getrusage::bb6": {
+        "Local(_18)": {
+            "assign",
+        },
+        "Local(_7)": {
+            "assign",
+        },
+        "Local(_4)": {
+            "assign",
+        },
+        "_6": {},
+        "Local(9)": {},
+        "Local(const ZeroSized: {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:63:9: 63:11})": {},
+    },
+    "rust::main::bb1": {
+        "Local(1)": {},
+    },
+    "rust::syscall_getrusage::{closure#0}::bb1": {
+        "Local(_7)": {
+            "assign",
+        },
+        "Local(const ZeroSized: {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:63:9: 63:11})": {},
+        "Local(_4)": {
+            "assign",
+        },
+        "_6": {},
+    },
+    "dummyRet::rust::syscall_getrusage::4::rust::syscall_getrusage::bb4_internal": {
+        "_6": {},
+        "Local(_7)": {
+            "assign",
+        },
+        "Local(const ZeroSized: {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:63:9: 63:11})": {},
+        "Local(_4)": {
+            "assign",
+        },
+    },
+    "rust::BenchmarkResult::print_results::bb3": {},
+    "rust::main::bb3": {
+        "Local(1)": {},
+    },
+    "rust::BenchmarkResult::print_results::bb6": {},
+    "rust::syscall_getrusage::bb7": {
+        "Local(9)": {},
+        "Local(const ZeroSized: {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:63:9: 63:11})": {},
+        "Local(_7)": {
+            "assign",
+        },
+        "Local(_18)": {
+            "assign",
+        },
+        "_6": {},
+        "Local(_4)": {
+            "assign",
+        },
+    },
+    "rust::BenchmarkResult::print_results::bb9": {},
+    "rust::syscall_getrusage::bb1": {
+        "Local(_4)": {
+            "assign",
+        },
+    },
+    "dummyCall::rust::syscall_getrusage::bb2::rust::syscall_getrusage::bb2_internal": {
+        "Local(const ZeroSized: {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:63:9: 63:11})": {},
+        "Local(_7)": {
+            "assign",
+        },
+        "_6": {},
+        "Local(_4)": {
+            "assign",
+        },
+    },
+    "dummyCall::rust::syscall_getrusage::bb4::rust::syscall_getrusage::bb4_internal": {
+        "Local(_4)": {
+            "assign",
+        },
+        "Local(_7)": {
+            "assign",
+        },
+        "_6": {},
+        "Local(const ZeroSized: {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:63:9: 63:11})": {},
+    },
+    "rust::syscall_getrusage::bb5": {
+        "Local(9)": {},
+        "Local(const ZeroSized: {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:63:9: 63:11})": {},
+        "Local(_18)": {
+            "assign",
+        },
+        "Local(_7)": {
+            "assign",
+        },
+        "Local(_4)": {
+            "assign",
+        },
+        "_6": {},
+    },
+    "dummyRet::rust::main::0::rust::main::bb0_internal": {
+        "Local(1)": {},
+    },
+    "rust::BenchmarkResult::print_results::bb7": {},
+    "rust::main::bb2": {
+        "Local(1)": {},
+    },
+    "rust::BenchmarkResult::print_results::bb8": {},
+    "rust::main::bb0": {},
+    "rust::syscall_getrusage::bb2": {
+        "Local(_7)": {
+            "assign",
+        },
+        "Local(_4)": {
+            "assign",
+        },
+    },
+    "dummyRet::rust::syscall_getrusage::_6::rust::syscall_getrusage::bb2_internal": {
+        "Local(_7)": {
+            "assign",
+        },
+        "_6": {},
+        "Local(_4)": {
+            "assign",
+        },
+        "Local(const ZeroSized: {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:63:9: 63:11})": {},
+    },
+    "rust::BenchmarkResult::print_results::bb5": {},
+    "rust::BenchmarkResult::print_results::bb2": {},
+    "rust::BenchmarkResult::print_results::bb4": {},
+    "dummyCall::rust::main::bb0::rust::main::bb0_internal": {},
+    "rust::syscall_getrusage::bb3": {
+        "Local(_7)": {
+            "assign",
+        },
+        "_6": {},
+        "Local(_4)": {
+            "assign",
+        },
+        "Local(const ZeroSized: {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:63:9: 63:11})": {},
+    },
+    "rust::syscall_getrusage::bb4": {
+        "_6": {},
+        "Local(_7)": {
+            "assign",
+        },
+        "Local(const ZeroSized: {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:63:9: 63:11})": {},
+        "Local(_4)": {
+            "assign",
+        },
+    },
+    "rust::syscall_getrusage::bb8": {
+        "Local(const ZeroSized: {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:63:9: 63:11})": {},
+        "Local(9)": {},
+        "Local(_4)": {
+            "assign",
+        },
+        "Local(_7)": {
+            "assign",
+        },
+        "Local(_18)": {
+            "assign",
+        },
+        "_6": {},
+    },
+    "rust::syscall_getrusage::{closure#0}::bb0": {
+        "Local(_4)": {
+            "assign",
+        },
+        "_6": {},
+        "Local(const ZeroSized: {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:63:9: 63:11})": {},
+        "Local(_7)": {
+            "assign",
+        },
+    },
+}
+Tracking variable 'Local(_18)' from block 'rust::syscall_getrusage::bb6' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::syscall_getrusage::bb6' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::syscall_getrusage::bb6' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::syscall_getrusage::{closure#0}::bb1' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::syscall_getrusage::{closure#0}::bb1' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'dummyRet::rust::syscall_getrusage::4::rust::syscall_getrusage::bb4_internal' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'dummyRet::rust::syscall_getrusage::4::rust::syscall_getrusage::bb4_internal' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::syscall_getrusage::bb7' (markers: {"assign"})
+Tracking variable 'Local(_18)' from block 'rust::syscall_getrusage::bb7' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::syscall_getrusage::bb7' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::syscall_getrusage::bb1' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'dummyCall::rust::syscall_getrusage::bb2::rust::syscall_getrusage::bb2_internal' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'dummyCall::rust::syscall_getrusage::bb2::rust::syscall_getrusage::bb2_internal' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'dummyCall::rust::syscall_getrusage::bb4::rust::syscall_getrusage::bb4_internal' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'dummyCall::rust::syscall_getrusage::bb4::rust::syscall_getrusage::bb4_internal' (markers: {"assign"})
+Tracking variable 'Local(_18)' from block 'rust::syscall_getrusage::bb5' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::syscall_getrusage::bb5' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::syscall_getrusage::bb5' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::syscall_getrusage::bb2' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::syscall_getrusage::bb2' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'dummyRet::rust::syscall_getrusage::_6::rust::syscall_getrusage::bb2_internal' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'dummyRet::rust::syscall_getrusage::_6::rust::syscall_getrusage::bb2_internal' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::syscall_getrusage::bb3' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::syscall_getrusage::bb3' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::syscall_getrusage::bb4' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::syscall_getrusage::bb4' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::syscall_getrusage::bb8' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::syscall_getrusage::bb8' (markers: {"assign"})
+Tracking variable 'Local(_18)' from block 'rust::syscall_getrusage::bb8' (markers: {"assign"})
+Tracking variable 'Local(_4)' from block 'rust::syscall_getrusage::{closure#0}::bb0' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::syscall_getrusage::{closure#0}::bb0' (markers: {"assign"})
+No tracking info per MIR var 'const ZeroSized: {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:63:9: 63:11}'
+-> DummyRet node 'dummyRet::rust::syscall_getrusage::_6::rust::syscall_getrusage::bb2_internal': transferring from LLVM var None to MIR var None
+-> DummyRet node 'dummyRet::rust::syscall_getrusage::4::rust::syscall_getrusage::bb4_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_9")
+-> DummyRet node 'dummyRet::rust::main::0::rust::main::bb0_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_1")
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:33:1: 33:2 (#0), scope: scope[0] }, kind: drop(_3) -> [return: bb9, unwind: bb13] }' -> '_3'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:33:1: 33:2 (#0), scope: scope[0] }, kind: drop(_2) -> [return: bb10, unwind: bb14] }' -> '_2'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:33:1: 33:2 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb11, unwind continue] }' -> '_1'
+-> Skip Drop in 'rust::benchmark::bb12' because has an unwind incoming edge
+-> Skip Drop in 'rust::benchmark::bb13' because has an unwind incoming edge
+-> Skip Drop in 'rust::benchmark::bb14' because has an unwind incoming edge
+No tracked variable found per '_3' o 'Local(_3)'
+No tracked variable found per '_2' o 'Local(_2)'
+No tracked variable found per '_1' o 'Local(_1)'
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_18), Local(_4), Local(_7)}": 1}
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

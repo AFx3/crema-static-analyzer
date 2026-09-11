@@ -1,0 +1,440 @@
+{
+  "memory_api_counts": {
+    "alloc": 4,
+    "borrowed_raw_pointer_view": 1,
+    "box_from_raw": 4,
+    "box_into_raw": 6,
+    "box_new": 7,
+    "cstr_from_ptr": 2,
+    "cstring_from_raw": 4,
+    "cstring_into_raw": 4,
+    "mem_drop": 2,
+    "ptr_read": 1
+  },
+  "memory_api_examples": {
+    "alloc": [
+      "alloc::alloc::exchange_malloc",
+      "std::slice::<impl [char]>::into_vec::<std::alloc::Global>",
+      "std::slice::<impl [&str]>::into_vec::<std::alloc::Global>"
+    ],
+    "borrowed_raw_pointer_view": [
+      "std::ffi::CStr::as_ptr"
+    ],
+    "box_from_raw": [
+      "std::boxed::Box::<i32>::from_raw",
+      "std::boxed::Box::<i8>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<i32>::into_raw",
+      "std::boxed::Box::<std::vec::Vec<char>>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<i32>::new",
+      "std::boxed::Box::<std::string::String>::new",
+      "std::boxed::Box::<std::vec::Vec<char>>::new"
+    ],
+    "cstr_from_ptr": [
+      "std::ffi::CStr::from_ptr::<'_>"
+    ],
+    "cstring_from_raw": [
+      "std::ffi::CString::from_raw"
+    ],
+    "cstring_into_raw": [
+      "std::ffi::CString::into_raw"
+    ],
+    "mem_drop": [
+      "std::mem::drop::<std::ffi::CString>",
+      "std::mem::drop::<std::boxed::Box<i32>>"
+    ],
+    "ptr_read": [
+      "std::ptr::read::<i8>"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _7]",
+      "[move _12]",
+      "[move _13]",
+      "[move _9]",
+      "[move _20]",
+      "[move _33]",
+      "[const ' ']",
+      "[move _31, move _33]",
+      "(move _37, const \"main\", copy _38)",
+      "[move _45]",
+      "[const \"foo\", move _7, move _8, move _9]",
+      "[move _19]"
+    ],
+    "arithmetic_binary": [
+      "Sub(copy _26, const 1_usize)",
+      "BitAnd(copy _25, copy _27)",
+      "Sub(copy _38, const 1_usize)",
+      "BitAnd(copy _37, copy _39)",
+      "Mul(move _23, const std::f64::consts::PI)",
+      "Add(const 1f64, move _25)",
+      "Mul(move _22, move _24)",
+      "Div(move _21, const 2f64)",
+      "Rem(move _19, const 100_u32)",
+      "Sub(copy _52, const 1_usize)",
+      "BitAnd(copy _51, copy _53)",
+      "Sub(copy _25, const 1_usize)",
+      "BitAnd(copy _24, copy _26)"
+    ],
+    "comparison": [
+      "Eq(copy _28, const 0_usize)",
+      "Ne(move _5, const '0')",
+      "Eq(copy _40, const 0_usize)",
+      "Eq(const 100_u32, const 0_u32)",
+      "Eq(copy _54, const 0_usize)",
+      "Eq(copy _27, const 0_usize)"
+    ],
+    "direct_use": [
+      "move _1",
+      "copy _18"
+    ],
+    "pointer_cast": [
+      "copy _3 as *const i8 (PtrToPtr)",
+      "copy _4 as *const i8 (PtrToPtr)",
+      "move _3 as *mut std::ffi::c_void (PtrToPtr)",
+      "copy _2 as *mut i32 (PtrToPtr)",
+      "copy _12 as *const () (PtrToPtr)",
+      "copy _35 as *const () (PtrToPtr)",
+      "copy _49 as *const () (PtrToPtr)",
+      "copy _9 as *const () (PtrToPtr)"
+    ],
+    "ref": [
+      "&(*_14)",
+      "&_6",
+      "&_1",
+      "&_14",
+      "&_11",
+      "&_5",
+      "&_12",
+      "&_8",
+      "&_19",
+      "&_9",
+      "&_7",
+      "&_27",
+      "&_32",
+      "&mut _1",
+      "&_18",
+      "&_13",
+      "&_25",
+      "&_10",
+      "&_17",
+      "&_30"
+    ],
+    "scalar_cast": [
+      "copy _24 as usize (Transmute)",
+      "copy _36 as usize (Transmute)",
+      "move _10 as usize (PointerExposeProvenance)",
+      "copy _1 as f64 (IntToFloat)",
+      "move _20 as u32 (FloatToInt)",
+      "copy _50 as usize (Transmute)",
+      "copy _23 as usize (Transmute)"
+    ],
+    "scalar_const": [
+      "const false",
+      "const true",
+      "const 1_u32"
+    ],
+    "scalar_nullary": [
+      "AlignOf(i32)",
+      "SizeOf([char; 1])",
+      "AlignOf([char; 1])",
+      "SizeOf([&str; 4])",
+      "AlignOf([&str; 4])"
+    ],
+    "unknown_unhandled": [
+      "const main::promoted[0]",
+      "copy (((_1.0: std::ptr::Unique<i32>).0: std::ptr::NonNull<i32>).0: *const i32)",
+      "const \"nisba\"",
+      "const main::promoted[1]",
+      "copy (*_12)",
+      "copy (*_2)",
+      "ShallowInitBox(move _16, [char; 1])",
+      "copy (((_17.0: std::ptr::Unique<[char; 1]>).0: std::ptr::NonNull<[char; 1]>).0: *const [char; 1])",
+      "move _17 as std::boxed::Box<[char]> (PointerCoercion(Unsize, Implicit))",
+      "ShallowInitBox(move _5, [&str; 4])",
+      "const \"bar\"",
+      "const \"invalid\\0name\"",
+      "const \"baz\"",
+      "copy (((_6.0: std::ptr::Unique<[&str; 4]>).0: std::ptr::NonNull<[&str; 4]>).0: *const [&str; 4])",
+      "discriminant(_14)",
+      "move ((_14 as Err).0: std::ffi::NulError)",
+      "log::Level::Error",
+      "const \"interior NUL!\"",
+      "copy (*_9)"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 15,
+    "arithmetic_binary": 13,
+    "comparison": 6,
+    "direct_use": 4,
+    "pointer_cast": 10,
+    "ref": 33,
+    "scalar_cast": 7,
+    "scalar_const": 14,
+    "scalar_nullary": 8,
+    "unknown_unhandled": 36
+  },
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 15,
+    "unknown_unhandled": 36
+  },
+  "schema_version": 1,
+  "target_keys": [
+    "boxed_i32__df",
+    "boxed_i32__ml",
+    "boxed_i32__uaf",
+    "clean_cstring_no_errors_only_rust",
+    "clean_mul_fn_ffi_no_errors",
+    "cstr_cargo_df_ffi",
+    "cstringcargo_enum_df_only_rust",
+    "noGenerator",
+    "uaf_mem_leak_ffi",
+    "uaf_read_ptr"
+  ],
+  "targets": 10,
+  "terminator_kind_counts": {
+    "Assert": 5,
+    "Call": 107,
+    "Drop": 19,
+    "Goto": 5,
+    "Return": 13,
+    "SwitchInt": 8,
+    "Unreachable": 1,
+    "UnwindResume": 7
+  },
+  "top_calls": [
+    [
+      "std::fmt::Arguments::<'_>::new_v1::<2, 1>",
+      11
+    ],
+    [
+      "std::io::_print",
+      11
+    ],
+    [
+      "core::fmt::rt::Argument::<'_>::new_display::<i32>",
+      6
+    ],
+    [
+      "std::boxed::Box::<i32>::into_raw",
+      5
+    ],
+    [
+      "std::boxed::Box::<i32>::new",
+      5
+    ],
+    [
+      "std::ffi::CString::new::<&str>",
+      5
+    ],
+    [
+      "std::ffi::CString::from_raw",
+      4
+    ],
+    [
+      "std::ffi::CString::into_raw",
+      4
+    ],
+    [
+      "std::boxed::Box::<i32>::from_raw",
+      3
+    ],
+    [
+      "std::ffi::CStr::from_ptr::<'_>",
+      2
+    ],
+    [
+      "std::result::Result::<std::ffi::CString, std::ffi::NulError>::unwrap",
+      2
+    ],
+    [
+      "std::result::Result::<std::ffi::CString, std::ffi::NulError>::expect",
+      2
+    ],
+    [
+      "alloc::alloc::exchange_malloc",
+      2
+    ],
+    [
+      "<log::Level as std::cmp::PartialOrd<log::LevelFilter>>::le",
+      2
+    ],
+    [
+      "<std::ffi::CString as std::ops::Deref>::deref",
+      1
+    ],
+    [
+      "alloc_c_string",
+      1
+    ],
+    [
+      "core::fmt::rt::Argument::<'_>::new_display::<&str>",
+      1
+    ],
+    [
+      "free_c_string",
+      1
+    ],
+    [
+      "std::ffi::CStr::as_ptr",
+      1
+    ],
+    [
+      "std::ffi::CStr::to_str",
+      1
+    ],
+    [
+      "std::result::Result::<&str, std::str::Utf8Error>::unwrap",
+      1
+    ],
+    [
+      "alloc::ffi::c_str::<impl std::ffi::CStr>::to_string_lossy",
+      1
+    ],
+    [
+      "core::fmt::rt::Argument::<'_>::new_debug::<std::borrow::Cow<'_, str>>",
+      1
+    ],
+    [
+      "print_e_free",
+      1
+    ],
+    [
+      "<str as std::string::ToString>::to_string",
+      1
+    ],
+    [
+      "free_int",
+      1
+    ],
+    [
+      "std::boxed::Box::<std::string::String>::new",
+      1
+    ],
+    [
+      "<std::iter::Filter<std::str::Chars<'_>, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/noGenerator/src/main.rs:1:108: 1:118}> as std::iter::Iterator>::map::<u32, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/noGenerator/src/main.rs:1:153: 1:162}>",
+      1
+    ],
+    [
+      "<std::iter::Map<std::iter::Filter<std::str::Chars<'_>, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/noGenerator/src/main.rs:1:108: 1:118}>, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/noGenerator/src/main.rs:1:153: 1:162}> as std::iter::Iterator>::product::<u32>",
+      1
+    ],
+    [
+      "<std::str::Chars<'_> as std::iter::Iterator>::filter::<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/noGenerator/src/main.rs:1:108: 1:118}>",
+      1
+    ],
+    [
+      "<std::string::String as std::ops::Deref>::deref",
+      1
+    ],
+    [
+      "<usize as std::string::ToString>::to_string",
+      1
+    ],
+    [
+      "core::fmt::rt::Argument::<'_>::new_display::<u32>",
+      1
+    ],
+    [
+      "core::str::<impl str>::chars",
+      1
+    ],
+    [
+      "std::boxed::Box::<std::vec::Vec<char>>::into_raw",
+      1
+    ],
+    [
+      "std::boxed::Box::<std::vec::Vec<char>>::new",
+      1
+    ],
+    [
+      "std::char::methods::<impl char>::is_digit",
+      1
+    ],
+    [
+      "std::char::methods::<impl char>::to_digit",
+      1
+    ],
+    [
+      "std::f64::<impl f64>::sqrt",
+      1
+    ],
+    [
+      "std::option::Option::<u32>::unwrap",
+      1
+    ],
+    [
+      "std::slice::<impl [char]>::into_vec::<std::alloc::Global>",
+      1
+    ],
+    [
+      "std::mem::drop::<std::ffi::CString>",
+      1
+    ],
+    [
+      "core::fmt::rt::Argument::<'_>::new_debug::<&str>",
+      1
+    ],
+    [
+      "core::fmt::rt::Argument::<'_>::new_debug::<*mut i8>",
+      1
+    ],
+    [
+      "core::fmt::rt::Argument::<'_>::new_display::<std::ffi::NulError>",
+      1
+    ],
+    [
+      "log::__private_api::loc",
+      1
+    ],
+    [
+      "log::__private_api::log::<'_, (), log::__private_api::GlobalLogger>",
+      1
+    ],
+    [
+      "log::max_level",
+      1
+    ],
+    [
+      "std::fmt::Arguments::<'_>::new_v1::<2, 2>",
+      1
+    ],
+    [
+      "std::option::Option::<&str>::unwrap",
+      1
+    ],
+    [
+      "std::process::abort",
+      1
+    ],
+    [
+      "std::slice::<impl [&str]>::into_vec::<std::alloc::Global>",
+      1
+    ],
+    [
+      "std::vec::Vec::<&str>::pop",
+      1
+    ],
+    [
+      "core::fmt::rt::Argument::<'_>::new_debug::<i8>",
+      1
+    ],
+    [
+      "std::boxed::Box::<i8>::from_raw",
+      1
+    ],
+    [
+      "std::ptr::read::<i8>",
+      1
+    ],
+    [
+      "std::mem::drop::<std::boxed::Box<i32>>",
+      1
+    ]
+  ]
+}

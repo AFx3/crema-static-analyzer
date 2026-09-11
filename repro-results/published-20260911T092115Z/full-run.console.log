@@ -1,0 +1,200 @@
+=== boxed_bool ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_bool/src/main.rs:13:1: 13:2 (#0)
+
+=== boxed_char ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_char/src/main.rs:13:1: 13:2 (#0)
+
+=== boxed_f32 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_f32/src/main.rs:13:1: 13:2 (#0)
+
+=== boxed_f64 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_f64/src/main.rs:13:1: 13:2 (#0)
+
+=== boxed_i128 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_i128/src/main.rs:13:1: 13:2 (#0)
+
+=== boxed_i16 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_i16/src/main.rs:17:1: 17:2 (#0)
+
+=== boxed_i32 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_i32/src/main.rs:12:1: 12:2 (#0)
+
+=== boxed_i64 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_i64/src/main.rs:11:1: 11:2 (#0)
+
+=== boxed_i8 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_i8/src/main.rs:12:1: 12:2 (#0)
+
+=== boxed_isize ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_isize/src/main.rs:13:1: 13:2 (#0)
+
+=== boxed_u128 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_u128/src/main.rs:13:1: 13:2 (#0)
+
+=== boxed_u16 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_u16/src/main.rs:13:1: 13:2 (#0)
+
+=== boxed_u32 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_u32/src/main.rs:14:1: 14:2 (#0)
+
+=== boxed_u64 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_u64/src/main.rs:14:1: 14:2 (#0)
+
+=== boxed_u8 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_u8/src/main.rs:11:1: 11:2 (#0)
+
+=== boxed_usize ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_usize/src/main.rs:14:1: 14:2 (#0)
+
+Done. DOUBLE FREES issue summaries are in z-DF_errors.log.
+=== boxed_bool ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_char ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_f32 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_f64 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_i128 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_i16 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_i32 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_i64 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_i8 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_isize ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_u128 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_u16 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_u32 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_u64 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_u8 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_usize ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+Done. MEMORY LEAKS issue summaries are in z-ML_errors.log.
+=== boxed_bool ===
+🤖💬 Potential memory issues detected 🚀:
+
+=== boxed_char ===
+🤖💬 Potential memory issues detected 🚀:
+
+=== boxed_f32 ===
+🤖💬 Potential memory issues detected 🚀:
+
+=== boxed_f64 ===
+🤖💬 Potential memory issues detected 🚀:
+
+=== boxed_i128 ===
+🤖💬 Potential memory issues detected 🚀:
+
+=== boxed_i16 ===
+🤖💬 Potential memory issues detected 🚀:
+
+=== boxed_i32 ===
+🤖💬 Potential memory issues detected 🚀:
+
+=== boxed_i64 ===
+🤖💬 Potential memory issues detected 🚀:
+
+=== boxed_i8 ===
+🤖💬 Potential memory issues detected 🚀:
+
+=== boxed_isize ===
+🤖💬 Potential memory issues detected 🚀:
+
+=== boxed_u128 ===
+🤖💬 Potential memory issues detected 🚀:
+
+=== boxed_u16 ===
+🤖💬 Potential memory issues detected 🚀:
+
+=== boxed_u32 ===
+🤖💬 Potential memory issues detected 🚀:
+
+=== boxed_u64 ===
+🤖💬 Potential memory issues detected 🚀:
+
+=== boxed_u8 ===
+🤖💬 Potential memory issues detected 🚀:
+
+=== boxed_usize ===
+🤖💬 Potential memory issues detected 🚀:
+
+Done. UAF issue summaries are in z-UAF_errors.log.
+=== clean_cstring_no_errors_only_rust ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_3), Local(_4), _4}": 1}
+
+=== cstringcargo_enum_df_only_rust ===

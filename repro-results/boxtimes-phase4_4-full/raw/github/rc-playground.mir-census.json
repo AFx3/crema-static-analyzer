@@ -1,0 +1,174 @@
+{
+  "call_counts": {
+    "<&std::vec::Vec<RcType> as std::iter::IntoIterator>::into_iter": 1,
+    "<RcType as Constructor<Entity>>::new": 1,
+    "<RcType as std::clone::Clone>::clone": 2,
+    "<RcType as std::ops::Deref>::deref": 1,
+    "<std::ops::Range<usize> as std::iter::IntoIterator>::into_iter": 3,
+    "<std::ops::Range<usize> as std::iter::Iterator>::next": 3,
+    "<std::rc::Rc<T> as std::clone::Clone>::clone": 1,
+    "<std::rc::Rc<T> as std::ops::Deref>::deref": 1,
+    "<std::slice::Iter<'_, RcType> as std::iter::Iterator>::next": 1,
+    "<usize as std::cmp::Ord>::max": 1,
+    "CustomRc::<Entity>::new": 1,
+    "CustomRc::<T>::drop_rc": 1,
+    "Game::<RcType>::new": 1,
+    "Game::<RcType>::run": 1,
+    "Game::<RcType>::setup": 1,
+    "Game::<StdRcWrapper<Entity>>::new": 1,
+    "Game::<StdRcWrapper<Entity>>::run": 1,
+    "Game::<StdRcWrapper<Entity>>::setup": 1,
+    "benchmark::<CustomRc<Entity>>": 1,
+    "benchmark::<StdRcWrapper<Entity>>": 1,
+    "core::fmt::rt::Argument::<'_>::new_debug::<std::time::Duration>": 1,
+    "core::fmt::rt::Argument::<'_>::new_display::<&str>": 2,
+    "core::fmt::rt::Argument::<'_>::new_display::<usize>": 4,
+    "std::boxed::Box::<CustomRcInner<T>>::from_raw": 1,
+    "std::boxed::Box::<CustomRcInner<T>>::into_raw": 1,
+    "std::boxed::Box::<CustomRcInner<T>>::new": 1,
+    "std::cell::UnsafeCell::<usize>::get": 3,
+    "std::cell::UnsafeCell::<usize>::new": 1,
+    "std::fmt::Arguments::<'_>::new_const::<1>": 2,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<3, 2>": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<5, 4>": 1,
+    "std::fmt::Formatter::<'_>::debug_struct_field3_finish": 1,
+    "std::hint::black_box::<f32>": 1,
+    "std::io::_print": 5,
+    "std::ptr::NonNull::<CustomRcInner<T>>::as_mut::<'_>": 1,
+    "std::ptr::NonNull::<CustomRcInner<T>>::as_ptr": 2,
+    "std::ptr::NonNull::<CustomRcInner<T>>::as_ref::<'_>": 2,
+    "std::ptr::NonNull::<CustomRcInner<T>>::new_unchecked": 1,
+    "std::rc::Rc::<T>::new": 1,
+    "std::time::Instant::elapsed": 1,
+    "std::time::Instant::now": 1,
+    "std::vec::Vec::<RcType>::new": 1,
+    "std::vec::Vec::<RcType>::push": 1
+  },
+  "call_total": 62,
+  "memory_api_counts": {
+    "borrowed_raw_pointer_view": 2,
+    "box_from_raw": 1,
+    "box_into_raw": 1,
+    "box_new": 1
+  },
+  "memory_api_examples": {
+    "borrowed_raw_pointer_view": [
+      "std::ptr::NonNull::<CustomRcInner<T>>::as_ptr"
+    ],
+    "box_from_raw": [
+      "std::boxed::Box::<CustomRcInner<T>>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<CustomRcInner<T>>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<CustomRcInner<T>>::new"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _42, move _44]",
+      "[move _10]",
+      "[move _25, move _27, move _29, move _31]"
+    ],
+    "arithmetic_binary": [
+      "Add(move _29, move _30)",
+      "Div(move _34, const 10_usize)",
+      "Rem(copy _9, move _32)",
+      "Add(copy ((*_1).1: f32), const 1f32)",
+      "Add(copy ((*_1).2: f32), const 1f32)",
+      "Sub(copy _17, const 1_usize)",
+      "BitAnd(copy _16, copy _18)"
+    ],
+    "checked_binary_unhandled": [
+      "AddWithOverflow(copy _4, const 1_usize)",
+      "SubWithOverflow(copy (*_4), const 1_usize)"
+    ],
+    "comparison": [
+      "Eq(const 10_usize, const 0_usize)",
+      "Eq(copy _32, const 0_usize)",
+      "Eq(copy _19, const 0_usize)"
+    ],
+    "direct_deref_use": [
+      "copy (*_5)",
+      "copy (*_4)"
+    ],
+    "direct_use": [
+      "move _2",
+      "move _10",
+      "move _17",
+      "move _3",
+      "move _1"
+    ],
+    "pointer_cast": [
+      "copy _5 as *const () (PtrToPtr)"
+    ],
+    "ref": [
+      "&mut _5",
+      "&mut _13",
+      "&((*_1).0: std::vec::Vec<RcType>)",
+      "&mut _19",
+      "&_24",
+      "&_9",
+      "&((*_1).1: usize)",
+      "&_41"
+    ],
+    "scalar_cast": [
+      "copy _15 as usize (Transmute)"
+    ],
+    "scalar_const": [
+      "const 25000_usize",
+      "const 25_usize",
+      "const 10000_usize",
+      "const false",
+      "const true"
+    ],
+    "scalar_nullary": [
+      "AlignOf(usize)"
+    ],
+    "unknown_unhandled": [
+      "copy ((*_1).1: usize)",
+      "std::ops::Range::<usize> { start: const 0_usize, end: move _4 }",
+      "discriminant(_6)",
+      "copy ((_6 as Some).0: usize)",
+      "copy ((*_1).2: usize)",
+      "std::ops::Range::<usize> { start: const 0_usize, end: move _12 }",
+      "discriminant(_14)",
+      "discriminant(_20)"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 3,
+    "arithmetic_binary": 7,
+    "checked_binary_unhandled": 2,
+    "comparison": 3,
+    "direct_deref_use": 2,
+    "direct_use": 5,
+    "pointer_cast": 1,
+    "ref": 39,
+    "scalar_cast": 1,
+    "scalar_const": 6,
+    "scalar_nullary": 1,
+    "unknown_unhandled": 41
+  },
+  "rvalue_total": 111,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 3,
+    "checked_binary_unhandled": 2,
+    "unknown_unhandled": 41
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "rc-playground",
+  "terminator_kind_counts": {
+    "Assert": 5,
+    "Call": 62,
+    "Drop": 10,
+    "Goto": 4,
+    "Return": 16,
+    "SwitchInt": 7,
+    "Unreachable": 2,
+    "UnwindResume": 5
+  }
+}

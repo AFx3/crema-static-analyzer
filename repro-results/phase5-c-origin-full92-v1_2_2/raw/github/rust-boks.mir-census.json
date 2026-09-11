@@ -1,0 +1,112 @@
+{
+  "call_counts": {
+    "<Boks<i32> as std::ops::Deref>::deref": 1,
+    "<std::iter::Empty<Oisann<&mut i32>> as std::default::Default>::default": 1,
+    "<std::iter::Empty<Oisann<&mut i32>> as std::iter::Iterator>::next": 2,
+    "<std::string::String as std::convert::From<&str>>::from": 2,
+    "<std::string::String as std::ops::Deref>::deref": 2,
+    "Boks::<&mut i32>::ny": 1,
+    "Boks::<&str>::ny": 2,
+    "Boks::<Oisann<&mut i32>>::ny": 1,
+    "Boks::<i32>::ny": 1,
+    "core::fmt::rt::Argument::<'_>::new_debug::<i32>": 4,
+    "std::boxed::Box::<&str>::new": 2,
+    "std::boxed::Box::<T>::from_raw": 1,
+    "std::boxed::Box::<T>::into_raw": 1,
+    "std::boxed::Box::<T>::new": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 4,
+    "std::io::_print": 4,
+    "std::mem::drop::<std::option::Option<Oisann<&mut i32>>>": 1,
+    "std::ptr::NonNull::<T>::as_mut::<'_>": 2,
+    "std::ptr::NonNull::<T>::as_ref::<'_>": 1,
+    "std::ptr::NonNull::<T>::new_unchecked": 1
+  },
+  "call_total": 35,
+  "memory_api_counts": {
+    "box_from_raw": 1,
+    "box_into_raw": 1,
+    "box_new": 3,
+    "mem_drop": 1
+  },
+  "memory_api_examples": {
+    "box_from_raw": [
+      "std::boxed::Box::<T>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<T>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<&str>::new",
+      "std::boxed::Box::<T>::new"
+    ],
+    "mem_drop": [
+      "std::mem::drop::<std::option::Option<Oisann<&mut i32>>>"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _8]",
+      "[move _19]",
+      "[move _30]",
+      "[move _58]"
+    ],
+    "direct_use": [
+      "move _36",
+      "move _42",
+      "move _49",
+      "move _46"
+    ],
+    "raw_address": [
+      "&raw mut (*_4)"
+    ],
+    "ref": [
+      "&((*_1).0: std::ptr::NonNull<T>)",
+      "&_1",
+      "&_7",
+      "&mut _11",
+      "&_11",
+      "&_18",
+      "&mut _21",
+      "&_21"
+    ],
+    "scalar_const": [
+      "const false",
+      "const 42_i32",
+      "const true"
+    ],
+    "unknown_unhandled": [
+      "const main::promoted[3]",
+      "const main::promoted[2]",
+      "Oisann::<&mut i32>(move _24)",
+      "const main::promoted[1]",
+      "const \"heisann\"",
+      "Oisann::<&mut i32>(move _48)",
+      "std::option::Option::<Oisann<&mut i32>>::Some(move _47)",
+      "const main::promoted[0]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 4,
+    "direct_use": 7,
+    "raw_address": 1,
+    "ref": 18,
+    "scalar_const": 10,
+    "unknown_unhandled": 11
+  },
+  "rvalue_total": 51,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 4,
+    "unknown_unhandled": 11
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "rust-boks",
+  "terminator_kind_counts": {
+    "Call": 35,
+    "Drop": 20,
+    "Goto": 3,
+    "Return": 8,
+    "SwitchInt": 1,
+    "UnwindResume": 1
+  }
+}

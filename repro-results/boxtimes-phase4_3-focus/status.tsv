@@ -1,0 +1,5 @@
+key	target	exit_code
+boxed_bool__ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_bool	0
+boxed_f64__ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_f64	0
+boxed_usize__ml	a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_usize	0
+closure_df	a-code_full_rust/closure_df	0

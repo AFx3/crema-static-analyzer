@@ -1,0 +1,5 @@
+{
+  "c_malloc_rust_string_from_raw_parts_ub": [
+    "UB_FFI"
+  ]
+}

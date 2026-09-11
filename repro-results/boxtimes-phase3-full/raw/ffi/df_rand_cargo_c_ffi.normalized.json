@@ -1,0 +1,7 @@
+{
+  "df_rand_cargo_c_ffi": [
+    "DF",
+    "UAF",
+    "UB_FFI"
+  ]
+}

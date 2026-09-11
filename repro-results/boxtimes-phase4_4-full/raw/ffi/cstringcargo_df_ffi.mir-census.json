@@ -1,0 +1,66 @@
+{
+  "call_counts": {
+    "core::fmt::rt::Argument::<'_>::new_debug::<std::ffi::CString>": 1,
+    "modify_and_free_string": 1,
+    "std::ffi::CString::from_raw": 1,
+    "std::ffi::CString::into_raw": 1,
+    "std::ffi::CString::new::<&str>": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 1,
+    "std::io::_print": 1,
+    "std::result::Result::<std::ffi::CString, std::ffi::NulError>::unwrap": 1
+  },
+  "call_total": 8,
+  "memory_api_counts": {
+    "cstring_from_raw": 1,
+    "cstring_into_raw": 1
+  },
+  "memory_api_examples": {
+    "cstring_from_raw": [
+      "std::ffi::CString::from_raw"
+    ],
+    "cstring_into_raw": [
+      "std::ffi::CString::into_raw"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _8]"
+    ],
+    "direct_use": [
+      "move _1"
+    ],
+    "ref": [
+      "&_1",
+      "&_7"
+    ],
+    "scalar_const": [
+      "const false",
+      "const true"
+    ],
+    "unknown_unhandled": [
+      "const main::promoted[0]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 1,
+    "direct_use": 1,
+    "ref": 2,
+    "scalar_const": 4,
+    "unknown_unhandled": 1
+  },
+  "rvalue_total": 9,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 1,
+    "unknown_unhandled": 1
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "cstringcargo_df_ffi",
+  "terminator_kind_counts": {
+    "Call": 8,
+    "Drop": 2,
+    "Return": 1,
+    "SwitchInt": 1,
+    "UnwindResume": 1
+  }
+}

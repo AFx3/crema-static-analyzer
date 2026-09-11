@@ -1,0 +1,79 @@
+{
+  "call_counts": {
+    "core::fmt::rt::Argument::<'_>::new_display::<u8>": 2,
+    "std::boxed::Box::<u8>::from_raw": 1,
+    "std::boxed::Box::<u8>::into_raw": 1,
+    "std::boxed::Box::<u8>::new": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 2,
+    "std::io::_print": 2,
+    "std::mem::drop::<std::boxed::Box<u8>>": 1
+  },
+  "call_total": 10,
+  "memory_api_counts": {
+    "box_from_raw": 1,
+    "box_into_raw": 1,
+    "box_new": 1,
+    "mem_drop": 1
+  },
+  "memory_api_examples": {
+    "box_from_raw": [
+      "std::boxed::Box::<u8>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<u8>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<u8>::new"
+    ],
+    "mem_drop": [
+      "std::mem::drop::<std::boxed::Box<u8>>"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _7]",
+      "[move _19]"
+    ],
+    "direct_use": [
+      "move _1"
+    ],
+    "ref": [
+      "&(*_22)",
+      "&_6",
+      "&_13",
+      "&_18"
+    ],
+    "scalar_const": [
+      "const false",
+      "const true"
+    ],
+    "unknown_unhandled": [
+      "const main::promoted[1]",
+      "copy (((_1.0: std::ptr::Unique<u8>).0: std::ptr::NonNull<u8>).0: *const u8)",
+      "copy (*_9)",
+      "const main::promoted[0]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 2,
+    "direct_use": 1,
+    "ref": 4,
+    "scalar_const": 4,
+    "unknown_unhandled": 4
+  },
+  "rvalue_total": 15,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 2,
+    "unknown_unhandled": 4
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "boxed_u8__uaf",
+  "terminator_kind_counts": {
+    "Call": 10,
+    "Drop": 1,
+    "Return": 1,
+    "SwitchInt": 1,
+    "UnwindResume": 1
+  }
+}

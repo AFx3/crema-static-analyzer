@@ -1,0 +1,54 @@
+{
+  "call_counts": {
+    "State::decrement": 1,
+    "State::increment": 1,
+    "std::boxed::Box::<State>::into_raw": 1,
+    "std::boxed::Box::<State>::new": 1
+  },
+  "call_total": 4,
+  "memory_api_counts": {
+    "box_into_raw": 1,
+    "box_new": 1
+  },
+  "memory_api_examples": {
+    "box_into_raw": [
+      "std::boxed::Box::<State>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<State>::new"
+    ]
+  },
+  "rvalue_examples": {
+    "checked_binary_unhandled": [
+      "SubWithOverflow(copy _2, const 1_i32)",
+      "AddWithOverflow(copy _2, const 1_i32)"
+    ],
+    "ref": [
+      "&mut (*_1)"
+    ],
+    "unknown_unhandled": [
+      "State { counter: const 0_i32 }",
+      "copy ((*_1).0: i32)",
+      "move (_3.0: i32)",
+      "copy ((*_2).0: i32)"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "checked_binary_unhandled": 2,
+    "ref": 2,
+    "unknown_unhandled": 7
+  },
+  "rvalue_total": 11,
+  "rvalue_unhandled_counts": {
+    "checked_binary_unhandled": 2,
+    "unknown_unhandled": 7
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "wasm-demo",
+  "terminator_kind_counts": {
+    "Assert": 2,
+    "Call": 4,
+    "Return": 6
+  }
+}

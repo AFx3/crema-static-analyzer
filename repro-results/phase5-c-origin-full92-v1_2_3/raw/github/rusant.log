@@ -1,0 +1,1162 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:671:59
+    |
+671 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+    |                                                           ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:671:68
+    |
+671 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+    |                                                                    ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:3920:50
+     |
+3920 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return_place, ..}) = &mir_block.terminator {   
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:676:8
+    |
+676 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintStateMap {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 5 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running `target/debug/crema '/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant'`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/ffi_extraction '/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant' /home/af/Documenti/a-phd/crema`
+warning: variable does not need to be mutable
+  --> /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/src/main.rs:16:9
+   |
+16 |     let mut c_url = CString::new(original).expect("CString::new failed");
+   |         ----^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: 1 warning emitted
+
+Selected C source for SVF: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/src/libsantapanelo_bridge.c
+LLVM IR compilation finished with status: ExitStatus(unix_wait_status(0))
+
+*********General Stats***************
+################ (program : ffi.pre.bc)###############
+AddrsNum            25
+BBWith2Succ         0
+BBWith3Succ         0
+CallsNum            0
+ConstArrayObj       0
+ConstStructObj      0
+ConstantObj         0
+CopysNum            5
+FIObjNum            0
+FSObjNum            24
+FunctionObjs        4
+GepsNum             2
+GlobalObjs          0
+HeapObjs            1
+IndCallSites        4
+LoadsNum            19
+MaxStructSize       2
+NonPtrObj           6
+ReturnsNum          0
+StackObjs           19
+StoresNum           20
+TotalCallSite       4
+TotalFieldObjects   2
+TotalObjects        25
+TotalPTASVFStmts    69
+TotalPointers       96
+TotalSVFStmts       75
+VarArrayObj         0
+VarStructObj        1
+----------------Time and memory stats--------------------
+LLVMIRTime          0.008
+SVFIRTime           0
+SymbolTableTime     0
+#######################################################
+
+*********PTACallGraph Stats (Andersen analysis)***************
+################ (program : ffi.pre.bc)###############
+----------------Numbers stats----------------------------
+CalRetPairInCycle   0
+MaxNodeInCycle      0
+NodeInCycle         0
+TotalCycle          0
+TotalEdge           0
+TotalNode           4
+#######################################################
+
+*********Andersen Pointer Analysis Stats***************
+################ (program : ffi.pre.bc)###############
+----------------Time and memory stats--------------------
+AvgIn/OutAddrEdge   0.239583
+AvgIn/OutCopyEdge   0.479167
+AvgIn/OutEdge       1.10417
+AvgIn/OutLoadEdge   0.1875
+AvgIn/OutStoreEdge  0.197917
+AvgPtsSetSize       0.209302
+AvgTopLvlPtsSize    0.509434
+CollapseTime        0
+CopyGepTime         0
+LoadStoreTime       0
+MemoryUsageVmrss    244
+MemoryUsageVmsize   0
+SCCDetectTime       0
+SCCMergeTime        0
+TotalTime           0
+UpdateCGTime        0
+----------------Numbers stats----------------------------
+AddrProcessed       23
+CopyProcessed       2
+DummyFieldPtrs      0
+FieldObjs           2
+GepProcessed        2
+IndCallSites        4
+IndEdgeSolved       0
+LoadProcessed       18
+LocalVarInRecur     0
+MaxInAddrEdge       1
+MaxInCopyEdge       1
+MaxInLoadEdge       1
+MaxInStoreEdge      1
+MaxNodesInSCC       0
+MaxOutAddrEdge      1
+MaxOutCopyEdge      2
+MaxOutLoadEdge      1
+MaxOutStoreEdge     1
+MaxPtsSetSize       1
+MemObjects          25
+NodesInCycles       0
+NullPointer         0
+NumOfAddrs          23
+NumOfCGEdge         83
+NumOfCGNode         100
+NumOfCopys          44
+NumOfFieldExpand    0
+NumOfGeps           2
+NumOfLoads          18
+NumOfSCCDetect      2
+NumOfSFRs           0
+NumOfStores         19
+NumOfValidNode      96
+NumOfValidObjNode   24
+Pointers            96
+PointsToBlkPtr      0
+PointsToConstPtr    0
+SolveIterations     2
+StoreProcessed      19
+TotalCycleNum       0
+TotalObjects        27
+TotalPWCCycleNum    0
+TotalPointers       96
+#######################################################
+
+****Persistent Points-To Cache Statistics: Andersen's analysis bitvector****
+################ (program : ffi.pre.bc)###############
+UniquePointsToSets       26
+TotalUnions              27
+PropertyUnions           27
+UniqueUnions             0
+LookupUnions             0
+PreemptiveUnions         0
+TotalComplements         198
+PropertyComplements      198
+UniqueComplements        0
+LookupComplements        0
+PreemptiveComplements    0
+TotalIntersections       37
+PropertyIntersections    37
+UniqueIntersections      0
+LookupIntersections      0
+PreemptiveIntersections  0
+#######################################################
+
+*********PTACallGraph Stats (Andersen analysis)***************
+################ (program : ffi.pre.bc)###############
+----------------Numbers stats----------------------------
+CalRetPairInCycle   0
+MaxNodeInCycle      0
+NodeInCycle         0
+TotalCycle          0
+TotalEdge           0
+TotalNode           4
+#######################################################
+
+*********Andersen Pointer Analysis Stats***************
+################ (program : ffi.pre.bc)###############
+----------------Time and memory stats--------------------
+AvgIn/OutAddrEdge   0.239583
+AvgIn/OutCopyEdge   0.479167
+AvgIn/OutEdge       1.10417
+AvgIn/OutLoadEdge   0.1875
+AvgIn/OutStoreEdge  0.197917
+AvgPtsSetSize       0.209302
+AvgTopLvlPtsSize    0.509434
+CollapseTime        0
+CopyGepTime         0
+LoadStoreTime       0
+MemoryUsageVmrss    244
+MemoryUsageVmsize   0
+SCCDetectTime       0
+SCCMergeTime        0
+TotalTime           0.001
+UpdateCGTime        0
+----------------Numbers stats----------------------------
+AddrProcessed       23
+CopyProcessed       2
+DummyFieldPtrs      0
+FieldObjs           2
+GepProcessed        2
+IndCallSites        4
+IndEdgeSolved       0
+LoadProcessed       18
+LocalVarInRecur     0
+MaxInAddrEdge       1
+MaxInCopyEdge       1
+MaxInLoadEdge       1
+MaxInStoreEdge      1
+MaxNodesInSCC       0
+MaxOutAddrEdge      1
+MaxOutCopyEdge      2
+MaxOutLoadEdge      1
+MaxOutStoreEdge     1
+MaxPtsSetSize       1
+MemObjects          25
+NodesInCycles       0
+NullPointer         0
+NumOfAddrs          23
+NumOfCGEdge         83
+NumOfCGNode         100
+NumOfCopys          44
+NumOfFieldExpand    0
+NumOfGeps           2
+NumOfLoads          18
+NumOfSCCDetect      2
+NumOfSFRs           0
+NumOfStores         19
+NumOfValidNode      96
+NumOfValidObjNode   24
+Pointers            96
+PointsToBlkPtr      0
+PointsToConstPtr    0
+SolveIterations     2
+StoreProcessed      19
+TotalCycleNum       0
+TotalObjects        27
+TotalPWCCycleNum    0
+TotalPointers       96
+#######################################################
+Processing Node: 0x5d29a7811630
+Node Info: IntraICFGNode9 {fun: bridge_on_request_call}
+AddrStmt: [Var13 <-- Var14]	
+ValVar ID: 13
+   %retval = alloca %struct.SaltpaneloOnRequestCallResponse, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a783eab0
+Processing Node: 0x5d29a77e4930
+Node Info: IntraICFGNode10 {fun: bridge_on_request_call}
+AddrStmt: [Var16 <-- Var17]	
+ValVar ID: 16
+   %f.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a7825140
+Processing Node: 0x5d29a78468f0
+Node Info: IntraICFGNode11 {fun: bridge_on_request_call}
+AddrStmt: [Var18 <-- Var19]	
+ValVar ID: 18
+   %src_id.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a7825590
+Processing Node: 0x5d29a7868cd0
+Node Info: IntraICFGNode12 {fun: bridge_on_request_call}
+AddrStmt: [Var20 <-- Var21]	
+ValVar ID: 20
+   %src_email.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a7850bf0
+Processing Node: 0x5d29a7812350
+Node Info: IntraICFGNode13 {fun: bridge_on_request_call}
+AddrStmt: [Var22 <-- Var23]	
+ValVar ID: 22
+   %route_id.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a783fd10
+Processing Node: 0x5d29a7874fd0
+Node Info: IntraICFGNode14 {fun: bridge_on_request_call}
+AddrStmt: [Var24 <-- Var25]	
+ValVar ID: 24
+   %channel_id.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a7840110
+Processing Node: 0x5d29a7812040
+Node Info: IntraICFGNode15 {fun: bridge_on_request_call}
+AddrStmt: [Var26 <-- Var27]	
+ValVar ID: 26
+   %userdata.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a781cec0
+Processing Node: 0x5d29a7872670
+Node Info: IntraICFGNode16 {fun: bridge_on_request_call}
+StoreStmt: [Var16 <-- Var7]	
+ValVar ID: 28
+   store ptr %f, ptr %f.addr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a781d390
+Processing Node: 0x5d29a77f1520
+Node Info: IntraICFGNode17 {fun: bridge_on_request_call}
+StoreStmt: [Var18 <-- Var8]	
+ValVar ID: 29
+   store ptr %src_id, ptr %src_id.addr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a784de60
+Processing Node: 0x5d29a7873f60
+Node Info: IntraICFGNode18 {fun: bridge_on_request_call}
+StoreStmt: [Var20 <-- Var9]	
+ValVar ID: 30
+   store ptr %src_email, ptr %src_email.addr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a784e260
+Processing Node: 0x5d29a7810680
+Node Info: IntraICFGNode19 {fun: bridge_on_request_call}
+StoreStmt: [Var22 <-- Var10]	
+ValVar ID: 31
+   store ptr %route_id, ptr %route_id.addr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a787a9b0
+Processing Node: 0x5d29a7874130
+Node Info: IntraICFGNode20 {fun: bridge_on_request_call}
+StoreStmt: [Var24 <-- Var11]	
+ValVar ID: 32
+   store ptr %channel_id, ptr %channel_id.addr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a787adb0
+Processing Node: 0x5d29a7810de0
+Node Info: IntraICFGNode21 {fun: bridge_on_request_call}
+StoreStmt: [Var26 <-- Var12]	
+ValVar ID: 33
+   store ptr %userdata, ptr %userdata.addr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a787b0a0
+Processing Node: 0x5d29a77f4130
+Node Info: IntraICFGNode22 {fun: bridge_on_request_call}
+LoadStmt: [Var34 <-- Var16]	
+ValVar ID: 34
+   %0 = load ptr, ptr %f.addr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a7847e00
+Processing Node: 0x5d29a7874890
+Node Info: IntraICFGNode23 {fun: bridge_on_request_call}
+LoadStmt: [Var35 <-- Var18]	
+ValVar ID: 35
+   %1 = load ptr, ptr %src_id.addr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a784fe40
+Processing Node: 0x5d29a78412b0
+Node Info: IntraICFGNode24 {fun: bridge_on_request_call}
+LoadStmt: [Var36 <-- Var20]	
+ValVar ID: 36
+   %2 = load ptr, ptr %src_email.addr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a7850300
+Processing Node: 0x5d29a7858080
+Node Info: IntraICFGNode25 {fun: bridge_on_request_call}
+LoadStmt: [Var37 <-- Var22]	
+ValVar ID: 37
+   %3 = load ptr, ptr %route_id.addr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a77f2640
+Processing Node: 0x5d29a7841150
+Node Info: IntraICFGNode26 {fun: bridge_on_request_call}
+LoadStmt: [Var38 <-- Var24]	
+ValVar ID: 38
+   %4 = load ptr, ptr %channel_id.addr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a77f2ae0
+Processing Node: 0x5d29a787f790
+Node Info: IntraICFGNode27 {fun: bridge_on_request_call}
+LoadStmt: [Var39 <-- Var26]	
+ValVar ID: 39
+   %5 = load ptr, ptr %userdata.addr, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a77f2fa0
+Processing Node: 0x5d29a7831ec0
+Node Info: CallICFGNode28 {fun: bridge_on_request_call}
+   %call = call { i8, ptr } %0(ptr noundef %1, ptr noundef %2, ptr noundef %3, ptr noundef %4, ptr noundef %5) CallICFGNode: 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Processing Node: 0x5d29a7865d40
+Node Info: RetICFGNode29 {fun: bridge_on_request_call}
+   %call = call { i8, ptr } %0(ptr noundef %1, ptr noundef %2, ptr noundef %3, ptr noundef %4, ptr noundef %5) RetICFGNode: 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Processing Node: 0x5d29a7822e00
+Node Info: IntraICFGNode30 {fun: bridge_on_request_call}
+CopyStmt: [Var41 <-- Var13]	
+ValVar ID: 41
+   %6 = bitcast ptr %retval to ptr 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a78264c0
+Processing Node: 0x5d29a784dad0
+Node Info: IntraICFGNode31 {fun: bridge_on_request_call}
+GepStmt: [Var42 <-- Var41]	
+ValVar ID: 42
+   %7 = getelementptr inbounds { i8, ptr }, ptr %6, i32 0, i32 0 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a7827430
+Processing Node: 0x5d29a7828bd0
+Node Info: IntraICFGNode32 {fun: bridge_on_request_call}
+CopyStmt: [Var44 <-- Var0]	
+ValVar ID: 44
+   %8 = extractvalue { i8, ptr } %call, 0 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a7824ce0
+Processing Node: 0x5d29a7829d70
+Node Info: IntraICFGNode33 {fun: bridge_on_request_call}
+StoreStmt: [Var42 <-- Var44]	
+ValVar ID: 45
+   store i8 %8, ptr %7, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a7822410
+Processing Node: 0x5d29a7829670
+Node Info: IntraICFGNode34 {fun: bridge_on_request_call}
+GepStmt: [Var46 <-- Var41]	
+ValVar ID: 46
+   %9 = getelementptr inbounds { i8, ptr }, ptr %6, i32 0, i32 1 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a78228c0
+Processing Node: 0x5d29a7847400
+Node Info: IntraICFGNode35 {fun: bridge_on_request_call}
+CopyStmt: [Var47 <-- Var0]	
+ValVar ID: 47
+   %10 = extractvalue { i8, ptr } %call, 1 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a7822cb0
+Processing Node: 0x5d29a77e6e80
+Node Info: IntraICFGNode36 {fun: bridge_on_request_call}
+StoreStmt: [Var46 <-- Var47]	
+ValVar ID: 48
+   store ptr %10, ptr %9, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a7839d90
+Processing Node: 0x5d29a7828d30
+Node Info: IntraICFGNode37 {fun: bridge_on_request_call}
+CopyStmt: [Var49 <-- Var13]	
+ValVar ID: 49
+   %11 = bitcast ptr %retval to ptr 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a783a1e0
+Processing Node: 0x5d29a7873350
+Node Info: IntraICFGNode38 {fun: bridge_on_request_call}
+LoadStmt: [Var50 <-- Var49]	
+ValVar ID: 50
+   %12 = load { i8, ptr }, ptr %11, align 8 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a783a5e0
+Processing Node: 0x5d29a7810870
+Node Info: IntraICFGNode39 {fun: bridge_on_request_call}
+   ret { i8, ptr } %12 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Processing Node: 0x5d29a77f93c0
+Node Info: FunExitICFGNode2 {fun: bridge_on_request_call}
+PhiStmt: [Var6 <-- ([Var50, ICFGNode39],)]	
+ValVar ID: 51
+   ret { i8, ptr } %12 
+Function associated with node: 0x5d29a7866460
+Basic block associated with node: 0x5d29a77e8640
+Associated SVF Statements:
+  - 0x5d29a7862270
+Writing 'callgraph_initial.dot.dot'...DOT file generated: ./output/bridge_on_request_call_view_icfg_output_SVF.dot
+DOT file generated: ./output/bridge_on_request_call_node_and_edges_only_icfg_SVF.dot
+ICFG Traversal Complete for function: bridge_on_request_call.
+Processing Node: 0x5d29a77f3b90
+Node Info: IntraICFGNode40 {fun: bridge_on_call_disconnected}
+AddrStmt: [Var59 <-- Var60]	
+ValVar ID: 59
+   %f.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a7867020
+Basic block associated with node: 0x5d29a77e5eb0
+Associated SVF Statements:
+  - 0x5d29a78628f0
+Processing Node: 0x5d29a77f3f30
+Node Info: IntraICFGNode41 {fun: bridge_on_call_disconnected}
+AddrStmt: [Var61 <-- Var62]	
+ValVar ID: 61
+   %route_id.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a7867020
+Basic block associated with node: 0x5d29a77e5eb0
+Associated SVF Statements:
+  - 0x5d29a7823600
+Processing Node: 0x5d29a77e69d0
+Node Info: IntraICFGNode42 {fun: bridge_on_call_disconnected}
+AddrStmt: [Var63 <-- Var64]	
+ValVar ID: 63
+   %channel_id.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a7867020
+Basic block associated with node: 0x5d29a77e5eb0
+Associated SVF Statements:
+  - 0x5d29a7823af0
+Processing Node: 0x5d29a7849d20
+Node Info: IntraICFGNode43 {fun: bridge_on_call_disconnected}
+AddrStmt: [Var65 <-- Var66]	
+ValVar ID: 65
+   %userdata.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a7867020
+Basic block associated with node: 0x5d29a77e5eb0
+Associated SVF Statements:
+  - 0x5d29a7823fe0
+Processing Node: 0x5d29a77f8160
+Node Info: IntraICFGNode44 {fun: bridge_on_call_disconnected}
+StoreStmt: [Var59 <-- Var55]	
+ValVar ID: 67
+   store ptr %f, ptr %f.addr, align 8 
+Function associated with node: 0x5d29a7867020
+Basic block associated with node: 0x5d29a77e5eb0
+Associated SVF Statements:
+  - 0x5d29a7824210
+Processing Node: 0x5d29a7831530
+Node Info: IntraICFGNode45 {fun: bridge_on_call_disconnected}
+StoreStmt: [Var61 <-- Var56]	
+ValVar ID: 68
+   store ptr %route_id, ptr %route_id.addr, align 8 
+Function associated with node: 0x5d29a7867020
+Basic block associated with node: 0x5d29a77e5eb0
+Associated SVF Statements:
+  - 0x5d29a7807a50
+Processing Node: 0x5d29a77e5fe0
+Node Info: IntraICFGNode46 {fun: bridge_on_call_disconnected}
+StoreStmt: [Var63 <-- Var57]	
+ValVar ID: 69
+   store ptr %channel_id, ptr %channel_id.addr, align 8 
+Function associated with node: 0x5d29a7867020
+Basic block associated with node: 0x5d29a77e5eb0
+Associated SVF Statements:
+  - 0x5d29a7807ed0
+Processing Node: 0x5d29a7831700
+Node Info: IntraICFGNode47 {fun: bridge_on_call_disconnected}
+StoreStmt: [Var65 <-- Var58]	
+ValVar ID: 70
+   store ptr %userdata, ptr %userdata.addr, align 8 
+Function associated with node: 0x5d29a7867020
+Basic block associated with node: 0x5d29a77e5eb0
+Associated SVF Statements:
+  - 0x5d29a7876490
+Processing Node: 0x5d29a7872980
+Node Info: IntraICFGNode48 {fun: bridge_on_call_disconnected}
+LoadStmt: [Var71 <-- Var59]	
+ValVar ID: 71
+   %0 = load ptr, ptr %f.addr, align 8 
+Function associated with node: 0x5d29a7867020
+Basic block associated with node: 0x5d29a77e5eb0
+Associated SVF Statements:
+  - 0x5d29a78768e0
+Processing Node: 0x5d29a77f7850
+Node Info: IntraICFGNode49 {fun: bridge_on_call_disconnected}
+LoadStmt: [Var72 <-- Var61]	
+ValVar ID: 72
+   %1 = load ptr, ptr %route_id.addr, align 8 
+Function associated with node: 0x5d29a7867020
+Basic block associated with node: 0x5d29a77e5eb0
+Associated SVF Statements:
+  - 0x5d29a7876da0
+Processing Node: 0x5d29a77fb7c0
+Node Info: IntraICFGNode50 {fun: bridge_on_call_disconnected}
+LoadStmt: [Var73 <-- Var63]	
+ValVar ID: 73
+   %2 = load ptr, ptr %channel_id.addr, align 8 
+Function associated with node: 0x5d29a7867020
+Basic block associated with node: 0x5d29a77e5eb0
+Associated SVF Statements:
+  - 0x5d29a781bd80
+Processing Node: 0x5d29a7810cb0
+Node Info: IntraICFGNode51 {fun: bridge_on_call_disconnected}
+LoadStmt: [Var74 <-- Var65]	
+ValVar ID: 74
+   %3 = load ptr, ptr %userdata.addr, align 8 
+Function associated with node: 0x5d29a7867020
+Basic block associated with node: 0x5d29a77e5eb0
+Associated SVF Statements:
+  - 0x5d29a781c200
+Processing Node: 0x5d29a7812f00
+Node Info: CallICFGNode52 {fun: bridge_on_call_disconnected}
+   %call = call ptr %0(ptr noundef %1, ptr noundef %2, ptr noundef %3) CallICFGNode: 
+Function associated with node: 0x5d29a7867020
+Basic block associated with node: 0x5d29a77e5eb0
+Processing Node: 0x5d29a78104b0
+Node Info: RetICFGNode53 {fun: bridge_on_call_disconnected}
+   %call = call ptr %0(ptr noundef %1, ptr noundef %2, ptr noundef %3) RetICFGNode: 
+Function associated with node: 0x5d29a7867020
+Basic block associated with node: 0x5d29a77e5eb0
+Processing Node: 0x5d29a7810fb0
+Node Info: IntraICFGNode54 {fun: bridge_on_call_disconnected}
+   ret ptr %call 
+Function associated with node: 0x5d29a7867020
+Basic block associated with node: 0x5d29a77e5eb0
+Processing Node: 0x5d29a7814850
+Node Info: FunExitICFGNode4 {fun: bridge_on_call_disconnected}
+PhiStmt: [Var54 <-- ([Var75, ICFGNode54],)]	
+ValVar ID: 76
+   ret ptr %call 
+Function associated with node: 0x5d29a7867020
+Basic block associated with node: 0x5d29a77e5eb0
+Associated SVF Statements:
+  - 0x5d29a781c920
+DOT file generated: ./output/bridge_on_call_disconnected_view_icfg_output_SVF.dot
+DOT file generated: ./output/bridge_on_call_disconnected_node_and_edges_only_icfg_SVF.dot
+ICFG Traversal Complete for function: bridge_on_call_disconnected.
+Processing Node: 0x5d29a77eb000
+Node Info: IntraICFGNode55 {fun: bridge_on_handle_call}
+AddrStmt: [Var85 <-- Var86]	
+ValVar ID: 85
+   %f.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Associated SVF Statements:
+  - 0x5d29a787bdf0
+Processing Node: 0x5d29a77f8590
+Node Info: IntraICFGNode56 {fun: bridge_on_handle_call}
+AddrStmt: [Var87 <-- Var88]	
+ValVar ID: 87
+   %route_id.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Associated SVF Statements:
+  - 0x5d29a787c220
+Processing Node: 0x5d29a7874520
+Node Info: IntraICFGNode57 {fun: bridge_on_handle_call}
+AddrStmt: [Var89 <-- Var90]	
+ValVar ID: 89
+   %channel_id.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Associated SVF Statements:
+  - 0x5d29a787c710
+Processing Node: 0x5d29a787cbb0
+Node Info: IntraICFGNode58 {fun: bridge_on_handle_call}
+AddrStmt: [Var91 <-- Var92]	
+ValVar ID: 91
+   %raddr.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Associated SVF Statements:
+  - 0x5d29a7879810
+Processing Node: 0x5d29a77e77c0
+Node Info: IntraICFGNode59 {fun: bridge_on_handle_call}
+AddrStmt: [Var93 <-- Var94]	
+ValVar ID: 93
+   %userdata.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Associated SVF Statements:
+  - 0x5d29a7879d00
+Processing Node: 0x5d29a7847640
+Node Info: IntraICFGNode60 {fun: bridge_on_handle_call}
+StoreStmt: [Var85 <-- Var80]	
+ValVar ID: 95
+   store ptr %f, ptr %f.addr, align 8 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Associated SVF Statements:
+  - 0x5d29a787a220
+Processing Node: 0x5d29a77f8300
+Node Info: IntraICFGNode61 {fun: bridge_on_handle_call}
+StoreStmt: [Var87 <-- Var81]	
+ValVar ID: 96
+   store ptr %route_id, ptr %route_id.addr, align 8 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Associated SVF Statements:
+  - 0x5d29a787a6a0
+Processing Node: 0x5d29a7831b30
+Node Info: IntraICFGNode62 {fun: bridge_on_handle_call}
+StoreStmt: [Var89 <-- Var82]	
+ValVar ID: 97
+   store ptr %channel_id, ptr %channel_id.addr, align 8 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Associated SVF Statements:
+  - 0x5d29a783a950
+Processing Node: 0x5d29a7874300
+Node Info: IntraICFGNode63 {fun: bridge_on_handle_call}
+StoreStmt: [Var91 <-- Var83]	
+ValVar ID: 98
+   store ptr %raddr, ptr %raddr.addr, align 8 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Associated SVF Statements:
+  - 0x5d29a783add0
+Processing Node: 0x5d29a7875410
+Node Info: IntraICFGNode64 {fun: bridge_on_handle_call}
+StoreStmt: [Var93 <-- Var84]	
+ValVar ID: 99
+   store ptr %userdata, ptr %userdata.addr, align 8 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Associated SVF Statements:
+  - 0x5d29a783b250
+Processing Node: 0x5d29a7831cc0
+Node Info: IntraICFGNode65 {fun: bridge_on_handle_call}
+LoadStmt: [Var100 <-- Var85]	
+ValVar ID: 100
+   %0 = load ptr, ptr %f.addr, align 8 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Associated SVF Statements:
+  - 0x5d29a783b6a0
+Processing Node: 0x5d29a77f2140
+Node Info: IntraICFGNode66 {fun: bridge_on_handle_call}
+LoadStmt: [Var101 <-- Var87]	
+ValVar ID: 101
+   %1 = load ptr, ptr %route_id.addr, align 8 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Associated SVF Statements:
+  - 0x5d29a7860ee0
+Processing Node: 0x5d29a7826780
+Node Info: IntraICFGNode67 {fun: bridge_on_handle_call}
+LoadStmt: [Var102 <-- Var89]	
+ValVar ID: 102
+   %2 = load ptr, ptr %channel_id.addr, align 8 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Associated SVF Statements:
+  - 0x5d29a78613a0
+Processing Node: 0x5d29a7881c50
+Node Info: IntraICFGNode68 {fun: bridge_on_handle_call}
+LoadStmt: [Var103 <-- Var91]	
+ValVar ID: 103
+   %3 = load ptr, ptr %raddr.addr, align 8 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Associated SVF Statements:
+  - 0x5d29a7861860
+Processing Node: 0x5d29a7816e90
+Node Info: IntraICFGNode69 {fun: bridge_on_handle_call}
+LoadStmt: [Var104 <-- Var93]	
+ValVar ID: 104
+   %4 = load ptr, ptr %userdata.addr, align 8 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Associated SVF Statements:
+  - 0x5d29a7861d20
+Processing Node: 0x5d29a7840b90
+Node Info: CallICFGNode70 {fun: bridge_on_handle_call}
+   %call = call ptr %0(ptr noundef %1, ptr noundef %2, ptr noundef %3, ptr noundef %4) CallICFGNode: 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Processing Node: 0x5d29a7825740
+Node Info: RetICFGNode71 {fun: bridge_on_handle_call}
+   %call = call ptr %0(ptr noundef %1, ptr noundef %2, ptr noundef %3, ptr noundef %4) RetICFGNode: 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Processing Node: 0x5d29a77ea030
+Node Info: IntraICFGNode72 {fun: bridge_on_handle_call}
+   ret ptr %call 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Processing Node: 0x5d29a77f7500
+Node Info: FunExitICFGNode6 {fun: bridge_on_handle_call}
+PhiStmt: [Var79 <-- ([Var105, ICFGNode72],)]	
+ValVar ID: 106
+   ret ptr %call 
+Function associated with node: 0x5d29a77e5b30
+Basic block associated with node: 0x5d29a77e6140
+Associated SVF Statements:
+  - 0x5d29a7820af0
+DOT file generated: ./output/bridge_on_handle_call_view_icfg_output_SVF.dot
+DOT file generated: ./output/bridge_on_handle_call_node_and_edges_only_icfg_SVF.dot
+ICFG Traversal Complete for function: bridge_on_handle_call.
+Processing Node: 0x5d29a7826ee0
+Node Info: IntraICFGNode73 {fun: bridge_open_url}
+AddrStmt: [Var113 <-- Var114]	
+ValVar ID: 113
+   %f.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a77eeb10
+Basic block associated with node: 0x5d29a77fdb90
+Associated SVF Statements:
+  - 0x5d29a7821140
+Processing Node: 0x5d29a78298d0
+Node Info: IntraICFGNode74 {fun: bridge_open_url}
+AddrStmt: [Var115 <-- Var116]	
+ValVar ID: 115
+   %url.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a77eeb10
+Basic block associated with node: 0x5d29a77fdb90
+Associated SVF Statements:
+  - 0x5d29a78215d0
+Processing Node: 0x5d29a784d370
+Node Info: IntraICFGNode75 {fun: bridge_open_url}
+AddrStmt: [Var117 <-- Var118]	
+ValVar ID: 117
+   %userdata.addr = alloca ptr, align 8 
+Function associated with node: 0x5d29a77eeb10
+Basic block associated with node: 0x5d29a77fdb90
+Associated SVF Statements:
+  - 0x5d29a78651e0
+Processing Node: 0x5d29a784f220
+Node Info: IntraICFGNode76 {fun: bridge_open_url}
+StoreStmt: [Var113 <-- Var110]	
+ValVar ID: 119
+   store ptr %f, ptr %f.addr, align 8 
+Function associated with node: 0x5d29a77eeb10
+Basic block associated with node: 0x5d29a77fdb90
+Associated SVF Statements:
+  - 0x5d29a7865700
+Processing Node: 0x5d29a784fc60
+Node Info: IntraICFGNode77 {fun: bridge_open_url}
+StoreStmt: [Var115 <-- Var111]	
+ValVar ID: 120
+   store ptr %url, ptr %url.addr, align 8 
+Function associated with node: 0x5d29a77eeb10
+Basic block associated with node: 0x5d29a77fdb90
+Associated SVF Statements:
+  - 0x5d29a7865b80
+Processing Node: 0x5d29a78231b0
+Node Info: IntraICFGNode78 {fun: bridge_open_url}
+StoreStmt: [Var117 <-- Var112]	
+ValVar ID: 121
+   store ptr %userdata, ptr %userdata.addr, align 8 
+Function associated with node: 0x5d29a77eeb10
+Basic block associated with node: 0x5d29a77fdb90
+Associated SVF Statements:
+  - 0x5d29a7863970
+Processing Node: 0x5d29a77e66a0
+Node Info: IntraICFGNode79 {fun: bridge_open_url}
+LoadStmt: [Var122 <-- Var113]	
+ValVar ID: 122
+   %0 = load ptr, ptr %f.addr, align 8 
+Function associated with node: 0x5d29a77eeb10
+Basic block associated with node: 0x5d29a77fdb90
+Associated SVF Statements:
+  - 0x5d29a7863dc0
+Processing Node: 0x5d29a77f49f0
+Node Info: IntraICFGNode80 {fun: bridge_open_url}
+LoadStmt: [Var123 <-- Var115]	
+ValVar ID: 123
+   %1 = load ptr, ptr %url.addr, align 8 
+Function associated with node: 0x5d29a77eeb10
+Basic block associated with node: 0x5d29a77fdb90
+Associated SVF Statements:
+  - 0x5d29a7864280
+Processing Node: 0x5d29a7869290
+Node Info: IntraICFGNode81 {fun: bridge_open_url}
+LoadStmt: [Var124 <-- Var117]	
+ValVar ID: 124
+   %2 = load ptr, ptr %userdata.addr, align 8 
+Function associated with node: 0x5d29a77eeb10
+Basic block associated with node: 0x5d29a77fdb90
+Associated SVF Statements:
+  - 0x5d29a7856070
+Processing Node: 0x5d29a77f76b0
+Node Info: CallICFGNode82 {fun: bridge_open_url}
+   %call = call ptr %0(ptr noundef %1, ptr noundef %2) CallICFGNode: 
+Function associated with node: 0x5d29a77eeb10
+Basic block associated with node: 0x5d29a77fdb90
+Processing Node: 0x5d29a787dcd0
+Node Info: RetICFGNode83 {fun: bridge_open_url}
+   %call = call ptr %0(ptr noundef %1, ptr noundef %2) RetICFGNode: 
+Function associated with node: 0x5d29a77eeb10
+Basic block associated with node: 0x5d29a77fdb90
+Processing Node: 0x5d29a77eb550
+Node Info: IntraICFGNode84 {fun: bridge_open_url}
+   ret ptr %call 
+Function associated with node: 0x5d29a77eeb10
+Basic block associated with node: 0x5d29a77fdb90
+Processing Node: 0x5d29a7814d70
+Node Info: FunExitICFGNode8 {fun: bridge_open_url}
+PhiStmt: [Var109 <-- ([Var125, ICFGNode84],)]	
+ValVar ID: 126
+   ret ptr %call 
+Function associated with node: 0x5d29a77eeb10
+Basic block associated with node: 0x5d29a77fdb90
+Associated SVF Statements:
+  - 0x5d29a7856770
+DOT file generated: ./output/bridge_open_url_view_icfg_output_SVF.dot
+DOT file generated: ./output/bridge_open_url_node_and_edges_only_icfg_SVF.dot
+ICFG Traversal Complete for function: bridge_open_url.
+svf-driver finished with status: ExitStatus(unix_wait_status(0))
+cargo:rerun-if-changed=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/src/libsantapanelo_bridge.c
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package rusant target rusant at /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/target/debug",
+    "--extern=anyhow=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/target/debug/deps/libanyhow-93340125b77c73cc.rlib",
+    "--extern=once_cell=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/target/debug/deps/libonce_cell-7d8771cc0add5777.rlib",
+    "--extern=regex_syntax=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/target/debug/deps/libregex_syntax-eddb13b0f2ea78f9.rlib",
+    "--extern=shlex=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/target/debug/deps/libshlex-f4c3659040844f7b.rlib",
+    "--extern=open=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/target/debug/deps/libopen-0ea5dee1255bf75b.rlib",
+    "--extern=memchr=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/target/debug/deps/libmemchr-34eb650b64c0b1fd.rlib",
+    "--extern=cc=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/target/debug/deps/libcc-f345928e0c3d8433.rlib",
+    "--extern=regex_automata=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/target/debug/deps/libregex_automata-b951b5699a7cba4b.rlib",
+    "--extern=regex=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/target/debug/deps/libregex-7cff56891633185e.rlib",
+    "--extern=pathdiff=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/target/debug/deps/libpathdiff-b0c6b085f31b091b.rlib",
+    "--extern=aho_corasick=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/target/debug/deps/libaho_corasick-0c323ca373dc9a3a.rlib",
+]
+warning: variable does not need to be mutable
+  --> /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/src/main.rs:16:9
+   |
+16 |     let mut c_url = CString::new(original).expect("CString::new failed");
+   |         ----^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+Loading LLVM JSON file: bridge_on_request_call_A_FINAL_ICFG.json
+Loading LLVM JSON file: bridge_on_call_disconnected_A_FINAL_ICFG.json
+Loading LLVM JSON file: bridge_on_handle_call_A_FINAL_ICFG.json
+Loading LLVM JSON file: bridge_open_url_A_FINAL_ICFG.json
+Global ICFG saved to global_icfg.json
+warning: 1 warning emitted
+
+Analyzing package rusant target build-script-build at /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/build.rs
+Skipping unsupported target kind: [CustomBuild]
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+Final Abstract State: {"rust::main::bb10": {{"Local(_1)"}: TOP, {"Local(_13)", "Local(_14)"}: TOP, {"Local(_18)"}: TOP, {"Local(_21)"}: TOP, {"Local(_6)", "Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb9": {{"Local(_1)"}: TOP, {"Local(_13)", "Local(_14)"}: TOP, {"Local(_18)"}: TOP, {"Local(_21)"}: TOP, {"Local(_6)", "Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb5": {{"Local(_1)"}: ALLOC, {"Local(_6)", "Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb11": {{"Local(_1)"}: TOP, {"Local(_13)", "Local(_14)"}: TOP, {"Local(_18)"}: TOP, {"Local(_21)"}: TOP, {"Local(_6)", "Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::open_url::bb6": {{"Local(_10)"}: ALLOC}, "rust::main::bb6": {{"Local(_1)"}: TOP, {"Local(_13)", "Local(_14)"}: TOP, {"Local(_18)"}: TOP, {"Local(_21)"}: TOP, {"Local(_6)", "Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb0": {{"Local(_2)"}: ALLOC}, "dummyRet::rust::main::5::rust::main::bb5_internal": {{"Local(_1)"}: TOP, {"Local(_13)", "Local(_14)"}: TOP, {"Local(_18)"}: TOP, {"Local(_21)"}: TOP, {"Local(_6)", "Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb12": {{"Local(_1)"}: FREED, {"Local(_13)", "Local(_14)"}: TOP, {"Local(_18)"}: TOP, {"Local(_21)"}: TOP, {"Local(_6)", "Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::open_url::terminate": {{"Local(_10)"}: ALLOC}, "rust::open_url::bb5": {{"Local(_10)"}: ALLOC}, "rust::main::bb8": {{"Local(_1)"}: TOP, {"Local(_13)", "Local(_14)"}: TOP, {"Local(_18)"}: TOP, {"Local(_21)"}: TOP, {"Local(_6)", "Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::open_url::bb9": {{"Local(_0)"}: MV, {"Local(_10)"}: ALLOC}, "rust::open_url::bb8": {{"Local(_0)"}: MV, {"Local(_10)"}: ALLOC}, "rust::main::bb4": {{"Local(_1)"}: ALLOC, {"Local(_6)", "Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb15": {{"Local(_1)"}: FREED, {"Local(_13)", "Local(_14)"}: TOP, {"Local(_18)"}: TOP, {"Local(_21)"}: TOP, {"Local(_6)", "Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb7": {{"Local(_1)"}: TOP, {"Local(_13)", "Local(_14)"}: TOP, {"Local(_18)"}: TOP, {"Local(_21)"}: TOP, {"Local(_6)", "Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::open_url::bb7": {{"Local(_0)"}: MV, {"Local(_10)"}: ALLOC}, "rust::open_url::bb3": {}, "dummyCall::rust::main::bb5::rust::main::bb5_internal": {{"Local(_1)"}: ALLOC, {"Local(_6)", "Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::open_url::bb2": {}, "rust::open_url::bb1": {}, "rust::main::terminate": {{"Local(_1)"}: FREED, {"Local(_13)", "Local(_14)"}: TOP, {"Local(_18)"}: TOP, {"Local(_21)"}: TOP, {"Local(_6)", "Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb3": {{"Local(_1)"}: ALLOC, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb13": {{"Local(_1)"}: FREED, {"Local(_13)", "Local(_14)"}: TOP, {"Local(_18)"}: TOP, {"Local(_21)"}: TOP, {"Local(_6)", "Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb1": {{"Local(_1)"}: ALLOC}, "rust::main::bb2": {{"Local(_1)"}: ALLOC, {"Local(_9)"}: TOP}, "rust::open_url::bb4": {}, "rust::main::bb14": {{"Local(_1)"}: FREED, {"Local(_13)", "Local(_14)"}: TOP, {"Local(_18)"}: TOP, {"Local(_21)"}: TOP, {"Local(_6)", "Local(_7)"}: TOP, {"Local(_9)"}: TOP}}
+Final Taint State: {
+    "rust::main::bb6": {
+        "Local(5)": {},
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_13)": {},
+        "Local(_6)": {},
+    },
+    "rust::open_url::bb7": {
+        "Local(_0)": {
+            "assign",
+        },
+    },
+    "rust::open_url::bb8": {
+        "Local(_0)": {
+            "assign",
+        },
+    },
+    "rust::open_url::bb6": {},
+    "rust::open_url::bb3": {},
+    "rust::main::bb11": {
+        "Local(_13)": {},
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_6)": {},
+        "Local(5)": {},
+    },
+    "rust::main::bb1": {
+        "Local(_1)": {},
+    },
+    "rust::main::bb3": {
+        "Local(_1)": {},
+    },
+    "rust::main::bb8": {
+        "Local(_6)": {},
+        "Local(_13)": {},
+        "Local(_1)": {
+            "free",
+        },
+        "Local(5)": {},
+    },
+    "rust::main::bb10": {
+        "Local(_13)": {},
+        "Local(_6)": {},
+        "Local(5)": {},
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb5": {
+        "Local(_1)": {},
+        "Local(_6)": {},
+    },
+    "rust::main::bb12": {
+        "Local(_6)": {},
+        "Local(5)": {},
+        "Local(_13)": {},
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb0": {},
+    "dummyCall::rust::main::bb5::rust::main::bb5_internal": {
+        "Local(_1)": {},
+        "Local(_6)": {},
+    },
+    "rust::main::bb2": {
+        "Local(_1)": {},
+    },
+    "rust::main::bb7": {
+        "Local(_6)": {},
+        "Local(5)": {},
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_13)": {},
+    },
+    "rust::main::bb9": {
+        "Local(_6)": {},
+        "Local(5)": {},
+        "Local(_13)": {},
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::open_url::bb9": {
+        "Local(_0)": {
+            "assign",
+        },
+    },
+    "rust::open_url::bb1": {},
+    "rust::open_url::bb2": {},
+    "rust::open_url::bb5": {},
+    "rust::open_url::bb4": {},
+    "rust::main::terminate": {
+        "Local(_13)": {},
+        "Local(_1)": {
+            "free",
+        },
+        "Local(5)": {},
+        "Local(_6)": {},
+    },
+    "dummyRet::rust::main::5::rust::main::bb5_internal": {
+        "Local(5)": {},
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_6)": {},
+        "Local(_13)": {},
+    },
+    "rust::main::bb14": {
+        "Local(5)": {},
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_6)": {},
+        "Local(_13)": {},
+    },
+    "rust::open_url::terminate": {},
+    "rust::main::bb4": {
+        "Local(_6)": {},
+        "Local(_1)": {},
+    },
+    "rust::main::bb13": {
+        "Local(5)": {},
+        "Local(_6)": {},
+        "Local(_13)": {},
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb15": {
+        "Local(_6)": {},
+        "Local(5)": {},
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_13)": {},
+    },
+}
+Tracking variable 'Local(_0)' from block 'rust::open_url::bb7' (markers: {"assign"})
+Tracking variable 'Local(_0)' from block 'rust::open_url::bb8' (markers: {"assign"})
+Tracking variable 'Local(_0)' from block 'rust::open_url::bb9' (markers: {"assign"})
+-> DummyRet node 'dummyRet::rust::main::5::rust::main::bb5_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_5")
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/rusant/src/main.rs:28:1: 28:2 (#0), scope: scope[1] }, kind: drop(_1) -> [return: bb13, unwind continue] }' -> '_1'
+-> Skip Drop in 'rust::main::bb14' because has an unwind incoming edge
+No tracked variable found per '_1' o 'Local(_1)'
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_0)}": 1}
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

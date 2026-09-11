@@ -1,0 +1,50 @@
+{
+  "boxed_bool": [
+    "ML"
+  ],
+  "boxed_char": [
+    "ML"
+  ],
+  "boxed_f32": [
+    "ML"
+  ],
+  "boxed_f64": [
+    "ML"
+  ],
+  "boxed_i128": [
+    "ML"
+  ],
+  "boxed_i16": [
+    "ML"
+  ],
+  "boxed_i32": [
+    "ML"
+  ],
+  "boxed_i64": [
+    "ML"
+  ],
+  "boxed_i8": [
+    "ML"
+  ],
+  "boxed_isize": [
+    "ML"
+  ],
+  "boxed_u128": [
+    "ML"
+  ],
+  "boxed_u16": [
+    "ML"
+  ],
+  "boxed_u32": [
+    "ML"
+  ],
+  "boxed_u64": [
+    "ML"
+  ],
+  "boxed_u8": [
+    "ML"
+  ],
+  "boxed_usize": [
+    "ML"
+  ]
+}

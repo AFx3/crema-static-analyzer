@@ -1,0 +1,5 @@
+{
+  "c_malloc_c_free_then_rust_use_uaf": [
+    "ML"
+  ]
+}

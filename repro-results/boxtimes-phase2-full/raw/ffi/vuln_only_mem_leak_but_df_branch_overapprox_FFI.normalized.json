@@ -1,0 +1,7 @@
+{
+  "vuln_only_mem_leak_but_df_branch_overapprox_FFI": [
+    "DF",
+    "ML",
+    "UB_FFI"
+  ]
+}

@@ -1,0 +1,1903 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+    |                                                           ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+    |                                                                    ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2002:50
+     |
+2002 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return_place, ..}) = &mir_block.terminator {   
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: method `is_default` is never used
+   --> src/abstract_domain.rs:112:12
+    |
+81  | impl CellValue {
+    | -------------- method in this implementation
+...
+112 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:468:8
+    |
+468 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintStateMap {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 5 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running `target/debug/crema '/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example'`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/ffi_extraction '/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example' /home/af/Documenti/a-phd/crema`
+LLVM IR compilation finished with status: ExitStatus(unix_wait_status(0))
+
+*********General Stats***************
+################ (program : ffi.pre.bc)###############
+AddrsNum            19
+BBWith2Succ         0
+BBWith3Succ         0
+CallsNum            0
+ConstArrayObj       0
+ConstStructObj      0
+ConstantObj         0
+CopysNum            13
+FIObjNum            0
+FSObjNum            11
+FunctionObjs        1
+GepsNum             6
+GlobalObjs          5
+HeapObjs            1
+IndCallSites        0
+LoadsNum            25
+MaxStructSize       0
+NonPtrObj           5
+ReturnsNum          0
+StackObjs           4
+StoresNum           15
+TotalCallSite       0
+TotalFieldObjects   0
+TotalObjects        12
+TotalPTASVFStmts    35
+TotalPointers       81
+TotalSVFStmts       85
+VarArrayObj         0
+VarStructObj        0
+----------------Time and memory stats--------------------
+LLVMIRTime          0.01
+SVFIRTime           0.001
+SymbolTableTime     0
+#######################################################
+
+*********PTACallGraph Stats (Andersen analysis)***************
+################ (program : ffi.pre.bc)###############
+----------------Numbers stats----------------------------
+CalRetPairInCycle   0
+MaxNodeInCycle      0
+NodeInCycle         0
+TotalCycle          0
+TotalEdge           0
+TotalNode           1
+#######################################################
+
+*********Andersen Pointer Analysis Stats***************
+################ (program : ffi.pre.bc)###############
+----------------Time and memory stats--------------------
+AvgIn/OutAddrEdge   0.380952
+AvgIn/OutCopyEdge   0.452381
+AvgIn/OutEdge       1.11905
+AvgIn/OutLoadEdge   0.142857
+AvgIn/OutStoreEdge  0.142857
+AvgPtsSetSize       0.333333
+AvgTopLvlPtsSize    0.931034
+CollapseTime        0
+CopyGepTime         0
+LoadStoreTime       0
+MemoryUsageVmrss    248
+MemoryUsageVmsize   0
+SCCDetectTime       0
+SCCMergeTime        0
+TotalTime           0
+UpdateCGTime        0
+----------------Numbers stats----------------------------
+AddrProcessed       16
+CopyProcessed       10
+DummyFieldPtrs      0
+FieldObjs           0
+GepProcessed        6
+IndCallSites        0
+IndEdgeSolved       0
+LoadProcessed       6
+LocalVarInRecur     0
+MaxInAddrEdge       1
+MaxInCopyEdge       1
+MaxInLoadEdge       1
+MaxInStoreEdge      1
+MaxNodesInSCC       0
+MaxOutAddrEdge      6
+MaxOutCopyEdge      1
+MaxOutLoadEdge      1
+MaxOutStoreEdge     1
+MaxPtsSetSize       1
+MemObjects          12
+NodesInCycles       0
+NullPointer         0
+NumOfAddrs          16
+NumOfCGEdge         31
+NumOfCGNode         43
+NumOfCopys          13
+NumOfFieldExpand    0
+NumOfGeps           6
+NumOfLoads          6
+NumOfSCCDetect      2
+NumOfSFRs           0
+NumOfStores         6
+NumOfValidNode      42
+NumOfValidObjNode   11
+Pointers            81
+PointsToBlkPtr      0
+PointsToConstPtr    6
+SolveIterations     2
+StoreProcessed      6
+TotalCycleNum       0
+TotalObjects        12
+TotalPWCCycleNum    0
+TotalPointers       81
+#######################################################
+
+****Persistent Points-To Cache Statistics: Andersen's analysis bitvector****
+################ (program : ffi.pre.bc)###############
+UniquePointsToSets       12
+TotalUnions              32
+PropertyUnions           32
+UniqueUnions             0
+LookupUnions             0
+PreemptiveUnions         0
+TotalComplements         86
+PropertyComplements      86
+UniqueComplements        0
+LookupComplements        0
+PreemptiveComplements    0
+TotalIntersections       12
+PropertyIntersections    12
+UniqueIntersections      0
+LookupIntersections      0
+PreemptiveIntersections  0
+#######################################################
+
+*********PTACallGraph Stats (Andersen analysis)***************
+################ (program : ffi.pre.bc)###############
+----------------Numbers stats----------------------------
+CalRetPairInCycle   0
+MaxNodeInCycle      0
+NodeInCycle         0
+TotalCycle          0
+TotalEdge           0
+TotalNode           1
+#######################################################
+
+*********Andersen Pointer Analysis Stats***************
+################ (program : ffi.pre.bc)###############
+----------------Time and memory stats--------------------
+AvgIn/OutAddrEdge   0.380952
+AvgIn/OutCopyEdge   0.452381
+AvgIn/OutEdge       1.11905
+AvgIn/OutLoadEdge   0.142857
+AvgIn/OutStoreEdge  0.142857
+AvgPtsSetSize       0.333333
+AvgTopLvlPtsSize    0.931034
+CollapseTime        0
+CopyGepTime         0
+LoadStoreTime       0
+MemoryUsageVmrss    248
+MemoryUsageVmsize   0
+SCCDetectTime       0
+SCCMergeTime        0
+TotalTime           0
+UpdateCGTime        0
+----------------Numbers stats----------------------------
+AddrProcessed       16
+CopyProcessed       10
+DummyFieldPtrs      0
+FieldObjs           0
+GepProcessed        6
+IndCallSites        0
+IndEdgeSolved       0
+LoadProcessed       6
+LocalVarInRecur     0
+MaxInAddrEdge       1
+MaxInCopyEdge       1
+MaxInLoadEdge       1
+MaxInStoreEdge      1
+MaxNodesInSCC       0
+MaxOutAddrEdge      6
+MaxOutCopyEdge      1
+MaxOutLoadEdge      1
+MaxOutStoreEdge     1
+MaxPtsSetSize       1
+MemObjects          12
+NodesInCycles       0
+NullPointer         0
+NumOfAddrs          16
+NumOfCGEdge         31
+NumOfCGNode         43
+NumOfCopys          13
+NumOfFieldExpand    0
+NumOfGeps           6
+NumOfLoads          6
+NumOfSCCDetect      2
+NumOfSFRs           0
+NumOfStores         6
+NumOfValidNode      42
+NumOfValidObjNode   11
+Pointers            81
+PointsToBlkPtr      0
+PointsToConstPtr    12
+SolveIterations     2
+StoreProcessed      6
+TotalCycleNum       0
+TotalObjects        12
+TotalPWCCycleNum    0
+TotalPointers       81
+#######################################################
+Processing Node: 0x649cc6372bc0
+Node Info: IntraICFGNode3 {fun: main}
+AddrStmt: [Var25 <-- Var26]	
+ValVar ID: 25
+   %retval = alloca i32, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63cf140
+Processing Node: 0x649cc638df80
+Node Info: IntraICFGNode4 {fun: main}
+AddrStmt: [Var28 <-- Var29]	
+ValVar ID: 28
+   %argc.addr = alloca i32, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc639e730
+Processing Node: 0x649cc638bb10
+Node Info: IntraICFGNode5 {fun: main}
+AddrStmt: [Var30 <-- Var31]	
+ValVar ID: 30
+   %argv.addr = alloca ptr, align 8 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc639eb80
+Processing Node: 0x649cc635b930
+Node Info: IntraICFGNode6 {fun: main}
+AddrStmt: [Var32 <-- Var33]	
+ValVar ID: 32
+   %require = alloca i32, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63d2e20
+Processing Node: 0x649cc63c9040
+Node Info: IntraICFGNode7 {fun: main}
+StoreStmt: [Var25 <-- Var35]	
+ValVar ID: 34
+   store i32 0, ptr %retval, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc6374a10
+Processing Node: 0x649cc6367520
+Node Info: IntraICFGNode8 {fun: main}
+StoreStmt: [Var28 <-- Var23]	
+ValVar ID: 36
+   store i32 %argc, ptr %argc.addr, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc6374e00
+Processing Node: 0x649cc6372ac0
+Node Info: IntraICFGNode9 {fun: main}
+StoreStmt: [Var30 <-- Var24]	
+ValVar ID: 37
+   store ptr %argv, ptr %argv.addr, align 8 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63750e0
+Processing Node: 0x649cc636b500
+Node Info: IntraICFGNode10 {fun: main}
+StoreStmt: [Var32 <-- Var35]	
+ValVar ID: 38
+   store i32 0, ptr %require, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63a6830
+Processing Node: 0x649cc636a4d0
+Node Info: IntraICFGNode11 {fun: main}
+LoadStmt: [Var39 <-- Var5]	
+ValVar ID: 39
+   %0 = load ptr, ptr @info_compiler, align 8 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63b47e0
+Processing Node: 0x649cc6373c80
+Node Info: IntraICFGNode12 {fun: main}
+LoadStmt: [Var40 <-- Var28]	
+ValVar ID: 40
+   %1 = load i32, ptr %argc.addr, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63b4cf0
+Processing Node: 0x649cc63dc1b0
+Node Info: IntraICFGNode13 {fun: main}
+CopyStmt: [Var41 <-- Var40]	
+ValVar ID: 41
+   %idxprom = sext i32 %1 to i64 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63a5b20
+Processing Node: 0x649cc63afcb0
+Node Info: IntraICFGNode14 {fun: main}
+GepStmt: [Var42 <-- Var39]	
+ValVar ID: 42
+   %arrayidx = getelementptr inbounds i8, ptr %0, i64 %idxprom 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63a6010
+Processing Node: 0x649cc63f3960
+Node Info: IntraICFGNode15 {fun: main}
+LoadStmt: [Var43 <-- Var42]	
+ValVar ID: 43
+   %2 = load i8, ptr %arrayidx, align 1 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63ca280
+Processing Node: 0x649cc63f6e70
+Node Info: IntraICFGNode16 {fun: main}
+CopyStmt: [Var44 <-- Var43]	
+ValVar ID: 44
+   %conv = sext i8 %2 to i32 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63ca690
+Processing Node: 0x649cc63afb50
+Node Info: IntraICFGNode17 {fun: main}
+LoadStmt: [Var45 <-- Var32]	
+ValVar ID: 45
+   %3 = load i32, ptr %require, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63d22a0
+Processing Node: 0x649cc637f760
+Node Info: IntraICFGNode18 {fun: main}
+BinaryOPStmt: [Var46 <-- (Var45 opcode13 Var44)]	
+ValVar ID: 46
+   %add = add nsw i32 %3, %conv 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63d27e0
+Processing Node: 0x649cc63cfb90
+Node Info: IntraICFGNode19 {fun: main}
+StoreStmt: [Var32 <-- Var46]	
+ValVar ID: 47
+   store i32 %add, ptr %require, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63d07c0
+Processing Node: 0x649cc63d0150
+Node Info: IntraICFGNode20 {fun: main}
+LoadStmt: [Var48 <-- Var9]	
+ValVar ID: 48
+   %4 = load ptr, ptr @info_platform, align 8 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63d0b30
+Processing Node: 0x649cc63d0380
+Node Info: IntraICFGNode21 {fun: main}
+LoadStmt: [Var49 <-- Var28]	
+ValVar ID: 49
+   %5 = load i32, ptr %argc.addr, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63d0ff0
+Processing Node: 0x649cc63cff20
+Node Info: IntraICFGNode22 {fun: main}
+CopyStmt: [Var50 <-- Var49]	
+ValVar ID: 50
+   %idxprom1 = sext i32 %5 to i64 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc6364b60
+Processing Node: 0x649cc63c9b20
+Node Info: IntraICFGNode23 {fun: main}
+GepStmt: [Var51 <-- Var48]	
+ValVar ID: 51
+   %arrayidx2 = getelementptr inbounds i8, ptr %4, i64 %idxprom1 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc6365000
+Processing Node: 0x649cc63ca950
+Node Info: IntraICFGNode24 {fun: main}
+LoadStmt: [Var52 <-- Var51]	
+ValVar ID: 52
+   %6 = load i8, ptr %arrayidx2, align 1 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63ee5b0
+Processing Node: 0x649cc63e9ab0
+Node Info: IntraICFGNode25 {fun: main}
+CopyStmt: [Var53 <-- Var52]	
+ValVar ID: 53
+   %conv3 = sext i8 %6 to i32 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63ee9c0
+Processing Node: 0x649cc638f930
+Node Info: IntraICFGNode26 {fun: main}
+LoadStmt: [Var54 <-- Var32]	
+ValVar ID: 54
+   %7 = load i32, ptr %require, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63eedf0
+Processing Node: 0x649cc638eb90
+Node Info: IntraICFGNode27 {fun: main}
+BinaryOPStmt: [Var55 <-- (Var54 opcode13 Var53)]	
+ValVar ID: 55
+   %add4 = add nsw i32 %7, %conv3 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63a1ec0
+Processing Node: 0x649cc638b730
+Node Info: IntraICFGNode28 {fun: main}
+StoreStmt: [Var32 <-- Var55]	
+ValVar ID: 56
+   store i32 %add4, ptr %require, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63a2340
+Processing Node: 0x649cc63f68a0
+Node Info: IntraICFGNode29 {fun: main}
+LoadStmt: [Var57 <-- Var12]	
+ValVar ID: 57
+   %8 = load ptr, ptr @info_arch, align 8 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63a26b0
+Processing Node: 0x649cc6369d50
+Node Info: IntraICFGNode30 {fun: main}
+LoadStmt: [Var58 <-- Var28]	
+ValVar ID: 58
+   %9 = load i32, ptr %argc.addr, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63e0a00
+Processing Node: 0x649cc636ac40
+Node Info: IntraICFGNode31 {fun: main}
+CopyStmt: [Var59 <-- Var58]	
+ValVar ID: 59
+   %idxprom5 = sext i32 %9 to i64 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63e0d70
+Processing Node: 0x649cc63734d0
+Node Info: IntraICFGNode32 {fun: main}
+GepStmt: [Var60 <-- Var57]	
+ValVar ID: 60
+   %arrayidx6 = getelementptr inbounds i8, ptr %8, i64 %idxprom5 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63e1210
+Processing Node: 0x649cc63e95e0
+Node Info: IntraICFGNode33 {fun: main}
+LoadStmt: [Var61 <-- Var60]	
+ValVar ID: 61
+   %10 = load i8, ptr %arrayidx6, align 1 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63a4c80
+Processing Node: 0x649cc637f1d0
+Node Info: IntraICFGNode34 {fun: main}
+CopyStmt: [Var62 <-- Var61]	
+ValVar ID: 62
+   %conv7 = sext i8 %10 to i32 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63a5090
+Processing Node: 0x649cc63dc550
+Node Info: IntraICFGNode35 {fun: main}
+LoadStmt: [Var63 <-- Var32]	
+ValVar ID: 63
+   %11 = load i32, ptr %require, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63a54c0
+Processing Node: 0x649cc63a57f0
+Node Info: IntraICFGNode36 {fun: main}
+BinaryOPStmt: [Var64 <-- (Var63 opcode13 Var62)]	
+ValVar ID: 64
+   %add8 = add nsw i32 %11, %conv7 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63f1330
+Processing Node: 0x649cc63721c0
+Node Info: IntraICFGNode37 {fun: main}
+StoreStmt: [Var32 <-- Var64]	
+ValVar ID: 65
+   store i32 %add8, ptr %require, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63f17b0
+Processing Node: 0x649cc6370dd0
+Node Info: IntraICFGNode38 {fun: main}
+LoadStmt: [Var66 <-- Var28]	
+ValVar ID: 66
+   %12 = load i32, ptr %argc.addr, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63f1b20
+Processing Node: 0x649cc63f5230
+Node Info: IntraICFGNode39 {fun: main}
+CopyStmt: [Var67 <-- Var66]	
+ValVar ID: 67
+   %idxprom9 = sext i32 %12 to i64 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63f1e90
+Processing Node: 0x649cc6380030
+Node Info: IntraICFGNode40 {fun: main}
+GepStmt: [Var68 <-- Var7]	
+ValVar ID: 68
+   %arrayidx10 = getelementptr inbounds [50 x i8], ptr @info_version, i64 0, i64 %idxprom9 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63f2360
+Processing Node: 0x649cc63f82a0
+Node Info: IntraICFGNode41 {fun: main}
+LoadStmt: [Var70 <-- Var68]	
+ValVar ID: 70
+   %13 = load i8, ptr %arrayidx10, align 1 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc639f0b0
+Processing Node: 0x649cc63df520
+Node Info: IntraICFGNode42 {fun: main}
+CopyStmt: [Var71 <-- Var70]	
+ValVar ID: 71
+   %conv11 = sext i8 %13 to i32 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc639f4b0
+Processing Node: 0x649cc63f2f90
+Node Info: IntraICFGNode43 {fun: main}
+LoadStmt: [Var72 <-- Var32]	
+ValVar ID: 72
+   %14 = load i32, ptr %require, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc639f8e0
+Processing Node: 0x649cc63cfdd0
+Node Info: IntraICFGNode44 {fun: main}
+BinaryOPStmt: [Var73 <-- (Var72 opcode13 Var71)]	
+ValVar ID: 73
+   %add12 = add nsw i32 %14, %conv11 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc639fca0
+Processing Node: 0x649cc63a0e90
+Node Info: IntraICFGNode45 {fun: main}
+StoreStmt: [Var32 <-- Var73]	
+ValVar ID: 74
+   store i32 %add12, ptr %require, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63a0120
+Processing Node: 0x649cc63afe00
+Node Info: IntraICFGNode46 {fun: main}
+LoadStmt: [Var75 <-- Var15]	
+ValVar ID: 75
+   %15 = load ptr, ptr @info_language_standard_default, align 8 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63e1400
+Processing Node: 0x649cc63712d0
+Node Info: IntraICFGNode47 {fun: main}
+LoadStmt: [Var76 <-- Var28]	
+ValVar ID: 76
+   %16 = load i32, ptr %argc.addr, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63e18c0
+Processing Node: 0x649cc63de510
+Node Info: IntraICFGNode48 {fun: main}
+CopyStmt: [Var77 <-- Var76]	
+ValVar ID: 77
+   %idxprom13 = sext i32 %16 to i64 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63e1bc0
+Processing Node: 0x649cc6366340
+Node Info: IntraICFGNode49 {fun: main}
+GepStmt: [Var78 <-- Var75]	
+ValVar ID: 78
+   %arrayidx14 = getelementptr inbounds i8, ptr %15, i64 %idxprom13 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63e2060
+Processing Node: 0x649cc63f77b0
+Node Info: IntraICFGNode50 {fun: main}
+LoadStmt: [Var79 <-- Var78]	
+ValVar ID: 79
+   %17 = load i8, ptr %arrayidx14, align 1 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63e2520
+Processing Node: 0x649cc63a1a40
+Node Info: IntraICFGNode51 {fun: main}
+CopyStmt: [Var80 <-- Var79]	
+ValVar ID: 80
+   %conv15 = sext i8 %17 to i32 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63e2930
+Processing Node: 0x649cc63f7e80
+Node Info: IntraICFGNode52 {fun: main}
+LoadStmt: [Var81 <-- Var32]	
+ValVar ID: 81
+   %18 = load i32, ptr %require, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63a6f40
+Processing Node: 0x649cc6366950
+Node Info: IntraICFGNode53 {fun: main}
+BinaryOPStmt: [Var82 <-- (Var81 opcode13 Var80)]	
+ValVar ID: 82
+   %add16 = add nsw i32 %18, %conv15 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63a7300
+Processing Node: 0x649cc6360d10
+Node Info: IntraICFGNode54 {fun: main}
+StoreStmt: [Var32 <-- Var82]	
+ValVar ID: 83
+   store i32 %add16, ptr %require, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63a7780
+Processing Node: 0x649cc63f7ab0
+Node Info: IntraICFGNode55 {fun: main}
+LoadStmt: [Var84 <-- Var18]	
+ValVar ID: 84
+   %19 = load ptr, ptr @info_language_extensions_default, align 8 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63a7af0
+Processing Node: 0x649cc63b0480
+Node Info: IntraICFGNode56 {fun: main}
+LoadStmt: [Var85 <-- Var28]	
+ValVar ID: 85
+   %20 = load i32, ptr %argc.addr, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63a7fb0
+Processing Node: 0x649cc63de250
+Node Info: IntraICFGNode57 {fun: main}
+CopyStmt: [Var86 <-- Var85]	
+ValVar ID: 86
+   %idxprom17 = sext i32 %20 to i64 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63a8320
+Processing Node: 0x649cc638d400
+Node Info: IntraICFGNode58 {fun: main}
+GepStmt: [Var87 <-- Var84]	
+ValVar ID: 87
+   %arrayidx18 = getelementptr inbounds i8, ptr %19, i64 %idxprom17 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc6386650
+Processing Node: 0x649cc63db340
+Node Info: IntraICFGNode59 {fun: main}
+LoadStmt: [Var88 <-- Var87]	
+ValVar ID: 88
+   %21 = load i8, ptr %arrayidx18, align 1 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc6386b10
+Processing Node: 0x649cc63da810
+Node Info: IntraICFGNode60 {fun: main}
+CopyStmt: [Var89 <-- Var88]	
+ValVar ID: 89
+   %conv19 = sext i8 %21 to i32 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc6386f20
+Processing Node: 0x649cc63db8e0
+Node Info: IntraICFGNode61 {fun: main}
+LoadStmt: [Var90 <-- Var32]	
+ValVar ID: 90
+   %22 = load i32, ptr %require, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc6387350
+Processing Node: 0x649cc6368210
+Node Info: IntraICFGNode62 {fun: main}
+BinaryOPStmt: [Var91 <-- (Var90 opcode13 Var89)]	
+ValVar ID: 91
+   %add20 = add nsw i32 %22, %conv19 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc6387b10
+Processing Node: 0x649cc63c5720
+Node Info: IntraICFGNode63 {fun: main}
+StoreStmt: [Var32 <-- Var91]	
+ValVar ID: 92
+   store i32 %add20, ptr %require, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63b50f0
+Processing Node: 0x649cc6360740
+Node Info: IntraICFGNode64 {fun: main}
+LoadStmt: [Var93 <-- Var30]	
+ValVar ID: 93
+   %23 = load ptr, ptr %argv.addr, align 8 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63b5460
+Processing Node: 0x649cc637f590
+Node Info: IntraICFGNode65 {fun: main}
+LoadStmt: [Var94 <-- Var32]	
+ValVar ID: 94
+   %24 = load i32, ptr %require, align 4 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63b5920
+Processing Node: 0x649cc63dc380
+Node Info: IntraICFGNode66 {fun: main}
+   ret i32 %24 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Processing Node: 0x649cc63e8e40
+Node Info: FunExitICFGNode2 {fun: main}
+PhiStmt: [Var22 <-- ([Var94, ICFGNode66],)]	
+ValVar ID: 95
+   ret i32 %24 
+Function associated with node: 0x649cc6364080
+Basic block associated with node: 0x649cc63de190
+Associated SVF Statements:
+  - 0x649cc63b5cd0
+Writing 'callgraph_initial.dot.dot'...DOT file generated: ./output/main_view_icfg_output_SVF.dot
+DOT file generated: ./output/main_node_and_edges_only_icfg_SVF.dot
+ICFG Traversal Complete for function: main.
+svf-driver finished with status: ExitStatus(unix_wait_status(0))
+cargo:rerun-if-changed=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/build/whisper-rs-sys-802e3c6a7b333056/out/build/CMakeFiles/3.31.4/CompilerIdC/CMakeCCompilerId.c
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package rust-iwhisper-example target rust-iwhisper-example at /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug",
+    "--extern=regex_syntax=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libregex_syntax-f3bd2c09aaba6b9f.rlib",
+    "--extern=libloading=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/liblibloading-b1780ac76b809838.rlib",
+    "--extern=lazycell=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/liblazycell-470586395cc53f3d.rlib",
+    "--extern=log=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/liblog-59a169bde0af823e.rlib",
+    "--extern=syn=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libsyn-6d61e60c651484e5.rlib",
+    "--extern=quote=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libquote-42890af6b3049dff.rlib",
+    "--extern=regex=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libregex-072e15e07902c8e9.rlib",
+    "--extern=nom=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libnom-55cf561f7680512f.rlib",
+    "--extern=regex_automata=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libregex_automata-84bdc58f5efc95b0.rlib",
+    "--extern=rustix=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/librustix-53571251b2a55991.rlib",
+    "--extern=either=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libeither-dbe9eb68f5606bb3.rlib",
+    "--extern=clang_sys=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libclang_sys-80c6f52dd658074a.rlib",
+    "--extern=prettyplease=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libprettyplease-c7323ca4e2a0112c.rlib",
+    "--extern=whisper_rs_sys=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libwhisper_rs_sys-c40a369490e4cb5f.rlib",
+    "--extern=linux_raw_sys=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/liblinux_raw_sys-470ca7522ace30d5.rlib",
+    "--extern=libc=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/liblibc-6070da7c80725585.rlib",
+    "--extern=cfg_if=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libcfg_if-d0d88294126870fb.rlib",
+    "--extern=cexpr=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libcexpr-bd8f3feecf20fbaf.rlib",
+    "--extern=itertools=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libitertools-85d561e223e84618.rlib",
+    "--extern=proc_macro2=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libproc_macro2-66cc3e099f5a1ea6.rlib",
+    "--extern=shlex=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libshlex-f4c3659040844f7b.rlib",
+    "--extern=hound=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libhound-0eb2d6ac870f9505.rlib",
+    "--extern=bindgen=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libbindgen-9fffa3cfee5a820c.rlib",
+    "--extern=cc=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libcc-8ff03b6412dcff4a.rlib",
+    "--extern=which=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libwhich-1eef13de4715c270.rlib",
+    "--extern=lazy_static=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/liblazy_static-6731096c945e6a32.rlib",
+    "--extern=whisper_rs=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libwhisper_rs-531178ea2194ea0f.rlib",
+    "--extern=bitflags=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libbitflags-b657d03220f102ab.rlib",
+    "--extern=fs_extra=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libfs_extra-44d5508250f1ceef.rlib",
+    "--extern=cmake=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libcmake-e5748e392b6e6e93.rlib",
+    "--extern=home=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libhome-4a4df8ad7b09f373.rlib",
+    "--extern=glob=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libglob-ead686df6db2d0d2.rlib",
+    "--extern=rustc_hash=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/librustc_hash-27694c26883e36a3.rlib",
+    "--extern=unicode_ident=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libunicode_ident-7b828347d8713ecd.rlib",
+    "--extern=minimal_lexical=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libminimal_lexical-5f3b8bf59460c2c4.rlib",
+    "--extern=memchr=/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/target/debug/deps/libmemchr-806f1f6be488454b.rlib",
+]
+Loading LLVM JSON file: main_A_FINAL_ICFG.json
+Global ICFG saved to global_icfg.json
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb1::rust::main::bb1_internal", outgoing_edge: "rust::main::bb2", id: "26f653fbfe7a0f4b", mir_var: None, llvm_var: None, is_internal: Some(true) }
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb15::rust::main::bb15_internal", outgoing_edge: "rust::main::bb16", id: "44643e6361bffa", mir_var: Some("_34"), llvm_var: Some("Local _0"), is_internal: Some(true) }
+DUMMYRET normalize: '_34'->'Local(34)', 'Local _0'->'Local(_0)'
+BEFORE JOIN: Local(34)=BOTTOM, Local(_0)=BOTTOM
+JOINED Local(34)=BOTTOM
+AFTER SET: mem_ret[Local(34)]=BOTTOM
+TAINT Local(34)={}
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb1::rust::main::bb1_internal", outgoing_edge: "rust::main::bb2", id: "26f653fbfe7a0f4b", mir_var: None, llvm_var: None, is_internal: Some(true) }
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::read_wav_to_f32::bb7::rust::read_wav_to_f32::bb7_internal", outgoing_edge: "rust::read_wav_to_f32::bb8", id: "2770bb87d64d92da", mir_var: None, llvm_var: None, is_internal: Some(true) }
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::read_wav_to_f32::bb6::rust::read_wav_to_f32::bb6_internal", outgoing_edge: "rust::read_wav_to_f32::bb7", id: "cdb17cddf71e2f0f", mir_var: None, llvm_var: None, is_internal: Some(true) }
+Final Abstract State: {"rust::main::{closure#0}::terminate": {{"Local(_4)", "Local(_8)"}: FREED}, "dummyRet::rust::read_wav_to_f32::_8::rust::read_wav_to_f32::bb6_internal": {{"Local(_2)"}: FREED}, "rust::main::{closure#0}::bb4": {{"Local(_8)"}: FREED}, "dummyCall::rust::read_wav_to_f32::bb7::rust::read_wav_to_f32::bb7_internal": {{"Local(_2)"}: FREED}, "rust::main::{closure#0}::bb8": {}, "rust::main::bb14": {{"Local(_4)"}: FREED, {"Local(_6)"}: MV}, "rust::read_wav_to_f32::{closure#0}::bb1": {{"Local(_2)"}: FREED}, "rust::read_wav_to_f32::bb8": {{"Local(_2)"}: FREED}, "rust::main::bb28": {{"Local(_11)", "Local(_16)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)"}: FREED, {"Local(_6)"}: MV}, "rust::main::{closure#0}::bb0": {}, "rust::main::bb1": {}, "rust::read_wav_to_f32::bb1": {}, "rust::main::bb8": {{"Local(_4)"}: FREED, {"Local(_6)"}: MV}, "rust::main::terminate": {{"Local(_1)", "Local(_11)", "Local(_16)", "Local(_2)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)"}: FREED, {"Local(_11)", "Local(_16)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)", "Local(_8)"}: TOP, {"Local(_6)"}: MV, {"Local(_7)"}: MV}, "rust::main::bb37": {{"Local(_1)", "Local(_11)", "Local(_16)", "Local(_2)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)"}: FREED, {"Local(_11)", "Local(_16)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)", "Local(_8)"}: TOP, {"Local(_6)"}: MV, {"Local(_7)"}: MV}, "rust::main::bb13": {{"Local(_4)"}: FREED, {"Local(_6)"}: MV}, "rust::read_wav_to_f32::bb5": {}, "rust::read_wav_to_f32::bb10": {{"Local(_2)"}: FREED}, "rust::main::bb10": {{"Local(_4)"}: FREED, {"Local(_6)"}: MV}, "rust::main::bb5": {{"Local(_4)"}: FREED, {"Local(_6)"}: MV}, "rust::main::bb21": {{"Local(_11)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_45)"}: FREED, {"Local(_6)"}: MV}, "rust::read_wav_to_f32::{closure#0}::bb0": {{"Local(_2)"}: FREED}, "rust::main::bb19": {{"Local(_11)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_45)"}: FREED, {"Local(_6)"}: MV}, "rust::main::bb4": {{"Local(_4)"}: FREED, {"Local(_7)"}: MV}, "rust::main::{closure#0}::bb1": {}, "rust::main::bb36": {{"Local(_11)", "Local(_16)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)"}: FREED, {"Local(_11)", "Local(_16)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)", "Local(_8)"}: FREED, {"Local(_4)", "Local(_8)"}: TOP, {"Local(_6)"}: MV, {"Local(_7)"}: MV}, "rust::main::bb12": {{"Local(_4)"}: FREED, {"Local(_6)"}: MV}, "rust::main::bb2": {{"Local(_4)", "Local(_8)"}: FREED}, "rust::main::bb18": {{"Local(_11)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)"}: FREED, {"Local(_6)"}: MV}, "rust::main::bb17": {{"Local(_11)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)"}: FREED, {"Local(_6)"}: MV}, "rust::main::bb6": {{"Local(_4)"}: FREED, {"Local(_6)"}: MV}, "rust::main::{closure#0}::bb10": {}, "dummyCall::rust::main::bb15::rust::main::bb15_internal": {{"Local(_4)"}: FREED, {"Local(_6)"}: MV}, "rust::read_wav_to_f32::bb11": {{"Local(_2)"}: FREED}, "rust::main::bb35": {{"Local(_11)", "Local(_16)", "Local(_2)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)"}: FREED, {"Local(_11)", "Local(_16)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)", "Local(_8)"}: TOP, {"Local(_6)"}: MV, {"Local(_7)"}: MV}, "rust::main::bb20": {{"Local(_11)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_45)"}: FREED, {"Local(_6)"}: MV}, "rust::main::bb25": {{"Local(_11)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_45)"}: FREED, {"Local(_6)"}: MV}, "rust::main::bb30": {{"Local(_1)", "Local(_11)", "Local(_16)", "Local(_2)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)"}: FREED, {"Local(_11)", "Local(_16)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)", "Local(_8)"}: TOP, {"Local(_6)"}: MV, {"Local(_7)"}: MV}, "rust::read_wav_to_f32::bb9": {{"Local(_2)"}: FREED}, "rust::main::bb0": {}, "rust::main::{closure#0}::bb12": {{"Local(_4)", "Local(_8)"}: FREED}, "rust::main::{closure#0}::bb3": {{"Local(_8)"}: FREED}, "rust::main::bb31": {{"Local(_11)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)"}: FREED, {"Local(_6)"}: MV}, "rust::read_wav_to_f32::bb12": {{"Local(_2)"}: FREED}, "rust::read_wav_to_f32::terminate": {{"Local(_2)"}: FREED}, "rust::main::bb33": {{"Local(_11)", "Local(_16)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)"}: FREED, {"Local(_6)"}: MV}, "rust::read_wav_to_f32::bb4": {}, "rust::read_wav_to_f32::bb2": {}, "dummyCall::rust::main::bb1::rust::main::bb1_internal": {}, "rust::main::bb32": {{"Local(_11)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_45)"}: FREED, {"Local(_6)"}: MV}, "rust::main::bb7": {{"Local(_4)"}: FREED, {"Local(_6)"}: MV}, "rust::read_wav_to_f32::bb3": {}, "rust::main::{closure#0}::bb13": {{"Local(_8)"}: FREED}, "rust::main::{closure#0}::bb2": {{"Local(_8)"}: FREED}, "rust::main::{closure#0}::bb5": {}, "dummyRet::rust::main::_4::rust::main::bb1_internal": {{"Local(_4)", "Local(_8)"}: FREED}, "rust::main::bb11": {{"Local(_4)"}: FREED, {"Local(_6)"}: MV}, "rust::main::bb22": {{"Local(_11)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_45)"}: FREED, {"Local(_6)"}: MV}, "dummyCall::rust::read_wav_to_f32::bb6::rust::read_wav_to_f32::bb6_internal": {}, "rust::main::{closure#0}::bb6": {{"Local(_4)", "Local(_8)"}: FREED}, "rust::read_wav_to_f32::bb7": {{"Local(_2)"}: FREED}, "rust::main::{closure#0}::bb15": {{"Local(_4)", "Local(_8)"}: FREED}, "rust::main::bb29": {{"Local(_11)", "Local(_16)", "Local(_2)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)"}: FREED, {"Local(_11)", "Local(_16)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)", "Local(_8)"}: TOP, {"Local(_6)"}: MV, {"Local(_7)"}: MV}, "rust::main::bb3": {{"Local(_4)"}: FREED, {"Local(_8)"}: ALLOC}, "rust::main::bb16": {{"Local(_11)", "Local(_33)", "Local(_36)", "Local(_4)"}: FREED, {"Local(_6)"}: MV}, "rust::main::{closure#0}::bb7": {}, "rust::main::bb23": {{"Local(_11)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_45)"}: FREED, {"Local(_6)"}: MV}, "rust::main::bb24": {{"Local(_11)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_45)"}: FREED, {"Local(_6)"}: MV}, "rust::main::{closure#0}::bb14": {{"Local(_4)", "Local(_8)"}: FREED}, "dummyRet::rust::read_wav_to_f32::_7::rust::read_wav_to_f32::bb7_internal": {{"Local(_2)"}: FREED}, "rust::main::bb27": {{"Local(_11)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)"}: FREED, {"Local(_6)"}: MV}, "rust::main::bb26": {{"Local(_11)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)"}: FREED, {"Local(_6)"}: MV}, "rust::main::{closure#0}::bb9": {}, "rust::main::{closure#0}::bb11": {{"Local(_8)"}: FREED}, "rust::main::bb9": {{"Local(_4)"}: FREED, {"Local(_6)"}: MV}, "rust::main::bb34": {{"Local(_11)", "Local(_33)", "Local(_36)", "Local(_38)", "Local(_4)", "Local(_43)", "Local(_45)"}: FREED, {"Local(_6)"}: MV}, "dummyRet::rust::main::15::rust::main::bb15_internal": {{"Local(_11)", "Local(_33)", "Local(_36)", "Local(_4)"}: FREED, {"Local(_6)"}: MV}, "rust::read_wav_to_f32::bb6": {}, "rust::main::bb15": {{"Local(_4)"}: FREED, {"Local(_6)"}: MV}}
+Final Taint State: {
+    "rust::read_wav_to_f32::bb7": {
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "rust::main::bb1": {},
+    "rust::read_wav_to_f32::bb5": {},
+    "rust::main::bb13": {
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+    },
+    "dummyRet::rust::read_wav_to_f32::_7::rust::read_wav_to_f32::bb7_internal": {
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "rust::main::bb29": {
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_16)": {
+            "free",
+        },
+        "Local(_7)": {
+            "assign",
+        },
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_2)": {
+            "free",
+        },
+        "Local(_43)": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::bb15": {
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_8)": {
+            "free",
+        },
+    },
+    "rust::main::bb23": {
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_36)": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::bb8": {},
+    "rust::main::bb0": {},
+    "rust::main::{closure#0}::bb4": {
+        "Local(_8)": {
+            "free",
+        },
+    },
+    "dummyCall::rust::main::bb1::rust::main::bb1_internal": {},
+    "rust::read_wav_to_f32::bb11": {
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "rust::main::bb30": {
+        "Local(_2)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_7)": {
+            "assign",
+        },
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_16)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_43)": {
+            "free",
+        },
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+    },
+    "rust::main::bb17": {
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_33)": {
+            "free",
+        },
+    },
+    "rust::main::bb11": {
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+    },
+    "rust::read_wav_to_f32::{closure#0}::bb0": {
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "dummyRet::rust::read_wav_to_f32::_8::rust::read_wav_to_f32::bb6_internal": {
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::bb3": {
+        "Local(_8)": {
+            "free",
+        },
+    },
+    "rust::main::bb19": {
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "free",
+        },
+    },
+    "rust::main::bb9": {
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+    },
+    "rust::main::bb10": {
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_4)": {
+            "free",
+        },
+    },
+    "rust::main::bb15": {
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_4)": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::bb11": {
+        "Local(_8)": {
+            "free",
+        },
+    },
+    "rust::read_wav_to_f32::bb9": {
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "rust::read_wav_to_f32::bb10": {
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "dummyRet::rust::main::15::rust::main::bb15_internal": {
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_33)": {
+            "free",
+        },
+    },
+    "rust::main::bb4": {
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_7)": {
+            "assign",
+        },
+    },
+    "rust::main::bb6": {
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_4)": {
+            "free",
+        },
+    },
+    "rust::main::bb28": {
+        "Local(_16)": {
+            "free",
+        },
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_43)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+    },
+    "rust::main::bb25": {
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_36)": {
+            "free",
+        },
+    },
+    "dummyCall::rust::read_wav_to_f32::bb6::rust::read_wav_to_f32::bb6_internal": {},
+    "rust::main::{closure#0}::bb13": {
+        "Local(_8)": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::bb14": {
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_8)": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::bb6": {
+        "Local(_8)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+    },
+    "rust::read_wav_to_f32::bb12": {
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "rust::main::bb26": {
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_43)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+    },
+    "rust::main::bb32": {
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+    },
+    "rust::main::bb24": {
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+    },
+    "rust::read_wav_to_f32::bb6": {},
+    "rust::main::terminate": {
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_16)": {
+            "free",
+        },
+        "Local(_43)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_7)": {
+            "assign",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "rust::main::bb31": {
+        "Local(_43)": {
+            "free",
+        },
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+        "Local(_33)": {
+            "free",
+        },
+    },
+    "rust::read_wav_to_f32::terminate": {
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::bb0": {},
+    "rust::main::{closure#0}::terminate": {
+        "Local(_8)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+    },
+    "dummyCall::rust::main::bb15::rust::main::bb15_internal": {
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+    },
+    "rust::main::bb27": {
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_43)": {
+            "free",
+        },
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_38)": {
+            "free",
+        },
+    },
+    "rust::read_wav_to_f32::bb8": {
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "rust::main::bb3": {
+        "Local(_4)": {
+            "free",
+        },
+    },
+    "rust::read_wav_to_f32::bb1": {},
+    "rust::read_wav_to_f32::bb4": {},
+    "rust::main::{closure#0}::bb12": {
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_8)": {
+            "free",
+        },
+    },
+    "rust::main::bb37": {
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_43)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_2)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_16)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_7)": {
+            "assign",
+        },
+    },
+    "dummyRet::rust::main::_4::rust::main::bb1_internal": {
+        "Local(_8)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+    },
+    "rust::main::bb5": {
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_4)": {
+            "free",
+        },
+    },
+    "rust::main::bb35": {
+        "Local(_43)": {
+            "free",
+        },
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_2)": {
+            "free",
+        },
+        "Local(_16)": {
+            "free",
+        },
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_7)": {
+            "assign",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+    },
+    "rust::main::bb20": {
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+    },
+    "rust::main::bb16": {
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+    },
+    "rust::main::bb22": {
+        "Local(_45)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_11)": {
+            "free",
+        },
+    },
+    "dummyCall::rust::read_wav_to_f32::bb7::rust::read_wav_to_f32::bb7_internal": {
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "rust::main::bb36": {
+        "Local(_7)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_43)": {
+            "free",
+        },
+        "Local(_16)": {
+            "free",
+        },
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_8)": {
+            "free",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+    },
+    "rust::main::bb34": {
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_43)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+        "Local(_33)": {
+            "free",
+        },
+    },
+    "rust::main::bb14": {
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_4)": {
+            "free",
+        },
+    },
+    "rust::read_wav_to_f32::bb3": {},
+    "rust::main::{closure#0}::bb2": {
+        "Local(_8)": {
+            "free",
+        },
+    },
+    "rust::main::bb7": {
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_4)": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::bb9": {},
+    "rust::read_wav_to_f32::{closure#0}::bb1": {
+        "Local(_2)": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::bb7": {},
+    "rust::read_wav_to_f32::bb2": {},
+    "rust::main::{closure#0}::bb5": {},
+    "rust::main::bb21": {
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_33)": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::bb10": {},
+    "rust::main::{closure#0}::bb1": {},
+    "rust::main::bb33": {
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_16)": {
+            "free",
+        },
+        "Local(_36)": {
+            "free",
+        },
+        "Local(_45)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_43)": {
+            "free",
+        },
+    },
+    "rust::main::bb8": {
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+    },
+    "rust::main::bb2": {
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_8)": {
+            "free",
+        },
+    },
+    "rust::main::bb12": {
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+    },
+    "rust::main::bb18": {
+        "Local(_11)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_38)": {
+            "free",
+        },
+        "Local(_33)": {
+            "free",
+        },
+        "Local(_36)": {
+            "free",
+        },
+    },
+}
+Tracking variable 'Local(_6)' from block 'rust::main::bb13' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb29' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::main::bb29' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb23' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::main::bb30' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb30' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb17' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb11' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb19' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb9' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb10' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb15' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'dummyRet::rust::main::15::rust::main::bb15_internal' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::main::bb4' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb28' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb25' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb26' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb32' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb24' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::terminate' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::main::terminate' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb31' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'dummyCall::rust::main::bb15::rust::main::bb15_internal' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb27' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb37' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::main::bb37' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb5' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb35' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::main::bb35' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb20' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb16' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb22' (markers: {"assign"})
+Tracking variable 'Local(_7)' from block 'rust::main::bb36' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb36' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb34' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb14' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb7' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb21' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb33' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb8' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb12' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb18' (markers: {"assign"})
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs:61:9: 61:10 (#14), scope: scope[0] }, kind: drop(_4) -> [return: bb12, unwind continue] }' -> '_4'
+No tracked variable found per '_4' o 'Local(_4)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs:61:9: 61:10 (#0), scope: scope[1] }, kind: drop(_8) -> [return: bb2, unwind: bb14] }' -> '_8'
+No tracked variable found per '_8' o 'Local(_8)'
+-> Skip Drop in 'rust::main::{closure#0}::bb13' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::{closure#0}::bb14' because has an unwind incoming edge
+No tracking info per MIR var 'Local(_5) [mutable]'
+-> DummyRet node 'dummyRet::rust::main::_4::rust::main::bb1_internal': transferring from LLVM var None to MIR var None
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs:62:7: 62:8 (#0), scope: scope[1] }, kind: drop(_4) -> [return: bb3, unwind: bb36] }' -> '_4'
+No tracked variable found per '_4' o 'Local(_4)'
+-> DummyRet node 'dummyRet::rust::main::15::rust::main::bb15_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_34")
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs:86:1: 86:2 (#0), scope: scope[7] }, kind: drop(_36) -> [return: bb23, unwind: bb27] }' -> '_36'
+No tracked variable found per '_36' o 'Local(_36)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs:86:1: 86:2 (#0), scope: scope[6] }, kind: drop(_33) -> [return: bb24, unwind: bb34] }' -> '_33'
+No tracked variable found per '_33' o 'Local(_33)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs:86:1: 86:2 (#0), scope: scope[3] }, kind: drop(_11) -> [return: bb25, unwind: bb36] }' -> '_11'
+No tracked variable found per '_11' o 'Local(_11)'
+-> Skip Drop in 'rust::main::bb26' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb27' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb28' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs:84:38: 84:39 (#0), scope: scope[8] }, kind: drop(_43) -> [return: bb26, unwind terminate(cleanup)] }' -> '_43'
+No tracked variable found per '_43' o 'Local(_43)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs:86:1: 86:2 (#0), scope: scope[4] }, kind: drop(_16) -> [return: bb28, unwind terminate(cleanup)] }' -> '_16'
+No tracked variable found per '_16' o 'Local(_16)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs:86:1: 86:2 (#0), scope: scope[0] }, kind: drop(_2) -> [return: bb29, unwind terminate(cleanup)] }' -> '_2'
+No tracked variable found per '_2' o 'Local(_2)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs:86:1: 86:2 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb30, unwind terminate(cleanup)] }' -> '_1'
+No tracked variable found per '_1' o 'Local(_1)'
+No tracking info per MIR var 'Local(_9) [mutable]'
+-> DummyRet node 'dummyRet::rust::read_wav_to_f32::_8::rust::read_wav_to_f32::bb6_internal': transferring from LLVM var None to MIR var None
+No tracking info per MIR var 'Local(_8) [mutable]'
+-> DummyRet node 'dummyRet::rust::read_wav_to_f32::_7::rust::read_wav_to_f32::bb7_internal': transferring from LLVM var None to MIR var None
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs:29:1: 29:2 (#0), scope: scope[0] }, kind: drop(_2) -> [return: bb10, unwind continue] }' -> '_2'
+No tracked variable found per '_2' o 'Local(_2)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs:29:1: 29:2 (#0), scope: scope[0] }, kind: drop(_2) -> [return: bb10, unwind continue] }' -> '_2'
+No tracked variable found per '_2' o 'Local(_2)'
+-> Skip Drop in 'rust::read_wav_to_f32::bb11' because has an unwind incoming edge
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_7)}": 1, "{Local(_6)}": 1}
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

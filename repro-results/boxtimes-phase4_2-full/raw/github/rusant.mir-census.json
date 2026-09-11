@@ -1,0 +1,78 @@
+{
+  "call_counts": {
+    "<std::ffi::CString as std::ops::Deref>::deref": 1,
+    "core::fmt::rt::Argument::<'_>::new_debug::<&str>": 1,
+    "open::that::<&str>": 1,
+    "open_url": 1,
+    "std::ffi::CStr::as_ptr": 1,
+    "std::ffi::CStr::from_ptr::<'_>": 2,
+    "std::ffi::CStr::to_str": 2,
+    "std::ffi::CString::into_raw": 1,
+    "std::ffi::CString::new::<&str>": 2,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 1,
+    "std::io::_print": 1,
+    "std::ptr::null_mut::<std::ffi::c_void>": 1,
+    "std::result::Result::<&str, std::str::Utf8Error>::unwrap": 2,
+    "std::result::Result::<(), std::io::Error>::unwrap": 1,
+    "std::result::Result::<std::ffi::CString, std::ffi::NulError>::expect": 1,
+    "std::result::Result::<std::ffi::CString, std::ffi::NulError>::unwrap": 1
+  },
+  "call_total": 20,
+  "memory_api_counts": {
+    "borrowed_raw_pointer_view": 1,
+    "cstr_from_ptr": 2,
+    "cstring_into_raw": 1
+  },
+  "memory_api_examples": {
+    "borrowed_raw_pointer_view": [
+      "std::ffi::CStr::as_ptr"
+    ],
+    "cstr_from_ptr": [
+      "std::ffi::CStr::from_ptr::<'_>"
+    ],
+    "cstring_into_raw": [
+      "std::ffi::CString::into_raw"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _20]"
+    ],
+    "pointer_cast": [
+      "copy _1 as *const i8 (PtrToPtr)",
+      "move _7 as *mut i8 (PtrToPtr)",
+      "copy _5 as *const i8 (PtrToPtr)"
+    ],
+    "ref": [
+      "&_1",
+      "&_11",
+      "&_19"
+    ],
+    "unknown_unhandled": [
+      "const \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\"",
+      "const \"CString::new failed\"",
+      "const main::promoted[0]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 1,
+    "pointer_cast": 3,
+    "ref": 3,
+    "unknown_unhandled": 3
+  },
+  "rvalue_total": 10,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 1,
+    "unknown_unhandled": 3
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "rusant",
+  "terminator_kind_counts": {
+    "Call": 20,
+    "Drop": 2,
+    "Return": 2,
+    "Unhandled": 1,
+    "UnwindResume": 1
+  }
+}

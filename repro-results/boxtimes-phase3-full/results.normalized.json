@@ -1,0 +1,266 @@
+{
+  "boxed_bool__df": [
+    "DF"
+  ],
+  "boxed_bool__ml": [
+    "ML"
+  ],
+  "boxed_bool__uaf": [
+    "UAF"
+  ],
+  "boxed_char__df": [
+    "DF"
+  ],
+  "boxed_char__ml": [
+    "ML"
+  ],
+  "boxed_char__uaf": [
+    "UAF"
+  ],
+  "boxed_f32__df": [
+    "DF"
+  ],
+  "boxed_f32__ml": [
+    "ML"
+  ],
+  "boxed_f32__uaf": [
+    "UAF"
+  ],
+  "boxed_f64__df": [
+    "DF"
+  ],
+  "boxed_f64__ml": [
+    "ML"
+  ],
+  "boxed_f64__uaf": [
+    "UAF"
+  ],
+  "boxed_i128__df": [
+    "DF"
+  ],
+  "boxed_i128__ml": [
+    "ML"
+  ],
+  "boxed_i128__uaf": [
+    "UAF"
+  ],
+  "boxed_i16__df": [
+    "DF"
+  ],
+  "boxed_i16__ml": [
+    "ML"
+  ],
+  "boxed_i16__uaf": [
+    "UAF"
+  ],
+  "boxed_i32__df": [
+    "DF"
+  ],
+  "boxed_i32__ml": [
+    "ML"
+  ],
+  "boxed_i32__uaf": [
+    "UAF"
+  ],
+  "boxed_i64__df": [
+    "DF"
+  ],
+  "boxed_i64__ml": [
+    "ML"
+  ],
+  "boxed_i64__uaf": [
+    "UAF"
+  ],
+  "boxed_i8__df": [
+    "DF"
+  ],
+  "boxed_i8__ml": [
+    "ML"
+  ],
+  "boxed_i8__uaf": [
+    "UAF"
+  ],
+  "boxed_isize__df": [
+    "DF"
+  ],
+  "boxed_isize__ml": [
+    "ML"
+  ],
+  "boxed_isize__uaf": [
+    "UAF"
+  ],
+  "boxed_u128__df": [
+    "DF"
+  ],
+  "boxed_u128__ml": [
+    "ML"
+  ],
+  "boxed_u128__uaf": [
+    "UAF"
+  ],
+  "boxed_u16__df": [
+    "DF"
+  ],
+  "boxed_u16__ml": [
+    "ML"
+  ],
+  "boxed_u16__uaf": [
+    "UAF"
+  ],
+  "boxed_u32__df": [
+    "DF"
+  ],
+  "boxed_u32__ml": [
+    "ML"
+  ],
+  "boxed_u32__uaf": [
+    "UAF"
+  ],
+  "boxed_u64__df": [
+    "DF"
+  ],
+  "boxed_u64__ml": [
+    "ML"
+  ],
+  "boxed_u64__uaf": [
+    "UAF"
+  ],
+  "boxed_u8__df": [
+    "DF"
+  ],
+  "boxed_u8__ml": [
+    "ML"
+  ],
+  "boxed_u8__uaf": [
+    "UAF"
+  ],
+  "boxed_usize__df": [
+    "DF"
+  ],
+  "boxed_usize__ml": [
+    "ML"
+  ],
+  "boxed_usize__uaf": [
+    "UAF"
+  ],
+  "branch_df_mem_leak_ffi": [
+    "DF",
+    "ML",
+    "UB_FFI"
+  ],
+  "c-callback-rust-closure": [
+    "ML"
+  ],
+  "clean_cstring_no_errors_only_rust": [],
+  "clean_into_from_raw": [],
+  "clean_mul_fn_ffi_no_errors": [],
+  "clean_struct_point_mem_leak_into_raw_no_errors": [],
+  "closure_df": [
+    "DF"
+  ],
+  "concurrent-verification": [],
+  "cstr_cargo_df_ffi": [
+    "DF",
+    "UAF",
+    "UB_FFI"
+  ],
+  "cstr_expect_uaf_and_ub_ffi": [
+    "UAF",
+    "UB_FFI"
+  ],
+  "cstring_df_only_rust": [
+    "DF"
+  ],
+  "cstringcargo_df_ffi": [
+    "DF",
+    "UB_FFI"
+  ],
+  "cstringcargo_enum_df_only_rust": [
+    "DF"
+  ],
+  "df_rand_cargo_c_ffi": [
+    "DF",
+    "UAF",
+    "UB_FFI"
+  ],
+  "explicit_drop_df_only_rust": [
+    "DF"
+  ],
+  "for_df_ffi": [
+    "DF",
+    "UB_FFI"
+  ],
+  "for_memory_leak_ffi": [
+    "ML"
+  ],
+  "lock-free": [
+    "ML"
+  ],
+  "lock_free_non_blocking_linked_list": [],
+  "napkin-math-test": [],
+  "noGenerator": [
+    "ML"
+  ],
+  "openapi-client-gen": [],
+  "rc-playground": [],
+  "rusant": [
+    "ML"
+  ],
+  "rust-boks": [],
+  "rust_hw3": [],
+  "rust_memory": [
+    "ML"
+  ],
+  "shared-register": [
+    "ML"
+  ],
+  "skip-list-test": [
+    "ML"
+  ],
+  "square": [],
+  "stackswap-coroutines": [],
+  "std_mem_forget_mem_leak_rust": [
+    "ML"
+  ],
+  "struct_point_df_only_rust": [
+    "DF"
+  ],
+  "struct_point_mem_leak": [
+    "ML"
+  ],
+  "uaf_mem_leak_ffi": [
+    "ML",
+    "UAF",
+    "UB_FFI"
+  ],
+  "uaf_read_ptr": [
+    "UAF"
+  ],
+  "unsafely-created-owned-type": [],
+  "unsized_struct": [
+    "ML"
+  ],
+  "vuln_only_mem_leak_but_df_branch_overapprox_FFI": [
+    "DF",
+    "ML",
+    "UB_FFI"
+  ],
+  "warning_ub_bool": [
+    "UB_FFI"
+  ],
+  "warning_ub_int": [
+    "UB_FFI"
+  ],
+  "warning_ub_mult": [
+    "UB_FFI"
+  ],
+  "warning_ub_string": [
+    "UB_FFI"
+  ],
+  "wasm-demo": [
+    "ML"
+  ],
+  "whisper-rs-example": [
+    "ML"
+  ]
+}

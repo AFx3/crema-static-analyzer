@@ -1,0 +1,87 @@
+{
+  "call_counts": {
+    "<str as std::string::ToString>::to_string": 1,
+    "core::fmt::rt::Argument::<'_>::new_display::<i32>": 2,
+    "free_int": 1,
+    "std::boxed::Box::<i32>::into_raw": 2,
+    "std::boxed::Box::<i32>::new": 2,
+    "std::boxed::Box::<std::string::String>::new": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 2,
+    "std::io::_print": 2
+  },
+  "call_total": 13,
+  "memory_api_counts": {
+    "box_into_raw": 2,
+    "box_new": 3
+  },
+  "memory_api_examples": {
+    "box_into_raw": [
+      "std::boxed::Box::<i32>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<std::string::String>::new",
+      "std::boxed::Box::<i32>::new"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _9]",
+      "[move _20]"
+    ],
+    "arithmetic_binary": [
+      "Sub(copy _26, const 1_usize)",
+      "BitAnd(copy _25, copy _27)"
+    ],
+    "comparison": [
+      "Eq(copy _28, const 0_usize)"
+    ],
+    "direct_deref_use": [
+      "copy (*_12)"
+    ],
+    "pointer_cast": [
+      "move _3 as *mut std::ffi::c_void (PtrToPtr)",
+      "copy _2 as *mut i32 (PtrToPtr)",
+      "copy _12 as *const () (PtrToPtr)"
+    ],
+    "ref": [
+      "&_8",
+      "&(*_14)",
+      "&_19",
+      "&_11"
+    ],
+    "scalar_cast": [
+      "copy _24 as usize (Transmute)"
+    ],
+    "scalar_nullary": [
+      "AlignOf(i32)"
+    ],
+    "unknown_unhandled": [
+      "const main::promoted[1]",
+      "const main::promoted[0]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 2,
+    "arithmetic_binary": 2,
+    "comparison": 1,
+    "direct_deref_use": 1,
+    "pointer_cast": 4,
+    "ref": 4,
+    "scalar_cast": 1,
+    "scalar_nullary": 1,
+    "unknown_unhandled": 2
+  },
+  "rvalue_total": 18,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 2,
+    "unknown_unhandled": 2
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "uaf_mem_leak_ffi",
+  "terminator_kind_counts": {
+    "Assert": 1,
+    "Call": 13,
+    "Return": 2
+  }
+}

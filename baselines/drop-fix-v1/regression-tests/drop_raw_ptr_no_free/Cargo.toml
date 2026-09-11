@@ -1,0 +1,6 @@
+[package]
+name = "drop_raw_ptr_no_free"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]

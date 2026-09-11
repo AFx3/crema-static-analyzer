@@ -1,0 +1,114 @@
+{
+  "call_counts": {
+    "LockFreeQueue::<T>::dequeue": 1,
+    "LockFreeQueue::<i32>::dequeue": 3,
+    "LockFreeQueue::<i32>::enqueue": 3,
+    "LockFreeQueue::<i32>::new": 1,
+    "Node::<T>::new": 2,
+    "core::fmt::rt::Argument::<'_>::new_debug::<std::option::Option<i32>>": 3,
+    "std::boxed::Box::<Node<T>>::from_raw": 2,
+    "std::boxed::Box::<Node<T>>::into_raw": 2,
+    "std::boxed::Box::<Node<T>>::new": 2,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 3,
+    "std::fmt::Formatter::<'_>::debug_struct_field2_finish": 1,
+    "std::io::_print": 3,
+    "std::mem::drop::<std::boxed::Box<Node<T>>>": 2,
+    "std::mem::zeroed::<T>": 1,
+    "std::option::Option::<T>::is_some": 1,
+    "std::ptr::mut_ptr::<impl *mut Node<T>>::is_null": 2,
+    "std::ptr::null_mut::<Node<T>>": 1,
+    "std::ptr::read::<T>": 1,
+    "std::result::Result::<*mut Node<T>, *mut Node<T>>::is_ok": 2,
+    "std::sync::atomic::AtomicPtr::<Node<T>>::compare_exchange": 5,
+    "std::sync::atomic::AtomicPtr::<Node<T>>::load": 8,
+    "std::sync::atomic::AtomicPtr::<Node<T>>::new": 3
+  },
+  "call_total": 52,
+  "memory_api_counts": {
+    "box_from_raw": 2,
+    "box_into_raw": 2,
+    "box_new": 2,
+    "mem_drop": 2,
+    "ptr_read": 1
+  },
+  "memory_api_examples": {
+    "box_from_raw": [
+      "std::boxed::Box::<Node<T>>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<Node<T>>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<Node<T>>::new"
+    ],
+    "mem_drop": [
+      "std::mem::drop::<std::boxed::Box<Node<T>>>"
+    ],
+    "ptr_read": [
+      "std::ptr::read::<T>"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _13]",
+      "[move _22]",
+      "[move _31]"
+    ],
+    "comparison": [
+      "Eq(copy _6, move _13)",
+      "Eq(copy _2, move _12)",
+      "Eq(copy _2, copy _5)"
+    ],
+    "direct_use": [
+      "move _1",
+      "move _21"
+    ],
+    "raw_address": [
+      "&raw const (*_23)"
+    ],
+    "ref": [
+      "&((*_1).0: T)",
+      "&((*_1).1: std::sync::atomic::AtomicPtr<Node<T>>)",
+      "&_10",
+      "&(*_1)",
+      "&_4",
+      "&((*_1).0: std::sync::atomic::AtomicPtr<Node<T>>)",
+      "&_1",
+      "&_15"
+    ],
+    "unknown_unhandled": [
+      "const \"Node\"",
+      "const \"data\"",
+      "copy _6 as &dyn std::fmt::Debug (PointerCoercion(Unsize, Implicit))",
+      "const \"next\"",
+      "copy _9 as &dyn std::fmt::Debug (PointerCoercion(Unsize, Implicit))",
+      "LockFreeQueue::<T> { head: move _5, tail: move _6 }",
+      "std::sync::atomic::Ordering::Relaxed",
+      "const main::promoted[2]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 3,
+    "comparison": 3,
+    "direct_use": 2,
+    "raw_address": 1,
+    "ref": 33,
+    "unknown_unhandled": 30
+  },
+  "rvalue_total": 72,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 3,
+    "unknown_unhandled": 30
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "concurrent-verification",
+  "terminator_kind_counts": {
+    "Call": 52,
+    "Drop": 8,
+    "Goto": 4,
+    "Return": 7,
+    "SwitchInt": 8,
+    "UnwindResume": 4
+  }
+}

@@ -1,0 +1,7 @@
+rustc 1.84.0-nightly (3fee0f12e 2024-11-20)
+binary: rustc
+commit-hash: 3fee0f12e4f595948f8f54f57c8b7a7a58127124
+commit-date: 2024-11-20
+host: x86_64-unknown-linux-gnu
+release: 1.84.0-nightly
+LLVM version: 19.1.3

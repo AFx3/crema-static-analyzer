@@ -1,0 +1,377 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:671:59
+    |
+671 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+    |                                                           ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:671:68
+    |
+671 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+    |                                                                    ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:3897:50
+     |
+3897 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return_place, ..}) = &mir_block.terminator {   
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:653:8
+    |
+653 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintStateMap {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 5 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.05s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3 /home/af/Documenti/a-phd/crema`
+No C files found in the project.
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package hw3 target hw3 at /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/target/debug",
+]
+Global ICFG saved to global_icfg.json
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+Final Abstract State: {"rust::main::bb4": {{"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb54": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_21)"}: FREED, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_4)"}: FREED, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_5)"}: FREED, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_75)"}: FREED, {"Local(_76)"}: FREED, {"Local(_77)"}: TOP, {"Local(_81)"}: TOP, {"Local(_85)"}: TOP, {"Local(_89)"}: TOP, {"Local(_9)"}: TOP, {"Local(_93)"}: TOP}, "rust::main::bb46": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_21)"}: FREED, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_75)"}: FREED, {"Local(_76)"}: FREED, {"Local(_77)"}: TOP, {"Local(_81)"}: TOP, {"Local(_85)"}: TOP, {"Local(_89)"}: TOP, {"Local(_9)"}: TOP, {"Local(_93)"}: TOP}, "rust::main::bb48": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_21)"}: FREED, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_4)"}: FREED, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_75)"}: FREED, {"Local(_76)"}: FREED, {"Local(_77)"}: TOP, {"Local(_81)"}: TOP, {"Local(_85)"}: TOP, {"Local(_89)"}: TOP, {"Local(_9)"}: TOP, {"Local(_93)"}: TOP}, "rust::main::bb45": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_75)"}: FREED, {"Local(_76)"}: FREED, {"Local(_77)"}: TOP, {"Local(_81)"}: TOP, {"Local(_85)"}: TOP, {"Local(_89)"}: TOP, {"Local(_9)"}: TOP, {"Local(_93)"}: TOP}, "rust::main::bb49": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_76)"}: FREED, {"Local(_77)"}: TOP, {"Local(_81)"}: TOP, {"Local(_85)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb1": {}, "rust::main::bb43": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_76)"}: FREED, {"Local(_77)"}: TOP, {"Local(_81)"}: TOP, {"Local(_85)"}: TOP, {"Local(_89)"}: TOP, {"Local(_9)"}: TOP, {"Local(_93)"}: TOP}, "rust::main::bb29": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb26": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_65)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb2": {}, "rust::main::bb12": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb16": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb19": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb44": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_76)"}: FREED, {"Local(_77)"}: TOP, {"Local(_81)"}: TOP, {"Local(_85)"}: TOP, {"Local(_89)"}: TOP, {"Local(_9)"}: TOP, {"Local(_93)"}: TOP}, "rust::main::bb22": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_56)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb24": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb34": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb6": {{"Local(_12)"}: TOP, {"Local(_20)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb31": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb51": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_21)"}: FREED, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_75)"}: FREED, {"Local(_76)"}: FREED, {"Local(_77)"}: TOP, {"Local(_81)"}: TOP, {"Local(_85)"}: TOP, {"Local(_89)"}: TOP, {"Local(_9)"}: TOP, {"Local(_93)"}: TOP}, "rust::main::bb52": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_21)"}: FREED, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_4)"}: FREED, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_75)"}: FREED, {"Local(_76)"}: FREED, {"Local(_77)"}: TOP, {"Local(_81)"}: TOP, {"Local(_85)"}: TOP, {"Local(_89)"}: TOP, {"Local(_9)"}: TOP, {"Local(_93)"}: TOP}, "rust::main::bb8": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb5": {{"Local(_12)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb37": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_77)"}: TOP, {"Local(_85)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb21": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb13": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_36)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb3": {{"Local(_7)"}: TOP}, "rust::main::bb40": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_76)"}: FREED, {"Local(_77)"}: TOP, {"Local(_81)"}: TOP, {"Local(_85)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb35": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_77)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb10": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb41": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_76)"}: FREED, {"Local(_77)"}: TOP, {"Local(_81)"}: TOP, {"Local(_85)"}: TOP, {"Local(_9)"}: TOP, {"Local(_93)"}: TOP}, "rust::main::bb9": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb18": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb15": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb23": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb25": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb53": {{"Local(_12)"}: TOP, {"Local(_5)"}: FREED, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb20": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb11": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb33": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb42": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_76)"}: FREED, {"Local(_77)"}: TOP, {"Local(_81)"}: TOP, {"Local(_85)"}: TOP, {"Local(_9)"}: TOP, {"Local(_93)"}: TOP}, "rust::main::bb39": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_77)"}: TOP, {"Local(_81)"}: TOP, {"Local(_85)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb0": {}, "rust::main::bb30": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_7)"}: TOP, {"Local(_74)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb27": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb36": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_77)"}: TOP, {"Local(_85)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::terminate": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_21)"}: FREED, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_4)"}: FREED, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_5)"}: FREED, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_75)"}: FREED, {"Local(_76)"}: FREED, {"Local(_77)"}: TOP, {"Local(_81)"}: TOP, {"Local(_85)"}: TOP, {"Local(_89)"}: TOP, {"Local(_9)"}: TOP, {"Local(_93)"}: TOP}, "rust::main::bb28": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb32": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb50": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_75)"}: FREED, {"Local(_76)"}: FREED, {"Local(_77)"}: TOP, {"Local(_81)"}: TOP, {"Local(_85)"}: TOP, {"Local(_89)"}: TOP, {"Local(_9)"}: TOP, {"Local(_93)"}: TOP}, "rust::main::bb14": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb47": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_21)"}: FREED, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_4)"}: FREED, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_75)"}: FREED, {"Local(_76)"}: FREED, {"Local(_77)"}: TOP, {"Local(_81)"}: TOP, {"Local(_85)"}: TOP, {"Local(_89)"}: TOP, {"Local(_9)"}: TOP, {"Local(_93)"}: TOP}, "rust::main::bb17": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_45)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb7": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_7)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb38": {{"Local(_12)"}: TOP, {"Local(_17)"}: TOP, {"Local(_20)"}: TOP, {"Local(_23)"}: TOP, {"Local(_25)"}: TOP, {"Local(_27)"}: TOP, {"Local(_31)"}: TOP, {"Local(_34)"}: TOP, {"Local(_36)"}: TOP, {"Local(_40)"}: TOP, {"Local(_43)"}: TOP, {"Local(_45)"}: TOP, {"Local(_47)"}: TOP, {"Local(_51)"}: TOP, {"Local(_54)"}: TOP, {"Local(_56)"}: TOP, {"Local(_60)"}: TOP, {"Local(_63)"}: TOP, {"Local(_65)"}: TOP, {"Local(_69)"}: TOP, {"Local(_7)"}: TOP, {"Local(_72)"}: TOP, {"Local(_74)"}: TOP, {"Local(_77)"}: TOP, {"Local(_81)"}: TOP, {"Local(_85)"}: TOP, {"Local(_9)"}: TOP}}
+Final Taint State: {
+    "rust::main::bb28": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb33": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb50": {
+        "Local(_75)": {
+            "free",
+        },
+        "Local(_4)": {},
+        "Local(_76)": {
+            "free",
+        },
+    },
+    "rust::main::terminate": {
+        "Local(_76)": {
+            "free",
+        },
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_75)": {
+            "free",
+        },
+        "Local(_21)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+    },
+    "rust::main::bb36": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb24": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb31": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb17": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb52": {
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_21)": {
+            "free",
+        },
+        "Local(_75)": {
+            "free",
+        },
+        "Local(_76)": {
+            "free",
+        },
+    },
+    "rust::main::bb54": {
+        "Local(_76)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_21)": {
+            "free",
+        },
+        "Local(_75)": {
+            "free",
+        },
+    },
+    "rust::main::bb10": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb18": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb47": {
+        "Local(_21)": {
+            "free",
+        },
+        "Local(_75)": {
+            "free",
+        },
+        "Local(_76)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+    },
+    "rust::main::bb14": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb38": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb34": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb48": {
+        "Local(_76)": {
+            "free",
+        },
+        "Local(_21)": {
+            "free",
+        },
+        "Local(_75)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+    },
+    "rust::main::bb30": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb37": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb26": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb53": {
+        "Local(_5)": {
+            "free",
+        },
+    },
+    "rust::main::bb35": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb44": {
+        "Local(_76)": {
+            "free",
+        },
+        "Local(_4)": {},
+    },
+    "rust::main::bb3": {},
+    "rust::main::bb20": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb19": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb16": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb25": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb8": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb32": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb46": {
+        "Local(_75)": {
+            "free",
+        },
+        "Local(_76)": {
+            "free",
+        },
+        "Local(_21)": {
+            "free",
+        },
+        "Local(_4)": {},
+    },
+    "rust::main::bb11": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb2": {},
+    "rust::main::bb0": {},
+    "rust::main::bb51": {
+        "Local(_21)": {
+            "free",
+        },
+        "Local(_75)": {
+            "free",
+        },
+        "Local(_4)": {},
+        "Local(_76)": {
+            "free",
+        },
+    },
+    "rust::main::bb13": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb23": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb4": {},
+    "rust::main::bb27": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb1": {},
+    "rust::main::bb22": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb12": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb29": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb42": {
+        "Local(_76)": {
+            "free",
+        },
+        "Local(_4)": {},
+    },
+    "rust::main::bb7": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb45": {
+        "Local(_75)": {
+            "free",
+        },
+        "Local(_4)": {},
+        "Local(_76)": {
+            "free",
+        },
+    },
+    "rust::main::bb41": {
+        "Local(_76)": {
+            "free",
+        },
+        "Local(_4)": {},
+    },
+    "rust::main::bb39": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb5": {},
+    "rust::main::bb40": {
+        "Local(_4)": {},
+        "Local(_76)": {
+            "free",
+        },
+    },
+    "rust::main::bb9": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb21": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb15": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb6": {
+        "Local(_4)": {},
+    },
+    "rust::main::bb49": {
+        "Local(_4)": {},
+        "Local(_76)": {
+            "free",
+        },
+    },
+    "rust::main::bb43": {
+        "Local(_4)": {},
+        "Local(_76)": {
+            "free",
+        },
+    },
+}
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:63:64: 63:65 (#0), scope: scope[0] }, kind: drop(_4) -> [return: bb5, unwind continue] }' -> '_4'
+-> Skip Drop in 'rust::<MyRc<T> as std::clone::Clone>::clone::bb6' because has an unwind incoming edge
+-> Skip Drop in 'rust::MyRc::<T>::new::bb5' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:73:66: 73:67 (#0), scope: scope[0] }, kind: drop(_5) -> [return: bb5, unwind continue] }' -> '_5'
+Aliased via from_raw: 'Local(_11) [mutable]' -> '_10'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:73:66: 73:67 (#0), scope: scope[0] }, kind: drop(_5) -> [return: bb9, unwind continue] }' -> '_5'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:76:68: 76:69 (#0), scope: scope[0] }, kind: drop(_15) -> [return: bb14, unwind continue] }' -> '_15'
+-> Skip Drop in 'rust::<MyRc<T> as std::ops::Drop>::drop::bb15' because has an unwind incoming edge
+-> Skip Drop in 'rust::<MyRc<T> as std::ops::Drop>::drop::bb16' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:121:9: 121:10 (#0), scope: scope[4] }, kind: drop(_76) -> [return: bb41, unwind: bb50] }' -> '_76'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:124:5: 124:6 (#0), scope: scope[3] }, kind: drop(_75) -> [return: bb46, unwind: bb51] }' -> '_75'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:128:1: 128:2 (#0), scope: scope[1] }, kind: drop(_21) -> [return: bb47, unwind: bb52] }' -> '_21'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:128:1: 128:2 (#0), scope: scope[0] }, kind: drop(_4) -> [return: bb48, unwind continue] }' -> '_4'
+-> Skip Drop in 'rust::main::bb49' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb50' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb51' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb52' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb53' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:31:43: 31:44 (#0), scope: scope[0] }, kind: drop(_6) -> [return: bb4, unwind: bb8] }' -> '_6'
+-> Skip Drop in 'rust::SimpleStack::<T>::push::bb5' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:32:5: 32:6 (#0), scope: scope[0] }, kind: drop(_2) -> [return: bb6, unwind terminate(cleanup)] }' -> '_2'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:36:5: 36:6 (#0), scope: scope[0] }, kind: drop(_4) -> [return: bb4, unwind continue] }' -> '_4'
+-> Skip Drop in 'rust::SimpleStack::<T>::pop::bb5' because has an unwind incoming edge
+No tracked variable found per '_4' o 'Local(_4)'
+No tracked variable found per '_5' o 'Local(_5)'
+No tracked variable found per '_5' o 'Local(_5)'
+No tracked variable found per '_15' o 'Local(_15)'
+No tracked variable found per '_76' o 'Local(_76)'
+No tracked variable found per '_75' o 'Local(_75)'
+No tracked variable found per '_21' o 'Local(_21)'
+No tracked variable found per '_4' o 'Local(_4)'
+No tracked variable found per '_6' o 'Local(_6)'
+No tracked variable found per '_2' o 'Local(_2)'
+No tracked variable found per '_4' o 'Local(_4)'
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 NO Issues detected: ✅
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

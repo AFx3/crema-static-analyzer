@@ -1,0 +1,274 @@
+{
+	"edges" : 
+	[
+		{
+			"destination" : 97299335317088,
+			"edge_type" : "intra",
+			"source" : 97299335815568
+		},
+		{
+			"destination" : 97299335284928,
+			"edge_type" : "intra",
+			"source" : 97299335317088
+		},
+		{
+			"destination" : 97299335297104,
+			"edge_type" : "intra",
+			"source" : 97299335284928
+		},
+		{
+			"destination" : 97299335450160,
+			"edge_type" : "intra",
+			"source" : 97299335297104
+		},
+		{
+			"destination" : 97299335662288,
+			"edge_type" : "intra",
+			"source" : 97299335450160
+		},
+		{
+			"destination" : 97299335223600,
+			"edge_type" : "intra",
+			"source" : 97299335662288
+		}
+	],
+	"nodes" : 
+	[
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 97299335814016,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 97299335688704,
+			"function_name" : "c_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97299335815568,
+					"edge_type" : "intra",
+					"source" : 97299335505968
+				}
+			],
+			"info" : "IntraICFGNode29 {fun: c_free_string}\nAddrStmt: [Var51 <-- Var52]\t\nValVar ID: 51\n   %p.addr = alloca ptr, align 8 ",
+			"node_id" : 97299335815568,
+			"node_kind" : 0,
+			"node_kind_string" : "IntraBlock",
+			"node_source_loc" : "",
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97299335317088,
+					"edge_type" : "intra",
+					"source" : 97299335815568
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"edge_id" : 34,
+					"lhs_var_id" : 51,
+					"pta_edge" : true,
+					"rhs_var_id" : 52,
+					"stmt_id" : 97299335591136,
+					"stmt_info" : "AddrStmt: [Var51 <-- Var52]\t\nValVar ID: 51\n   %p.addr = alloca ptr, align 8 ",
+					"stmt_type" : "AddrStmt"
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 97299335814016,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 97299335688704,
+			"function_name" : "c_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97299335317088,
+					"edge_type" : "intra",
+					"source" : 97299335815568
+				}
+			],
+			"info" : "IntraICFGNode30 {fun: c_free_string}\nStoreStmt: [Var51 <-- Var50]\t\nValVar ID: 53\n   store ptr %p, ptr %p.addr, align 8 ",
+			"node_id" : 97299335317088,
+			"node_kind" : 0,
+			"node_kind_string" : "IntraBlock",
+			"node_source_loc" : "",
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97299335284928,
+					"edge_type" : "intra",
+					"source" : 97299335317088
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"edge_id" : 35,
+					"lhs_var_id" : 51,
+					"pta_edge" : true,
+					"rhs_var_id" : 50,
+					"stmt_id" : 97299335832368,
+					"stmt_info" : "StoreStmt: [Var51 <-- Var50]\t\nValVar ID: 53\n   store ptr %p, ptr %p.addr, align 8 ",
+					"stmt_type" : "StoreStmt"
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 97299335814016,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 97299335688704,
+			"function_name" : "c_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97299335284928,
+					"edge_type" : "intra",
+					"source" : 97299335317088
+				}
+			],
+			"info" : "IntraICFGNode31 {fun: c_free_string}\nLoadStmt: [Var54 <-- Var51]\t\nValVar ID: 54\n   %0 = load ptr, ptr %p.addr, align 8 ",
+			"node_id" : 97299335284928,
+			"node_kind" : 0,
+			"node_kind_string" : "IntraBlock",
+			"node_source_loc" : "",
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97299335297104,
+					"edge_type" : "intra",
+					"source" : 97299335284928
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"edge_id" : 36,
+					"lhs_var_id" : 54,
+					"pta_edge" : true,
+					"rhs_var_id" : 51,
+					"stmt_id" : 97299335828672,
+					"stmt_info" : "LoadStmt: [Var54 <-- Var51]\t\nValVar ID: 54\n   %0 = load ptr, ptr %p.addr, align 8 ",
+					"stmt_type" : "LoadStmt"
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 97299335814016,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 97299335688704,
+			"function_name" : "c_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97299335297104,
+					"edge_type" : "intra",
+					"source" : 97299335284928
+				}
+			],
+			"info" : "CallICFGNode32 {fun: c_free_string}\n   call void @free(ptr noundef %0) #4 CallICFGNode: ",
+			"node_id" : 97299335297104,
+			"node_kind" : 4,
+			"node_kind_string" : "FunCallBlock",
+			"node_source_loc" : "CallICFGNode: ",
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97299335450160,
+					"edge_type" : "intra",
+					"source" : 97299335297104
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 97299335814016,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 97299335688704,
+			"function_name" : "c_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97299335450160,
+					"edge_type" : "intra",
+					"source" : 97299335297104
+				}
+			],
+			"info" : "RetICFGNode33 {fun: c_free_string}\n   call void @free(ptr noundef %0) #4 RetICFGNode: ",
+			"node_id" : 97299335450160,
+			"node_kind" : 5,
+			"node_kind_string" : "FunRetBlock",
+			"node_source_loc" : "RetICFGNode: ",
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97299335662288,
+					"edge_type" : "intra",
+					"source" : 97299335450160
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 97299335814016,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 97299335688704,
+			"function_name" : "c_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97299335662288,
+					"edge_type" : "intra",
+					"source" : 97299335450160
+				}
+			],
+			"info" : "IntraICFGNode34 {fun: c_free_string}\n   ret void ",
+			"node_id" : 97299335662288,
+			"node_kind" : 0,
+			"node_kind_string" : "IntraBlock",
+			"node_source_loc" : "",
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97299335223600,
+					"edge_type" : "intra",
+					"source" : 97299335662288
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 97299335814016,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 97299335688704,
+			"function_name" : "c_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97299335223600,
+					"edge_type" : "intra",
+					"source" : 97299335662288
+				}
+			],
+			"info" : "FunExitICFGNode4 {fun: c_free_string}",
+			"node_id" : 97299335223600,
+			"node_kind" : 3,
+			"node_kind_string" : "FunExitBlock",
+			"node_source_loc" : "function ret: ",
+			"node_type" : false,
+			"outgoing_edges" : [],
+			"svf_statements" : []
+		}
+	]
+}

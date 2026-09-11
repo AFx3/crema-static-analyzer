@@ -1,0 +1,768 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2403:50
+     |
+2403 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:594:8
+    |
+594 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 5 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/cstringcargo_df_ffi`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/cstringcargo_df_ffi
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/cstringcargo_df_ffi /home/af/Documenti/a-phd/crema`
+LLVM IR compilation finished with status: ExitStatus(unix_wait_status(0))
+
+*********General Stats***************
+################ (program : ffi.pre.bc)###############
+AddrsNum            8
+BBWith2Succ         1
+BBWith3Succ         0
+CallsNum            0
+ConstArrayObj       0
+ConstStructObj      0
+ConstantObj         0
+CopysNum            2
+FIObjNum            0
+FSObjNum            6
+FunctionObjs        4
+GepsNum             2
+GlobalObjs          0
+HeapObjs            1
+IndCallSites        0
+LoadsNum            5
+MaxStructSize       0
+NonPtrObj           5
+ReturnsNum          0
+StackObjs           1
+StoresNum           2
+TotalCallSite       3
+TotalFieldObjects   0
+TotalObjects        7
+TotalPTASVFStmts    18
+TotalPointers       29
+TotalSVFStmts       23
+VarArrayObj         0
+VarStructObj        0
+----------------Time and memory stats--------------------
+LLVMIRTime          0.007
+SVFIRTime           0
+SymbolTableTime     0
+#######################################################
+
+*********PTACallGraph Stats (Andersen analysis)***************
+################ (program : ffi.pre.bc)###############
+----------------Numbers stats----------------------------
+CalRetPairInCycle   0
+MaxNodeInCycle      0
+NodeInCycle         0
+TotalCycle          0
+TotalEdge           3
+TotalNode           4
+#######################################################
+
+*********Andersen Pointer Analysis Stats***************
+################ (program : ffi.pre.bc)###############
+----------------Time and memory stats--------------------
+AvgIn/OutAddrEdge   0.291667
+AvgIn/OutCopyEdge   0.375
+AvgIn/OutEdge       0.958333
+AvgIn/OutLoadEdge   0.208333
+AvgIn/OutStoreEdge  0.0833333
+AvgPtsSetSize       0.177778
+AvgTopLvlPtsSize    0.533333
+CollapseTime        0
+CopyGepTime         0
+LoadStoreTime       0
+MemoryUsageVmrss    248
+MemoryUsageVmsize   0
+SCCDetectTime       0
+SCCMergeTime        0
+TotalTime           0.001
+UpdateCGTime        0
+----------------Numbers stats----------------------------
+AddrProcessed       7
+CopyProcessed       0
+DummyFieldPtrs      1
+FieldObjs           0
+GepProcessed        1
+IndCallSites        0
+IndEdgeSolved       0
+LoadProcessed       4
+LocalVarInRecur     0
+MaxInAddrEdge       1
+MaxInCopyEdge       1
+MaxInLoadEdge       1
+MaxInStoreEdge      1
+MaxNodesInSCC       0
+MaxOutAddrEdge      2
+MaxOutCopyEdge      4
+MaxOutLoadEdge      4
+MaxOutStoreEdge     1
+MaxPtsSetSize       1
+MemObjects          7
+NodesInCycles       0
+NullPointer         0
+NumOfAddrs          7
+NumOfCGEdge         16
+NumOfCGNode         31
+NumOfCopys          7
+NumOfFieldExpand    0
+NumOfGeps           2
+NumOfLoads          5
+NumOfSCCDetect      2
+NumOfSFRs           0
+NumOfStores         2
+NumOfValidNode      24
+NumOfValidObjNode   6
+Pointers            28
+PointsToBlkPtr      0
+PointsToConstPtr    1
+SolveIterations     2
+StoreProcessed      1
+TotalCycleNum       0
+TotalObjects        7
+TotalPWCCycleNum    0
+TotalPointers       29
+#######################################################
+
+****Persistent Points-To Cache Statistics: Andersen's analysis bitvector****
+################ (program : ffi.pre.bc)###############
+UniquePointsToSets       7
+TotalUnions              8
+PropertyUnions           8
+UniqueUnions             0
+LookupUnions             0
+PreemptiveUnions         0
+TotalComplements         62
+PropertyComplements      62
+UniqueComplements        0
+LookupComplements        0
+PreemptiveComplements    0
+TotalIntersections       5
+PropertyIntersections    5
+UniqueIntersections      0
+LookupIntersections      0
+PreemptiveIntersections  0
+#######################################################
+
+*********PTACallGraph Stats (Andersen analysis)***************
+################ (program : ffi.pre.bc)###############
+----------------Numbers stats----------------------------
+CalRetPairInCycle   0
+MaxNodeInCycle      0
+NodeInCycle         0
+TotalCycle          0
+TotalEdge           3
+TotalNode           4
+#######################################################
+
+*********Andersen Pointer Analysis Stats***************
+################ (program : ffi.pre.bc)###############
+----------------Time and memory stats--------------------
+AvgIn/OutAddrEdge   0.291667
+AvgIn/OutCopyEdge   0.375
+AvgIn/OutEdge       0.958333
+AvgIn/OutLoadEdge   0.208333
+AvgIn/OutStoreEdge  0.0833333
+AvgPtsSetSize       0.177778
+AvgTopLvlPtsSize    0.533333
+CollapseTime        0
+CopyGepTime         0
+LoadStoreTime       0
+MemoryUsageVmrss    248
+MemoryUsageVmsize   0
+SCCDetectTime       0
+SCCMergeTime        0
+TotalTime           0.001
+UpdateCGTime        0
+----------------Numbers stats----------------------------
+AddrProcessed       7
+CopyProcessed       0
+DummyFieldPtrs      1
+FieldObjs           0
+GepProcessed        1
+IndCallSites        0
+IndEdgeSolved       0
+LoadProcessed       4
+LocalVarInRecur     0
+MaxInAddrEdge       1
+MaxInCopyEdge       1
+MaxInLoadEdge       1
+MaxInStoreEdge      1
+MaxNodesInSCC       0
+MaxOutAddrEdge      2
+MaxOutCopyEdge      4
+MaxOutLoadEdge      4
+MaxOutStoreEdge     1
+MaxPtsSetSize       1
+MemObjects          7
+NodesInCycles       0
+NullPointer         0
+NumOfAddrs          7
+NumOfCGEdge         16
+NumOfCGNode         31
+NumOfCopys          7
+NumOfFieldExpand    0
+NumOfGeps           2
+NumOfLoads          5
+NumOfSCCDetect      2
+NumOfSFRs           0
+NumOfStores         2
+NumOfValidNode      24
+NumOfValidObjNode   6
+Pointers            28
+PointsToBlkPtr      0
+PointsToConstPtr    2
+SolveIterations     2
+StoreProcessed      1
+TotalCycleNum       0
+TotalObjects        7
+TotalPWCCycleNum    0
+TotalPointers       29
+#######################################################
+Processing Node: 0x63131fbb36f0
+Node Info: IntraICFGNode3 {fun: modify_and_free_string}
+AddrStmt: [Var10 <-- Var11]	
+ValVar ID: 10
+   %ptr.addr = alloca ptr, align 8 
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fb9bed0
+Associated SVF Statements:
+  - 0x63131fb8ca20
+Processing Node: 0x63131fbaffb0
+Node Info: IntraICFGNode4 {fun: modify_and_free_string}
+StoreStmt: [Var10 <-- Var9]	
+ValVar ID: 13
+   store ptr %ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fb9bed0
+Associated SVF Statements:
+  - 0x63131fbe4300
+Processing Node: 0x63131fb84930
+Node Info: IntraICFGNode5 {fun: modify_and_free_string}
+LoadStmt: [Var14 <-- Var10]	
+ValVar ID: 14
+   %0 = load ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fb9bed0
+Associated SVF Statements:
+  - 0x63131fb87e60
+Processing Node: 0x63131fbe99b0
+Node Info: IntraICFGNode6 {fun: modify_and_free_string}
+CmpStmt: [Var15 <-- (Var14 predicate32 Var0)]	
+ValVar ID: 15
+   %cmp = icmp eq ptr %0, null 
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fb9bed0
+Associated SVF Statements:
+  - 0x63131fbb4200
+Processing Node: 0x63131fbea300
+Node Info: IntraICFGNode7 {fun: modify_and_free_string}
+BranchStmt: [Condition Var15]
+Successor 0 ICFGNode8   Successor 1 ICFGNode9   
+ValVar ID: 16
+   br i1 %cmp, label %if.then, label %if.end 
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fb9bed0
+Associated SVF Statements:
+  - 0x63131fbb40d0
+Processing Node: 0x63131fc1de00
+Node Info: IntraICFGNode8 {fun: modify_and_free_string}
+BranchStmt: [ Unconditional branch]
+Successor 0 ICFGNode10   
+ValVar ID: 17
+   br label %return 
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fb9c190
+Associated SVF Statements:
+  - 0x63131fbb7e10
+Processing Node: 0x63131fb9b980
+Node Info: IntraICFGNode9 {fun: modify_and_free_string}
+LoadStmt: [Var19 <-- Var10]	
+ValVar ID: 19
+   %1 = load ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fb9c420
+Associated SVF Statements:
+  - 0x63131fb8e600
+Processing Node: 0x63131fc21ed0
+Node Info: IntraICFGNode10 {fun: modify_and_free_string}
+   ret void 
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fc196f0
+Processing Node: 0x63131fc1b5c0
+Node Info: CallICFGNode11 {fun: modify_and_free_string}
+GepStmt: [Var42 <-- Var19]	
+ValVar ID: 20
+   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 
+GepStmt: [Var43 <-- Var4]	
+ValVar ID: 20
+   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 
+LoadStmt: [Var44 <-- Var43]	
+ValVar ID: 20
+   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 
+StoreStmt: [Var42 <-- Var44]	
+ValVar ID: 20
+   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 
+CopyStmt: [Var20 <-- Var19]	
+ValVar ID: 20
+   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fb9c420
+Associated SVF Statements:
+  - 0x63131fc20370
+  - 0x63131fbbbe70
+  - 0x63131fc1d5f0
+  - 0x63131fc1a500
+  - 0x63131fbb85f0
+Processing Node: 0x63131fbb31d0
+Node Info: FunExitICFGNode2 {fun: modify_and_free_string}
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fc196f0
+Processing Node: 0x63131fc1fa80
+Node Info: RetICFGNode12 {fun: modify_and_free_string}
+   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 RetICFGNode: 
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fb9c420
+Processing Node: 0x63131fbb4b60
+Node Info: IntraICFGNode13 {fun: modify_and_free_string}
+LoadStmt: [Var23 <-- Var10]	
+ValVar ID: 23
+   %2 = load ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fb9c420
+Associated SVF Statements:
+  - 0x63131fbb65a0
+Processing Node: 0x63131fb902a0
+Node Info: CallICFGNode14 {fun: modify_and_free_string}
+   %call1 = call i32 (ptr, ...) @printf(ptr noundef @.str.1, ptr noundef %2) CallICFGNode: 
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fb9c420
+Processing Node: 0x63131fc1edb0
+Node Info: RetICFGNode15 {fun: modify_and_free_string}
+   %call1 = call i32 (ptr, ...) @printf(ptr noundef @.str.1, ptr noundef %2) RetICFGNode: 
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fb9c420
+Processing Node: 0x63131fb8fc30
+Node Info: IntraICFGNode16 {fun: modify_and_free_string}
+LoadStmt: [Var27 <-- Var10]	
+ValVar ID: 27
+   %3 = load ptr, ptr %ptr.addr, align 8 
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fb9c420
+Associated SVF Statements:
+  - 0x63131fbcf2e0
+Processing Node: 0x63131fbb3a20
+Node Info: CallICFGNode17 {fun: modify_and_free_string}
+   call void @free(ptr noundef %3) #3 CallICFGNode: 
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fb9c420
+Processing Node: 0x63131fb8f870
+Node Info: RetICFGNode18 {fun: modify_and_free_string}
+   call void @free(ptr noundef %3) #3 RetICFGNode: 
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fb9c420
+Processing Node: 0x63131fb8e340
+Node Info: IntraICFGNode19 {fun: modify_and_free_string}
+BranchStmt: [ Unconditional branch]
+Successor 0 ICFGNode10   
+ValVar ID: 31
+   br label %return 
+Function associated with node: 0x63131fbf7390
+Basic block associated with node: 0x63131fb9c420
+Associated SVF Statements:
+  - 0x63131fb87410
+Writing 'callgraph_initial.dot.dot'...DOT file generated: ./output/modify_and_free_string_view_icfg_output_SVF.dot
+DOT file generated: ./output/modify_and_free_string_node_and_edges_only_icfg_SVF.dot
+ICFG Traversal Complete for function: modify_and_free_string.
+No instructions found in function: strcpy.
+No instructions found in function: printf.
+No instructions found in function: free.
+svf-driver finished with status: ExitStatus(unix_wait_status(0))
+cargo:rerun-if-changed=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/cstringcargo_df_ffi/src/ffi.c
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package cstringcargo target cstringcargo at /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/cstringcargo_df_ffi/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/cstringcargo_df_ffi/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/cstringcargo_df_ffi/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/cstringcargo_df_ffi/target/debug",
+    "--extern=cc=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/cstringcargo_df_ffi/target/debug/deps/libcc-f6d4be4f462924b9.rlib",
+    "--extern=shlex=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/cstringcargo_df_ffi/target/debug/deps/libshlex-f4c3659040844f7b.rlib",
+]
+Loading LLVM JSON file: modify_and_free_string_A_FINAL_ICFG.json
+Global ICFG saved to global_icfg.json
+Analyzing package cstringcargo target build-script-build at /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/cstringcargo_df_ffi/build.rs
+Skipping unsupported target kind: [CustomBuild]
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "llvm::modify_and_free_string::node108933787890128::rust::main::bb6", outgoing_edge: "rust::main::bb7", id: "dc029b09764f049a", mir_var: None, llvm_var: Some("BasicBlock: return { \"basic block\": return, \"location\":  }"), is_internal: Some(false) }
+Final Abstract State: {"llvm::modify_and_free_string::node108933788331440::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb10": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_1)"}: FREED, {"Local(_13)"}: TOP, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb0": {{"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC}, "llvm::modify_and_free_string::node108933787891440::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "llvm::modify_and_free_string::node108933787890128::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb6": {{"Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "llvm::modify_and_free_string::node108933788113328::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "llvm::modify_and_free_string::node108933787746976::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb9": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_13)"}: FREED, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "llvm::modify_and_free_string::node108933788317120::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb2": {{"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_9)"}: TOP}, "llvm::modify_and_free_string::node108933787699504::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "llvm::modify_and_free_string::node108933788327424::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "llvm::modify_and_free_string::node108933788334720::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "llvm::modify_and_free_string::node108933787793792::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb11": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_1)"}: FREED, {"Local(_13)"}: TOP, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "llvm::modify_and_free_string::node108933787892256::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "llvm::modify_and_free_string::node108933787738944::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb8": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_13)"}: FREED, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "llvm::modify_and_free_string::node108933787877296::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb12": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_13)"}: TOP, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "dummyCall::rust::main::bb6::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "dummyRet::rust::main::bb7::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb7": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_13)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::terminate": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_1)"}: FREED, {"Local(_13)"}: TOP, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "llvm::modify_and_free_string::node108933787896672::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "llvm::modify_and_free_string::node108933788115712::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "llvm::modify_and_free_string::node108933788344016::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb5": {{"Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "llvm::modify_and_free_string::node108933787745328::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "llvm::modify_and_free_string::node108933787744368::rust::main::bb6": {{"11@rust::main::bb6", "Local(_10)"}: MV, {"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb4": {{"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb3": {{"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC, {"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb1": {{"Local(_14)"}: BOXTIMES, {"Local(_2)"}: ALLOC}}
+Final Taint State: {
+    "rust::main::bb11": {
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_10)": {
+            "assign",
+        },
+        "11@rust::main::bb6": {
+            "assign",
+        },
+    },
+    "llvm::modify_and_free_string::node108933788115712::rust::main::bb6": {
+        "11@rust::main::bb6": {
+            "assign",
+        },
+        "Local(_10)": {
+            "assign",
+        },
+    },
+    "llvm::modify_and_free_string::node108933787877296::rust::main::bb6": {
+        "11@rust::main::bb6": {
+            "assign",
+        },
+        "Local(_10)": {
+            "assign",
+        },
+    },
+    "rust::main::bb0": {},
+    "rust::main::terminate": {
+        "Local(_1)": {
+            "free",
+        },
+        "11@rust::main::bb6": {
+            "assign",
+        },
+        "Local(_10)": {
+            "assign",
+        },
+    },
+    "llvm::modify_and_free_string::node108933787793792::rust::main::bb6": {
+        "11@rust::main::bb6": {
+            "assign",
+        },
+        "Local(_10)": {
+            "assign",
+        },
+    },
+    "llvm::modify_and_free_string::node108933787746976::rust::main::bb6": {
+        "11@rust::main::bb6": {
+            "assign",
+        },
+        "Local(_10)": {
+            "assign",
+        },
+    },
+    "dummyRet::rust::main::bb7::rust::main::bb6": {
+        "11@rust::main::bb6": {
+            "assign",
+        },
+        "Local(_10)": {
+            "assign",
+        },
+    },
+    "llvm::modify_and_free_string::node108933787738944::rust::main::bb6": {
+        "Local(_10)": {
+            "assign",
+        },
+        "11@rust::main::bb6": {
+            "assign",
+        },
+    },
+    "rust::main::bb3": {},
+    "rust::main::bb2": {},
+    "rust::main::bb6": {
+        "Local(_10)": {
+            "assign",
+        },
+    },
+    "rust::main::bb7": {
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_10)": {
+            "assign",
+        },
+        "11@rust::main::bb6": {
+            "assign",
+        },
+    },
+    "llvm::modify_and_free_string::node108933787892256::rust::main::bb6": {
+        "Local(_10)": {
+            "assign",
+        },
+        "11@rust::main::bb6": {
+            "assign",
+        },
+    },
+    "rust::main::bb8": {
+        "Local(_13)": {
+            "free",
+        },
+        "11@rust::main::bb6": {
+            "assign",
+        },
+        "Local(_10)": {
+            "assign",
+        },
+    },
+    "llvm::modify_and_free_string::node108933787896672::rust::main::bb6": {
+        "Local(_10)": {
+            "assign",
+        },
+        "11@rust::main::bb6": {
+            "assign",
+        },
+    },
+    "llvm::modify_and_free_string::node108933787744368::rust::main::bb6": {
+        "Local(_10)": {
+            "assign",
+        },
+        "11@rust::main::bb6": {
+            "assign",
+        },
+    },
+    "llvm::modify_and_free_string::node108933787891440::rust::main::bb6": {
+        "Local(_10)": {
+            "assign",
+        },
+        "11@rust::main::bb6": {
+            "assign",
+        },
+    },
+    "llvm::modify_and_free_string::node108933787699504::rust::main::bb6": {
+        "11@rust::main::bb6": {
+            "assign",
+        },
+        "Local(_10)": {
+            "assign",
+        },
+    },
+    "rust::main::bb9": {
+        "Local(_10)": {
+            "assign",
+        },
+        "Local(_13)": {
+            "free",
+        },
+        "11@rust::main::bb6": {
+            "assign",
+        },
+    },
+    "rust::main::bb1": {},
+    "llvm::modify_and_free_string::node108933788327424::rust::main::bb6": {
+        "11@rust::main::bb6": {
+            "assign",
+        },
+        "Local(_10)": {
+            "assign",
+        },
+    },
+    "llvm::modify_and_free_string::node108933788331440::rust::main::bb6": {
+        "Local(_10)": {
+            "assign",
+        },
+        "11@rust::main::bb6": {
+            "assign",
+        },
+    },
+    "llvm::modify_and_free_string::node108933788334720::rust::main::bb6": {
+        "Local(_10)": {
+            "assign",
+        },
+        "11@rust::main::bb6": {
+            "assign",
+        },
+    },
+    "llvm::modify_and_free_string::node108933788344016::rust::main::bb6": {
+        "11@rust::main::bb6": {
+            "assign",
+        },
+        "Local(_10)": {
+            "assign",
+        },
+    },
+    "dummyCall::rust::main::bb6::rust::main::bb6": {
+        "11@rust::main::bb6": {
+            "assign",
+        },
+        "Local(_10)": {
+            "assign",
+        },
+    },
+    "llvm::modify_and_free_string::node108933788317120::rust::main::bb6": {
+        "Local(_10)": {
+            "assign",
+        },
+        "11@rust::main::bb6": {
+            "assign",
+        },
+    },
+    "rust::main::bb12": {
+        "11@rust::main::bb6": {
+            "assign",
+        },
+        "Local(_10)": {
+            "assign",
+        },
+    },
+    "llvm::modify_and_free_string::node108933787890128::rust::main::bb6": {
+        "11@rust::main::bb6": {
+            "assign",
+        },
+        "Local(_10)": {
+            "assign",
+        },
+    },
+    "rust::main::bb4": {},
+    "rust::main::bb5": {
+        "Local(_10)": {
+            "assign",
+        },
+    },
+    "rust::main::bb10": {
+        "Local(_10)": {
+            "assign",
+        },
+        "11@rust::main::bb6": {
+            "assign",
+        },
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "llvm::modify_and_free_string::node108933788113328::rust::main::bb6": {
+        "11@rust::main::bb6": {
+            "assign",
+        },
+        "Local(_10)": {
+            "assign",
+        },
+    },
+    "llvm::modify_and_free_string::node108933787745328::rust::main::bb6": {
+        "11@rust::main::bb6": {
+            "assign",
+        },
+        "Local(_10)": {
+            "assign",
+        },
+    },
+}
+Tracking variable 'Local(_10)' from block 'rust::main::bb11' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'rust::main::bb11' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933788115712::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933788115712::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933787877296::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933787877296::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'rust::main::terminate' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'rust::main::terminate' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933787793792::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933787793792::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933787746976::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933787746976::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'dummyRet::rust::main::bb7::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'dummyRet::rust::main::bb7::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933787738944::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933787738944::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb7' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'rust::main::bb7' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'rust::main::bb7' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933787892256::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933787892256::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'rust::main::bb8' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'rust::main::bb8' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933787896672::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933787896672::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933787744368::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933787744368::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933787891440::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933787891440::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933787699504::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933787699504::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'rust::main::bb9' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'rust::main::bb9' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933788327424::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933788327424::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933788331440::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933788331440::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933788334720::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933788334720::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933788344016::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933788344016::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'dummyCall::rust::main::bb6::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'dummyCall::rust::main::bb6::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933788317120::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933788317120::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'rust::main::bb12' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'rust::main::bb12' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933787890128::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933787890128::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'rust::main::bb5' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'rust::main::bb10' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'rust::main::bb10' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933788113328::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933788113328::rust::main::bb6' (markers: {"assign"})
+Tracking variable '11@rust::main::bb6' from block 'llvm::modify_and_free_string::node108933787745328::rust::main::bb6' (markers: {"assign"})
+Tracking variable 'Local(_10)' from block 'llvm::modify_and_free_string::node108933787745328::rust::main::bb6' (markers: {"assign"})
+-> DummyRet node 'dummyRet::rust::main::bb7::rust::main::bb6': transferring from LLVM var Some("BasicBlock: return { \"basic block\": return, \"location\":  }") to MIR var None
+Aliased via from_raw: 'Local(_10)' -> '_13'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/cstringcargo_df_ffi/src/main.rs:64:31: 64:32 (#0), scope: scope[2] }, kind: drop(_13) -> [return: bb9, unwind: bb12] }' -> '_13'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/cstringcargo_df_ffi/src/main.rs:81:1: 81:2 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb10, unwind terminate(cleanup)] }' -> '_1'
+No tracked variable found per '_1' o 'Local(_1)'
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Double Free Issues ☢:
+Free detected at source line: CallICFGNode17 {fun: modify_and_free_string}
+   call void @free(ptr noundef %3) #3 CallICFGNode: 
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🪲  WARNING: variable '11@rust::main::bb6' was allocated in Rust and then freed in C (LLVM free) at `CallICFGNode17 {fun: modify_and_free_string}
+   call void @free(ptr noundef %3) #3 CallICFGNode: `
+Possible UNDEFINED BEHAVIOUR!

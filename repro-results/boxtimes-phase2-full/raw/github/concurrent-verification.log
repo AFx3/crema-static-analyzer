@@ -1,0 +1,176 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2128:50
+     |
+2128 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: variant `BOXTIMES` is never constructed
+  --> src/abstract_domain.rs:82:5
+   |
+78 | pub enum CellValue {
+   |          --------- variant in this enum
+...
+82 |     BOXTIMES,
+   |     ^^^^^^^^
+   |
+   = note: `CellValue` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:594:8
+    |
+594 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 6 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification /home/af/Documenti/a-phd/crema`
+No C files found in the project.
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package concurrent-verification target concurrent-verification at /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug",
+    "--extern=crossbeam_epoch=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libcrossbeam_epoch-8a8bcc2e0a943378.rlib",
+    "--extern=regex=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libregex-d76922fa37dd4030.rlib",
+    "--extern=overload=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/liboverload-667acc2908675926.rlib",
+    "--extern=cfg_if=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libcfg_if-b85213fd3be25fda.rlib",
+    "--extern=tracing_subscriber=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libtracing_subscriber-172eae5796a6be8c.rlib",
+    "--extern=once_cell=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libonce_cell-7d8771cc0add5777.rlib",
+    "--extern=regex_automata=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libregex_automata-76d9ee70e58e8db4.rlib",
+    "--extern=regex_automata=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libregex_automata-a2e447320ba9cb0b.rlib",
+    "--extern=tracing_log=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libtracing_log-9b8da0d8264434d4.rlib",
+    "--extern=smallvec=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libsmallvec-519d8201ab96c01f.rlib",
+    "--extern=matchers=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libmatchers-1ab677d3d7cbfd9c.rlib",
+    "--extern=pin_project_lite=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libpin_project_lite-add54b4dc95dda79.rlib",
+    "--extern=tracing_core=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libtracing_core-cef3cf2cf88ebf56.rlib",
+    "--extern=crossbeam=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libcrossbeam-0bbbd3eb61e7a0c6.rlib",
+    "--extern=shlex=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libshlex-f4c3659040844f7b.rlib",
+    "--extern=tracing=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libtracing-c566964b1b92ff56.rlib",
+    "--extern=libc=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/liblibc-93e96c9e14a59e4e.rlib",
+    "--extern=crossbeam_channel=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libcrossbeam_channel-e438185a977e92f7.rlib",
+    "--extern=cc=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libcc-a7ec3a8cbd1a1008.rlib",
+    "--extern=regex_syntax=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libregex_syntax-5ceaa91920579a46.rlib",
+    "--extern=lazy_static=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/liblazy_static-7af2f34f8b124b26.rlib",
+    "--extern=crossbeam_deque=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libcrossbeam_deque-ad6ae38ec3164de4.rlib",
+    "--extern=crossbeam_queue=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libcrossbeam_queue-785355b8955d181d.rlib",
+    "--extern=thread_local=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libthread_local-94c372d6c5e216b7.rlib",
+    "--extern=nu_ansi_term=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libnu_ansi_term-539d6c8f66d1b861.rlib",
+    "--extern=log=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/liblog-f64d0affdc8926e0.rlib",
+    "--extern=scoped_tls=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libscoped_tls-394f36581bc39462.rlib",
+    "--extern=sharded_slab=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libsharded_slab-95991d1034e4c6b5.rlib",
+    "--extern=regex_syntax=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libregex_syntax-535187a0fa603608.rlib",
+    "--extern=crossbeam_utils=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libcrossbeam_utils-454d52f566cbaeeb.rlib",
+    "--extern=loom=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libloom-c57feba44177e8e7.rlib",
+    "--extern=generator=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/target/debug/deps/libgenerator-dbedc8f0d0f7e60c.rlib",
+]
+Global ICFG saved to global_icfg.json
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+Final Abstract State: {"rust::main::bb9": {}, "rust::main::bb11": {}, "rust::main::bb1": {}, "rust::main::bb2": {}, "rust::main::bb0": {}, "rust::main::bb18": {{"Local(_1)"}: FREED}, "rust::main::bb4": {}, "rust::main::bb12": {}, "rust::main::bb16": {{"Local(_1)"}: FREED}, "rust::main::bb13": {}, "rust::main::bb15": {}, "rust::main::bb14": {}, "rust::main::bb6": {}, "rust::main::bb5": {}, "rust::main::terminate": {{"Local(_1)"}: FREED}, "rust::main::bb17": {{"Local(_1)"}: FREED}, "rust::main::bb3": {}, "rust::main::bb8": {}, "rust::main::bb7": {}, "rust::main::bb10": {}, "rust::main::bb19": {{"Local(_1)"}: FREED}}
+Final Taint State: {
+    "rust::main::bb0": {},
+    "rust::main::bb14": {},
+    "rust::main::bb18": {
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb4": {},
+    "rust::main::bb6": {},
+    "rust::main::bb12": {},
+    "rust::main::bb15": {},
+    "rust::main::bb2": {},
+    "rust::main::bb9": {},
+    "rust::main::bb5": {},
+    "rust::main::bb13": {},
+    "rust::main::terminate": {
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb19": {
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb7": {},
+    "rust::main::bb8": {},
+    "rust::main::bb10": {},
+    "rust::main::bb3": {},
+    "rust::main::bb17": {
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb16": {
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb11": {},
+    "rust::main::bb1": {},
+}
+-> Skip Drop in 'rust::Node::<T>::new::bb3' because has an unwind incoming edge
+-> DummyRet node 'dummyRet::rust::<LockFreeQueue<T> as std::ops::Drop>::drop::1::rust::<LockFreeQueue<T> as std::ops::Drop>::drop::bb1_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_4")
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/src/main.rs:121:38: 121:39 (#0), scope: scope[0] }, kind: drop(_4) -> [return: bb1, unwind continue] }' -> '_4'
+No tracked variable found per '_4' o 'Local(_4)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/src/main.rs:121:38: 121:39 (#0), scope: scope[0] }, kind: drop(_4) -> [return: bb6, unwind continue] }' -> '_4'
+No tracked variable found per '_4' o 'Local(_4)'
+Aliased via from_raw: 'Local(_6)' -> '_10'
+-> Skip Drop in 'rust::<LockFreeQueue<T> as std::ops::Drop>::drop::bb10' because has an unwind incoming edge
+-> DummyRet node 'dummyRet::rust::LockFreeQueue::<T>::new::1::rust::LockFreeQueue::<T>::new::bb1_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_3")
+Aliased via from_raw: 'Local(_2)' -> '_31'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/src/main.rs:109:17: 109:18 (#0), scope: scope[3] }, kind: drop(_21) -> [return: bb1, unwind continue] }' -> '_21'
+No tracked variable found per '_21' o 'Local(_21)'
+-> Skip Drop in 'rust::LockFreeQueue::<T>::dequeue::bb20' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/concurrent-verification/src/main.rs:350:1: 350:2 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb17, unwind continue] }' -> '_1'
+No tracked variable found per '_1' o 'Local(_1)'
+-> Skip Drop in 'rust::main::bb18' because has an unwind incoming edge
+-> DummyRet node 'dummyRet::rust::LockFreeQueue::<T>::enqueue::0::rust::LockFreeQueue::<T>::enqueue::bb0_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_5")
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 NO Issues detected: ✅
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

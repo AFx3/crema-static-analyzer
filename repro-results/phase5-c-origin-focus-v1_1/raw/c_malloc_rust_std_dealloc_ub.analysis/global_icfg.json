@@ -1,0 +1,230 @@
+{
+  "ordered_nodes": [
+    [
+      "rust::main::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_std_dealloc_ub/src/main.rs:10:17: 10:29 (#0), scope: scope[0] }, kind: _2 = c_alloc_16() -> [return: bb1, unwind unreachable] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_std_dealloc_ub/src/main.rs:10:17: 10:29 (#0)",
+            "function_called": "c_alloc_16",
+            "arguments": [],
+            "return_place": "_2",
+            "return_target": "bb1",
+            "unwind_target": "unreachable"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_std_dealloc_ub/src/main.rs:10:17: 10:40 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_1, move _2 as *mut u8 (PtrToPtr)))",
+              "place": "Local(_1)",
+              "is_mutable": false,
+              "rvalue": "move _2 as *mut u8 (PtrToPtr)"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_std_dealloc_ub/src/main.rs:11:12: 11:23 (#0), scope: scope[1] }, kind: _3 = std::ptr::mut_ptr::<impl *mut u8>::is_null(copy _1) -> [return: bb2, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_std_dealloc_ub/src/main.rs:11:12: 11:23 (#0)",
+            "function_called": "std::ptr::mut_ptr::<impl *mut u8>::is_null",
+            "arguments": [
+              {
+                "arg": "Local(_1)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_3",
+            "return_target": "bb2",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [],
+          "terminator": {
+            "kind": "SwitchInt",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_std_dealloc_ub/src/main.rs:11:12: 11:23 (#0), scope: scope[1] }, kind: switchInt(move _3) -> [0: bb3, otherwise: bb6] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_std_dealloc_ub/src/main.rs:11:12: 11:23 (#0)",
+            "targets": [
+              "(0, bb3)"
+            ],
+            "discr": "move _3",
+            "otherwise": "bb6"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb3",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 3,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_std_dealloc_ub/src/main.rs:12:22: 12:52 (#0), scope: scope[1] }, kind: _5 = std::alloc::Layout::from_size_align(const 16_usize, const 8_usize) -> [return: bb4, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_std_dealloc_ub/src/main.rs:12:22: 12:52 (#0)",
+            "function_called": "std::alloc::Layout::from_size_align",
+            "arguments": [
+              {
+                "arg": "const 16_usize",
+                "is_mutable": null
+              },
+              {
+                "arg": "const 8_usize",
+                "is_mutable": null
+              }
+            ],
+            "return_place": "_5",
+            "return_target": "bb4",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb4",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 4,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_std_dealloc_ub/src/main.rs:12:22: 12:61 (#0), scope: scope[1] }, kind: _4 = std::result::Result::<std::alloc::Layout, std::alloc::LayoutError>::unwrap(move _5) -> [return: bb5, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_std_dealloc_ub/src/main.rs:12:22: 12:61 (#0)",
+            "function_called": "std::result::Result::<std::alloc::Layout, std::alloc::LayoutError>::unwrap",
+            "arguments": [
+              {
+                "arg": "Local(_5) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_4",
+            "return_target": "bb5",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb5",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 5,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_std_dealloc_ub/src/main.rs:13:9: 13:27 (#0), scope: scope[2] }, kind: _6 = std::alloc::dealloc(copy _1, copy _4) -> [return: bb6, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_std_dealloc_ub/src/main.rs:13:9: 13:27 (#0)",
+            "function_called": "std::alloc::dealloc",
+            "arguments": [
+              {
+                "arg": "Local(_1)",
+                "is_mutable": false
+              },
+              {
+                "arg": "Local(_4)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_6",
+            "return_target": "bb6",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb6",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 6,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_std_dealloc_ub/src/main.rs:15:2: 15:2 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_std_dealloc_ub/src/main.rs:15:2: 15:2 (#0)"
+          }
+        }
+      }
+    ]
+  ],
+  "icfg_edges": [
+    {
+      "source": "rust::main::bb0",
+      "destination": "rust::main::bb1",
+      "label": "FFI Call (stdlib)",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::main::bb1",
+      "destination": "rust::main::bb2",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb1",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::main::bb2",
+      "destination": "rust::main::bb3",
+      "label": "SwitchInt target",
+      "source_label": "Mir bb2",
+      "destination_label": "Mir bb3"
+    },
+    {
+      "source": "rust::main::bb2",
+      "destination": "rust::main::bb6",
+      "label": "SwitchInt otherwise",
+      "source_label": "Mir bb2",
+      "destination_label": "Mir bb6"
+    },
+    {
+      "source": "rust::main::bb3",
+      "destination": "rust::main::bb4",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb3",
+      "destination_label": "Mir bb4"
+    },
+    {
+      "source": "rust::main::bb4",
+      "destination": "rust::main::bb5",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb4",
+      "destination_label": "Mir bb5"
+    },
+    {
+      "source": "rust::main::bb5",
+      "destination": "rust::main::bb6",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb5",
+      "destination_label": "Mir bb6"
+    }
+  ]
+}

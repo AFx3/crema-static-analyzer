@@ -1,0 +1,5 @@
+{
+  "ffi_functions": [
+    "c_calloc_u64"
+  ]
+}

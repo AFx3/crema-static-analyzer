@@ -1,0 +1,88 @@
+{
+	"edges" : 
+	[
+		{
+			"destination" : 103000259440192,
+			"edge_type" : "intra",
+			"source" : 103000259356400
+		}
+	],
+	"nodes" : 
+	[
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 103000259496016,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 103000259688784,
+			"function_name" : "c_static_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 103000259356400,
+					"edge_type" : "intra",
+					"source" : 103000259387104
+				}
+			],
+			"info" : "IntraICFGNode3 {fun: c_static_string}\n   ret ptr @.str ",
+			"node_id" : 103000259356400,
+			"node_kind" : 0,
+			"node_kind_string" : "IntraBlock",
+			"node_source_loc" : "",
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 103000259440192,
+					"edge_type" : "intra",
+					"source" : 103000259356400
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 103000259496016,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 103000259688784,
+			"function_name" : "c_static_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 103000259440192,
+					"edge_type" : "intra",
+					"source" : 103000259356400
+				}
+			],
+			"info" : "FunExitICFGNode2 {fun: c_static_string}\nPhiStmt: [Var7 <-- ([Var4, ICFGNode3],)]\t\nValVar ID: 8\n   ret ptr @.str ",
+			"node_id" : 103000259440192,
+			"node_kind" : 3,
+			"node_kind_string" : "FunExitBlock",
+			"node_source_loc" : "function ret: ",
+			"node_type" : false,
+			"outgoing_edges" : [],
+			"svf_statements" : 
+			[
+				{
+					"edge_id" : 3,
+					"lhs_var_id" : 7,
+					"operand_var_ids" : 
+					[
+						4
+					],
+					"operand_vars" : 
+					[
+						{
+							"icfg_node" : 103000259356400,
+							"op_var_id" : 4
+						}
+					],
+					"pta_edge" : true,
+					"res_var_id" : 7,
+					"stmt_id" : 103000259240080,
+					"stmt_info" : "PhiStmt: [Var7 <-- ([Var4, ICFGNode3],)]\t\nValVar ID: 8\n   ret ptr @.str ",
+					"stmt_type" : "PhiStmt"
+				}
+			]
+		}
+	]
+}

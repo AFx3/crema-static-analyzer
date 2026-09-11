@@ -1,0 +1,50 @@
+{
+  "boxed_bool": [
+    "POTENTIAL_UNCLASSIFIED"
+  ],
+  "boxed_char": [
+    "POTENTIAL_UNCLASSIFIED"
+  ],
+  "boxed_f32": [
+    "POTENTIAL_UNCLASSIFIED"
+  ],
+  "boxed_f64": [
+    "POTENTIAL_UNCLASSIFIED"
+  ],
+  "boxed_i128": [
+    "POTENTIAL_UNCLASSIFIED"
+  ],
+  "boxed_i16": [
+    "POTENTIAL_UNCLASSIFIED"
+  ],
+  "boxed_i32": [
+    "POTENTIAL_UNCLASSIFIED"
+  ],
+  "boxed_i64": [
+    "POTENTIAL_UNCLASSIFIED"
+  ],
+  "boxed_i8": [
+    "POTENTIAL_UNCLASSIFIED"
+  ],
+  "boxed_isize": [
+    "POTENTIAL_UNCLASSIFIED"
+  ],
+  "boxed_u128": [
+    "POTENTIAL_UNCLASSIFIED"
+  ],
+  "boxed_u16": [
+    "POTENTIAL_UNCLASSIFIED"
+  ],
+  "boxed_u32": [
+    "POTENTIAL_UNCLASSIFIED"
+  ],
+  "boxed_u64": [
+    "POTENTIAL_UNCLASSIFIED"
+  ],
+  "boxed_u8": [
+    "POTENTIAL_UNCLASSIFIED"
+  ],
+  "boxed_usize": [
+    "POTENTIAL_UNCLASSIFIED"
+  ]
+}

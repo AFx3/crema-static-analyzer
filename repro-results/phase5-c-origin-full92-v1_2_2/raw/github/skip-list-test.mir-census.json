@@ -1,0 +1,176 @@
+{
+  "call_counts": {
+    "<std::iter::Rev<std::ops::Range<usize>> as std::iter::IntoIterator>::into_iter": 1,
+    "<std::iter::Rev<std::ops::Range<usize>> as std::iter::Iterator>::next": 1,
+    "<std::ops::Range<usize> as std::iter::Iterator>::rev": 1,
+    "<std::option::Option<u32> as std::cmp::PartialEq>::eq": 8,
+    "<std::option::Option<u32> as std::cmp::PartialEq>::ne": 1,
+    "<std::option::Option<u32> as std::cmp::PartialOrd>::lt": 1,
+    "<std::vec::Vec<*mut Node<u32>> as std::ops::Deref>::deref": 3,
+    "<std::vec::Vec<*mut Node<u32>> as std::ops::Index<usize>>::index": 3,
+    "List::<u32>::new": 2,
+    "Node::<T>::new": 1,
+    "Node::<u32>::new": 10,
+    "alloc::alloc::exchange_malloc": 2,
+    "core::panicking::panic": 7,
+    "search": 7,
+    "std::boxed::Box::<Node<T>>::into_raw": 1,
+    "std::boxed::Box::<Node<T>>::new": 1,
+    "std::boxed::Box::<Node<u32>>::into_raw": 10,
+    "std::boxed::Box::<Node<u32>>::new": 10,
+    "std::slice::<impl [*mut Node<u32>]>::into_vec::<std::alloc::Global>": 2,
+    "std::vec::Vec::<*mut Node<T>>::new": 1,
+    "std::vec::Vec::<*mut Node<u32>>::len": 2,
+    "std::vec::Vec::<*mut Node<u32>>::push": 13
+  },
+  "call_total": 88,
+  "memory_api_counts": {
+    "alloc": 4,
+    "box_into_raw": 11,
+    "box_new": 11
+  },
+  "memory_api_examples": {
+    "alloc": [
+      "alloc::alloc::exchange_malloc",
+      "std::slice::<impl [*mut Node<u32>]>::into_vec::<std::alloc::Global>"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<Node<u32>>::into_raw",
+      "std::boxed::Box::<Node<T>>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<Node<u32>>::new",
+      "std::boxed::Box::<Node<T>>::new"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[copy _1, copy _5, copy _5]",
+      "[copy _1]"
+    ],
+    "arithmetic_binary": [
+      "Sub(copy _193, const 1_usize)",
+      "BitAnd(copy _192, copy _194)",
+      "Sub(copy _187, const 1_usize)",
+      "BitAnd(copy _186, copy _188)",
+      "Sub(copy _181, const 1_usize)",
+      "BitAnd(copy _180, copy _182)",
+      "Sub(copy _175, const 1_usize)",
+      "BitAnd(copy _174, copy _176)"
+    ],
+    "comparison": [
+      "Eq(copy _195, const 0_usize)",
+      "Eq(copy _189, const 0_usize)",
+      "Eq(copy _183, const 0_usize)",
+      "Lt(copy _54, copy _55)",
+      "Lt(copy _61, copy _62)",
+      "Eq(copy _177, const 0_usize)",
+      "Lt(copy _67, copy _68)",
+      "Eq(copy _171, const 0_usize)"
+    ],
+    "copy_for_deref": [
+      "deref_copy (_41.0: *mut Node<u32>)",
+      "deref_copy (*_52)[_54]",
+      "deref_copy (*_59)[_61]",
+      "deref_copy (_96.0: *mut Node<u32>)",
+      "deref_copy (*_18)",
+      "deref_copy (*_30)"
+    ],
+    "direct_deref_use": [
+      "copy (*_23)"
+    ],
+    "direct_use": [
+      "move _64",
+      "move _97",
+      "move _42",
+      "copy _1",
+      "move _5",
+      "move _22",
+      "move _34",
+      "copy _3"
+    ],
+    "pointer_cast": [
+      "copy _153 as *const () (PtrToPtr)",
+      "copy _146 as *const () (PtrToPtr)",
+      "copy _147 as *const () (PtrToPtr)",
+      "copy _149 as *const () (PtrToPtr)",
+      "copy _154 as *const () (PtrToPtr)",
+      "copy _151 as *const () (PtrToPtr)",
+      "copy _152 as *const () (PtrToPtr)"
+    ],
+    "ref": [
+      "&((*_48).1: std::vec::Vec<*mut Node<u32>>)",
+      "&((*_148).0: std::option::Option<u32>)",
+      "&mut ((*_1).1: std::vec::Vec<*mut Node<u32>>)",
+      "&mut ((*_5).1: std::vec::Vec<*mut Node<u32>>)",
+      "&mut ((*_9).1: std::vec::Vec<*mut Node<u32>>)",
+      "&mut ((*_13).1: std::vec::Vec<*mut Node<u32>>)",
+      "&mut ((*_17).1: std::vec::Vec<*mut Node<u32>>)",
+      "&mut ((*_21).1: std::vec::Vec<*mut Node<u32>>)"
+    ],
+    "scalar_cast": [
+      "copy _191 as usize (Transmute)",
+      "copy _185 as usize (Transmute)",
+      "copy _179 as usize (Transmute)",
+      "copy _173 as usize (Transmute)",
+      "copy _167 as usize (Transmute)",
+      "copy _161 as usize (Transmute)",
+      "copy _155 as usize (Transmute)"
+    ],
+    "scalar_const": [
+      "const 0_usize"
+    ],
+    "scalar_nullary": [
+      "SizeOf([*mut Node<u32>; 1])",
+      "AlignOf([*mut Node<u32>; 1])",
+      "AlignOf(Node<u32>)",
+      "Len((*_52))",
+      "Len((*_59))",
+      "Len((*_65))",
+      "SizeOf([*mut Node<u32>; 3])",
+      "AlignOf([*mut Node<u32>; 3])"
+    ],
+    "unknown_unhandled": [
+      "std::option::Option::<u32>::Some(const 3_u32)",
+      "std::option::Option::<u32>::Some(const 6_u32)",
+      "std::option::Option::<u32>::Some(const 7_u32)",
+      "std::option::Option::<u32>::Some(const 9_u32)",
+      "std::option::Option::<u32>::Some(const 12_u32)",
+      "std::option::Option::<u32>::Some(const 17_u32)",
+      "std::option::Option::<u32>::Some(const 19_u32)",
+      "std::option::Option::<u32>::Some(const 21_u32)"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 2,
+    "arithmetic_binary": 14,
+    "comparison": 12,
+    "copy_for_deref": 10,
+    "direct_deref_use": 1,
+    "direct_use": 11,
+    "pointer_cast": 7,
+    "ref": 41,
+    "scalar_cast": 7,
+    "scalar_const": 3,
+    "scalar_nullary": 14,
+    "unknown_unhandled": 38
+  },
+  "rvalue_total": 160,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 2,
+    "unknown_unhandled": 38
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "skip-list-test",
+  "terminator_kind_counts": {
+    "Assert": 10,
+    "Call": 88,
+    "Drop": 3,
+    "Goto": 8,
+    "Return": 4,
+    "SwitchInt": 13,
+    "Unreachable": 1,
+    "UnwindResume": 2
+  }
+}

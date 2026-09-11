@@ -1,0 +1,182 @@
+BUILD a-code_full_rust/a-double_free_full_rust_literals/boxed_i32
+   Compiling boxed_i32 v0.1.0 (/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-double_free_full_rust_literals/boxed_i32)
+warning: unused variable: `b1_again`
+ --> src/main.rs:9:7
+  |
+9 |   let b1_again = unsafe { Box::from_raw(raw) };
+  |       ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_b1_again`
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `b2`
+  --> src/main.rs:10:7
+   |
+10 |   let b2 = unsafe { Box::from_raw(raw) };
+   |       ^^ help: if this is intentional, prefix it with an underscore: `_b2`
+
+warning: `boxed_i32` (bin "boxed_i32") generated 2 warnings (run `cargo fix --bin "boxed_i32" -p boxed_i32` to apply 2 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
+BUILD a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i32
+   Compiling boxed_i32 v0.1.0 (/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i32)
+warning: unused variable: `raw`
+  --> src/main.rs:11:7
+   |
+11 |   let raw: *mut i32 = Box::into_raw(b1);
+   |       ^^^ help: if this is intentional, prefix it with an underscore: `_raw`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `boxed_i32` (bin "boxed_i32") generated 1 warning (run `cargo fix --bin "boxed_i32" -p boxed_i32` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
+BUILD a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i32
+   Compiling boxed_i32 v0.1.0 (/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i32)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
+BUILD a-code_full_rust/clean_cstring_no_errors_only_rust
+   Compiling cstring_test2_cargo v0.1.0 (/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/clean_cstring_no_errors_only_rust)
+warning: unused import: `process::abort`
+ --> src/main.rs:1:25
+  |
+1 | use std::{ffi::CString, process::abort};
+  |                         ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::ptr`
+ --> src/main.rs:3:5
+  |
+3 | use std::ptr;
+  |     ^^^^^^^^
+
+warning: unused import: `std::ffi::CStr`
+ --> src/main.rs:4:5
+  |
+4 | use std::ffi::CStr;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused import: `std::ffi::c_char`
+ --> src/main.rs:5:5
+  |
+5 | use std::ffi::c_char;
+  |     ^^^^^^^^^^^^^^^^
+
+warning: `cstring_test2_cargo` (bin "cstring_test2_cargo") generated 4 warnings (run `cargo fix --bin "cstring_test2_cargo" -p cstring_test2_cargo` to apply 4 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.12s
+BUILD a-code_full_rust/cstringcargo_enum_df_only_rust
+   Compiling log v0.4.27
+   Compiling cstringcargo_enum v0.1.0 (/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstringcargo_enum_df_only_rust)
+warning: unused import: `std::ptr`
+ --> src/main.rs:4:5
+  |
+4 | use std::ptr;
+  |     ^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `cstringcargo_enum` (bin "cstringcargo_enum") generated 1 warning (run `cargo fix --bin "cstringcargo_enum" -p cstringcargo_enum` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s
+BUILD a-code_full_rust/uaf_read_ptr
+   Compiling uaf_read_ptr v0.1.0 (/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/uaf_read_ptr)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.12s
+BUILD a-code_c_ffi/clean_mul_fn_ffi_no_errors
+ Downloading crates ...
+  Downloaded cc v1.2.19
+   Compiling shlex v1.3.0
+   Compiling cc v1.2.19
+   Compiling diff_fn_cargo v0.1.0 (/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/clean_mul_fn_ffi_no_errors)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.79s
+BUILD a-code_c_ffi/cstr_cargo_df_ffi
+ Downloading crates ...
+  Downloaded cc v1.2.20
+   Compiling shlex v1.3.0
+   Compiling cc v1.2.20
+   Compiling cstr_cargo v0.1.0 (/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/cstr_cargo_df_ffi)
+warning: cstr_cargo@0.1.0: src/ffi.c: In function 'print_e_free':
+warning: cstr_cargo@0.1.0: src/ffi.c:2:5: warning: implicit declaration of function 'printf' [-Wimplicit-function-declaration]
+warning: cstr_cargo@0.1.0:     2 |     printf("Stringa vista da C: %s\n", s);
+warning: cstr_cargo@0.1.0:       |     ^~~~~~
+warning: cstr_cargo@0.1.0: src/ffi.c:1:1: note: include '<stdio.h>' or provide a declaration of 'printf'
+warning: cstr_cargo@0.1.0:   +++ |+#include <stdio.h>
+warning: cstr_cargo@0.1.0:     1 | void print_e_free(char* s) {
+warning: cstr_cargo@0.1.0: src/ffi.c:2:5: warning: incompatible implicit declaration of built-in function 'printf' [-Wbuiltin-declaration-mismatch]
+warning: cstr_cargo@0.1.0:     2 |     printf("Stringa vista da C: %s\n", s);
+warning: cstr_cargo@0.1.0:       |     ^~~~~~
+warning: cstr_cargo@0.1.0: src/ffi.c:2:5: note: include '<stdio.h>' or provide a declaration of 'printf'
+warning: cstr_cargo@0.1.0: src/ffi.c:3:5: warning: implicit declaration of function 'free' [-Wimplicit-function-declaration]
+warning: cstr_cargo@0.1.0:     3 |     free(s);
+warning: cstr_cargo@0.1.0:       |     ^~~~
+warning: cstr_cargo@0.1.0: src/ffi.c:1:1: note: include '<stdlib.h>' or provide a declaration of 'free'
+warning: cstr_cargo@0.1.0:   +++ |+#include <stdlib.h>
+warning: cstr_cargo@0.1.0:     1 | void print_e_free(char* s) {
+warning: cstr_cargo@0.1.0: src/ffi.c:3:5: warning: incompatible implicit declaration of built-in function 'free' [-Wbuiltin-declaration-mismatch]
+warning: cstr_cargo@0.1.0:     3 |     free(s);
+warning: cstr_cargo@0.1.0:       |     ^~~~
+warning: cstr_cargo@0.1.0: src/ffi.c:3:5: note: include '<stdlib.h>' or provide a declaration of 'free'
+warning: unused import: `process::abort`
+ --> src/main.rs:1:25
+  |
+1 | use std::{ffi::CString, process::abort};
+  |                         ^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::ptr`
+ --> src/main.rs:2:5
+  |
+2 | use std::ptr;
+  |     ^^^^^^^^
+
+warning: unused variable: `c1`
+  --> src/main.rs:52:9
+   |
+52 |     let c1 = CString::from_raw(ptr as *mut c_char);
+   |         ^^ help: if this is intentional, prefix it with an underscore: `_c1`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `cstr_cargo` (bin "cstr_cargo") generated 3 warnings (run `cargo fix --bin "cstr_cargo" -p cstr_cargo` to apply 3 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.87s
+BUILD a-code_c_ffi/uaf_mem_leak_ffi
+ Downloading crates ...
+  Downloaded cc v1.2.18
+   Compiling shlex v1.3.0
+   Compiling cc v1.2.18
+   Compiling uafmulcargo v0.1.0 (/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_ffi/uaf_mem_leak_ffi)
+warning: unused variable: `a`
+  --> src/main.rs:20:9
+   |
+20 |     let a = Box::into_raw(boxed);
+   |         ^ help: if this is intentional, prefix it with an underscore: `_a`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `alloc_string` is never used
+  --> src/main.rs:56:5
+   |
+56 |  fn alloc_string(s: &str) -> Box<String> {
+   |     ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `cast_and_free_pointer` is never used
+ --> src/main.rs:2:23
+  |
+2 | unsafe extern "C" {fn cast_and_free_pointer(ptr: *mut c_void);}
+  |                       ^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `free_string` is never used
+ --> src/main.rs:4:23
+  |
+4 | unsafe extern "C" {fn free_string(ptr: *mut c_void);}
+  |                       ^^^^^^^^^^^
+
+warning: function `free_str` is never used
+ --> src/main.rs:5:23
+  |
+5 | unsafe extern "C" {fn free_str(ptr: *mut c_void);}
+  |                       ^^^^^^^^
+
+warning: `uafmulcargo` (bin "uafmulcargo") generated 5 warnings (run `cargo fix --bin "uafmulcargo" -p uafmulcargo` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.24s
+BUILD found vulns/noGenerator
+   Compiling noGenerator v0.1.0 (/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/noGenerator)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.18s

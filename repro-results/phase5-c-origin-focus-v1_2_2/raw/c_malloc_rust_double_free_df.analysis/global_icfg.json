@@ -1,0 +1,1261 @@
+{
+  "ordered_nodes": [
+    [
+      "rust::main::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_double_free_df/src/main.rs:11:17: 11:32 (#0), scope: scope[0] }, kind: _1 = c_alloc_i32(const 13_i32) -> [return: bb1, unwind unreachable] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_double_free_df/src/main.rs:11:17: 11:32 (#0)",
+            "function_called": "c_alloc_i32",
+            "arguments": [
+              {
+                "arg": "const 13_i32",
+                "is_mutable": null
+              }
+            ],
+            "return_place": "_1",
+            "return_target": "bb1",
+            "unwind_target": "unreachable"
+          }
+        }
+      }
+    ],
+    [
+      "dummyCall::rust::main::bb0::rust::main::bb0",
+      {
+        "node_type": "DummyCall",
+        "node_data": {
+          "dummy_node_name": "dummyCall",
+          "incoming_edge": "rust::main::bb0",
+          "outgoing_edge": "llvm::c_alloc_i32::node109178515926640::rust::main::bb0",
+          "id": "58926fadff2c73c9",
+          "mir_var": "const 13_i32",
+          "llvm_var": "7@rust::main::bb0",
+          "is_internal": false
+        }
+      }
+    ],
+    [
+      "llvm::c_alloc_i32::node109178515926640::rust::main::bb0",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 109178515926640,
+          "node_type": false,
+          "info": "IntraICFGNode3 {fun: c_alloc_i32}\nAddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %value.addr = alloca i32, align 4 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "c_alloc_i32",
+          "basic_block": 109178515929760,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 109178515746176,
+              "stmt_type": "AddrStmt",
+              "stmt_info": "AddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %value.addr = alloca i32, align 4 ",
+              "edge_id": 5,
+              "pta_edge": true,
+              "lhs_var_id": 8,
+              "rhs_var_id": 9,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "operand_vars": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 109178515955200,
+              "destination": 109178515926640,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 109178515926640,
+              "destination": 109178515905952,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::c_alloc_i32::node109178515905952::rust::main::bb0",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 109178515905952,
+          "node_type": false,
+          "info": "IntraICFGNode4 {fun: c_alloc_i32}\nAddrStmt: [Var11 <-- Var12]\t\nValVar ID: 11\n   %p = alloca ptr, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "c_alloc_i32",
+          "basic_block": 109178515929760,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 109178515918112,
+              "stmt_type": "AddrStmt",
+              "stmt_info": "AddrStmt: [Var11 <-- Var12]\t\nValVar ID: 11\n   %p = alloca ptr, align 8 ",
+              "edge_id": 6,
+              "pta_edge": true,
+              "lhs_var_id": 11,
+              "rhs_var_id": 12,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "operand_vars": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 109178515926640,
+              "destination": 109178515905952,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 109178515905952,
+              "destination": 109178515920096,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::c_alloc_i32::node109178515920096::rust::main::bb0",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 109178515920096,
+          "node_type": false,
+          "info": "IntraICFGNode5 {fun: c_alloc_i32}\nStoreStmt: [Var8 <-- Var7]\t\nValVar ID: 13\n   store i32 %value, ptr %value.addr, align 4 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "c_alloc_i32",
+          "basic_block": 109178515929760,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 109178515906656,
+              "stmt_type": "StoreStmt",
+              "stmt_info": "StoreStmt: [Var8 <-- Var7]\t\nValVar ID: 13\n   store i32 %value, ptr %value.addr, align 4 ",
+              "edge_id": 7,
+              "pta_edge": false,
+              "lhs_var_id": 8,
+              "rhs_var_id": 7,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "operand_vars": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 109178515905952,
+              "destination": 109178515920096,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 109178515920096,
+              "destination": 109178515794736,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::c_alloc_i32::node109178515794736::rust::main::bb0",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 109178515794736,
+          "node_type": true,
+          "info": "CallICFGNode6 {fun: c_alloc_i32}\nAddrStmt: [Var14 <-- Var15]\t\nValVar ID: 14\n   %call = call noalias ptr @malloc(i64 noundef 4) #2 ",
+          "node_kind_string": "FunCallBlock",
+          "node_kind": 4,
+          "node_source_loc": "CallICFGNode: ",
+          "function_name": "c_alloc_i32",
+          "basic_block": 109178515929760,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 109178515922000,
+              "stmt_type": "AddrStmt",
+              "stmt_info": "AddrStmt: [Var14 <-- Var15]\t\nValVar ID: 14\n   %call = call noalias ptr @malloc(i64 noundef 4) #2 ",
+              "edge_id": 8,
+              "pta_edge": true,
+              "lhs_var_id": 14,
+              "rhs_var_id": 15,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "operand_vars": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 109178515920096,
+              "destination": 109178515794736,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 109178515794736,
+              "destination": 109178515732784,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::c_alloc_i32::node109178515732784::rust::main::bb0",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 109178515732784,
+          "node_type": true,
+          "info": "RetICFGNode7 {fun: c_alloc_i32}\n   %call = call noalias ptr @malloc(i64 noundef 4) #2 RetICFGNode: ",
+          "node_kind_string": "FunRetBlock",
+          "node_kind": 5,
+          "node_source_loc": "RetICFGNode: ",
+          "function_name": "c_alloc_i32",
+          "basic_block": 109178515929760,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [],
+          "incoming_edges": [
+            {
+              "source": 109178515794736,
+              "destination": 109178515732784,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 109178515732784,
+              "destination": 109178516257936,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::c_alloc_i32::node109178516257936::rust::main::bb0",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 109178516257936,
+          "node_type": false,
+          "info": "IntraICFGNode8 {fun: c_alloc_i32}\nCopyStmt: [Var19 <-- Var14]\t\nValVar ID: 19\n   %0 = bitcast ptr %call to ptr ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "c_alloc_i32",
+          "basic_block": 109178515929760,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 109178515925472,
+              "stmt_type": "AssignStmt",
+              "stmt_info": "CopyStmt: [Var19 <-- Var14]\t\nValVar ID: 19\n   %0 = bitcast ptr %call to ptr ",
+              "edge_id": 9,
+              "pta_edge": true,
+              "lhs_var_id": 19,
+              "rhs_var_id": 14,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "operand_vars": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 109178515732784,
+              "destination": 109178516257936,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 109178516257936,
+              "destination": 109178515941776,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::c_alloc_i32::node109178515941776::rust::main::bb0",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 109178515941776,
+          "node_type": false,
+          "info": "IntraICFGNode9 {fun: c_alloc_i32}\nStoreStmt: [Var11 <-- Var19]\t\nValVar ID: 20\n   store ptr %0, ptr %p, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "c_alloc_i32",
+          "basic_block": 109178515929760,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 109178515924448,
+              "stmt_type": "StoreStmt",
+              "stmt_info": "StoreStmt: [Var11 <-- Var19]\t\nValVar ID: 20\n   store ptr %0, ptr %p, align 8 ",
+              "edge_id": 10,
+              "pta_edge": true,
+              "lhs_var_id": 11,
+              "rhs_var_id": 19,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "operand_vars": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 109178516257936,
+              "destination": 109178515941776,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 109178515941776,
+              "destination": 109178515907904,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::c_alloc_i32::node109178515907904::rust::main::bb0",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 109178515907904,
+          "node_type": false,
+          "info": "IntraICFGNode10 {fun: c_alloc_i32}\nLoadStmt: [Var21 <-- Var11]\t\nValVar ID: 21\n   %1 = load ptr, ptr %p, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "c_alloc_i32",
+          "basic_block": 109178515929760,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 109178515923600,
+              "stmt_type": "LoadStmt",
+              "stmt_info": "LoadStmt: [Var21 <-- Var11]\t\nValVar ID: 21\n   %1 = load ptr, ptr %p, align 8 ",
+              "edge_id": 11,
+              "pta_edge": true,
+              "lhs_var_id": 21,
+              "rhs_var_id": 11,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "operand_vars": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 109178515941776,
+              "destination": 109178515907904,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 109178515907904,
+              "destination": 109178516015440,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::c_alloc_i32::node109178516015440::rust::main::bb0",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 109178516015440,
+          "node_type": false,
+          "info": "IntraICFGNode11 {fun: c_alloc_i32}\nCmpStmt: [Var22 <-- (Var21 predicate33 Var0)]\t\nValVar ID: 22\n   %cmp = icmp ne ptr %1, null ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "c_alloc_i32",
+          "basic_block": 109178515929760,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 109178515934560,
+              "stmt_type": "CmpStmt",
+              "stmt_info": "CmpStmt: [Var22 <-- (Var21 predicate33 Var0)]\t\nValVar ID: 22\n   %cmp = icmp ne ptr %1, null ",
+              "edge_id": 12,
+              "pta_edge": false,
+              "lhs_var_id": null,
+              "rhs_var_id": null,
+              "res_var_id": 22,
+              "operand_var_ids": [
+                21,
+                0
+              ],
+              "operand_vars": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 109178515907904,
+              "destination": 109178516015440,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 109178516015440,
+              "destination": 109178516014512,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::c_alloc_i32::node109178516014512::rust::main::bb0",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 109178516014512,
+          "node_type": false,
+          "info": "IntraICFGNode12 {fun: c_alloc_i32}\nBranchStmt: [Condition Var22]\nSuccessor 0 ICFGNode13   Successor 1 ICFGNode14   \nValVar ID: 23\n   br i1 %cmp, label %if.then, label %if.end ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "c_alloc_i32",
+          "basic_block": 109178515929760,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 109178516193248,
+              "stmt_type": "BranchStmt",
+              "stmt_info": "BranchStmt: [Condition Var22]\nSuccessor 0 ICFGNode13   Successor 1 ICFGNode14   \nValVar ID: 23\n   br i1 %cmp, label %if.then, label %if.end ",
+              "edge_id": 13,
+              "pta_edge": false,
+              "lhs_var_id": null,
+              "rhs_var_id": null,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "operand_vars": null,
+              "call_inst": null,
+              "is_conditional": true,
+              "condition_var_id": 109178515754208,
+              "successors": [
+                {
+                  "successor_id": 109178515954288,
+                  "condition_value": 1
+                },
+                {
+                  "successor_id": 109178516188208,
+                  "condition_value": 0
+                }
+              ]
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 109178516015440,
+              "destination": 109178516014512,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 109178516014512,
+              "destination": 109178515954288,
+              "edge_type": "intra"
+            },
+            {
+              "source": 109178516014512,
+              "destination": 109178516188208,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::c_alloc_i32::node109178515954288::rust::main::bb0",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 109178515954288,
+          "node_type": false,
+          "info": "IntraICFGNode13 {fun: c_alloc_i32}\nLoadStmt: [Var24 <-- Var8]\t\nValVar ID: 24\n   %2 = load i32, ptr %value.addr, align 4 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "c_alloc_i32",
+          "basic_block": 109178515930416,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 109178515913104,
+              "stmt_type": "LoadStmt",
+              "stmt_info": "LoadStmt: [Var24 <-- Var8]\t\nValVar ID: 24\n   %2 = load i32, ptr %value.addr, align 4 ",
+              "edge_id": 14,
+              "pta_edge": false,
+              "lhs_var_id": 24,
+              "rhs_var_id": 8,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "operand_vars": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 109178516014512,
+              "destination": 109178515954288,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 109178515954288,
+              "destination": 109178516153008,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::c_alloc_i32::node109178516188208::rust::main::bb0",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 109178516188208,
+          "node_type": false,
+          "info": "IntraICFGNode14 {fun: c_alloc_i32}\nLoadStmt: [Var29 <-- Var11]\t\nValVar ID: 29\n   %4 = load ptr, ptr %p, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "c_alloc_i32",
+          "basic_block": 109178515931072,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 109178515737408,
+              "stmt_type": "LoadStmt",
+              "stmt_info": "LoadStmt: [Var29 <-- Var11]\t\nValVar ID: 29\n   %4 = load ptr, ptr %p, align 8 ",
+              "edge_id": 18,
+              "pta_edge": true,
+              "lhs_var_id": 29,
+              "rhs_var_id": 11,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "operand_vars": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 109178516014512,
+              "destination": 109178516188208,
+              "edge_type": "intra"
+            },
+            {
+              "source": 109178516152384,
+              "destination": 109178516188208,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 109178516188208,
+              "destination": 109178515919760,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::c_alloc_i32::node109178516153008::rust::main::bb0",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 109178516153008,
+          "node_type": false,
+          "info": "IntraICFGNode15 {fun: c_alloc_i32}\nLoadStmt: [Var25 <-- Var11]\t\nValVar ID: 25\n   %3 = load ptr, ptr %p, align 8 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "c_alloc_i32",
+          "basic_block": 109178515930416,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 109178516018320,
+              "stmt_type": "LoadStmt",
+              "stmt_info": "LoadStmt: [Var25 <-- Var11]\t\nValVar ID: 25\n   %3 = load ptr, ptr %p, align 8 ",
+              "edge_id": 15,
+              "pta_edge": true,
+              "lhs_var_id": 25,
+              "rhs_var_id": 11,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "operand_vars": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 109178515954288,
+              "destination": 109178516153008,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 109178516153008,
+              "destination": 109178515964704,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::c_alloc_i32::node109178515919760::rust::main::bb0",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 109178515919760,
+          "node_type": false,
+          "info": "IntraICFGNode16 {fun: c_alloc_i32}\n   ret ptr %4 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "c_alloc_i32",
+          "basic_block": 109178515931072,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+          "svf_statements": [],
+          "incoming_edges": [
+            {
+              "source": 109178516188208,
+              "destination": 109178515919760,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 109178515919760,
+              "destination": 109178516033504,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::c_alloc_i32::node109178515964704::rust::main::bb0",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 109178515964704,
+          "node_type": false,
+          "info": "IntraICFGNode17 {fun: c_alloc_i32}\nStoreStmt: [Var25 <-- Var24]\t\nValVar ID: 26\n   store i32 %2, ptr %3, align 4 ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "c_alloc_i32",
+          "basic_block": 109178515930416,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 109178515820928,
+              "stmt_type": "StoreStmt",
+              "stmt_info": "StoreStmt: [Var25 <-- Var24]\t\nValVar ID: 26\n   store i32 %2, ptr %3, align 4 ",
+              "edge_id": 16,
+              "pta_edge": false,
+              "lhs_var_id": 25,
+              "rhs_var_id": 24,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "operand_vars": null,
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 109178516153008,
+              "destination": 109178515964704,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 109178515964704,
+              "destination": 109178516152384,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "llvm::c_alloc_i32::node109178516033504::rust::main::bb0",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 109178516033504,
+          "node_type": false,
+          "info": "FunExitICFGNode2 {fun: c_alloc_i32}\nPhiStmt: [Var6 <-- ([Var29, ICFGNode16],)]\t\nValVar ID: 30\n   ret ptr %4 ",
+          "node_kind_string": "FunExitBlock",
+          "node_kind": 3,
+          "node_source_loc": "function ret: ",
+          "function_name": "c_alloc_i32",
+          "basic_block": 109178515931072,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 109178515776016,
+              "stmt_type": "PhiStmt",
+              "stmt_info": "PhiStmt: [Var6 <-- ([Var29, ICFGNode16],)]\t\nValVar ID: 30\n   ret ptr %4 ",
+              "edge_id": 19,
+              "pta_edge": true,
+              "lhs_var_id": 6,
+              "rhs_var_id": null,
+              "res_var_id": 6,
+              "operand_var_ids": [
+                29
+              ],
+              "operand_vars": [
+                {
+                  "op_var_id": 29,
+                  "icfg_node": 109178515919760
+                }
+              ],
+              "call_inst": null,
+              "is_conditional": null,
+              "condition_var_id": null,
+              "successors": null
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 109178515919760,
+              "destination": 109178516033504,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": []
+        }
+      }
+    ],
+    [
+      "llvm::c_alloc_i32::node109178516152384::rust::main::bb0",
+      {
+        "node_type": "Llvm",
+        "node_data": {
+          "node_id": 109178516152384,
+          "node_type": false,
+          "info": "IntraICFGNode18 {fun: c_alloc_i32}\nBranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode14   \nValVar ID: 27\n   br label %if.end ",
+          "node_kind_string": "IntraBlock",
+          "node_kind": 0,
+          "node_source_loc": "",
+          "function_name": "c_alloc_i32",
+          "basic_block": 109178515930416,
+          "basic_block_name": null,
+          "basic_block_info": "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+          "svf_statements": [
+            {
+              "stmt_id": 109178515823920,
+              "stmt_type": "BranchStmt",
+              "stmt_info": "BranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode14   \nValVar ID: 27\n   br label %if.end ",
+              "edge_id": 17,
+              "pta_edge": false,
+              "lhs_var_id": null,
+              "rhs_var_id": null,
+              "res_var_id": null,
+              "operand_var_ids": null,
+              "operand_vars": null,
+              "call_inst": null,
+              "is_conditional": false,
+              "condition_var_id": null,
+              "successors": [
+                {
+                  "successor_id": 109178516188208,
+                  "condition_value": 1
+                }
+              ]
+            }
+          ],
+          "incoming_edges": [
+            {
+              "source": 109178515964704,
+              "destination": 109178516152384,
+              "edge_type": "intra"
+            }
+          ],
+          "outgoing_edges": [
+            {
+              "source": 109178516152384,
+              "destination": 109178516188208,
+              "edge_type": "intra"
+            }
+          ]
+        }
+      }
+    ],
+    [
+      "dummyRet::rust::main::bb1::rust::main::bb0",
+      {
+        "node_type": "DummyRet",
+        "node_data": {
+          "dummy_node_name": "dummyRet",
+          "incoming_edge": "llvm::c_alloc_i32::node109178516033504::rust::main::bb0",
+          "outgoing_edge": "rust::main::bb1",
+          "id": "243775e1b5393415",
+          "mir_var": "_1",
+          "llvm_var": "6@rust::main::bb0",
+          "is_internal": false
+        }
+      }
+    ],
+    [
+      "rust::main::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_double_free_df/src/main.rs:12:12: 12:23 (#0), scope: scope[1] }, kind: _2 = std::ptr::mut_ptr::<impl *mut i32>::is_null(copy _1) -> [return: bb2, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_double_free_df/src/main.rs:12:12: 12:23 (#0)",
+            "function_called": "std::ptr::mut_ptr::<impl *mut i32>::is_null",
+            "arguments": [
+              {
+                "arg": "Local(_1)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_2",
+            "return_target": "bb2",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [],
+          "terminator": {
+            "kind": "SwitchInt",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_double_free_df/src/main.rs:12:12: 12:23 (#0), scope: scope[1] }, kind: switchInt(move _2) -> [0: bb3, otherwise: bb7] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_double_free_df/src/main.rs:12:12: 12:23 (#0)",
+            "targets": [
+              "(0, bb3)"
+            ],
+            "discr": "move _2",
+            "otherwise": "bb7"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb3",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 3,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_double_free_df/src/main.rs:16:14: 16:32 (#0), scope: scope[1] }, kind: _4 = std::ptr::mut_ptr::<impl *mut i32>::cast::<std::ffi::c_void>(copy _1) -> [return: bb4, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_double_free_df/src/main.rs:16:14: 16:32 (#0)",
+            "function_called": "std::ptr::mut_ptr::<impl *mut i32>::cast::<std::ffi::c_void>",
+            "arguments": [
+              {
+                "arg": "Local(_1)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_4",
+            "return_target": "bb4",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb4",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 4,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_double_free_df/src/main.rs:16:9: 16:33 (#0), scope: scope[1] }, kind: _3 = free(move _4) -> [return: bb5, unwind unreachable] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_double_free_df/src/main.rs:16:9: 16:33 (#0)",
+            "function_called": "free",
+            "arguments": [
+              {
+                "arg": "Local(_4) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_3",
+            "return_target": "bb5",
+            "unwind_target": "unreachable"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb5",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 5,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_double_free_df/src/main.rs:17:14: 17:32 (#0), scope: scope[1] }, kind: _6 = std::ptr::mut_ptr::<impl *mut i32>::cast::<std::ffi::c_void>(copy _1) -> [return: bb6, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_double_free_df/src/main.rs:17:14: 17:32 (#0)",
+            "function_called": "std::ptr::mut_ptr::<impl *mut i32>::cast::<std::ffi::c_void>",
+            "arguments": [
+              {
+                "arg": "Local(_1)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_6",
+            "return_target": "bb6",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb6",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 6,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_double_free_df/src/main.rs:17:9: 17:33 (#0), scope: scope[1] }, kind: _5 = free(move _6) -> [return: bb7, unwind unreachable] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_double_free_df/src/main.rs:17:9: 17:33 (#0)",
+            "function_called": "free",
+            "arguments": [
+              {
+                "arg": "Local(_6) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_5",
+            "return_target": "bb7",
+            "unwind_target": "unreachable"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb7",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 7,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_double_free_df/src/main.rs:19:2: 19:2 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_double_free_df/src/main.rs:19:2: 19:2 (#0)"
+          }
+        }
+      }
+    ]
+  ],
+  "icfg_edges": [
+    {
+      "source": "rust::main::bb0",
+      "destination": "dummyCall::rust::main::bb0::rust::main::bb0",
+      "label": "FFI Call",
+      "source_label": "Mir bb0",
+      "destination_label": "dummyCall (id: 58926fadff2c73c9)"
+    },
+    {
+      "source": "dummyCall::rust::main::bb0::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178515926640::rust::main::bb0",
+      "label": "dummyCall->LLVM Entry",
+      "source_label": "dummyCall (id: 58926fadff2c73c9)",
+      "destination_label": "IntraICFGNode3 {fun: c_alloc_i32}\nAddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %value.addr = alloca i32, align 4 "
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178516033504::rust::main::bb0",
+      "destination": "dummyRet::rust::main::bb1::rust::main::bb0",
+      "label": "LLVM Exit->dummyRet",
+      "source_label": "FunExitICFGNode2 {fun: c_alloc_i32}\nPhiStmt: [Var6 <-- ([Var29, ICFGNode16],)]\t\nValVar ID: 30\n   ret ptr %4 ",
+      "destination_label": "dummyRet (id: 243775e1b5393415)"
+    },
+    {
+      "source": "dummyRet::rust::main::bb1::rust::main::bb0",
+      "destination": "rust::main::bb1",
+      "label": "dummyRet->MIR Return",
+      "source_label": "dummyRet (id: 243775e1b5393415)",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::main::bb1",
+      "destination": "rust::main::bb2",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb1",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::main::bb2",
+      "destination": "rust::main::bb3",
+      "label": "SwitchInt target",
+      "source_label": "Mir bb2",
+      "destination_label": "Mir bb3"
+    },
+    {
+      "source": "rust::main::bb2",
+      "destination": "rust::main::bb7",
+      "label": "SwitchInt otherwise",
+      "source_label": "Mir bb2",
+      "destination_label": "Mir bb7"
+    },
+    {
+      "source": "rust::main::bb3",
+      "destination": "rust::main::bb4",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb3",
+      "destination_label": "Mir bb4"
+    },
+    {
+      "source": "rust::main::bb4",
+      "destination": "rust::main::bb5",
+      "label": "FFI Call (stdlib)",
+      "source_label": "Mir bb4",
+      "destination_label": "Mir bb5"
+    },
+    {
+      "source": "rust::main::bb5",
+      "destination": "rust::main::bb6",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb5",
+      "destination_label": "Mir bb6"
+    },
+    {
+      "source": "rust::main::bb6",
+      "destination": "rust::main::bb7",
+      "label": "FFI Call (stdlib)",
+      "source_label": "Mir bb6",
+      "destination_label": "Mir bb7"
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178515732784::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178516257936::rust::main::bb0",
+      "label": "LLVM",
+      "source_label": "RetICFGNode7 {fun: c_alloc_i32}\n   %call = call noalias ptr @malloc(i64 noundef 4) #2 RetICFGNode: ",
+      "destination_label": "IntraICFGNode8 {fun: c_alloc_i32}\nCopyStmt: [Var19 <-- Var14]\t\nValVar ID: 19\n   %0 = bitcast ptr %call to ptr "
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178515794736::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178515732784::rust::main::bb0",
+      "label": "LLVM",
+      "source_label": "CallICFGNode6 {fun: c_alloc_i32}\nAddrStmt: [Var14 <-- Var15]\t\nValVar ID: 14\n   %call = call noalias ptr @malloc(i64 noundef 4) #2 ",
+      "destination_label": "RetICFGNode7 {fun: c_alloc_i32}\n   %call = call noalias ptr @malloc(i64 noundef 4) #2 RetICFGNode: "
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178515905952::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178515920096::rust::main::bb0",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode4 {fun: c_alloc_i32}\nAddrStmt: [Var11 <-- Var12]\t\nValVar ID: 11\n   %p = alloca ptr, align 8 ",
+      "destination_label": "IntraICFGNode5 {fun: c_alloc_i32}\nStoreStmt: [Var8 <-- Var7]\t\nValVar ID: 13\n   store i32 %value, ptr %value.addr, align 4 "
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178515907904::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178516015440::rust::main::bb0",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode10 {fun: c_alloc_i32}\nLoadStmt: [Var21 <-- Var11]\t\nValVar ID: 21\n   %1 = load ptr, ptr %p, align 8 ",
+      "destination_label": "IntraICFGNode11 {fun: c_alloc_i32}\nCmpStmt: [Var22 <-- (Var21 predicate33 Var0)]\t\nValVar ID: 22\n   %cmp = icmp ne ptr %1, null "
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178515919760::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178516033504::rust::main::bb0",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode16 {fun: c_alloc_i32}\n   ret ptr %4 ",
+      "destination_label": "FunExitICFGNode2 {fun: c_alloc_i32}\nPhiStmt: [Var6 <-- ([Var29, ICFGNode16],)]\t\nValVar ID: 30\n   ret ptr %4 "
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178515920096::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178515794736::rust::main::bb0",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode5 {fun: c_alloc_i32}\nStoreStmt: [Var8 <-- Var7]\t\nValVar ID: 13\n   store i32 %value, ptr %value.addr, align 4 ",
+      "destination_label": "CallICFGNode6 {fun: c_alloc_i32}\nAddrStmt: [Var14 <-- Var15]\t\nValVar ID: 14\n   %call = call noalias ptr @malloc(i64 noundef 4) #2 "
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178515926640::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178515905952::rust::main::bb0",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode3 {fun: c_alloc_i32}\nAddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %value.addr = alloca i32, align 4 ",
+      "destination_label": "IntraICFGNode4 {fun: c_alloc_i32}\nAddrStmt: [Var11 <-- Var12]\t\nValVar ID: 11\n   %p = alloca ptr, align 8 "
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178515941776::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178515907904::rust::main::bb0",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode9 {fun: c_alloc_i32}\nStoreStmt: [Var11 <-- Var19]\t\nValVar ID: 20\n   store ptr %0, ptr %p, align 8 ",
+      "destination_label": "IntraICFGNode10 {fun: c_alloc_i32}\nLoadStmt: [Var21 <-- Var11]\t\nValVar ID: 21\n   %1 = load ptr, ptr %p, align 8 "
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178515954288::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178516153008::rust::main::bb0",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode13 {fun: c_alloc_i32}\nLoadStmt: [Var24 <-- Var8]\t\nValVar ID: 24\n   %2 = load i32, ptr %value.addr, align 4 ",
+      "destination_label": "IntraICFGNode15 {fun: c_alloc_i32}\nLoadStmt: [Var25 <-- Var11]\t\nValVar ID: 25\n   %3 = load ptr, ptr %p, align 8 "
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178515964704::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178516152384::rust::main::bb0",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode17 {fun: c_alloc_i32}\nStoreStmt: [Var25 <-- Var24]\t\nValVar ID: 26\n   store i32 %2, ptr %3, align 4 ",
+      "destination_label": "IntraICFGNode18 {fun: c_alloc_i32}\nBranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode14   \nValVar ID: 27\n   br label %if.end "
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178516014512::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178515954288::rust::main::bb0",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode12 {fun: c_alloc_i32}\nBranchStmt: [Condition Var22]\nSuccessor 0 ICFGNode13   Successor 1 ICFGNode14   \nValVar ID: 23\n   br i1 %cmp, label %if.then, label %if.end ",
+      "destination_label": "IntraICFGNode13 {fun: c_alloc_i32}\nLoadStmt: [Var24 <-- Var8]\t\nValVar ID: 24\n   %2 = load i32, ptr %value.addr, align 4 "
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178516014512::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178516188208::rust::main::bb0",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode12 {fun: c_alloc_i32}\nBranchStmt: [Condition Var22]\nSuccessor 0 ICFGNode13   Successor 1 ICFGNode14   \nValVar ID: 23\n   br i1 %cmp, label %if.then, label %if.end ",
+      "destination_label": "IntraICFGNode14 {fun: c_alloc_i32}\nLoadStmt: [Var29 <-- Var11]\t\nValVar ID: 29\n   %4 = load ptr, ptr %p, align 8 "
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178516015440::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178516014512::rust::main::bb0",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode11 {fun: c_alloc_i32}\nCmpStmt: [Var22 <-- (Var21 predicate33 Var0)]\t\nValVar ID: 22\n   %cmp = icmp ne ptr %1, null ",
+      "destination_label": "IntraICFGNode12 {fun: c_alloc_i32}\nBranchStmt: [Condition Var22]\nSuccessor 0 ICFGNode13   Successor 1 ICFGNode14   \nValVar ID: 23\n   br i1 %cmp, label %if.then, label %if.end "
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178516152384::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178516188208::rust::main::bb0",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode18 {fun: c_alloc_i32}\nBranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode14   \nValVar ID: 27\n   br label %if.end ",
+      "destination_label": "IntraICFGNode14 {fun: c_alloc_i32}\nLoadStmt: [Var29 <-- Var11]\t\nValVar ID: 29\n   %4 = load ptr, ptr %p, align 8 "
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178516153008::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178515964704::rust::main::bb0",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode15 {fun: c_alloc_i32}\nLoadStmt: [Var25 <-- Var11]\t\nValVar ID: 25\n   %3 = load ptr, ptr %p, align 8 ",
+      "destination_label": "IntraICFGNode17 {fun: c_alloc_i32}\nStoreStmt: [Var25 <-- Var24]\t\nValVar ID: 26\n   store i32 %2, ptr %3, align 4 "
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178516188208::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178515919760::rust::main::bb0",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode14 {fun: c_alloc_i32}\nLoadStmt: [Var29 <-- Var11]\t\nValVar ID: 29\n   %4 = load ptr, ptr %p, align 8 ",
+      "destination_label": "IntraICFGNode16 {fun: c_alloc_i32}\n   ret ptr %4 "
+    },
+    {
+      "source": "llvm::c_alloc_i32::node109178516257936::rust::main::bb0",
+      "destination": "llvm::c_alloc_i32::node109178515941776::rust::main::bb0",
+      "label": "LLVM",
+      "source_label": "IntraICFGNode8 {fun: c_alloc_i32}\nCopyStmt: [Var19 <-- Var14]\t\nValVar ID: 19\n   %0 = bitcast ptr %call to ptr ",
+      "destination_label": "IntraICFGNode9 {fun: c_alloc_i32}\nStoreStmt: [Var11 <-- Var19]\t\nValVar ID: 20\n   store ptr %0, ptr %p, align 8 "
+    }
+  ]
+}

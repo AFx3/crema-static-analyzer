@@ -1,0 +1,7 @@
+{
+  "uaf_mem_leak_ffi": [
+    "ML",
+    "UAF",
+    "UB_FFI"
+  ]
+}

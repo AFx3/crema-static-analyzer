@@ -1,0 +1,308 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2015:50
+     |
+2015 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: variant `BOXTIMES` is never constructed
+  --> src/abstract_domain.rs:82:5
+   |
+78 | pub enum CellValue {
+   |          --------- variant in this enum
+...
+82 |     BOXTIMES,
+   |     ^^^^^^^^
+   |
+   = note: `CellValue` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:481:8
+    |
+481 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 6 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3 /home/af/Documenti/a-phd/crema`
+No C files found in the project.
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package hw3 target hw3 at /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/target/debug",
+]
+Global ICFG saved to global_icfg.json
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+Final Abstract State: {"rust::main::bb25": {}, "rust::main::bb0": {}, "rust::main::bb20": {}, "rust::main::bb26": {}, "rust::main::bb45": {{"Local(_75)", "Local(_76)"}: FREED}, "rust::main::bb24": {}, "rust::main::bb51": {{"Local(_21)", "Local(_75)", "Local(_76)"}: FREED}, "rust::main::bb29": {}, "rust::main::bb42": {{"Local(_76)"}: FREED}, "rust::main::bb47": {{"Local(_21)", "Local(_4)", "Local(_75)", "Local(_76)"}: FREED}, "rust::main::bb17": {}, "rust::main::bb53": {{"Local(_5)"}: FREED}, "rust::main::bb43": {{"Local(_76)"}: FREED}, "rust::main::bb10": {}, "rust::main::bb3": {}, "rust::main::bb31": {}, "rust::main::bb1": {}, "rust::main::bb28": {}, "rust::main::bb5": {}, "rust::main::bb22": {}, "rust::main::bb44": {{"Local(_76)"}: FREED}, "rust::main::bb46": {{"Local(_21)", "Local(_75)", "Local(_76)"}: FREED}, "rust::main::bb13": {}, "rust::main::bb39": {}, "rust::main::bb41": {{"Local(_76)"}: FREED}, "rust::main::bb18": {}, "rust::main::bb35": {}, "rust::main::bb50": {{"Local(_75)", "Local(_76)"}: FREED}, "rust::main::bb37": {}, "rust::main::bb14": {}, "rust::main::bb19": {}, "rust::main::bb49": {{"Local(_76)"}: FREED}, "rust::main::bb7": {}, "rust::main::bb38": {}, "rust::main::bb16": {}, "rust::main::bb15": {}, "rust::main::bb32": {}, "rust::main::terminate": {{"Local(_21)", "Local(_4)", "Local(_75)", "Local(_76)"}: FREED, {"Local(_5)"}: FREED}, "rust::main::bb12": {}, "rust::main::bb48": {{"Local(_21)", "Local(_4)", "Local(_75)", "Local(_76)"}: FREED}, "rust::main::bb8": {}, "rust::main::bb54": {{"Local(_21)", "Local(_4)", "Local(_75)", "Local(_76)"}: FREED, {"Local(_5)"}: FREED}, "rust::main::bb11": {}, "rust::main::bb9": {}, "rust::main::bb21": {}, "rust::main::bb34": {}, "rust::main::bb6": {}, "rust::main::bb27": {}, "rust::main::bb4": {}, "rust::main::bb23": {}, "rust::main::bb30": {}, "rust::main::bb52": {{"Local(_21)", "Local(_4)", "Local(_75)", "Local(_76)"}: FREED}, "rust::main::bb40": {{"Local(_76)"}: FREED}, "rust::main::bb2": {}, "rust::main::bb36": {}, "rust::main::bb33": {}}
+Final Taint State: {
+    "rust::main::bb21": {},
+    "rust::main::bb29": {},
+    "rust::main::bb10": {},
+    "rust::main::bb15": {},
+    "rust::main::bb17": {},
+    "rust::main::bb42": {
+        "Local(_76)": {
+            "free",
+        },
+    },
+    "rust::main::bb54": {
+        "Local(_75)": {
+            "free",
+        },
+        "Local(_21)": {
+            "free",
+        },
+        "Local(_76)": {
+            "free",
+        },
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+    },
+    "rust::main::bb14": {},
+    "rust::main::bb19": {},
+    "rust::main::bb43": {
+        "Local(_76)": {
+            "free",
+        },
+    },
+    "rust::main::bb46": {
+        "Local(_75)": {
+            "free",
+        },
+        "Local(_21)": {
+            "free",
+        },
+        "Local(_76)": {
+            "free",
+        },
+    },
+    "rust::main::bb52": {
+        "Local(_76)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_75)": {
+            "free",
+        },
+        "Local(_21)": {
+            "free",
+        },
+    },
+    "rust::main::bb50": {
+        "Local(_75)": {
+            "free",
+        },
+        "Local(_76)": {
+            "free",
+        },
+    },
+    "rust::main::bb26": {},
+    "rust::main::bb28": {},
+    "rust::main::bb18": {},
+    "rust::main::bb25": {},
+    "rust::main::bb3": {},
+    "rust::main::bb31": {},
+    "rust::main::bb23": {},
+    "rust::main::bb8": {},
+    "rust::main::bb1": {},
+    "rust::main::bb33": {},
+    "rust::main::bb45": {
+        "Local(_76)": {
+            "free",
+        },
+        "Local(_75)": {
+            "free",
+        },
+    },
+    "rust::main::bb13": {},
+    "rust::main::bb49": {
+        "Local(_76)": {
+            "free",
+        },
+    },
+    "rust::main::bb0": {},
+    "rust::main::bb5": {},
+    "rust::main::bb30": {},
+    "rust::main::bb40": {
+        "Local(_76)": {
+            "free",
+        },
+    },
+    "rust::main::bb35": {},
+    "rust::main::bb2": {},
+    "rust::main::bb6": {},
+    "rust::main::bb53": {
+        "Local(_5)": {
+            "free",
+        },
+    },
+    "rust::main::bb36": {},
+    "rust::main::bb24": {},
+    "rust::main::bb44": {
+        "Local(_76)": {
+            "free",
+        },
+    },
+    "rust::main::bb47": {
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_75)": {
+            "free",
+        },
+        "Local(_76)": {
+            "free",
+        },
+        "Local(_21)": {
+            "free",
+        },
+    },
+    "rust::main::bb27": {},
+    "rust::main::bb48": {
+        "Local(_21)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_75)": {
+            "free",
+        },
+        "Local(_76)": {
+            "free",
+        },
+    },
+    "rust::main::bb22": {},
+    "rust::main::bb38": {},
+    "rust::main::bb9": {},
+    "rust::main::bb16": {},
+    "rust::main::bb20": {},
+    "rust::main::bb34": {},
+    "rust::main::bb4": {},
+    "rust::main::bb7": {},
+    "rust::main::bb32": {},
+    "rust::main::bb51": {
+        "Local(_75)": {
+            "free",
+        },
+        "Local(_76)": {
+            "free",
+        },
+        "Local(_21)": {
+            "free",
+        },
+    },
+    "rust::main::bb41": {
+        "Local(_76)": {
+            "free",
+        },
+    },
+    "rust::main::bb11": {},
+    "rust::main::terminate": {
+        "Local(_21)": {
+            "free",
+        },
+        "Local(_75)": {
+            "free",
+        },
+        "Local(_5)": {
+            "free",
+        },
+        "Local(_4)": {
+            "free",
+        },
+        "Local(_76)": {
+            "free",
+        },
+    },
+    "rust::main::bb39": {},
+    "rust::main::bb12": {},
+    "rust::main::bb37": {},
+}
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:121:9: 121:10 (#0), scope: scope[4] }, kind: drop(_76) -> [return: bb41, unwind: bb50] }' -> '_76'
+No tracked variable found per '_76' o 'Local(_76)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:124:5: 124:6 (#0), scope: scope[3] }, kind: drop(_75) -> [return: bb46, unwind: bb51] }' -> '_75'
+No tracked variable found per '_75' o 'Local(_75)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:128:1: 128:2 (#0), scope: scope[1] }, kind: drop(_21) -> [return: bb47, unwind: bb52] }' -> '_21'
+No tracked variable found per '_21' o 'Local(_21)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:128:1: 128:2 (#0), scope: scope[0] }, kind: drop(_4) -> [return: bb48, unwind continue] }' -> '_4'
+No tracked variable found per '_4' o 'Local(_4)'
+-> Skip Drop in 'rust::main::bb49' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb50' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb51' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb52' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb53' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:73:66: 73:67 (#0), scope: scope[0] }, kind: drop(_5) -> [return: bb5, unwind continue] }' -> '_5'
+No tracked variable found per '_5' o 'Local(_5)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:73:66: 73:67 (#0), scope: scope[0] }, kind: drop(_5) -> [return: bb9, unwind continue] }' -> '_5'
+No tracked variable found per '_5' o 'Local(_5)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:76:68: 76:69 (#0), scope: scope[0] }, kind: drop(_15) -> [return: bb14, unwind continue] }' -> '_15'
+No tracked variable found per '_15' o 'Local(_15)'
+-> Skip Drop in 'rust::<MyRc<T> as std::ops::Drop>::drop::bb15' because has an unwind incoming edge
+-> Skip Drop in 'rust::<MyRc<T> as std::ops::Drop>::drop::bb16' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:31:43: 31:44 (#0), scope: scope[0] }, kind: drop(_6) -> [return: bb4, unwind: bb8] }' -> '_6'
+No tracked variable found per '_6' o 'Local(_6)'
+-> Skip Drop in 'rust::SimpleStack::<T>::push::bb5' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:32:5: 32:6 (#0), scope: scope[0] }, kind: drop(_2) -> [return: bb6, unwind terminate(cleanup)] }' -> '_2'
+No tracked variable found per '_2' o 'Local(_2)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:63:64: 63:65 (#0), scope: scope[0] }, kind: drop(_4) -> [return: bb5, unwind continue] }' -> '_4'
+No tracked variable found per '_4' o 'Local(_4)'
+-> Skip Drop in 'rust::<MyRc<T> as std::clone::Clone>::clone::bb6' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_hw3/src/main.rs:36:5: 36:6 (#0), scope: scope[0] }, kind: drop(_4) -> [return: bb4, unwind continue] }' -> '_4'
+No tracked variable found per '_4' o 'Local(_4)'
+-> Skip Drop in 'rust::SimpleStack::<T>::pop::bb5' because has an unwind incoming edge
+-> Skip Drop in 'rust::MyRc::<T>::new::bb5' because has an unwind incoming edge
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 NO Issues detected: ✅
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

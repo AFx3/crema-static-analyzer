@@ -1,0 +1,335 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:649:59
+    |
+649 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:649:68
+    |
+649 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:3845:50
+     |
+3845 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:653:8
+    |
+653 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 5 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_leak_ml`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_leak_ml
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_leak_ml /home/af/Documenti/a-phd/crema`
+LLVM IR compilation finished with status: ExitStatus(unix_wait_status(0))
+
+*********General Stats***************
+################ (program : ffi.pre.bc)###############
+AddrsNum            4
+BBWith2Succ         0
+BBWith3Succ         0
+CallsNum            0
+ConstArrayObj       0
+ConstStructObj      0
+ConstantObj         0
+CopysNum            1
+FIObjNum            0
+FSObjNum            3
+FunctionObjs        1
+GepsNum             0
+GlobalObjs          0
+HeapObjs            1
+IndCallSites        0
+LoadsNum            0
+MaxStructSize       0
+NonPtrObj           3
+ReturnsNum          0
+StackObjs           1
+StoresNum           1
+TotalCallSite       0
+TotalFieldObjects   0
+TotalObjects        4
+TotalPTASVFStmts    3
+TotalPointers       6
+TotalSVFStmts       7
+VarArrayObj         0
+VarStructObj        0
+----------------Time and memory stats--------------------
+LLVMIRTime          0.006
+SVFIRTime           0
+SymbolTableTime     0
+#######################################################
+
+*********PTACallGraph Stats (Andersen analysis)***************
+################ (program : ffi.pre.bc)###############
+----------------Numbers stats----------------------------
+CalRetPairInCycle   0
+MaxNodeInCycle      0
+NodeInCycle         0
+TotalCycle          0
+TotalEdge           0
+TotalNode           1
+#######################################################
+
+*********Andersen Pointer Analysis Stats***************
+################ (program : ffi.pre.bc)###############
+----------------Time and memory stats--------------------
+AvgIn/OutAddrEdge   0.333333
+AvgIn/OutCopyEdge   0.166667
+AvgIn/OutEdge       0.5
+AvgIn/OutLoadEdge   0
+AvgIn/OutStoreEdge  0
+AvgPtsSetSize       0.153846
+AvgTopLvlPtsSize    0.666667
+CollapseTime        0
+CopyGepTime         0
+LoadStoreTime       0
+MemoryUsageVmrss    248
+MemoryUsageVmsize   0
+SCCDetectTime       0
+SCCMergeTime        0
+TotalTime           0
+UpdateCGTime        0
+----------------Numbers stats----------------------------
+AddrProcessed       2
+CopyProcessed       0
+DummyFieldPtrs      0
+FieldObjs           0
+GepProcessed        0
+IndCallSites        0
+IndEdgeSolved       0
+LoadProcessed       0
+LocalVarInRecur     0
+MaxInAddrEdge       1
+MaxInCopyEdge       1
+MaxInLoadEdge       0
+MaxInStoreEdge      0
+MaxNodesInSCC       0
+MaxOutAddrEdge      1
+MaxOutCopyEdge      1
+MaxOutLoadEdge      0
+MaxOutStoreEdge     0
+MaxPtsSetSize       1
+MemObjects          4
+NodesInCycles       0
+NullPointer         0
+NumOfAddrs          2
+NumOfCGEdge         1
+NumOfCGNode         8
+NumOfCopys          1
+NumOfFieldExpand    0
+NumOfGeps           0
+NumOfLoads          0
+NumOfSCCDetect      1
+NumOfSFRs           0
+NumOfStores         0
+NumOfValidNode      6
+NumOfValidObjNode   2
+Pointers            6
+PointsToBlkPtr      0
+PointsToConstPtr    0
+SolveIterations     1
+StoreProcessed      0
+TotalCycleNum       0
+TotalObjects        4
+TotalPWCCycleNum    0
+TotalPointers       6
+#######################################################
+
+****Persistent Points-To Cache Statistics: Andersen's analysis bitvector****
+################ (program : ffi.pre.bc)###############
+UniquePointsToSets       3
+TotalUnions              2
+PropertyUnions           2
+UniqueUnions             0
+LookupUnions             0
+PreemptiveUnions         0
+TotalComplements         8
+PropertyComplements      8
+UniqueComplements        0
+LookupComplements        0
+PreemptiveComplements    0
+TotalIntersections       0
+PropertyIntersections    0
+UniqueIntersections      0
+LookupIntersections      0
+PreemptiveIntersections  0
+#######################################################
+
+*********PTACallGraph Stats (Andersen analysis)***************
+################ (program : ffi.pre.bc)###############
+----------------Numbers stats----------------------------
+CalRetPairInCycle   0
+MaxNodeInCycle      0
+NodeInCycle         0
+TotalCycle          0
+TotalEdge           0
+TotalNode           1
+#######################################################
+
+*********Andersen Pointer Analysis Stats***************
+################ (program : ffi.pre.bc)###############
+----------------Time and memory stats--------------------
+AvgIn/OutAddrEdge   0.333333
+AvgIn/OutCopyEdge   0.166667
+AvgIn/OutEdge       0.5
+AvgIn/OutLoadEdge   0
+AvgIn/OutStoreEdge  0
+AvgPtsSetSize       0.153846
+AvgTopLvlPtsSize    0.666667
+CollapseTime        0
+CopyGepTime         0
+LoadStoreTime       0
+MemoryUsageVmrss    248
+MemoryUsageVmsize   0
+SCCDetectTime       0
+SCCMergeTime        0
+TotalTime           0
+UpdateCGTime        0
+----------------Numbers stats----------------------------
+AddrProcessed       2
+CopyProcessed       0
+DummyFieldPtrs      0
+FieldObjs           0
+GepProcessed        0
+IndCallSites        0
+IndEdgeSolved       0
+LoadProcessed       0
+LocalVarInRecur     0
+MaxInAddrEdge       1
+MaxInCopyEdge       1
+MaxInLoadEdge       0
+MaxInStoreEdge      0
+MaxNodesInSCC       0
+MaxOutAddrEdge      1
+MaxOutCopyEdge      1
+MaxOutLoadEdge      0
+MaxOutStoreEdge     0
+MaxPtsSetSize       1
+MemObjects          4
+NodesInCycles       0
+NullPointer         0
+NumOfAddrs          2
+NumOfCGEdge         1
+NumOfCGNode         8
+NumOfCopys          1
+NumOfFieldExpand    0
+NumOfGeps           0
+NumOfLoads          0
+NumOfSCCDetect      1
+NumOfSFRs           0
+NumOfStores         0
+NumOfValidNode      6
+NumOfValidObjNode   2
+Pointers            6
+PointsToBlkPtr      0
+PointsToConstPtr    0
+SolveIterations     1
+StoreProcessed      0
+TotalCycleNum       0
+TotalObjects        4
+TotalPWCCycleNum    0
+TotalPointers       6
+#######################################################
+Processing Node: 0x5a89de625130
+Node Info: IntraICFGNode3 {fun: main}
+AddrStmt: [Var7 <-- Var8]	
+ValVar ID: 7
+   %retval = alloca i32, align 4 
+Function associated with node: 0x5a89de63d140
+Basic block associated with node: 0x5a89de68ab90
+Associated SVF Statements:
+  - 0x5a89de659f30
+Processing Node: 0x5a89de608cc0
+Node Info: IntraICFGNode4 {fun: main}
+StoreStmt: [Var7 <-- Var11]	
+ValVar ID: 10
+   store i32 0, ptr %retval, align 4 
+Function associated with node: 0x5a89de63d140
+Basic block associated with node: 0x5a89de68ab90
+Associated SVF Statements:
+  - 0x5a89de68bd50
+Processing Node: 0x5a89de6012c0
+Node Info: IntraICFGNode5 {fun: main}
+   ret i32 0 
+Function associated with node: 0x5a89de63d140
+Basic block associated with node: 0x5a89de68ab90
+Processing Node: 0x5a89de6735e0
+Node Info: FunExitICFGNode2 {fun: main}
+PhiStmt: [Var6 <-- ([Var11, ICFGNode5],)]	
+ValVar ID: 12
+   ret i32 0 
+Function associated with node: 0x5a89de63d140
+Basic block associated with node: 0x5a89de68ab90
+Associated SVF Statements:
+  - 0x5a89de6204f0
+Writing 'callgraph_initial.dot.dot'...DOT file generated: ./output/main_view_icfg_output_SVF.dot
+DOT file generated: ./output/main_node_and_edges_only_icfg_SVF.dot
+ICFG Traversal Complete for function: main.
+svf-driver finished with status: ExitStatus(unix_wait_status(0))
+cargo:rerun-if-changed=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_leak_ml/target/debug/build/c_malloc_leak_ml-e3e2b45adcbe2b34/out/flag_check.c
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package c_malloc_leak_ml target c_malloc_leak_ml at /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_leak_ml/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_leak_ml/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_leak_ml/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_leak_ml/target/debug",
+    "--extern=cc=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_leak_ml/target/debug/deps/libcc-b4624915574c0613.rlib",
+    "--extern=find_msvc_tools=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_leak_ml/target/debug/deps/libfind_msvc_tools-cd891f1e36afe5e3.rlib",
+    "--extern=shlex=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_leak_ml/target/debug/deps/libshlex-2c989fbdc7d06c87.rlib",
+]
+Loading LLVM JSON file: main_A_FINAL_ICFG.json
+Global ICFG saved to global_icfg.json
+Analyzing package c_malloc_leak_ml target build-script-build at /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_leak_ml/build.rs
+Skipping unsupported target kind: [CustomBuild]
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+Final Abstract State: {"rust::main::bb2": {}, "rust::main::bb5": {{"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb1": {}, "rust::main::bb4": {{"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb3": {{"Local(_9)"}: TOP}, "rust::main::bb6": {{"Local(_6)"}: TOP, {"Local(_9)"}: TOP}, "rust::main::bb0": {}}
+Final Taint State: {
+    "rust::main::bb0": {},
+    "rust::main::bb2": {},
+    "rust::main::bb4": {},
+    "rust::main::bb6": {},
+    "rust::main::bb5": {},
+    "rust::main::bb1": {},
+    "rust::main::bb3": {},
+}
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 NO Issues detected: ✅
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

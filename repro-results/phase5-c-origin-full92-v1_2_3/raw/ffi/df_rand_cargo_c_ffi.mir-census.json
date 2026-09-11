@@ -1,0 +1,78 @@
+{
+  "call_counts": {
+    "cast": 1,
+    "core::fmt::rt::Argument::<'_>::new_display::<i32>": 1,
+    "rand": 1,
+    "std::boxed::Box::<i32>::from_raw": 1,
+    "std::boxed::Box::<i32>::into_raw": 1,
+    "std::boxed::Box::<i32>::new": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 1,
+    "std::io::_print": 1
+  },
+  "call_total": 8,
+  "memory_api_counts": {
+    "box_from_raw": 1,
+    "box_into_raw": 1,
+    "box_new": 1
+  },
+  "memory_api_examples": {
+    "box_from_raw": [
+      "std::boxed::Box::<i32>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<i32>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<i32>::new"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _16]"
+    ],
+    "arithmetic_binary": [
+      "BitAnd(move _8, move _9)",
+      "Rem(move _6, const 5_i32)"
+    ],
+    "comparison": [
+      "Eq(const 5_i32, const 0_i32)",
+      "Eq(const 5_i32, const -1_i32)",
+      "Eq(copy _6, const i32::MIN)",
+      "Ge(copy _5, const 3_i32)"
+    ],
+    "pointer_cast": [
+      "move _3 as *mut std::ffi::c_void (PtrToPtr)",
+      "copy _2 as *mut i32 (PtrToPtr)"
+    ],
+    "ref": [
+      "&_5",
+      "&_15"
+    ],
+    "unknown_unhandled": [
+      "const main::promoted[0]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 1,
+    "arithmetic_binary": 2,
+    "comparison": 4,
+    "pointer_cast": 2,
+    "ref": 2,
+    "unknown_unhandled": 1
+  },
+  "rvalue_total": 12,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 1,
+    "unknown_unhandled": 1
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "df_rand_cargo_c_ffi",
+  "terminator_kind_counts": {
+    "Assert": 2,
+    "Call": 8,
+    "Drop": 1,
+    "Return": 1,
+    "SwitchInt": 1
+  }
+}

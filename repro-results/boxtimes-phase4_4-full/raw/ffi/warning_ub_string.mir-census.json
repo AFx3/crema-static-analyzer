@@ -1,0 +1,37 @@
+{
+  "call_counts": {
+    "free_str": 1,
+    "std::boxed::Box::<bool>::into_raw": 1,
+    "std::boxed::Box::<bool>::new": 1
+  },
+  "call_total": 3,
+  "memory_api_counts": {
+    "box_into_raw": 1,
+    "box_new": 1
+  },
+  "memory_api_examples": {
+    "box_into_raw": [
+      "std::boxed::Box::<bool>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<bool>::new"
+    ]
+  },
+  "rvalue_examples": {
+    "pointer_cast": [
+      "move _3 as *mut i8 (PtrToPtr)"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "pointer_cast": 1
+  },
+  "rvalue_total": 1,
+  "rvalue_unhandled_counts": {},
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "warning_ub_string",
+  "terminator_kind_counts": {
+    "Call": 3,
+    "Return": 1
+  }
+}

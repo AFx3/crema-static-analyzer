@@ -1,0 +1,37 @@
+timestamp_utc=2026-09-11T12:17:49Z
+repo_root=/home/af/Documenti/a-phd
+git_commit=d5adfeb7ae909868f86b774e0bce09034f409a80
+requested_toolchain=nightly-2024-11-21
+--- root/default ---
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+binary: rustc
+commit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452
+commit-date: 2026-07-14
+host: x86_64-unknown-linux-gnu
+release: 1.97.1
+LLVM version: 22.1.6
+--- target build toolchain ---
+rustc 1.84.0-nightly (3fee0f12e 2024-11-20)
+binary: rustc
+commit-hash: 3fee0f12e4f595948f8f54f57c8b7a7a58127124
+commit-date: 2024-11-20
+host: x86_64-unknown-linux-gnu
+release: 1.84.0-nightly
+LLVM version: 19.1.3
+--- crema directory toolchain ---
+rustc 1.84.0-nightly (3fee0f12e 2024-11-20)
+binary: rustc
+commit-hash: 3fee0f12e4f595948f8f54f57c8b7a7a58127124
+commit-date: 2024-11-20
+host: x86_64-unknown-linux-gnu
+release: 1.84.0-nightly
+LLVM version: 19.1.3
+--- cargo target build ---
+cargo 1.84.0-nightly (66221abde 2024-11-19)
+--- cargo crema dir ---
+cargo 1.84.0-nightly (66221abde 2024-11-19)
+--- clang ---
+Ubuntu clang version 14.0.0-1ubuntu1.1
+--- hashes ---
+f4fd43f8c82db161d1e741034185c3bb2aef99bdb6c5220393a7f0907ec81de1  /home/af/Documenti/a-phd/crema/src/abstract_domain.rs
+e80a1038f53b52aa2c08212bbd7b1a1767cc5404e74b330af62c8ff0e4641eee  /home/af/Documenti/a-phd/SVF-example/src/svf-example

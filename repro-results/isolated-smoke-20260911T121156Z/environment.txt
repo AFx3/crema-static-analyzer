@@ -1,0 +1,7 @@
+timestamp_utc=2026-09-11T12:12:00Z
+repo_root=/home/af/Documenti/a-phd
+git_commit=d5adfeb7ae909868f86b774e0bce09034f409a80
+rustc=rustc 1.97.1 (8bab26f4f 2026-07-14)
+active_toolchain=stable-x86_64-unknown-linux-gnu (default)
+sysroot=/mnt/dara/dara-dev/toolchains/rustup/toolchains/stable-x86_64-unknown-linux-gnu
+clang=Ubuntu clang version 14.0.0-1ubuntu1.1

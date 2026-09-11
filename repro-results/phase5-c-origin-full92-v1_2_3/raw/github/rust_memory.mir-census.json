@@ -1,0 +1,153 @@
+{
+  "call_counts": {
+    "<std::boxed::Box<[Numbers; 3]> as std::ops::Drop>::drop": 1,
+    "<std::ops::Range<usize> as std::iter::IntoIterator>::into_iter": 2,
+    "<std::ops::Range<usize> as std::iter::Iterator>::next": 2,
+    "<std::vec::Vec<*mut libc::c_void> as std::ops::Index<usize>>::index": 2,
+    "Numbers::new": 3,
+    "alloc::alloc::exchange_malloc": 1,
+    "core::fmt::rt::Argument::<'_>::new_debug::<&&Numbers>": 1,
+    "core::fmt::rt::Placeholder::new": 1,
+    "core::fmt::rt::UnsafeArg::new": 1,
+    "std::boxed::Box::<[*mut libc::c_void]>::into_raw": 1,
+    "std::boxed::Box::<[Numbers]>::into_raw": 1,
+    "std::fmt::Arguments::<'_>::new_const::<1>": 1,
+    "std::fmt::Arguments::<'_>::new_v1_formatted": 1,
+    "std::fmt::Formatter::<'_>::debug_struct_field3_finish": 1,
+    "std::io::_eprint": 1,
+    "std::io::_print": 1,
+    "std::mem::size_of::<Numbers>": 1,
+    "std::ptr::mut_ptr::<impl *mut libc::c_void>::offset": 1,
+    "std::slice::<impl [Numbers]>::into_vec::<std::alloc::Global>": 1,
+    "std::vec::Vec::<*mut libc::c_void>::from_raw_parts": 1,
+    "std::vec::Vec::<*mut libc::c_void>::into_boxed_slice": 1,
+    "std::vec::Vec::<*mut libc::c_void>::new": 1,
+    "std::vec::Vec::<*mut libc::c_void>::push": 1,
+    "std::vec::Vec::<Numbers>::from_raw_parts": 1,
+    "std::vec::Vec::<Numbers>::into_boxed_slice": 1,
+    "std::vec::Vec::<Numbers>::len": 1
+  },
+  "call_total": 31,
+  "memory_api_counts": {
+    "alloc": 2,
+    "box_into_raw": 2,
+    "vec_from_raw_parts": 2
+  },
+  "memory_api_examples": {
+    "alloc": [
+      "alloc::alloc::exchange_malloc",
+      "std::slice::<impl [Numbers]>::into_vec::<std::alloc::Global>"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<[Numbers]>::into_raw",
+      "std::boxed::Box::<[*mut libc::c_void]>::into_raw"
+    ],
+    "vec_from_raw_parts": [
+      "std::vec::Vec::<*mut libc::c_void>::from_raw_parts",
+      "std::vec::Vec::<Numbers>::from_raw_parts"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _59]",
+      "[move _65]",
+      "[move _8, move _9, move _10]"
+    ],
+    "arithmetic_binary": [
+      "Sub(copy _82, const 1_usize)",
+      "BitAnd(copy _81, copy _83)"
+    ],
+    "checked_binary_unhandled": [
+      "MulWithOverflow(copy _31, copy _18)"
+    ],
+    "comparison": [
+      "Eq(copy _84, const 0_usize)"
+    ],
+    "direct_deref_use": [
+      "copy (*_48)",
+      "copy (*_73)"
+    ],
+    "direct_use": [
+      "move _1",
+      "move _20",
+      "move _17",
+      "move _39",
+      "copy _50",
+      "move _7"
+    ],
+    "pointer_cast": [
+      "copy _79 as *const () (PtrToPtr)",
+      "move _14 as *mut libc::c_void (PtrToPtr)",
+      "move _34 as *mut libc::c_void (PtrToPtr)",
+      "copy _33 as *mut *mut libc::c_void (PtrToPtr)",
+      "move _47 as *mut Numbers (PtrToPtr)",
+      "move _72 as *mut Numbers (PtrToPtr)"
+    ],
+    "ref": [
+      "&_1",
+      "&mut _22",
+      "&mut _17",
+      "&mut _41",
+      "&_37",
+      "&(*_46)",
+      "&_51",
+      "&_61"
+    ],
+    "scalar_cast": [
+      "copy _80 as usize (Transmute)",
+      "move _19 as isize (IntToInt)",
+      "copy _26 as isize (IntToInt)"
+    ],
+    "scalar_const": [
+      "const false",
+      "const true"
+    ],
+    "scalar_nullary": [
+      "SizeOf([Numbers; 3])",
+      "AlignOf([Numbers; 3])"
+    ],
+    "unknown_unhandled": [
+      "ShallowInitBox(move _6, [Numbers; 3])",
+      "copy (((_7.0: std::ptr::Unique<[Numbers; 3]>).0: std::ptr::NonNull<[Numbers; 3]>).0: *const [Numbers; 3])",
+      "std::ops::Range::<usize> { start: const 0_usize, end: copy _11 }",
+      "discriminant(_23)",
+      "copy ((_23 as Some).0: usize)",
+      "move (_32.0: isize)",
+      "discriminant(_42)",
+      "copy ((_42 as Some).0: usize)"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 3,
+    "arithmetic_binary": 2,
+    "checked_binary_unhandled": 1,
+    "comparison": 1,
+    "direct_deref_use": 2,
+    "direct_use": 6,
+    "pointer_cast": 6,
+    "ref": 16,
+    "scalar_cast": 3,
+    "scalar_const": 8,
+    "scalar_nullary": 3,
+    "unknown_unhandled": 26
+  },
+  "rvalue_total": 77,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 3,
+    "checked_binary_unhandled": 1,
+    "unknown_unhandled": 26
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "rust_memory",
+  "terminator_kind_counts": {
+    "Assert": 2,
+    "Call": 31,
+    "Drop": 7,
+    "Goto": 5,
+    "Return": 4,
+    "SwitchInt": 4,
+    "Unreachable": 1,
+    "UnwindResume": 1
+  }
+}

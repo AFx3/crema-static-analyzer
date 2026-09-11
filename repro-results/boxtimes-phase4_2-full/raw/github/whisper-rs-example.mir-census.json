@@ -1,0 +1,145 @@
+{
+  "call_counts": {
+    "<&str as std::convert::Into<std::string::String>>::into": 1,
+    "<hound::WavSamples<'_, std::io::BufReader<std::fs::File>, i16> as std::iter::Iterator>::map::<f32, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs:23:18: 23:21}>": 1,
+    "<std::iter::Map<hound::WavSamples<'_, std::io::BufReader<std::fs::File>, i16>, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs:23:18: 23:21}> as std::iter::Iterator>::collect::<std::vec::Vec<f32>>": 1,
+    "<std::sync::mpsc::IntoIter<SegmentMessage> as std::iter::Iterator>::next": 1,
+    "<std::sync::mpsc::Receiver<SegmentMessage> as std::iter::IntoIterator>::into_iter": 1,
+    "<std::vec::Vec<f32> as std::ops::Index<std::ops::RangeFull>>::index": 1,
+    "<str as std::string::ToString>::to_string": 1,
+    "<whisper_rs::SamplingStrategy as std::default::Default>::default": 1,
+    "<whisper_rs::WhisperContextParameters as std::default::Default>::default": 1,
+    "core::fmt::rt::Argument::<'_>::new_display::<i64>": 2,
+    "core::fmt::rt::Argument::<'_>::new_display::<std::string::String>": 1,
+    "hound::WavReader::<std::io::BufReader<std::fs::File>>::open::<&std::path::Path>": 1,
+    "hound::WavReader::<std::io::BufReader<std::fs::File>>::samples::<i16>": 1,
+    "hound::WavReader::<std::io::BufReader<std::fs::File>>::spec": 1,
+    "read_wav_to_f32": 1,
+    "std::boxed::Box::<std::sync::mpsc::Sender<SegmentMessage>>::into_raw": 1,
+    "std::boxed::Box::<std::sync::mpsc::Sender<SegmentMessage>>::new": 1,
+    "std::ffi::CStr::from_ptr::<'_>": 1,
+    "std::ffi::CStr::to_str": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<4, 3>": 1,
+    "std::io::_print": 1,
+    "std::path::Path::new::<str>": 1,
+    "std::result::Result::<&str, std::str::Utf8Error>::unwrap": 1,
+    "std::result::Result::<(), std::sync::mpmc::SendError<SegmentMessage>>::unwrap": 1,
+    "std::result::Result::<hound::WavReader<std::io::BufReader<std::fs::File>>, hound::Error>::expect": 1,
+    "std::result::Result::<i16, hound::Error>::unwrap": 1,
+    "std::result::Result::<i32, whisper_rs::WhisperError>::expect": 1,
+    "std::result::Result::<std::vec::Vec<f32>, std::string::String>::expect": 1,
+    "std::result::Result::<whisper_rs::WhisperContext, whisper_rs::WhisperError>::expect": 1,
+    "std::result::Result::<whisper_rs::WhisperState<'_>, whisper_rs::WhisperError>::expect": 1,
+    "std::sync::mpsc::Sender::<SegmentMessage>::send": 1,
+    "std::sync::mpsc::channel::<SegmentMessage>": 1,
+    "std::thread::spawn::<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs:58:19: 58:26}, ()>": 1,
+    "whisper_rs::FullParams::<'_, '_>::new": 1,
+    "whisper_rs::FullParams::<'_, '_>::set_initial_prompt": 1,
+    "whisper_rs::FullParams::<'_, '_>::set_language": 1,
+    "whisper_rs::FullParams::<'_, '_>::set_new_segment_callback": 1,
+    "whisper_rs::FullParams::<'_, '_>::set_new_segment_callback_user_data": 1,
+    "whisper_rs::WhisperContext::create_state": 1,
+    "whisper_rs::WhisperContext::new_with_params": 1,
+    "whisper_rs::WhisperState::<'_>::full": 1,
+    "whisper_rs::whisper_rs_sys::whisper_full_get_segment_t0_from_state": 1,
+    "whisper_rs::whisper_rs_sys::whisper_full_get_segment_t1_from_state": 1,
+    "whisper_rs::whisper_rs_sys::whisper_full_get_segment_text_from_state": 1,
+    "whisper_rs::whisper_rs_sys::whisper_full_n_segments_from_state": 1
+  },
+  "call_total": 46,
+  "memory_api_counts": {
+    "box_into_raw": 1,
+    "box_new": 1,
+    "cstr_from_ptr": 1
+  },
+  "memory_api_examples": {
+    "box_into_raw": [
+      "std::boxed::Box::<std::sync::mpsc::Sender<SegmentMessage>>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<std::sync::mpsc::Sender<SegmentMessage>>::new"
+    ],
+    "cstr_from_ptr": [
+      "std::ffi::CStr::from_ptr::<'_>"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _14, move _16, move _18]"
+    ],
+    "arithmetic_binary": [
+      "Div(move _3, move _5)"
+    ],
+    "checked_binary_unhandled": [
+      "SubWithOverflow(copy _6, const 1_i32)"
+    ],
+    "direct_use": [
+      "move _1",
+      "move _16",
+      "move _2"
+    ],
+    "pointer_cast": [
+      "move _7 as *mut std::ffi::c_void (PtrToPtr)",
+      "copy _4 as *mut std::sync::mpsc::Sender<SegmentMessage> (PtrToPtr)"
+    ],
+    "ref": [
+      "&_2",
+      "&mut _2",
+      "&_10",
+      "&mut _16",
+      "&_11",
+      "&mut _36",
+      "&_33",
+      "&mut _4"
+    ],
+    "scalar_cast": [
+      "move _4 as f32 (IntToFloat)",
+      "const core::num::<impl i16>::MAX as f32 (IntToFloat)"
+    ],
+    "scalar_const": [
+      "const false",
+      "const true"
+    ],
+    "unknown_unhandled": [
+      "const \"failed to open WAV file\"",
+      "const \"failed to read samples\"",
+      "std::result::Result::<std::vec::Vec<f32>, std::string::String>::Ok(move _7)",
+      "std::result::Result::<std::vec::Vec<f32>, std::string::String>::Err(move _11)",
+      "move (_3.0: std::sync::mpsc::Sender<SegmentMessage>)",
+      "move (_3.1: std::sync::mpsc::Receiver<SegmentMessage>)",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs:58:19: 58:26} { rx: move _2 }",
+      "const \"/Users/bruce/Download/ggml-model-whisper-large-q5_0.bin\""
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 1,
+    "arithmetic_binary": 1,
+    "checked_binary_unhandled": 1,
+    "direct_use": 3,
+    "pointer_cast": 2,
+    "ref": 16,
+    "scalar_cast": 2,
+    "scalar_const": 16,
+    "unknown_unhandled": 25
+  },
+  "rvalue_total": 67,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 1,
+    "checked_binary_unhandled": 1,
+    "unknown_unhandled": 25
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "whisper-rs-example",
+  "terminator_kind_counts": {
+    "Assert": 1,
+    "Call": 46,
+    "Drop": 18,
+    "Goto": 1,
+    "Return": 5,
+    "SwitchInt": 6,
+    "Unhandled": 1,
+    "Unreachable": 1,
+    "UnwindResume": 3
+  }
+}

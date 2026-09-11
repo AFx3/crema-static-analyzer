@@ -1,0 +1,112 @@
+{
+  "call_counts": {
+    "<std::iter::Map<std::ops::Range<i32>, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list/src/main.rs:83:14: 83:17}> as std::iter::Iterator>::collect::<std::vec::Vec<std::thread::JoinHandle<()>>>": 1,
+    "<std::ops::Range<i32> as std::iter::Iterator>::map::<std::thread::JoinHandle<()>, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list/src/main.rs:83:14: 83:17}>": 1,
+    "<std::sync::Arc<LockFreeLinkedList<i32>> as std::clone::Clone>::clone": 1,
+    "<std::sync::Arc<LockFreeLinkedList<i32>> as std::ops::Deref>::deref": 6,
+    "<std::vec::IntoIter<std::thread::JoinHandle<()>> as std::iter::Iterator>::next": 1,
+    "<std::vec::Vec<std::thread::JoinHandle<()>> as std::iter::IntoIterator>::into_iter": 1,
+    "LockFreeLinkedList::<i32>::insert": 4,
+    "LockFreeLinkedList::<i32>::new": 2,
+    "LockFreeLinkedList::<i32>::traverse": 2,
+    "core::fmt::rt::Argument::<'_>::new_debug::<T>": 1,
+    "std::boxed::Box::<Node<T>>::from_raw": 1,
+    "std::boxed::Box::<Node<T>>::into_raw": 1,
+    "std::boxed::Box::<Node<T>>::new": 1,
+    "std::fmt::Arguments::<'_>::new_const::<1>": 2,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 1,
+    "std::io::_print": 3,
+    "std::ptr::mut_ptr::<impl *mut Node<T>>::is_null": 2,
+    "std::ptr::null_mut::<Node<T>>": 2,
+    "std::result::Result::<(), std::boxed::Box<dyn std::any::Any + std::marker::Send>>::unwrap": 1,
+    "std::result::Result::<*mut Node<T>, *mut Node<T>>::is_ok": 1,
+    "std::sync::Arc::<LockFreeLinkedList<i32>>::new": 2,
+    "std::sync::atomic::AtomicPtr::<Node<T>>::compare_exchange": 1,
+    "std::sync::atomic::AtomicPtr::<Node<T>>::load": 5,
+    "std::sync::atomic::AtomicPtr::<Node<T>>::new": 2,
+    "std::sync::atomic::AtomicPtr::<Node<T>>::store": 1,
+    "std::thread::JoinHandle::<()>::join": 1,
+    "std::thread::spawn::<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list/src/main.rs:85:27: 85:34}, ()>": 1
+  },
+  "call_total": 48,
+  "memory_api_counts": {
+    "box_from_raw": 1,
+    "box_into_raw": 1,
+    "box_new": 1
+  },
+  "memory_api_examples": {
+    "box_from_raw": [
+      "std::boxed::Box::<Node<T>>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<Node<T>>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<Node<T>>::new"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _12]"
+    ],
+    "closure_aggregate": [
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list/src/main.rs:83:14: 83:17} { list: move _24 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list/src/main.rs:85:27: 85:34} { list: move _3, i: copy _2 }"
+    ],
+    "copy_for_deref": [
+      "deref_copy ((*_1).0: &std::sync::Arc<LockFreeLinkedList<i32>>)"
+    ],
+    "direct_use": [
+      "move _2",
+      "copy _2",
+      "move _14",
+      "copy _7",
+      "move _25"
+    ],
+    "ref": [
+      "&((*_1).0: std::sync::atomic::AtomicPtr<Node<T>>)",
+      "&((*_3).1: std::sync::atomic::AtomicPtr<Node<T>>)",
+      "&_17",
+      "&(_1.0: std::sync::Arc<LockFreeLinkedList<i32>>)",
+      "&((*_2).0: T)",
+      "&_11",
+      "&((*_2).1: std::sync::atomic::AtomicPtr<Node<T>>)",
+      "&_1"
+    ],
+    "unknown_unhandled": [
+      "LockFreeLinkedList::<T> { head: move _1 }",
+      "Node::<T> { data: move _6, next: move _7 }",
+      "std::sync::atomic::Ordering::Acquire",
+      "std::sync::atomic::Ordering::Relaxed",
+      "std::sync::atomic::Ordering::AcqRel",
+      "copy (_1.1: i32)",
+      "const LockFreeLinkedList::<T>::traverse::promoted[0]",
+      "const main::promoted[1]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 1,
+    "closure_aggregate": 2,
+    "copy_for_deref": 1,
+    "direct_use": 7,
+    "ref": 18,
+    "unknown_unhandled": 17
+  },
+  "rvalue_total": 46,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 1,
+    "unknown_unhandled": 17
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "lock_free_non_blocking_linked_list",
+  "terminator_kind_counts": {
+    "Call": 48,
+    "Drop": 10,
+    "Goto": 4,
+    "Return": 7,
+    "SwitchInt": 4,
+    "Unreachable": 1,
+    "UnwindResume": 3
+  }
+}

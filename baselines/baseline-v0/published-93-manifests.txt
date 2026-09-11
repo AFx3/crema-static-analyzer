@@ -1,0 +1,93 @@
+./a-code_c_ffi/branch_df_mem_leak_ffi/Cargo.toml
+./a-code_c_ffi/clean_mul_fn_ffi_no_errors/Cargo.toml
+./a-code_c_ffi/cstr_cargo_df_ffi/Cargo.toml
+./a-code_c_ffi/cstr_expect_uaf_and_ub_ffi/Cargo.toml
+./a-code_c_ffi/cstringcargo_df_ffi/Cargo.toml
+./a-code_c_ffi/df_rand_cargo_c_ffi/Cargo.toml
+./a-code_c_ffi/for_df_ffi/Cargo.toml
+./a-code_c_ffi/for_memory_leak_ffi/Cargo.toml
+./a-code_c_ffi/uaf_mem_leak_ffi/Cargo.toml
+./a-code_c_ffi/vuln_only_mem_leak_but_df_branch_overapprox_FFI/Cargo.toml
+./a-code_c_ffi/warning_ub_bool/Cargo.toml
+./a-code_c_ffi/warning_ub_int/Cargo.toml
+./a-code_c_ffi/warning_ub_mult/Cargo.toml
+./a-code_c_ffi/warning_ub_string/Cargo.toml
+./a-code_full_rust/a-double_free_full_rust_literals/boxed_bool/Cargo.toml
+./a-code_full_rust/a-double_free_full_rust_literals/boxed_char/Cargo.toml
+./a-code_full_rust/a-double_free_full_rust_literals/boxed_f32/Cargo.toml
+./a-code_full_rust/a-double_free_full_rust_literals/boxed_f64/Cargo.toml
+./a-code_full_rust/a-double_free_full_rust_literals/boxed_i128/Cargo.toml
+./a-code_full_rust/a-double_free_full_rust_literals/boxed_i16/Cargo.toml
+./a-code_full_rust/a-double_free_full_rust_literals/boxed_i32/Cargo.toml
+./a-code_full_rust/a-double_free_full_rust_literals/boxed_i64/Cargo.toml
+./a-code_full_rust/a-double_free_full_rust_literals/boxed_i8/Cargo.toml
+./a-code_full_rust/a-double_free_full_rust_literals/boxed_isize/Cargo.toml
+./a-code_full_rust/a-double_free_full_rust_literals/boxed_u128/Cargo.toml
+./a-code_full_rust/a-double_free_full_rust_literals/boxed_u16/Cargo.toml
+./a-code_full_rust/a-double_free_full_rust_literals/boxed_u32/Cargo.toml
+./a-code_full_rust/a-double_free_full_rust_literals/boxed_u64/Cargo.toml
+./a-code_full_rust/a-double_free_full_rust_literals/boxed_u8/Cargo.toml
+./a-code_full_rust/a-double_free_full_rust_literals/boxed_usize/Cargo.toml
+./a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_bool/Cargo.toml
+./a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_char/Cargo.toml
+./a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_f32/Cargo.toml
+./a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_f64/Cargo.toml
+./a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i128/Cargo.toml
+./a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i16/Cargo.toml
+./a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i32/Cargo.toml
+./a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i64/Cargo.toml
+./a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_i8/Cargo.toml
+./a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_isize/Cargo.toml
+./a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u128/Cargo.toml
+./a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u16/Cargo.toml
+./a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u32/Cargo.toml
+./a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u64/Cargo.toml
+./a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_u8/Cargo.toml
+./a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_usize/Cargo.toml
+./a-code_full_rust/a-use_after_free_full_rust_literals/boxed_bool/Cargo.toml
+./a-code_full_rust/a-use_after_free_full_rust_literals/boxed_char/Cargo.toml
+./a-code_full_rust/a-use_after_free_full_rust_literals/boxed_f32/Cargo.toml
+./a-code_full_rust/a-use_after_free_full_rust_literals/boxed_f64/Cargo.toml
+./a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i128/Cargo.toml
+./a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i16/Cargo.toml
+./a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i32/Cargo.toml
+./a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i64/Cargo.toml
+./a-code_full_rust/a-use_after_free_full_rust_literals/boxed_i8/Cargo.toml
+./a-code_full_rust/a-use_after_free_full_rust_literals/boxed_isize/Cargo.toml
+./a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u128/Cargo.toml
+./a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u16/Cargo.toml
+./a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u32/Cargo.toml
+./a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u64/Cargo.toml
+./a-code_full_rust/a-use_after_free_full_rust_literals/boxed_u8/Cargo.toml
+./a-code_full_rust/a-use_after_free_full_rust_literals/boxed_usize/Cargo.toml
+./a-code_full_rust/clean_cstring_no_errors_only_rust/Cargo.toml
+./a-code_full_rust/clean_into_from_raw/Cargo.toml
+./a-code_full_rust/clean_struct_point_mem_leak_into_raw_no_errors/Cargo.toml
+./a-code_full_rust/closure_df/Cargo.toml
+./a-code_full_rust/cstringcargo_enum_df_only_rust/Cargo.toml
+./a-code_full_rust/cstring_df_only_rust/Cargo.toml
+./a-code_full_rust/explicit_drop_df_only_rust/Cargo.toml
+./a-code_full_rust/std_mem_forget_mem_leak_rust/Cargo.toml
+./a-code_full_rust/struct_point_df_only_rust/Cargo.toml
+./a-code_full_rust/struct_point_mem_leak/Cargo.toml
+./a-code_full_rust/uaf_read_ptr/Cargo.toml
+./found vulns/lock-free/Cargo.toml
+./found vulns/napkin-math-test/Cargo.toml
+./found vulns/noGenerator/Cargo.toml
+./found vulns/rusant/Cargo.toml
+./found vulns/shared-register/Cargo.toml
+./found vulns/skip-list-test/Cargo.toml
+./found vulns/wasm-demo/Cargo.toml
+./found vulns/whisper-rs-example/Cargo.toml
+./no_errors_projects/c-callback-rust-closure/Cargo.toml
+./no_errors_projects/concurrent-verification/Cargo.toml
+./no_errors_projects/lock_free_non_blocking_linked_list/Cargo.toml
+./no_errors_projects/openapi-client-gen/Cargo.toml
+./no_errors_projects/rc-playground/Cargo.toml
+./no_errors_projects/rust-boks/Cargo.toml
+./no_errors_projects/rust_hw3/Cargo.toml
+./no_errors_projects/rust_memory/Cargo.toml
+./no_errors_projects/square/Cargo.toml
+./no_errors_projects/stackswap-coroutines/Cargo.toml
+./no_errors_projects/unsafely-created-owned-type/Cargo.toml
+./no_errors_projects/unsized_struct/Cargo.toml

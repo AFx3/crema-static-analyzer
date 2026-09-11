@@ -1,0 +1,226 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2128:50
+     |
+2128 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: variant `BOXTIMES` is never constructed
+  --> src/abstract_domain.rs:82:5
+   |
+78 | pub enum CellValue {
+   |          --------- variant in this enum
+...
+82 |     BOXTIMES,
+   |     ^^^^^^^^
+   |
+   = note: `CellValue` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:594:8
+    |
+594 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 6 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground /home/af/Documenti/a-phd/crema`
+warning: unused import: `RefCell`
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/src/main.rs:1:17
+  |
+1 | use std::cell::{RefCell, UnsafeCell};
+  |                 ^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `Duration`
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/src/main.rs:4:17
+  |
+4 | use std::time::{Duration, Instant};
+  |                 ^^^^^^^^
+
+warning: field `id` is never read
+  --> /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/src/main.rs:12:5
+   |
+11 | struct Entity {
+   |        ------ field in this struct
+12 |     id: usize,
+   |     ^^
+   |
+   = note: `Entity` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+warning: method `update` is never used
+  --> /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/src/main.rs:18:8
+   |
+17 | impl Entity {
+   | ----------- method in this implementation
+18 |     fn update(&mut self) {
+   |        ^^^^^^
+
+warning: 4 warnings emitted
+
+No C files found in the project.
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package rc-playground target rc-playground at /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/target/debug",
+]
+warning: unused import: `RefCell`
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/src/main.rs:1:17
+  |
+1 | use std::cell::{RefCell, UnsafeCell};
+  |                 ^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `Duration`
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/src/main.rs:4:17
+  |
+4 | use std::time::{Duration, Instant};
+  |                 ^^^^^^^^
+
+warning: field `id` is never read
+  --> /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/src/main.rs:12:5
+   |
+11 | struct Entity {
+   |        ------ field in this struct
+12 |     id: usize,
+   |     ^^
+   |
+   = note: `Entity` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+warning: method `update` is never used
+  --> /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/src/main.rs:18:8
+   |
+17 | impl Entity {
+   | ----------- method in this implementation
+18 |     fn update(&mut self) {
+   |        ^^^^^^
+
+Global ICFG saved to global_icfg.json
+warning: 4 warnings emitted
+
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+Final Abstract State: {"rust::main::bb2": {}, "rust::main::bb3": {}, "rust::main::bb10": {{"Local(_7)"}: FREED}, "rust::main::bb0": {}, "rust::main::bb12": {{"Local(_7)"}: FREED}, "rust::main::bb5": {{"Local(_7)"}: FREED}, "rust::main::bb4": {}, "rust::main::bb7": {{"Local(_7)"}: FREED}, "rust::main::bb9": {{"Local(_7)"}: FREED}, "rust::main::bb11": {{"Local(_7)"}: FREED}, "rust::main::bb6": {{"Local(_7)"}: FREED}, "rust::main::bb1": {}, "rust::main::terminate": {{"Local(_7)"}: FREED}, "rust::main::bb8": {{"Local(_7)"}: FREED}}
+Final Taint State: {
+    "rust::main::bb8": {
+        "Local(_7)": {
+            "free",
+        },
+    },
+    "rust::main::bb9": {
+        "Local(_7)": {
+            "free",
+        },
+    },
+    "rust::main::bb11": {
+        "Local(_7)": {
+            "free",
+        },
+    },
+    "rust::main::bb10": {
+        "Local(_7)": {
+            "free",
+        },
+    },
+    "rust::main::bb0": {},
+    "rust::main::bb12": {
+        "Local(_7)": {
+            "free",
+        },
+    },
+    "rust::main::bb1": {},
+    "rust::main::bb2": {},
+    "rust::main::bb4": {},
+    "rust::main::terminate": {
+        "Local(_7)": {
+            "free",
+        },
+    },
+    "rust::main::bb3": {},
+    "rust::main::bb5": {
+        "Local(_7)": {
+            "free",
+        },
+    },
+    "rust::main::bb7": {
+        "Local(_7)": {
+            "free",
+        },
+    },
+    "rust::main::bb6": {
+        "Local(_7)": {
+            "free",
+        },
+    },
+}
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/src/main.rs:90:5: 90:6 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb5, unwind terminate(cleanup)] }' -> '_1'
+No tracked variable found per '_1' o 'Local(_1)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/src/main.rs:99:57: 99:58 (#0), scope: scope[2] }, kind: drop(_9) -> [return: bb7, unwind continue] }' -> '_9'
+No tracked variable found per '_9' o 'Local(_9)'
+-> DummyRet node 'dummyRet::rust::benchmark::4::rust::benchmark::bb4_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_13")
+-> DummyRet node 'dummyRet::rust::benchmark::5::rust::benchmark::bb5_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_14")
+-> DummyRet node 'dummyRet::rust::benchmark::6::rust::benchmark::bb6_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_16")
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/src/main.rs:213:1: 213:2 (#0), scope: scope[1] }, kind: drop(_13) -> [return: bb15, unwind continue] }' -> '_13'
+No tracked variable found per '_13' o 'Local(_13)'
+-> Skip Drop in 'rust::benchmark::bb16' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/src/main.rs:166:68: 166:69 (#0), scope: scope[3] }, kind: drop(_15) -> [return: bb2, unwind continue] }' -> '_15'
+No tracked variable found per '_15' o 'Local(_15)'
+-> Skip Drop in 'rust::Game::<RcType>::setup::bb10' because has an unwind incoming edge
+-> DummyRet node 'dummyRet::rust::<CustomRc<T> as std::ops::Drop>::drop::0::rust::<CustomRc<T> as std::ops::Drop>::drop::bb0_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_2")
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/src/main.rs:180:17: 180:18 (#0), scope: scope[5] }, kind: drop(_24) -> [return: bb13, unwind continue] }' -> '_24'
+No tracked variable found per '_24' o 'Local(_24)'
+-> Skip Drop in 'rust::Game::<RcType>::run::bb26' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rc-playground/src/main.rs:231:5: 231:6 (#0), scope: scope[3] }, kind: drop(_7) -> [return: bb6, unwind continue] }' -> '_7'
+No tracked variable found per '_7' o 'Local(_7)'
+-> Skip Drop in 'rust::main::bb11' because has an unwind incoming edge
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 NO Issues detected: ✅
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

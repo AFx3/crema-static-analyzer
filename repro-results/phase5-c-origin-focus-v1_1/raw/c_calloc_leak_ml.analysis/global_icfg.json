@@ -1,0 +1,260 @@
+{
+  "ordered_nodes": [
+    [
+      "rust::main::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_calloc_leak_ml/src/main.rs:9:17: 9:31 (#0), scope: scope[0] }, kind: _1 = c_calloc_u64() -> [return: bb1, unwind unreachable] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_calloc_leak_ml/src/main.rs:9:17: 9:31 (#0)",
+            "function_called": "c_calloc_u64",
+            "arguments": [],
+            "return_place": "_1",
+            "return_target": "bb1",
+            "unwind_target": "unreachable"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_calloc_leak_ml/src/main.rs:10:12: 10:23 (#0), scope: scope[1] }, kind: _2 = std::ptr::mut_ptr::<impl *mut u64>::is_null(copy _1) -> [return: bb2, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_calloc_leak_ml/src/main.rs:10:12: 10:23 (#0)",
+            "function_called": "std::ptr::mut_ptr::<impl *mut u64>::is_null",
+            "arguments": [
+              {
+                "arg": "Local(_1)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_2",
+            "return_target": "bb2",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [],
+          "terminator": {
+            "kind": "SwitchInt",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_calloc_leak_ml/src/main.rs:10:12: 10:23 (#0), scope: scope[1] }, kind: switchInt(move _2) -> [0: bb3, otherwise: bb6] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_calloc_leak_ml/src/main.rs:10:12: 10:23 (#0)",
+            "targets": [
+              "(0, bb3)"
+            ],
+            "discr": "move _2",
+            "otherwise": "bb6"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb3",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 3,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_calloc_leak_ml/src/main.rs:11:18: 11:22 (#0)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_5, const main::promoted[0]))",
+              "place": "Local(_5)",
+              "is_mutable": false,
+              "rvalue": "const main::promoted[0]"
+            },
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_calloc_leak_ml/src/main.rs:11:24: 11:26 (#6)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_9, &(*_1)))",
+              "place": "Local(_9)",
+              "is_mutable": false,
+              "rvalue": "&(*_1)"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_calloc_leak_ml/src/main.rs:11:19: 11:21 (#6), scope: scope[1] }, kind: _8 = core::fmt::rt::Argument::<'_>::new_display::<u64>(copy _9) -> [return: bb4, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_calloc_leak_ml/src/main.rs:11:19: 11:21 (#6)",
+            "function_called": "core::fmt::rt::Argument::<'_>::new_display::<u64>",
+            "arguments": [
+              {
+                "arg": "Local(_9)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_8",
+            "return_target": "bb4",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb4",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 4,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:28: 143:61 (#6)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_7, [move _8]))",
+              "place": "Local(_7)",
+              "is_mutable": false,
+              "rvalue": "[move _8]"
+            },
+            {
+              "source_info": {
+                "span": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:28: 143:61 (#6)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_6, &_7))",
+              "place": "Local(_6)",
+              "is_mutable": false,
+              "rvalue": "&_7"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:28: 143:61 (#6), scope: scope[1] }, kind: _4 = std::fmt::Arguments::<'_>::new_v1::<2, 1>(copy _5, copy _6) -> [return: bb5, unwind continue] }",
+            "source_info": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:28: 143:61 (#6)",
+            "function_called": "std::fmt::Arguments::<'_>::new_v1::<2, 1>",
+            "arguments": [
+              {
+                "arg": "Local(_5)",
+                "is_mutable": false
+              },
+              {
+                "arg": "Local(_6)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_4",
+            "return_target": "bb5",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb5",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 5,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:9: 143:62 (#5), scope: scope[1] }, kind: _3 = std::io::_print(move _4) -> [return: bb6, unwind continue] }",
+            "source_info": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:9: 143:62 (#5)",
+            "function_called": "std::io::_print",
+            "arguments": [
+              {
+                "arg": "Local(_4) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_3",
+            "return_target": "bb6",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb6",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 6,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_calloc_leak_ml/src/main.rs:14:2: 14:2 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/c_calloc_leak_ml/src/main.rs:14:2: 14:2 (#0)"
+          }
+        }
+      }
+    ]
+  ],
+  "icfg_edges": [
+    {
+      "source": "rust::main::bb0",
+      "destination": "rust::main::bb1",
+      "label": "FFI Call (stdlib)",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::main::bb1",
+      "destination": "rust::main::bb2",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb1",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::main::bb2",
+      "destination": "rust::main::bb3",
+      "label": "SwitchInt target",
+      "source_label": "Mir bb2",
+      "destination_label": "Mir bb3"
+    },
+    {
+      "source": "rust::main::bb2",
+      "destination": "rust::main::bb6",
+      "label": "SwitchInt otherwise",
+      "source_label": "Mir bb2",
+      "destination_label": "Mir bb6"
+    },
+    {
+      "source": "rust::main::bb3",
+      "destination": "rust::main::bb4",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb3",
+      "destination_label": "Mir bb4"
+    },
+    {
+      "source": "rust::main::bb4",
+      "destination": "rust::main::bb5",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb4",
+      "destination_label": "Mir bb5"
+    },
+    {
+      "source": "rust::main::bb5",
+      "destination": "rust::main::bb6",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb5",
+      "destination_label": "Mir bb6"
+    }
+  ]
+}

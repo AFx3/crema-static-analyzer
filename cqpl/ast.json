@@ -46,7 +46,7 @@
             }
           }
         ],
-        "next_op": null
+        "next_op": "Then"
       },
       {
         "kind": "Snk",

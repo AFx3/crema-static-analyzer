@@ -1,0 +1,64 @@
+=== boxed_bool ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_char ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_f32 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_f64 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_i128 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_i16 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_i32 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_i64 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_i8 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_isize ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_u128 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_u16 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_u32 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_u64 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_u8 ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+
+=== boxed_usize ===
+🤖💬 Potential memory issues detected 🚀:
+☢ Never Free Issues ☢: {"{Local(_9)}": 1}
+

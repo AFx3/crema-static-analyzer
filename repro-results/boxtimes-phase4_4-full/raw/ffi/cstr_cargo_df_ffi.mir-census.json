@@ -1,0 +1,67 @@
+{
+  "call_counts": {
+    "alloc::ffi::c_str::<impl std::ffi::CStr>::to_string_lossy": 1,
+    "core::fmt::rt::Argument::<'_>::new_debug::<std::borrow::Cow<'_, str>>": 1,
+    "print_e_free": 1,
+    "std::ffi::CStr::from_ptr::<'_>": 1,
+    "std::ffi::CString::from_raw": 1,
+    "std::ffi::CString::into_raw": 1,
+    "std::ffi::CString::new::<&str>": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 1,
+    "std::io::_print": 1,
+    "std::result::Result::<std::ffi::CString, std::ffi::NulError>::expect": 1
+  },
+  "call_total": 10,
+  "memory_api_counts": {
+    "cstr_from_ptr": 1,
+    "cstring_from_raw": 1,
+    "cstring_into_raw": 1
+  },
+  "memory_api_examples": {
+    "cstr_from_ptr": [
+      "std::ffi::CStr::from_ptr::<'_>"
+    ],
+    "cstring_from_raw": [
+      "std::ffi::CString::from_raw"
+    ],
+    "cstring_into_raw": [
+      "std::ffi::CString::into_raw"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _13]"
+    ],
+    "pointer_cast": [
+      "copy _4 as *const i8 (PtrToPtr)"
+    ],
+    "ref": [
+      "&_5",
+      "&_12"
+    ],
+    "unknown_unhandled": [
+      "const \"nisba\"",
+      "const main::promoted[0]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 1,
+    "pointer_cast": 1,
+    "ref": 2,
+    "unknown_unhandled": 2
+  },
+  "rvalue_total": 6,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 1,
+    "unknown_unhandled": 2
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "cstr_cargo_df_ffi",
+  "terminator_kind_counts": {
+    "Call": 10,
+    "Drop": 3,
+    "Return": 1,
+    "UnwindResume": 1
+  }
+}

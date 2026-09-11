@@ -1,0 +1,230 @@
+{
+  "call_counts": {
+    "<&std::collections::HashMap<&std::string::String, std::string::String> as std::iter::IntoIterator>::into_iter": 1,
+    "<&std::string::String as std::cmp::PartialEq<&str>>::eq": 1,
+    "<&std::vec::Vec<std::string::String> as std::iter::IntoIterator>::into_iter": 1,
+    "<&str as std::cmp::PartialEq>::ne": 1,
+    "<&str as std::string::ToString>::to_string": 1,
+    "<[u8; 1024] as std::ops::Index<std::ops::RangeFull>>::index": 1,
+    "<std::borrow::Cow<'_, str> as std::ops::Deref>::deref": 3,
+    "<std::collections::hash_map::Iter<'_, &std::string::String, std::string::String> as std::iter::Iterator>::next": 1,
+    "<std::env::Args as std::iter::Iterator>::collect::<std::vec::Vec<std::string::String>>": 1,
+    "<std::iter::Map<std::slice::Iter<'_, &str>, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/main.rs:15:14: 15:17}> as std::iter::Iterator>::collect::<std::vec::Vec<std::string::String>>": 1,
+    "<std::net::Incoming<'_> as std::iter::IntoIterator>::into_iter": 1,
+    "<std::net::Incoming<'_> as std::iter::Iterator>::next": 1,
+    "<std::net::TcpStream as std::io::Read>::read": 1,
+    "<std::net::TcpStream as std::io::Write>::flush": 1,
+    "<std::net::TcpStream as std::io::Write>::write": 1,
+    "<std::slice::Iter<'_, &str> as std::iter::Iterator>::map::<std::string::String, {closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/main.rs:15:14: 15:17}>": 1,
+    "<std::slice::Iter<'_, std::string::String> as std::iter::Iterator>::next": 1,
+    "<std::str::Split<'_, &str> as std::iter::Iterator>::last": 2,
+    "<std::str::Split<'_, &str> as std::iter::Iterator>::nth": 2,
+    "<std::str::SplitWhitespace<'_> as std::iter::Iterator>::nth": 1,
+    "<std::string::String as std::clone::Clone>::clone": 2,
+    "<std::string::String as std::convert::From<&str>>::from": 3,
+    "<std::string::String as std::ops::Deref>::deref": 5,
+    "<std::sync::Arc<shared_register::AtomicRegister> as std::clone::Clone>::clone": 1,
+    "<std::sync::Arc<shared_register::AtomicRegister> as std::ops::Deref>::deref": 3,
+    "<std::sync::Arc<std::sync::atomic::AtomicPtr<std::string::String>> as std::clone::Clone>::clone": 2,
+    "<std::sync::Arc<std::sync::atomic::AtomicPtr<std::string::String>> as std::ops::Deref>::deref": 4,
+    "<std::time::Duration as std::cmp::PartialOrd>::ge": 1,
+    "<std::vec::Vec<&str> as std::ops::Deref>::deref": 1,
+    "<std::vec::Vec<std::string::String> as std::clone::Clone>::clone": 2,
+    "<std::vec::Vec<std::string::String> as std::ops::Index<usize>>::index": 1,
+    "<str as std::cmp::PartialEq>::eq": 3,
+    "<str as std::string::ToString>::to_string": 5,
+    "<u32 as std::string::ToString>::to_string": 1,
+    "alloc::alloc::exchange_malloc": 1,
+    "core::fmt::rt::Argument::<'_>::new_display::<&&std::string::String>": 2,
+    "core::fmt::rt::Argument::<'_>::new_display::<&std::string::String>": 2,
+    "core::fmt::rt::Argument::<'_>::new_display::<std::io::Error>": 1,
+    "core::fmt::rt::Argument::<'_>::new_display::<std::string::String>": 1,
+    "core::fmt::rt::Argument::<'_>::new_display::<u32>": 3,
+    "core::slice::<impl [&str]>::iter": 1,
+    "core::str::<impl str>::parse::<u32>": 1,
+    "core::str::<impl str>::split::<&str>": 4,
+    "core::str::<impl str>::split_whitespace": 1,
+    "core::str::<impl str>::trim": 2,
+    "core::str::<impl str>::trim_matches::<char>": 1,
+    "reqwest::blocking::Client::new": 1,
+    "reqwest::blocking::Client::post::<&std::string::String>": 1,
+    "reqwest::blocking::RequestBuilder::body::<std::string::String>": 1,
+    "reqwest::blocking::RequestBuilder::send": 1,
+    "reqwest::blocking::Response::text": 1,
+    "server::handle_client": 1,
+    "server::start_server": 1,
+    "shared_register::AtomicRegister::new": 1,
+    "shared_register::AtomicRegister::read": 1,
+    "shared_register::AtomicRegister::write": 2,
+    "shared_register::AtomicRegister::write_with_quorum": 1,
+    "std::boxed::Box::<std::string::String>::into_raw": 2,
+    "std::boxed::Box::<std::string::String>::new": 2,
+    "std::collections::HashMap::<&std::string::String, std::string::String>::insert": 1,
+    "std::collections::HashMap::<&std::string::String, std::string::String>::new": 1,
+    "std::env::args": 1,
+    "std::fmt::Arguments::<'_>::new_const::<1>": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<1, 1>": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 6,
+    "std::fmt::Arguments::<'_>::new_v1::<3, 2>": 1,
+    "std::fmt::format": 2,
+    "std::hint::must_use::<std::string::String>": 2,
+    "std::io::_print": 7,
+    "std::net::TcpListener::bind::<std::string::String>": 1,
+    "std::net::TcpListener::incoming": 1,
+    "std::option::Option::<&str>::unwrap": 2,
+    "std::option::Option::<&str>::unwrap_or": 2,
+    "std::option::Option::<&str>::unwrap_or_default": 1,
+    "std::result::Result::<(), std::boxed::Box<dyn std::any::Any + std::marker::Send>>::unwrap": 1,
+    "std::result::Result::<(), std::io::Error>::unwrap": 1,
+    "std::result::Result::<reqwest::blocking::Response, reqwest::Error>::unwrap": 1,
+    "std::result::Result::<std::net::TcpListener, std::io::Error>::unwrap": 1,
+    "std::result::Result::<std::string::String, reqwest::Error>::unwrap": 1,
+    "std::result::Result::<u32, std::num::ParseIntError>::unwrap": 1,
+    "std::result::Result::<usize, std::io::Error>::unwrap": 2,
+    "std::slice::<impl [&str]>::into_vec::<std::alloc::Global>": 1,
+    "std::string::String::as_bytes": 1,
+    "std::string::String::from_utf8_lossy": 1,
+    "std::string::String::new": 1,
+    "std::string::String::push_str": 4,
+    "std::sync::Arc::<shared_register::AtomicRegister>::new": 1,
+    "std::sync::Arc::<std::sync::atomic::AtomicPtr<std::string::String>>::new": 1,
+    "std::sync::atomic::AtomicPtr::<std::string::String>::compare_exchange": 1,
+    "std::sync::atomic::AtomicPtr::<std::string::String>::load": 4,
+    "std::sync::atomic::AtomicPtr::<std::string::String>::new": 2,
+    "std::thread::JoinHandle::<()>::join": 1,
+    "std::thread::sleep": 1,
+    "std::thread::spawn::<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/main.rs:29:32: 29:39}, ()>": 1,
+    "std::thread::spawn::<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/server.rs:49:31: 49:38}, ()>": 1,
+    "std::time::Duration::from_millis": 1,
+    "std::time::Duration::from_secs": 1,
+    "std::time::Instant::elapsed": 1,
+    "std::time::Instant::now": 1,
+    "std::vec::Vec::<std::string::String>::len": 2
+  },
+  "call_total": 159,
+  "memory_api_counts": {
+    "alloc": 2,
+    "box_into_raw": 2,
+    "box_new": 2
+  },
+  "memory_api_examples": {
+    "alloc": [
+      "alloc::alloc::exchange_malloc",
+      "std::slice::<impl [&str]>::into_vec::<std::alloc::Global>"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<std::string::String>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<std::string::String>::new"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _38]",
+      "[move _72]",
+      "[move _79, move _81]",
+      "[move _8]",
+      "[move _18]",
+      "[move _40]",
+      "[const \"localhost:8000\", move _12, move _13, move _14]",
+      "[move _10]"
+    ],
+    "arithmetic_binary": [
+      "Div(move _6, const 2_usize)",
+      "Sub(copy _47, const 1_usize)",
+      "BitAnd(copy _46, copy _48)"
+    ],
+    "checked_binary_unhandled": [
+      "AddWithOverflow(copy _3, const 1_usize)"
+    ],
+    "comparison": [
+      "Eq(const 2_usize, const 0_usize)",
+      "Ge(move _84, copy _5)",
+      "Eq(move _11, copy _6)",
+      "Eq(copy _49, const 0_usize)"
+    ],
+    "direct_use": [
+      "move _9",
+      "move _55",
+      "copy _3",
+      "move _2",
+      "move _42",
+      "move _54",
+      "move _20",
+      "copy _2"
+    ],
+    "pointer_cast": [
+      "copy _44 as *const () (PtrToPtr)"
+    ],
+    "ref": [
+      "&((*_1).0: u32)",
+      "&((*_1).1: std::vec::Vec<std::string::String>)",
+      "&((*_1).2: std::sync::Arc<std::sync::atomic::AtomicPtr<std::string::String>>)",
+      "&mut _11",
+      "&_22",
+      "&_20",
+      "&_16",
+      "&_24"
+    ],
+    "repeat_unhandled": [
+      "[const 0_u8; 1024]"
+    ],
+    "scalar_cast": [
+      "copy _45 as usize (Transmute)"
+    ],
+    "scalar_const": [
+      "const false",
+      "const true",
+      "const 0_usize"
+    ],
+    "scalar_nullary": [
+      "SizeOf([&str; 4])",
+      "AlignOf([&str; 4])"
+    ],
+    "unknown_unhandled": [
+      "copy (*_3)",
+      "shared_register::AtomicRegister { id: move _2, nodes: move _4, register: move _6 }",
+      "discriminant(_12)",
+      "copy ((_12 as Some).0: &std::string::String)",
+      "copy (*_23)",
+      "const shared_register::AtomicRegister::write_with_quorum::promoted[0]",
+      "discriminant(_58)",
+      "copy (((_58 as Some).0: (&&std::string::String, &std::string::String)).0: &&std::string::String)"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 9,
+    "arithmetic_binary": 3,
+    "checked_binary_unhandled": 1,
+    "comparison": 4,
+    "direct_use": 12,
+    "pointer_cast": 1,
+    "ref": 73,
+    "repeat_unhandled": 1,
+    "scalar_cast": 1,
+    "scalar_const": 19,
+    "scalar_nullary": 3,
+    "unknown_unhandled": 55
+  },
+  "rvalue_total": 182,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 9,
+    "checked_binary_unhandled": 1,
+    "repeat_unhandled": 1,
+    "unknown_unhandled": 55
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "shared-register",
+  "terminator_kind_counts": {
+    "Assert": 3,
+    "Call": 159,
+    "Drop": 48,
+    "Goto": 15,
+    "Return": 11,
+    "SwitchInt": 19,
+    "Unreachable": 3,
+    "UnwindResume": 7
+  }
+}

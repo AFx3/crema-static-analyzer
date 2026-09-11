@@ -1,0 +1,114 @@
+{
+  "call_counts": {
+    "<<impl IntoIterator<Item = u8> as std::iter::IntoIterator>::IntoIter as std::iter::Iterator>::collect::<std::vec::Vec<u8>>": 1,
+    "<MyStruct as std::ops::DerefMut>::deref_mut": 1,
+    "<[u8] as std::cmp::PartialEq>::eq": 1,
+    "<impl IntoIterator<Item = u8> as std::iter::IntoIterator>::into_iter": 1,
+    "<std::boxed::Box<[u8]> as std::convert::From<std::boxed::Box<MyStructSlice>>>::from": 1,
+    "<std::slice::IterMut<'_, u8> as std::iter::Iterator>::for_each::<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:19:43: 19:46}>": 1,
+    "<std::vec::Vec<u8> as std::clone::Clone>::clone": 1,
+    "<std::vec::Vec<u8> as std::cmp::PartialEq>::eq": 1,
+    "<std::vec::Vec<u8> as std::ops::Deref>::deref": 1,
+    "<std::vec::Vec<u8> as std::ops::DerefMut>::deref_mut": 1,
+    "MyStruct::into_inner": 1,
+    "MyStruct::new::<[u8; 3]>": 1,
+    "MyStructSlice::inc": 1,
+    "core::fmt::rt::Argument::<'_>::new_debug::<MyStruct>": 2,
+    "core::slice::<impl [u8]>::iter_mut": 1,
+    "std::boxed::Box::<MyStructSlice>::from_raw": 1,
+    "std::boxed::Box::<MyStructSlice>::into_raw": 1,
+    "std::boxed::Box::<[u8]>::from_raw": 1,
+    "std::boxed::Box::<[u8]>::into_raw": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 2,
+    "std::fmt::Formatter::<'_>::debug_struct_field1_finish": 2,
+    "std::io::_print": 2,
+    "std::slice::<impl [u8]>::into_vec::<std::alloc::Global>": 1,
+    "std::vec::Vec::<u8>::into_boxed_slice": 1
+  },
+  "call_total": 28,
+  "memory_api_counts": {
+    "alloc": 1,
+    "box_from_raw": 2,
+    "box_into_raw": 2
+  },
+  "memory_api_examples": {
+    "alloc": [
+      "std::slice::<impl [u8]>::into_vec::<std::alloc::Global>"
+    ],
+    "box_from_raw": [
+      "std::boxed::Box::<MyStructSlice>::from_raw",
+      "std::boxed::Box::<[u8]>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<[u8]>::into_raw",
+      "std::boxed::Box::<MyStructSlice>::into_raw"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[const 1_u8, const 5_u8, const 4_u8]",
+      "[move _8]",
+      "[move _18]"
+    ],
+    "checked_binary_unhandled": [
+      "AddWithOverflow(copy (*_2), const 1_u8)"
+    ],
+    "other_cast_unhandled": [
+      "move _1 as &mut MyStructSlice (Transmute)",
+      "move _1 as &mut [u8] (Transmute)",
+      "copy _1 as &MyStructSlice (Transmute)",
+      "copy _2 as &mut MyStructSlice (Transmute)",
+      "copy _2 as &MyStructSlice (Transmute)",
+      "copy _1 as &[u8] (Transmute)"
+    ],
+    "pointer_cast": [
+      "move _3 as *mut MyStructSlice (PtrToPtr)",
+      "move _3 as *mut [u8] (PtrToPtr)"
+    ],
+    "ref": [
+      "&((*_1).0: [u8])",
+      "&_7",
+      "&((*_1).0: std::vec::Vec<u8>)",
+      "&_1",
+      "&mut _1",
+      "&_17",
+      "&((*_2).0: [u8])",
+      "&mut ((*_1).0: [u8])"
+    ],
+    "unknown_unhandled": [
+      "const \"MyStructSlice\"",
+      "const \"contents\"",
+      "copy _6 as &dyn std::fmt::Debug (PointerCoercion(Unsize, Implicit))",
+      "MyStruct { contents: move _2 }",
+      "const main::promoted[1]",
+      "const main::promoted[0]",
+      "move (_1.0: std::vec::Vec<u8>)",
+      "MyStruct { contents: move _1 }"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 3,
+    "checked_binary_unhandled": 1,
+    "other_cast_unhandled": 6,
+    "pointer_cast": 2,
+    "ref": 17,
+    "unknown_unhandled": 15
+  },
+  "rvalue_total": 44,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 3,
+    "checked_binary_unhandled": 1,
+    "other_cast_unhandled": 6,
+    "unknown_unhandled": 15
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "unsized_struct",
+  "terminator_kind_counts": {
+    "Assert": 1,
+    "Call": 28,
+    "Drop": 2,
+    "Return": 23,
+    "UnwindResume": 1
+  }
+}

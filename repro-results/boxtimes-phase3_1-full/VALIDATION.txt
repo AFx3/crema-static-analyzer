@@ -1,0 +1,13 @@
+CREMA BOXTIMES Phase 3.1
+
+lattice_law_tests:                5/5
+abstract_memory_invariant_tests:  8/8
+boxtimes_transfer_tests:         11/11
+phase3_1_stabilization_tests:     5/5
+
+isolated corpus:                 93/93
+execution failures:              0
+Phase2 -> Phase3.1 mismatches:    0
+
+Known oracle exception:
+shared-register requires ML; DF is an optional nondeterministic false positive.

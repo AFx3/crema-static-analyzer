@@ -1,0 +1,663 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2128:50
+     |
+2128 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: variant `BOXTIMES` is never constructed
+  --> src/abstract_domain.rs:82:5
+   |
+78 | pub enum CellValue {
+   |          --------- variant in this enum
+...
+82 |     BOXTIMES,
+   |     ^^^^^^^^
+   |
+   = note: `CellValue` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:594:8
+    |
+594 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 6 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_memory`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_memory
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_memory /home/af/Documenti/a-phd/crema`
+warning: fields `a`, `b`, and `c` are never read
+  --> /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_memory/src/main.rs:8:5
+   |
+7  | struct Numbers {
+   |        ------- fields in this struct
+8  |     a: i32,
+   |     ^
+9  |     b: i32,
+   |     ^
+10 |     c: i32,
+   |     ^
+   |
+   = note: `Numbers` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+warning: 1 warning emitted
+
+No C files found in the project.
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package rust_memory target rust_memory at /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_memory/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_memory/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_memory/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_memory/target/debug",
+    "--extern=libc=/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_memory/target/debug/deps/liblibc-7a3c919e3f682a20.rlib",
+]
+warning: fields `a`, `b`, and `c` are never read
+  --> /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_memory/src/main.rs:8:5
+   |
+7  | struct Numbers {
+   |        ------- fields in this struct
+8  |     a: i32,
+   |     ^
+9  |     b: i32,
+   |     ^
+10 |     c: i32,
+   |     ^
+   |
+   = note: `Numbers` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+Global ICFG saved to global_icfg.json
+warning: 1 warning emitted
+
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb1::rust::main::bb1_internal", outgoing_edge: "rust::main::bb2", id: "9d6bfa87fe144916", mir_var: Some("_8"), llvm_var: Some("Local _0"), is_internal: Some(true) }
+DUMMYRET normalize: '_8'->'Local(8)', 'Local _0'->'Local(_0)'
+BEFORE JOIN: Local(8)=BOTTOM, Local(_0)=BOTTOM
+JOINED Local(8)=BOTTOM
+AFTER SET: mem_ret[Local(8)]=BOTTOM
+TAINT Local(8)={}
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb2::rust::main::bb2_internal", outgoing_edge: "rust::main::bb3", id: "79bdf404100ae1fa", mir_var: Some("_9"), llvm_var: Some("Local _0"), is_internal: Some(true) }
+DUMMYRET normalize: '_9'->'Local(9)', 'Local _0'->'Local(_0)'
+BEFORE JOIN: Local(9)=BOTTOM, Local(_0)=BOTTOM
+JOINED Local(9)=BOTTOM
+AFTER SET: mem_ret[Local(9)]=BOTTOM
+TAINT Local(9)={}
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb3::rust::main::bb3_internal", outgoing_edge: "rust::main::bb4", id: "75b6808edc649056", mir_var: Some("_10"), llvm_var: Some("Local _0"), is_internal: Some(true) }
+DUMMYRET normalize: '_10'->'Local(10)', 'Local _0'->'Local(_0)'
+BEFORE JOIN: Local(10)=BOTTOM, Local(_0)=BOTTOM
+JOINED Local(10)=BOTTOM
+AFTER SET: mem_ret[Local(10)]=BOTTOM
+TAINT Local(10)={}
+Final Abstract State: {"rust::main::bb13": {{"Local(_13)"}: MV}, "rust::main::bb23": {{"Local(_13)"}: MV, {"Local(_33)"}: MV}, "rust::main::bb2": {}, "rust::main::bb48": {{"Local(_8)"}: FREED, {"Local(_9)"}: FREED}, "rust::main::bb36": {{"Local(_13)"}: MV, {"Local(_33)"}: MV, {"Local(_37)"}: FREED, {"Local(_70)"}: FREED}, "rust::main::bb24": {{"Local(_13)"}: MV, {"Local(_33)"}: MV}, "rust::main::bb35": {{"Local(_13)"}: MV, {"Local(_33)"}: MV, {"Local(_37)"}: FREED, {"Local(_70)"}: FREED}, "rust::main::bb29": {{"Local(_13)"}: MV, {"Local(_33)"}: MV}, "rust::main::bb0": {}, "dummyRet::rust::main::1::rust::main::bb1_internal": {}, "rust::main::terminate": {{"Local(_1)"}: FREED, {"Local(_13)"}: MV, {"Local(_14)"}: MV, {"Local(_17)"}: FREED, {"Local(_33)"}: MV, {"Local(_34)"}: MV, {"Local(_37)"}: FREED, {"Local(_70)"}: FREED, {"Local(_8)"}: FREED, {"Local(_9)"}: FREED}, "rust::main::bb15": {{"Local(_13)"}: MV}, "rust::main::bb22": {{"Local(_13)"}: MV, {"Local(_33)"}: MV}, "rust::main::bb14": {{"Local(_13)"}: MV, {"Local(_33)"}: MV}, "rust::main::bb30": {{"Local(_13)"}: MV, {"Local(_33)"}: MV}, "rust::main::bb3": {}, "rust::main::bb31": {{"Local(_13)"}: MV, {"Local(_33)"}: MV}, "dummyCall::rust::main::bb2::rust::main::bb2_internal": {}, "dummyCall::rust::main::bb1::rust::main::bb1_internal": {}, "rust::main::bb12": {{"Local(_13)"}: MV}, "rust::main::bb18": {{"Local(_13)"}: MV}, "rust::main::bb1": {}, "rust::main::bb34": {{"Local(_13)"}: MV, {"Local(_33)"}: MV, {"Local(_37)"}: FREED, {"Local(_70)"}: FREED}, "rust::main::bb20": {{"Local(_13)"}: MV, {"Local(_33)"}: MV}, "rust::main::bb9": {{"Local(_13)"}: MV}, "rust::main::bb44": {{"Local(_8)"}: FREED, {"Local(_9)"}: FREED}, "rust::main::bb42": {{"Local(_1)"}: FREED, {"Local(_13)"}: MV, {"Local(_14)"}: MV, {"Local(_17)"}: FREED, {"Local(_33)"}: MV, {"Local(_34)"}: MV, {"Local(_37)"}: FREED, {"Local(_70)"}: FREED}, "rust::main::bb40": {{"Local(_13)"}: MV, {"Local(_17)"}: FREED, {"Local(_33)"}: MV, {"Local(_34)"}: MV, {"Local(_37)"}: FREED, {"Local(_70)"}: FREED}, "rust::main::bb41": {{"Local(_13)"}: MV, {"Local(_33)"}: MV, {"Local(_34)"}: MV, {"Local(_37)"}: FREED, {"Local(_70)"}: FREED}, "rust::main::bb33": {{"Local(_13)"}: MV, {"Local(_33)"}: MV, {"Local(_70)"}: FREED}, "rust::main::bb6": {}, "rust::main::bb47": {{"Local(_13)"}: MV, {"Local(_33)"}: MV}, "rust::main::bb27": {{"Local(_13)"}: MV, {"Local(_33)"}: MV}, "dummyRet::rust::main::2::rust::main::bb2_internal": {}, "rust::main::bb5": {}, "rust::main::bb38": {{"Local(_8)"}: FREED, {"Local(_9)"}: FREED}, "rust::main::bb7": {{"Local(_14)"}: MV}, "rust::main::bb39": {{"Local(_1)"}: FREED, {"Local(_13)"}: MV, {"Local(_14)"}: MV, {"Local(_17)"}: FREED, {"Local(_33)"}: MV, {"Local(_34)"}: MV, {"Local(_37)"}: FREED, {"Local(_70)"}: FREED, {"Local(_8)"}: FREED, {"Local(_9)"}: FREED}, "rust::main::bb26": {{"Local(_13)"}: MV, {"Local(_33)"}: MV}, "rust::main::bb46": {{"Local(_13)"}: MV}, "rust::main::bb10": {{"Local(_13)"}: MV}, "rust::main::bb37": {{"Local(_9)"}: FREED}, "rust::main::bb21": {{"Local(_13)"}: MV, {"Local(_33)"}: MV}, "dummyRet::rust::main::3::rust::main::bb3_internal": {}, "rust::main::bb8": {{"Local(_13)"}: MV}, "rust::main::bb16": {{"Local(_13)"}: MV}, "rust::main::bb4": {}, "rust::main::bb43": {{"Local(_13)"}: MV, {"Local(_14)"}: MV, {"Local(_17)"}: FREED, {"Local(_33)"}: MV, {"Local(_34)"}: MV, {"Local(_37)"}: FREED, {"Local(_70)"}: FREED}, "rust::main::bb45": {}, "rust::main::bb11": {{"Local(_13)"}: MV}, "rust::main::bb17": {{"Local(_13)"}: MV}, "rust::main::bb25": {{"Local(_13)"}: MV, {"Local(_33)"}: MV}, "dummyCall::rust::main::bb3::rust::main::bb3_internal": {}, "rust::main::bb32": {{"Local(_13)"}: MV, {"Local(_33)"}: MV}, "rust::main::bb28": {{"Local(_13)"}: MV, {"Local(_33)"}: MV}, "rust::main::bb19": {{"Local(_13)"}: MV, {"Local(_34)"}: MV}}
+Final Taint State: {
+    "rust::main::bb28": {
+        "Local(_33)": {
+            "assign",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb26": {
+        "Local(_33)": {
+            "assign",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb7": {
+        "Local(_14)": {
+            "assign",
+        },
+    },
+    "rust::main::bb32": {
+        "Local(_33)": {
+            "assign",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb30": {
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "assign",
+        },
+    },
+    "rust::main::bb15": {
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb6": {},
+    "rust::main::bb5": {},
+    "rust::main::bb33": {
+        "Local(_70)": {
+            "free",
+        },
+        "Local(_33)": {
+            "assign",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb2": {},
+    "rust::main::bb11": {
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb9": {
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb19": {
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_34)": {
+            "assign",
+        },
+    },
+    "rust::main::bb13": {
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb17": {
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "dummyRet::rust::main::1::rust::main::bb1_internal": {},
+    "rust::main::bb41": {
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_34)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "assign",
+        },
+        "Local(_37)": {
+            "free",
+        },
+        "Local(_70)": {
+            "free",
+        },
+    },
+    "rust::main::bb42": {
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_34)": {
+            "assign",
+        },
+        "Local(_70)": {
+            "free",
+        },
+        "Local(_14)": {
+            "assign",
+        },
+        "Local(_37)": {
+            "free",
+        },
+        "Local(_17)": {
+            "free",
+        },
+        "Local(_33)": {
+            "assign",
+        },
+    },
+    "rust::main::bb4": {},
+    "rust::main::bb31": {
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "assign",
+        },
+    },
+    "rust::main::bb16": {
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "dummyRet::rust::main::3::rust::main::bb3_internal": {},
+    "rust::main::bb10": {
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb14": {
+        "Local(_33)": {
+            "assign",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb23": {
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "assign",
+        },
+    },
+    "rust::main::bb25": {
+        "Local(_33)": {
+            "assign",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb8": {
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb47": {
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "assign",
+        },
+    },
+    "rust::main::bb24": {
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "assign",
+        },
+    },
+    "dummyCall::rust::main::bb1::rust::main::bb1_internal": {},
+    "rust::main::bb38": {
+        "Local(_8)": {
+            "free",
+        },
+        "Local(_9)": {
+            "free",
+        },
+    },
+    "rust::main::bb1": {},
+    "rust::main::bb34": {
+        "Local(_70)": {
+            "free",
+        },
+        "Local(_33)": {
+            "assign",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_37)": {
+            "free",
+        },
+    },
+    "rust::main::bb0": {},
+    "rust::main::bb37": {
+        "Local(_9)": {
+            "free",
+        },
+    },
+    "rust::main::bb44": {
+        "Local(_8)": {
+            "free",
+        },
+        "Local(_9)": {
+            "free",
+        },
+    },
+    "rust::main::bb21": {
+        "Local(_33)": {
+            "assign",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb43": {
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_17)": {
+            "free",
+        },
+        "Local(_14)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "assign",
+        },
+        "Local(_34)": {
+            "assign",
+        },
+        "Local(_37)": {
+            "free",
+        },
+        "Local(_70)": {
+            "free",
+        },
+    },
+    "rust::main::bb20": {
+        "Local(_33)": {
+            "assign",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb36": {
+        "Local(_70)": {
+            "free",
+        },
+        "Local(_37)": {
+            "free",
+        },
+        "Local(_33)": {
+            "assign",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb3": {},
+    "dummyRet::rust::main::2::rust::main::bb2_internal": {},
+    "dummyCall::rust::main::bb3::rust::main::bb3_internal": {},
+    "rust::main::bb22": {
+        "Local(_33)": {
+            "assign",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb27": {
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "assign",
+        },
+    },
+    "rust::main::bb46": {
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb40": {
+        "Local(_37)": {
+            "free",
+        },
+        "Local(_17)": {
+            "free",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_34)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "assign",
+        },
+        "Local(_70)": {
+            "free",
+        },
+    },
+    "rust::main::terminate": {
+        "Local(_37)": {
+            "free",
+        },
+        "Local(_8)": {
+            "free",
+        },
+        "Local(_17)": {
+            "free",
+        },
+        "Local(_33)": {
+            "assign",
+        },
+        "Local(_34)": {
+            "assign",
+        },
+        "Local(_9)": {
+            "free",
+        },
+        "Local(_14)": {
+            "assign",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_70)": {
+            "free",
+        },
+    },
+    "rust::main::bb39": {
+        "Local(_9)": {
+            "free",
+        },
+        "Local(_37)": {
+            "free",
+        },
+        "Local(_17)": {
+            "free",
+        },
+        "Local(_70)": {
+            "free",
+        },
+        "Local(_8)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_14)": {
+            "assign",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "assign",
+        },
+        "Local(_34)": {
+            "assign",
+        },
+    },
+    "rust::main::bb35": {
+        "Local(_37)": {
+            "free",
+        },
+        "Local(_70)": {
+            "free",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "assign",
+        },
+    },
+    "rust::main::bb45": {},
+    "rust::main::bb12": {
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb18": {
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb48": {
+        "Local(_8)": {
+            "free",
+        },
+        "Local(_9)": {
+            "free",
+        },
+    },
+    "rust::main::bb29": {
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_33)": {
+            "assign",
+        },
+    },
+    "dummyCall::rust::main::bb2::rust::main::bb2_internal": {},
+}
+Tracking variable 'Local(_33)' from block 'rust::main::bb28' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb28' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb26' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb26' (markers: {"assign"})
+Tracking variable 'Local(_14)' from block 'rust::main::bb7' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb32' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb32' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb30' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb30' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb15' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb33' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb33' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb11' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb9' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb19' (markers: {"assign"})
+Tracking variable 'Local(_34)' from block 'rust::main::bb19' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb13' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb17' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb41' (markers: {"assign"})
+Tracking variable 'Local(_34)' from block 'rust::main::bb41' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb41' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb42' (markers: {"assign"})
+Tracking variable 'Local(_34)' from block 'rust::main::bb42' (markers: {"assign"})
+Tracking variable 'Local(_14)' from block 'rust::main::bb42' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb42' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb31' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb31' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb16' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb10' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb14' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb14' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb23' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb23' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb25' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb25' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb8' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb47' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb47' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb24' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb24' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb34' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb34' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb21' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb21' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb43' (markers: {"assign"})
+Tracking variable 'Local(_14)' from block 'rust::main::bb43' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb43' (markers: {"assign"})
+Tracking variable 'Local(_34)' from block 'rust::main::bb43' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb20' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb20' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb36' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb36' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb22' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb22' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb27' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb27' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb46' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb40' (markers: {"assign"})
+Tracking variable 'Local(_34)' from block 'rust::main::bb40' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb40' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::terminate' (markers: {"assign"})
+Tracking variable 'Local(_34)' from block 'rust::main::terminate' (markers: {"assign"})
+Tracking variable 'Local(_14)' from block 'rust::main::terminate' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::terminate' (markers: {"assign"})
+Tracking variable 'Local(_14)' from block 'rust::main::bb39' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb39' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb39' (markers: {"assign"})
+Tracking variable 'Local(_34)' from block 'rust::main::bb39' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb35' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb35' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb12' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb18' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb29' (markers: {"assign"})
+Tracking variable 'Local(_33)' from block 'rust::main::bb29' (markers: {"assign"})
+-> DummyRet node 'dummyRet::rust::main::1::rust::main::bb1_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_8")
+-> DummyRet node 'dummyRet::rust::main::2::rust::main::bb2_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_9")
+-> DummyRet node 'dummyRet::rust::main::3::rust::main::bb3_internal': transferring from LLVM var Some("Local _0") to MIR var Some("_10")
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_memory/src/main.rs:47:70: 47:71 (#0), scope: scope[9] }, kind: drop(_70) -> [return: bb34, unwind: bb36] }' -> '_70'
+No tracked variable found per '_70' o 'Local(_70)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_memory/src/main.rs:48:1: 48:2 (#0), scope: scope[8] }, kind: drop(_37) -> [return: bb35, unwind: bb41] }' -> '_37'
+No tracked variable found per '_37' o 'Local(_37)'
+-> Skip Drop in 'rust::main::bb36' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb37' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb38' because has an unwind incoming edge
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_memory/src/main.rs:48:1: 48:2 (#0), scope: scope[3] }, kind: drop(_17) -> [return: bb43, unwind terminate(cleanup)] }' -> '_17'
+No tracked variable found per '_17' o 'Local(_17)'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/rust_memory/src/main.rs:48:1: 48:2 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb39, unwind terminate(cleanup)] }' -> '_1'
+No tracked variable found per '_1' o 'Local(_1)'
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_14)}": 1, "{Local(_34)}": 1, "{Local(_13)}": 1, "{Local(_33)}": 1}
+
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

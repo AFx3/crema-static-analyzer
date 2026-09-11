@@ -1,0 +1,5 @@
+{
+  "warning_ub_bool": [
+    "UB_FFI"
+  ]
+}

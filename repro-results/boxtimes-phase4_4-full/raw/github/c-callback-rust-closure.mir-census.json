@@ -1,0 +1,128 @@
+{
+  "call_counts": {
+    "<dyn std::ops::FnMut() as std::ops::FnMut<()>>::call_mut": 1,
+    "Closure::dealloc_cb": 2,
+    "Closure::new": 1,
+    "Closure::register::<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/c-callback-rust-closure/src/main.rs:82:22: 82:24}>": 1,
+    "Closure::trigger": 1,
+    "register_cb": 2,
+    "std::boxed::Box::<*mut dyn std::ops::FnMut()>::from_raw": 1,
+    "std::boxed::Box::<*mut dyn std::ops::FnMut()>::into_raw": 1,
+    "std::boxed::Box::<*mut dyn std::ops::FnMut()>::new": 1,
+    "std::boxed::Box::<dyn std::ops::FnMut()>::from_raw": 1,
+    "std::boxed::Box::<dyn std::ops::FnMut()>::into_raw": 1,
+    "std::boxed::Box::<impl FnMut() + 'static>::new": 1,
+    "std::fmt::Arguments::<'_>::new_const::<1>": 1,
+    "std::io::_print": 1,
+    "std::ptr::mut_ptr::<impl *mut *mut dyn std::ops::FnMut()>::is_null": 2,
+    "std::ptr::null::<libc::c_void>": 1,
+    "std::ptr::null_mut::<*mut dyn std::ops::FnMut()>": 2,
+    "std::ptr::null_mut::<libc::c_void>": 1,
+    "trigger_cb": 1
+  },
+  "call_total": 23,
+  "memory_api_counts": {
+    "box_from_raw": 2,
+    "box_into_raw": 2,
+    "box_new": 2,
+    "dealloc": 2
+  },
+  "memory_api_examples": {
+    "box_from_raw": [
+      "std::boxed::Box::<*mut dyn std::ops::FnMut()>::from_raw",
+      "std::boxed::Box::<dyn std::ops::FnMut()>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<dyn std::ops::FnMut()>::into_raw",
+      "std::boxed::Box::<*mut dyn std::ops::FnMut()>::into_raw"
+    ],
+    "box_new": [
+      "std::boxed::Box::<impl FnMut() + 'static>::new",
+      "std::boxed::Box::<*mut dyn std::ops::FnMut()>::new"
+    ],
+    "dealloc": [
+      "Closure::dealloc_cb"
+    ]
+  },
+  "rvalue_examples": {
+    "arithmetic_binary": [
+      "Sub(copy _16, const 1_usize)",
+      "BitAnd(copy _15, copy _17)"
+    ],
+    "comparison": [
+      "Eq(copy _18, const 0_usize)"
+    ],
+    "copy_for_deref": [
+      "deref_copy ((*_1).0: *mut *mut dyn std::ops::FnMut())",
+      "deref_copy (*_2)"
+    ],
+    "direct_deref_use": [
+      "copy (*_13)"
+    ],
+    "direct_use": [
+      "move _12",
+      "move _2",
+      "move _8"
+    ],
+    "other_cast_unhandled": [
+      "move _6 as extern \"C\" fn(*mut libc::c_void) (Transmute)"
+    ],
+    "pointer_cast": [
+      "copy _13 as *const () (PtrToPtr)",
+      "copy _1 as *mut *mut dyn std::ops::FnMut() (PtrToPtr)",
+      "move _13 as *mut libc::c_void (PtrToPtr)"
+    ],
+    "ref": [
+      "&mut (*_5)",
+      "&mut _1",
+      "&_1"
+    ],
+    "scalar_cast": [
+      "copy _14 as usize (Transmute)"
+    ],
+    "scalar_const": [
+      "const false",
+      "const true"
+    ],
+    "scalar_nullary": [
+      "AlignOf(*mut dyn std::ops::FnMut())"
+    ],
+    "unknown_unhandled": [
+      "copy ((*_1).0: *mut *mut dyn std::ops::FnMut())",
+      "Closure { cb: move _1 }",
+      "move _5 as std::boxed::Box<dyn std::ops::FnMut()> (PointerCoercion(Unsize, Implicit))",
+      "Closure::register::call_closure as extern \"C\" fn(*mut libc::c_void) (PointerCoercion(ReifyFnPointer, Implicit))",
+      "const main::{closure#0}::promoted[0]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "arithmetic_binary": 2,
+    "comparison": 1,
+    "copy_for_deref": 2,
+    "direct_deref_use": 1,
+    "direct_use": 3,
+    "other_cast_unhandled": 1,
+    "pointer_cast": 3,
+    "ref": 3,
+    "scalar_cast": 1,
+    "scalar_const": 3,
+    "scalar_nullary": 1,
+    "unknown_unhandled": 8
+  },
+  "rvalue_total": 29,
+  "rvalue_unhandled_counts": {
+    "other_cast_unhandled": 1,
+    "unknown_unhandled": 8
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "c-callback-rust-closure",
+  "terminator_kind_counts": {
+    "Assert": 1,
+    "Call": 23,
+    "Drop": 7,
+    "Return": 8,
+    "SwitchInt": 3,
+    "UnwindResume": 3
+  }
+}

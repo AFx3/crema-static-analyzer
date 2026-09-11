@@ -1,0 +1,149 @@
+{
+  "ordered_nodes": [
+    [
+      "rust::main::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/rust_box_direct_c_free_ub/src/main.rs:9:21: 9:37 (#0), scope: scope[0] }, kind: _1 = std::boxed::Box::<i32>::new(const 17_i32) -> [return: bb1, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/rust_box_direct_c_free_ub/src/main.rs:9:21: 9:37 (#0)",
+            "function_called": "std::boxed::Box::<i32>::new",
+            "arguments": [
+              {
+                "arg": "const 17_i32",
+                "is_mutable": null
+              }
+            ],
+            "return_place": "_1",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/rust_box_direct_c_free_ub/src/main.rs:10:19: 10:39 (#0), scope: scope[1] }, kind: _2 = std::boxed::Box::<i32>::into_raw(move _1) -> [return: bb2, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/rust_box_direct_c_free_ub/src/main.rs:10:19: 10:39 (#0)",
+            "function_called": "std::boxed::Box::<i32>::into_raw",
+            "arguments": [
+              {
+                "arg": "Local(_1)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_2",
+            "return_target": "bb2",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/rust_box_direct_c_free_ub/src/main.rs:14:14: 14:34 (#0), scope: scope[2] }, kind: _4 = std::ptr::mut_ptr::<impl *mut i32>::cast::<std::ffi::c_void>(copy _2) -> [return: bb3, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/rust_box_direct_c_free_ub/src/main.rs:14:14: 14:34 (#0)",
+            "function_called": "std::ptr::mut_ptr::<impl *mut i32>::cast::<std::ffi::c_void>",
+            "arguments": [
+              {
+                "arg": "Local(_2)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_4",
+            "return_target": "bb3",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb3",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 3,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/rust_box_direct_c_free_ub/src/main.rs:14:9: 14:35 (#0), scope: scope[2] }, kind: _3 = free(move _4) -> [return: bb4, unwind unreachable] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/rust_box_direct_c_free_ub/src/main.rs:14:9: 14:35 (#0)",
+            "function_called": "free",
+            "arguments": [
+              {
+                "arg": "Local(_4) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_3",
+            "return_target": "bb4",
+            "unwind_target": "unreachable"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb4",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 4,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/rust_box_direct_c_free_ub/src/main.rs:16:2: 16:2 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_c_to_rust_alloc/rust_box_direct_c_free_ub/src/main.rs:16:2: 16:2 (#0)"
+          }
+        }
+      }
+    ]
+  ],
+  "icfg_edges": [
+    {
+      "source": "rust::main::bb0",
+      "destination": "rust::main::bb1",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::main::bb1",
+      "destination": "rust::main::bb2",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb1",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::main::bb2",
+      "destination": "rust::main::bb3",
+      "label": "Call return (fallback)",
+      "source_label": "Mir bb2",
+      "destination_label": "Mir bb3"
+    },
+    {
+      "source": "rust::main::bb3",
+      "destination": "rust::main::bb4",
+      "label": "FFI Call (stdlib)",
+      "source_label": "Mir bb3",
+      "destination_label": "Mir bb4"
+    }
+  ]
+}

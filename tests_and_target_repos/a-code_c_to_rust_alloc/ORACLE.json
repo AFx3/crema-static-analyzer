@@ -1,0 +1,90 @@
+{
+  "c_calloc_leak_ml": {
+    "expected_classes": [
+      "ML"
+    ],
+    "rationale": "calloc belongs to the malloc/free family and is nullable."
+  },
+  "c_malloc_c_double_free_df": {
+    "expected_classes": [
+      "DF"
+    ],
+    "rationale": "Two distinct Rust call sites inline the same C free wrapper; both are deallocation events for the same malloc-family allocation."
+  },
+  "c_malloc_c_free_clean": {
+    "expected_classes": [],
+    "rationale": "Matching malloc-family allocation and C free; must not be reported as allocator UB."
+  },
+  "c_malloc_c_free_then_rust_use_uaf": {
+    "expected_classes": [
+      "UAF"
+    ],
+    "rationale": "malloc-family allocation is freed inside inlined C/LLVM; a later Rust ptr::read is reachable from that free in the global ICFG."
+  },
+  "c_malloc_cstr_borrow_c_free_clean": {
+    "expected_classes": [],
+    "rationale": "Borrowed CStr view does not take ownership; C free remains matching deallocator."
+  },
+  "c_malloc_leak_ml": {
+    "expected_classes": [
+      "ML"
+    ],
+    "rationale": "C malloc -> Rust; possible live allocation is never freed."
+  },
+  "c_malloc_rust_box_from_raw_ub": {
+    "expected_classes": [
+      "UB_FFI"
+    ],
+    "rationale": "Positive C malloc-family provenance does not prove Box::from_raw's Global-allocator/layout/value safety contract; report potential UB."
+  },
+  "c_malloc_rust_cstring_from_raw_ub": {
+    "expected_classes": [
+      "UB_FFI"
+    ],
+    "rationale": "CString::from_raw requires prior CString::into_raw provenance."
+  },
+  "c_malloc_rust_double_free_df": {
+    "expected_classes": [
+      "DF"
+    ],
+    "rationale": "The same C malloc-family allocation is passed twice to C free from Rust."
+  },
+  "c_malloc_rust_free_clean": {
+    "expected_classes": [],
+    "rationale": "C malloc-family allocation reclaimed by the matching C free deallocator, even though free is invoked at a Rust call site."
+  },
+  "c_malloc_rust_free_then_use_uaf": {
+    "expected_classes": [
+      "UAF"
+    ],
+    "rationale": "Matching C free occurs at a Rust MIR source span, followed by ptr::read of the same C-origin allocation."
+  },
+  "c_malloc_rust_std_dealloc_ub": {
+    "expected_classes": [
+      "UB_FFI"
+    ],
+    "rationale": "Positive C malloc-family provenance does not prove std::alloc::dealloc's Global-allocator + matching-Layout contract; report potential UB."
+  },
+  "c_malloc_rust_string_from_raw_parts_ub": {
+    "expected_classes": [
+      "UB_FFI"
+    ],
+    "rationale": "Positive C malloc-family provenance does not prove String::from_raw_parts' Global-allocator, capacity, and UTF-8 safety contract; report potential UB."
+  },
+  "c_malloc_rust_vec_from_raw_parts_ub": {
+    "expected_classes": [
+      "UB_FFI"
+    ],
+    "rationale": "Positive C malloc-family provenance does not prove Vec::from_raw_parts' Global-allocator/layout/length/capacity contract; report potential UB."
+  },
+  "c_static_cstr_borrow_clean": {
+    "expected_classes": [],
+    "rationale": "Negative provenance control: a foreign pointer is not automatically a malloc allocation."
+  },
+  "rust_box_direct_c_free_ub": {
+    "expected_classes": [
+      "UB_FFI"
+    ],
+    "rationale": "Symmetric negative control: positive Rust Box/global-allocation tracking reaches direct C free. The new Rust-call-site free support must not suppress the existing Rust-to-C allocator warning."
+  }
+}

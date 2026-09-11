@@ -1,0 +1,14 @@
+timestamp_utc=2026-09-11T09:21:15Z
+repo_root=/home/af/Documenti/a-phd
+git_branch=cqpl
+git_commit=d5adfeb7ae909868f86b774e0bce09034f409a80
+git_dirty_entries=37
+rustc=rustc 1.97.1 (8bab26f4f 2026-07-14)
+cargo=cargo 1.97.1 (c980f4866 2026-06-30)
+active_toolchain=stable-x86_64-unknown-linux-gnu (default)
+sysroot=/mnt/dara/dara-dev/toolchains/rustup/toolchains/stable-x86_64-unknown-linux-gnu
+clang=Ubuntu clang version 14.0.0-1ubuntu1.1
+svf_driver=/home/af/Documenti/a-phd/SVF-example/src/svf-example
+svf_dir=/home/af/Documenti/a-phd/SVF
+llvm_dir=/home/af/Documenti/a-phd/SVF/llvm-16.0.0.obj
+z3_dir=/home/af/Documenti/a-phd/SVF/z3.obj

@@ -1,0 +1,1029 @@
+{
+  "memory_api_counts": {
+    "alloc": 52,
+    "alloc_zeroed": 1,
+    "borrowed_raw_pointer_view": 10,
+    "box_from_raw": 72,
+    "box_into_raw": 95,
+    "box_leak": 1,
+    "box_new": 115,
+    "cstr_from_ptr": 6,
+    "cstring_from_raw": 10,
+    "cstring_into_raw": 14,
+    "dealloc": 3,
+    "mem_drop": 28,
+    "mem_forget": 2,
+    "ptr_read": 6,
+    "vec_from_raw_parts": 2
+  },
+  "memory_api_examples": {
+    "alloc": [
+      "alloc::alloc::exchange_malloc",
+      "std::slice::<impl [&str]>::into_vec::<std::alloc::Global>",
+      "std::slice::<impl [char]>::into_vec::<std::alloc::Global>",
+      "std::slice::<impl [Numbers]>::into_vec::<std::alloc::Global>",
+      "std::slice::<impl [*mut Node<u32>]>::into_vec::<std::alloc::Global>",
+      "std::slice::<impl [(hashbrown::HashSet<std::string::String>, hashbrown::HashSet<std::string::String>)]>::into_vec::<std::alloc::Global>",
+      "std::slice::<impl [vm_insts::Inst]>::into_vec::<std::alloc::Global>",
+      "std::slice::<impl [vm_value::Value]>::into_vec::<std::alloc::Global>",
+      "std::slice::<impl [std::boxed::Box<parse::Node>]>::into_vec::<std::alloc::Global>",
+      "std::slice::<impl [std::rc::Rc<std::cell::RefCell<vm::CallFrame>>]>::into_vec::<std::alloc::Global>",
+      "std::alloc::Layout::from_size_align",
+      "std::result::Result::<std::alloc::Layout, std::alloc::LayoutError>::expect",
+      "<dyn StackBufferAllocator as StackBufferAllocator>::alloc",
+      "std::slice::<impl [u8]>::into_vec::<std::alloc::Global>"
+    ],
+    "alloc_zeroed": [
+      "std::alloc::alloc_zeroed"
+    ],
+    "borrowed_raw_pointer_view": [
+      "std::ffi::CStr::as_ptr",
+      "std::ptr::NonNull::<CustomRcInner<T>>::as_ptr",
+      "std::ptr::NonNull::<MyBox<T>>::as_ptr",
+      "core::slice::<impl [u8]>::as_mut_ptr"
+    ],
+    "box_from_raw": [
+      "std::boxed::Box::<i32>::from_raw",
+      "std::boxed::Box::<*mut dyn std::ops::FnMut()>::from_raw",
+      "std::boxed::Box::<dyn std::ops::FnMut()>::from_raw",
+      "std::boxed::Box::<Node<T>>::from_raw",
+      "std::boxed::Box::<CustomRcInner<T>>::from_raw",
+      "std::boxed::Box::<T>::from_raw",
+      "std::boxed::Box::<MyBox<T>>::from_raw",
+      "std::boxed::Box::<std::string::String>::from_raw",
+      "std::boxed::Box::<[u8]>::from_raw",
+      "std::boxed::Box::<MyStructSlice>::from_raw",
+      "std::boxed::Box::<bool>::from_raw",
+      "std::boxed::Box::<char>::from_raw",
+      "std::boxed::Box::<f32>::from_raw",
+      "std::boxed::Box::<f64>::from_raw",
+      "std::boxed::Box::<i128>::from_raw",
+      "std::boxed::Box::<i16>::from_raw",
+      "std::boxed::Box::<i64>::from_raw",
+      "std::boxed::Box::<i8>::from_raw",
+      "std::boxed::Box::<isize>::from_raw",
+      "std::boxed::Box::<u128>::from_raw"
+    ],
+    "box_into_raw": [
+      "std::boxed::Box::<i32>::into_raw",
+      "std::boxed::Box::<bool>::into_raw",
+      "std::boxed::Box::<std::string::String>::into_raw",
+      "std::boxed::Box::<dyn std::ops::FnMut()>::into_raw",
+      "std::boxed::Box::<*mut dyn std::ops::FnMut()>::into_raw",
+      "std::boxed::Box::<Node<T>>::into_raw",
+      "std::boxed::Box::<libc::rusage>::into_raw",
+      "std::boxed::Box::<std::vec::Vec<char>>::into_raw",
+      "std::boxed::Box::<CustomRcInner<T>>::into_raw",
+      "std::boxed::Box::<T>::into_raw",
+      "std::boxed::Box::<MyBox<T>>::into_raw",
+      "std::boxed::Box::<[Numbers]>::into_raw",
+      "std::boxed::Box::<[*mut libc::c_void]>::into_raw",
+      "std::boxed::Box::<Node<u32>>::into_raw",
+      "std::boxed::Box::<MyStructSlice>::into_raw",
+      "std::boxed::Box::<[u8]>::into_raw",
+      "std::boxed::Box::<State>::into_raw",
+      "std::boxed::Box::<std::sync::mpsc::Sender<SegmentMessage>>::into_raw",
+      "std::boxed::Box::<char>::into_raw",
+      "std::boxed::Box::<f32>::into_raw"
+    ],
+    "box_leak": [
+      "std::boxed::Box::<LockFreeStack<i32>>::leak::<'_>"
+    ],
+    "box_new": [
+      "std::boxed::Box::<i32>::new",
+      "std::boxed::Box::<std::string::String>::new",
+      "std::boxed::Box::<bool>::new",
+      "std::boxed::Box::<impl FnMut() + 'static>::new",
+      "std::boxed::Box::<*mut dyn std::ops::FnMut()>::new",
+      "std::boxed::Box::<Node<T>>::new",
+      "std::boxed::Box::<LockFreeStack<i32>>::new",
+      "std::boxed::Box::<libc::rusage>::new",
+      "std::boxed::Box::<std::vec::Vec<char>>::new",
+      "std::boxed::Box::<CustomRcInner<T>>::new",
+      "std::boxed::Box::<T>::new",
+      "std::boxed::Box::<&str>::new",
+      "std::boxed::Box::<MyBox<T>>::new",
+      "std::boxed::Box::<Node<u32>>::new",
+      "std::boxed::Box::<parse::Node>::new",
+      "std::boxed::Box::<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/square/src/parse.rs:77:14: 77:40}>::new",
+      "std::boxed::Box::<F>::new",
+      "std::boxed::Box::<State>::new",
+      "std::boxed::Box::<std::sync::mpsc::Sender<SegmentMessage>>::new",
+      "std::boxed::Box::<char>::new"
+    ],
+    "cstr_from_ptr": [
+      "std::ffi::CStr::from_ptr::<'_>"
+    ],
+    "cstring_from_raw": [
+      "std::ffi::CString::from_raw"
+    ],
+    "cstring_into_raw": [
+      "std::ffi::CString::into_raw"
+    ],
+    "dealloc": [
+      "Closure::dealloc_cb",
+      "std::alloc::dealloc"
+    ],
+    "mem_drop": [
+      "std::mem::drop::<std::boxed::Box<Node<T>>>",
+      "std::mem::drop::<std::option::Option<Oisann<&mut i32>>>",
+      "std::mem::drop::<std::boxed::Box<MyBox<T>>>",
+      "std::mem::drop::<std::option::Option<StyleSheet<'_>>>",
+      "std::mem::drop::<std::boxed::Box<std::string::String>>",
+      "std::mem::drop::<std::boxed::Box<bool>>",
+      "std::mem::drop::<std::boxed::Box<char>>",
+      "std::mem::drop::<std::boxed::Box<f32>>",
+      "std::mem::drop::<std::boxed::Box<f64>>",
+      "std::mem::drop::<std::boxed::Box<i128>>",
+      "std::mem::drop::<std::boxed::Box<i16>>",
+      "std::mem::drop::<std::boxed::Box<i32>>",
+      "std::mem::drop::<std::boxed::Box<i64>>",
+      "std::mem::drop::<std::boxed::Box<i8>>",
+      "std::mem::drop::<std::boxed::Box<isize>>",
+      "std::mem::drop::<std::boxed::Box<u128>>",
+      "std::mem::drop::<std::boxed::Box<u16>>",
+      "std::mem::drop::<std::boxed::Box<u32>>",
+      "std::mem::drop::<std::boxed::Box<u64>>",
+      "std::mem::drop::<std::boxed::Box<u8>>"
+    ],
+    "mem_forget": [
+      "std::mem::forget::<std::boxed::Box<&str>>",
+      "std::mem::forget::<std::boxed::Box<Point>>"
+    ],
+    "ptr_read": [
+      "std::ptr::read::<T>",
+      "std::ptr::read::<Point>",
+      "std::ptr::read::<i8>"
+    ],
+    "vec_from_raw_parts": [
+      "std::vec::Vec::<*mut libc::c_void>::from_raw_parts",
+      "std::vec::Vec::<Numbers>::from_raw_parts"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _17]",
+      "[move _29]",
+      "[move _12]",
+      "[move _13]",
+      "[move _21]",
+      "[move _8]",
+      "[move _16]",
+      "[const \"Alpha\", move _7, move _8]",
+      "[const \"Alfa\", move _7, move _8]",
+      "[move _9]",
+      "[move _20]",
+      "[move _22]",
+      "[move _31]",
+      "[move _23]",
+      "[move _9, move _11]",
+      "[move _18, move _20]",
+      "(copy _10,)",
+      "[move _33]",
+      "[const ' ']",
+      "[move _10]"
+    ],
+    "arithmetic_binary": [
+      "BitAnd(move _8, move _9)",
+      "Rem(move _6, const 5_i32)",
+      "Sub(copy _26, const 1_usize)",
+      "BitAnd(copy _25, copy _27)",
+      "Sub(copy _25, const 1_usize)",
+      "BitAnd(copy _24, copy _26)",
+      "Sub(copy _16, const 1_usize)",
+      "BitAnd(copy _15, copy _17)",
+      "Sub(copy _21, const 1_usize)",
+      "BitAnd(copy _20, copy _22)",
+      "Sub(copy _19, const 1_usize)",
+      "BitAnd(copy _18, copy _20)",
+      "Sub(copy _38, const 1_usize)",
+      "BitAnd(copy _37, copy _39)",
+      "Mul(move _23, const std::f64::consts::PI)",
+      "Add(const 1f64, move _25)",
+      "Mul(move _22, move _24)",
+      "Div(move _21, const 2f64)",
+      "Rem(move _19, const 100_u32)",
+      "Add(move _29, move _30)"
+    ],
+    "checked_binary_unhandled": [
+      "AddWithOverflow(copy _5, const 1_u64)",
+      "AddWithOverflow(copy _6, const 1_usize)",
+      "SubWithOverflow(copy (*_4), const 1_usize)",
+      "AddWithOverflow(copy _4, const 1_usize)",
+      "AddWithOverflow(copy (*_2), const 1_usize)",
+      "SubWithOverflow(copy (*_13), const 1_usize)",
+      "MulWithOverflow(copy _31, copy _18)",
+      "AddWithOverflow(copy _3, const 1_usize)",
+      "SubWithOverflow(copy _48, const 1_usize)",
+      "AddWithOverflow(copy _6, copy _4)",
+      "AddWithOverflow(copy ((*_1).1: usize), const 1_usize)",
+      "SubWithOverflow(copy ((*_2).2: usize), const 1_usize)",
+      "SubWithOverflow(copy ((*_2).1: usize), const 1_usize)",
+      "AddWithOverflow(copy _5, const 1_usize)",
+      "AddWithOverflow(const 1_i32, copy _23)",
+      "SubWithOverflow(const -2_i32, copy _23)",
+      "AddWithOverflow(copy _3, const 15_usize)",
+      "SubWithOverflow(copy _9, copy _10)",
+      "AddWithOverflow(copy _7, const 1_usize)",
+      "AddWithOverflow(copy _14, const 15_usize)"
+    ],
+    "closure_aggregate": [
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/lock-free/src/main.rs:86:18: 86:21} { stack: move _9 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/lock-free/src/main.rs:87:23: 87:30} { stack: copy (*_4), i: copy _2 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list/src/main.rs:85:27: 85:34} { list: move _3, i: copy _2 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/lock_free_non_blocking_linked_list/src/main.rs:83:14: 83:17} { list: move _24 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/napkin-math-test/src/main.rs:64:9: 64:16} { ptr: move _8 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/main.rs:29:32: 29:39} { port: copy _23, atomic_register: move _33 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/server.rs:49:31: 49:38} { stream: move _29, atomic_register: move _30 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/square/src/emit.rs:210:38: 210:41} { input: copy _1, id: copy _20 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/square/src/parse.rs:77:14: 77:40} { fn_name: copy _1 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/square/src/vm.rs:384:83: 384:86} { self: copy _1, vm: move _30 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/square/src/vm.rs:97:62: 97:65} { self: copy _1, vm: move _127 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/square/src/emit.rs:324:21: 324:35} { input: copy _1, expressions: copy _3, ctx: copy _4 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/square/src/emit.rs:329:28: 329:42} { expressions: copy _3, input: copy _1, ctx: copy _4, op: copy _2 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/square/src/scan.rs:102:19: 102:22} { pos: copy _2, chars: copy _1, n: move _7 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/square/src/emit.rs:1117:38: 1117:41} { input: copy _1, id: copy _44 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:84:66: 84:69} { child_id: move _30 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:96:22: 96:25} { child_id: move _49 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:195:27: 195:32} { required_size: move _25 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/stackswap-coroutines/src/main.rs:345:26: 345:29} { child_id: move _79 }",
+      "{closure@/home/af/Documenti/a-phd/tests_and_target_repos/found vulns/whisper-rs-example/src/main.rs:58:19: 58:26} { rx: move _2 }"
+    ],
+    "comparison": [
+      "Lt(move _6, move _7)",
+      "Eq(const 5_i32, const 0_i32)",
+      "Eq(const 5_i32, const -1_i32)",
+      "Eq(copy _6, const i32::MIN)",
+      "Ge(copy _5, const 3_i32)",
+      "Eq(copy _28, const 0_usize)",
+      "Eq(copy _27, const 0_usize)",
+      "Gt(move _6, move _7)",
+      "Eq(copy _18, const 0_usize)",
+      "Eq(copy _6, move _13)",
+      "Eq(copy _2, move _12)",
+      "Eq(copy _2, copy _5)",
+      "Eq(copy _23, const 0_usize)",
+      "Eq(copy _21, const 0_usize)",
+      "Ge(move _13, const 1_usize)",
+      "Eq(copy _40, const 0_usize)",
+      "Eq(const 100_u32, const 0_u32)",
+      "Ne(move _5, const '0')",
+      "Eq(const 10_usize, const 0_usize)",
+      "Eq(copy _32, const 0_usize)"
+    ],
+    "copy_for_deref": [
+      "deref_copy ((*_1).0: *mut *mut dyn std::ops::FnMut())",
+      "deref_copy (*_2)",
+      "deref_copy (_1.0: &LockFreeStack<i32>)",
+      "deref_copy ((*_1).0: &&LockFreeStack<i32>)",
+      "deref_copy ((*_1).0: &std::sync::Arc<LockFreeLinkedList<i32>>)",
+      "deref_copy ((*_1).0: &*mut libc::rusage)",
+      "deref_copy (*_18)",
+      "deref_copy (*_30)",
+      "deref_copy (_41.0: *mut Node<u32>)",
+      "deref_copy (*_52)[_54]",
+      "deref_copy (*_59)[_61]",
+      "deref_copy (_96.0: *mut Node<u32>)",
+      "deref_copy (_3.0: &vm_value::Value)",
+      "deref_copy (_3.1: &vm_value::Value)",
+      "deref_copy ((_18 as Some).0: &&char)",
+      "deref_copy (*_34)",
+      "deref_copy (*_21)",
+      "deref_copy (*_19)",
+      "deref_copy ((*_1).0: &str)",
+      "deref_copy ((*_1).1: &std::vec::Vec<std::boxed::Box<parse::Node>>)"
+    ],
+    "direct_deref_use": [
+      "copy (*_15)",
+      "copy (*_12)",
+      "copy (*_13)",
+      "copy (*_5)",
+      "copy (*_2)",
+      "copy (*_4)",
+      "copy (*_3)",
+      "copy (*_48)",
+      "copy (*_73)",
+      "copy (*_23)",
+      "copy (*_36)",
+      "copy (*_37)",
+      "copy (*_39)",
+      "copy (*_8)",
+      "copy (*_9)",
+      "copy (*_35)",
+      "copy (*_7)",
+      "copy (*_6)",
+      "copy (*_28)",
+      "copy (*_27)"
+    ],
+    "direct_use": [
+      "move _22",
+      "move _1",
+      "move _9",
+      "move _12",
+      "move _2",
+      "move _8",
+      "move _21",
+      "copy _2",
+      "copy _5",
+      "move _10",
+      "copy _8",
+      "move _14",
+      "move _25",
+      "copy _7",
+      "copy _6",
+      "copy _18",
+      "move _3",
+      "move _17",
+      "move _36",
+      "move _42"
+    ],
+    "other_cast_unhandled": [
+      "move _6 as extern \"C\" fn(*mut libc::c_void) (Transmute)",
+      "copy _2 as &MyStructSlice (Transmute)",
+      "copy _1 as &[u8] (Transmute)",
+      "move _1 as &mut [u8] (Transmute)",
+      "copy _2 as &mut MyStructSlice (Transmute)",
+      "copy _1 as &MyStructSlice (Transmute)",
+      "move _1 as &mut MyStructSlice (Transmute)"
+    ],
+    "pointer_cast": [
+      "copy _3 as *const i8 (PtrToPtr)",
+      "copy _4 as *const i8 (PtrToPtr)",
+      "move _3 as *mut std::ffi::c_void (PtrToPtr)",
+      "copy _2 as *mut i32 (PtrToPtr)",
+      "copy _23 as *const () (PtrToPtr)",
+      "copy _22 as *const () (PtrToPtr)",
+      "copy _12 as *const () (PtrToPtr)",
+      "move _12 as *mut i8 (PtrToPtr)",
+      "move _3 as *mut i8 (PtrToPtr)",
+      "copy _13 as *const () (PtrToPtr)",
+      "move _13 as *mut libc::c_void (PtrToPtr)",
+      "copy _1 as *mut *mut dyn std::ops::FnMut() (PtrToPtr)",
+      "copy _18 as *const () (PtrToPtr)",
+      "copy _7 as *const () (PtrToPtr)",
+      "copy _35 as *const () (PtrToPtr)",
+      "copy _5 as *const () (PtrToPtr)",
+      "copy _1 as *const i8 (PtrToPtr)",
+      "move _7 as *mut i8 (PtrToPtr)",
+      "copy _5 as *const i8 (PtrToPtr)",
+      "copy _79 as *const () (PtrToPtr)"
+    ],
+    "raw_address": [
+      "&raw const (*_23)",
+      "&raw mut (*_4)"
+    ],
+    "ref": [
+      "&_3",
+      "&_16",
+      "&_22",
+      "&_28",
+      "&_1",
+      "&_14",
+      "&_11",
+      "&_5",
+      "&_12",
+      "&(*_4)",
+      "&_20",
+      "&_7",
+      "&_15",
+      "&mut _11",
+      "&_8",
+      "&(*_14)",
+      "&_19",
+      "&mut (*_5)",
+      "&mut _1",
+      "&((*_1).0: T)"
+    ],
+    "repeat_unhandled": [
+      "[const 0_u8; 1024]",
+      "[const 0_u8; 512]"
+    ],
+    "scalar_cast": [
+      "copy _24 as usize (Transmute)",
+      "copy _23 as usize (Transmute)",
+      "copy _14 as usize (Transmute)",
+      "copy _19 as usize (Transmute)",
+      "copy _17 as usize (Transmute)",
+      "copy _36 as usize (Transmute)",
+      "move _10 as usize (PointerExposeProvenance)",
+      "copy _1 as f64 (IntToFloat)",
+      "move _20 as u32 (FloatToInt)",
+      "copy _15 as usize (Transmute)",
+      "copy _80 as usize (Transmute)",
+      "move _19 as isize (IntToInt)",
+      "copy _26 as isize (IntToInt)",
+      "copy _45 as usize (Transmute)",
+      "copy _191 as usize (Transmute)",
+      "copy _185 as usize (Transmute)",
+      "copy _179 as usize (Transmute)",
+      "copy _173 as usize (Transmute)",
+      "copy _167 as usize (Transmute)",
+      "copy _161 as usize (Transmute)"
+    ],
+    "scalar_const": [
+      "const false",
+      "const 4_i32",
+      "const 10_i32",
+      "const true",
+      "const 0_u64",
+      "const 0_usize",
+      "const 1_u32",
+      "const 25000_usize",
+      "const 25_usize",
+      "const 10000_usize",
+      "const 42_i32",
+      "const 1_usize",
+      "const 0_i32",
+      "const 4096_usize"
+    ],
+    "scalar_nullary": [
+      "SizeOf([&str; 3])",
+      "AlignOf([&str; 3])",
+      "AlignOf(i32)",
+      "AlignOf(*mut dyn std::ops::FnMut())",
+      "AlignOf(Node<T>)",
+      "SizeOf([char; 1])",
+      "AlignOf([char; 1])",
+      "AlignOf(usize)",
+      "SizeOf([Numbers; 3])",
+      "AlignOf([Numbers; 3])",
+      "SizeOf([&str; 4])",
+      "AlignOf([&str; 4])",
+      "SizeOf([*mut Node<u32>; 1])",
+      "AlignOf([*mut Node<u32>; 1])",
+      "AlignOf(Node<u32>)",
+      "Len((*_52))",
+      "Len((*_59))",
+      "Len((*_65))",
+      "SizeOf([*mut Node<u32>; 3])",
+      "AlignOf([*mut Node<u32>; 3])"
+    ],
+    "unary": [
+      "Neg(move _74)",
+      "Neg(copy _93)",
+      "Not(move _11)",
+      "Not(move _6)",
+      "Neg(move _59)",
+      "Neg(move _25)",
+      "Not(const 15_usize)"
+    ],
+    "unknown_unhandled": [
+      "const main::promoted[2]",
+      "const main::promoted[1]",
+      "const main::promoted[3]",
+      "const main::promoted[0]",
+      "const \"nisba\"",
+      "ShallowInitBox(move _5, [&str; 3])",
+      "const \"Beta\"",
+      "const \"Gamma\"",
+      "copy (((_6.0: std::ptr::Unique<[&str; 3]>).0: std::ptr::NonNull<[&str; 3]>).0: *const [&str; 3])",
+      "discriminant(_12)",
+      "copy ((_12 as Some).0: &&str)",
+      "const \"CString::new failed\"",
+      "move _6 as std::boxed::Box<[&str]> (PointerCoercion(Unsize, Implicit))",
+      "const \"test\"",
+      "copy ((*_1).0: *mut *mut dyn std::ops::FnMut())",
+      "move _5 as std::boxed::Box<dyn std::ops::FnMut()> (PointerCoercion(Unsize, Implicit))",
+      "Closure::register::call_closure as extern \"C\" fn(*mut libc::c_void) (PointerCoercion(ReifyFnPointer, Implicit))",
+      "Closure { cb: move _1 }",
+      "const main::{closure#0}::promoted[0]",
+      "Node::<T> { data: move _2, next: move _3 }"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 403,
+    "arithmetic_binary": 134,
+    "checked_binary_unhandled": 104,
+    "closure_aggregate": 21,
+    "comparison": 138,
+    "copy_for_deref": 427,
+    "direct_deref_use": 102,
+    "direct_use": 458,
+    "other_cast_unhandled": 7,
+    "pointer_cast": 91,
+    "raw_address": 2,
+    "ref": 2366,
+    "repeat_unhandled": 2,
+    "scalar_cast": 106,
+    "scalar_const": 909,
+    "scalar_nullary": 103,
+    "unary": 11,
+    "unknown_unhandled": 2728
+  },
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 403,
+    "checked_binary_unhandled": 104,
+    "other_cast_unhandled": 7,
+    "repeat_unhandled": 2,
+    "unknown_unhandled": 2728
+  },
+  "schema_version": 1,
+  "target_keys": [
+    "boxed_bool__df",
+    "boxed_bool__ml",
+    "boxed_bool__uaf",
+    "boxed_char__df",
+    "boxed_char__ml",
+    "boxed_char__uaf",
+    "boxed_f32__df",
+    "boxed_f32__ml",
+    "boxed_f32__uaf",
+    "boxed_f64__df",
+    "boxed_f64__ml",
+    "boxed_f64__uaf",
+    "boxed_i128__df",
+    "boxed_i128__ml",
+    "boxed_i128__uaf",
+    "boxed_i16__df",
+    "boxed_i16__ml",
+    "boxed_i16__uaf",
+    "boxed_i32__df",
+    "boxed_i32__ml",
+    "boxed_i32__uaf",
+    "boxed_i64__df",
+    "boxed_i64__ml",
+    "boxed_i64__uaf",
+    "boxed_i8__df",
+    "boxed_i8__ml",
+    "boxed_i8__uaf",
+    "boxed_isize__df",
+    "boxed_isize__ml",
+    "boxed_isize__uaf",
+    "boxed_u128__df",
+    "boxed_u128__ml",
+    "boxed_u128__uaf",
+    "boxed_u16__df",
+    "boxed_u16__ml",
+    "boxed_u16__uaf",
+    "boxed_u32__df",
+    "boxed_u32__ml",
+    "boxed_u32__uaf",
+    "boxed_u64__df",
+    "boxed_u64__ml",
+    "boxed_u64__uaf",
+    "boxed_u8__df",
+    "boxed_u8__ml",
+    "boxed_u8__uaf",
+    "boxed_usize__df",
+    "boxed_usize__ml",
+    "boxed_usize__uaf",
+    "branch_df_mem_leak_ffi",
+    "c-callback-rust-closure",
+    "clean_cstring_no_errors_only_rust",
+    "clean_into_from_raw",
+    "clean_mul_fn_ffi_no_errors",
+    "clean_struct_point_mem_leak_into_raw_no_errors",
+    "closure_df",
+    "concurrent-verification",
+    "cstr_cargo_df_ffi",
+    "cstr_expect_uaf_and_ub_ffi",
+    "cstring_df_only_rust",
+    "cstringcargo_df_ffi",
+    "cstringcargo_enum_df_only_rust",
+    "df_rand_cargo_c_ffi",
+    "explicit_drop_df_only_rust",
+    "for_df_ffi",
+    "for_memory_leak_ffi",
+    "lock-free",
+    "lock_free_non_blocking_linked_list",
+    "napkin-math-test",
+    "noGenerator",
+    "rc-playground",
+    "rusant",
+    "rust-boks",
+    "rust_hw3",
+    "rust_memory",
+    "shared-register",
+    "skip-list-test",
+    "square",
+    "stackswap-coroutines",
+    "std_mem_forget_mem_leak_rust",
+    "struct_point_df_only_rust",
+    "struct_point_mem_leak",
+    "uaf_mem_leak_ffi",
+    "uaf_read_ptr",
+    "unsafely-created-owned-type",
+    "unsized_struct",
+    "vuln_only_mem_leak_but_df_branch_overapprox_FFI",
+    "warning_ub_bool",
+    "warning_ub_int",
+    "warning_ub_mult",
+    "warning_ub_string",
+    "wasm-demo",
+    "whisper-rs-example"
+  ],
+  "targets": 92,
+  "terminator_kind_counts": {
+    "Assert": 177,
+    "Call": 4572,
+    "Drop": 1437,
+    "Goto": 625,
+    "Return": 437,
+    "SwitchInt": 916,
+    "Unhandled": 2,
+    "Unreachable": 106,
+    "UnwindResume": 210
+  },
+  "top_calls": [
+    [
+      "std::io::_print",
+      145
+    ],
+    [
+      "std::fmt::Arguments::<'_>::new_v1::<2, 1>",
+      137
+    ],
+    [
+      "<str as std::string::ToString>::to_string",
+      94
+    ],
+    [
+      "std::fmt::Formatter::<'_>::write_fmt",
+      71
+    ],
+    [
+      "<std::rc::Rc<std::cell::RefCell<vm_value::Value>> as std::ops::Deref>::deref",
+      62
+    ],
+    [
+      "std::cell::RefCell::<vm_value::Value>::borrow",
+      61
+    ],
+    [
+      "<str as std::cmp::PartialEq>::eq",
+      60
+    ],
+    [
+      "<std::cell::Ref<'_, vm_value::Value> as std::ops::Deref>::deref",
+      60
+    ],
+    [
+      "<std::result::Result<std::boxed::Box<parse::Node>, errors::SquareError> as std::ops::FromResidual<std::result::Result<std::convert::Infallible, errors::SquareError>>>::from_residual",
+      60
+    ],
+    [
+      "std::vec::Vec::<vm_insts::Inst>::push",
+      58
+    ],
+    [
+      "std::fmt::Arguments::<'_>::new_const::<1>",
+      57
+    ],
+    [
+      "<code_frame::Position as std::clone::Clone>::clone",
+      57
+    ],
+    [
+      "<std::result::Result<scan::Token, errors::SquareError> as std::ops::Try>::branch",
+      51
+    ],
+    [
+      "std::fmt::format",
+      49
+    ],
+    [
+      "std::hint::must_use::<std::string::String>",
+      49
+    ],
+    [
+      "<std::boxed::Box<dyn std::ops::Fn(std::result::Result<scan::Token, errors::SquareError>) -> std::result::Result<scan::Token, errors::SquareError>> as std::ops::Fn<(std::result::Result<scan::Token, errors::SquareError>,)>>::call",
+      47
+    ],
+    [
+      "std::fmt::Arguments::<'_>::new_v1::<1, 1>",
+      46
+    ],
+    [
+      "<std::rc::Rc<std::cell::RefCell<vm::CallFrame>> as std::ops::Deref>::deref",
+      37
+    ],
+    [
+      "vm::VM::current_frame",
+      37
+    ],
+    [
+      "<std::rc::Rc<std::cell::RefCell<std::vec::Vec<vm_value::Value>>> as std::ops::Deref>::deref",
+      36
+    ],
+    [
+      "<std::cell::Ref<'_, std::vec::Vec<vm_value::Value>> as std::ops::Deref>::deref",
+      34
+    ],
+    [
+      "<std::cell::RefMut<'_, vm::CallFrame> as std::ops::DerefMut>::deref_mut",
+      34
+    ],
+    [
+      "std::cell::RefCell::<std::vec::Vec<vm_value::Value>>::borrow",
+      34
+    ],
+    [
+      "<std::result::Result<std::vec::Vec<vm_insts::Inst>, errors::SquareError> as std::ops::FromResidual<std::result::Result<std::convert::Infallible, errors::SquareError>>>::from_residual",
+      33
+    ],
+    [
+      "code_frame::Position::advance",
+      32
+    ],
+    [
+      "<std::string::String as std::ops::Deref>::deref",
+      31
+    ],
+    [
+      "<std::string::String as std::clone::Clone>::clone",
+      31
+    ],
+    [
+      "<std::result::Result<std::vec::Vec<vm_insts::Inst>, errors::SquareError> as std::ops::Try>::branch",
+      31
+    ],
+    [
+      "<std::vec::Vec<vm_insts::Inst> as std::iter::Extend<vm_insts::Inst>>::extend::<std::vec::Vec<vm_insts::Inst>>",
+      31
+    ],
+    [
+      "std::cell::RefCell::<vm::CallFrame>::borrow_mut",
+      30
+    ],
+    [
+      "<std::iter::Peekable<std::slice::Iter<'_, char>> as std::iter::Iterator>::next",
+      28
+    ],
+    [
+      "core::fmt::rt::Argument::<'_>::new_display::<&vm_value::Value>",
+      27
+    ],
+    [
+      "scan::Token::pos",
+      25
+    ],
+    [
+      "scan::Token::source",
+      25
+    ],
+    [
+      "core::fmt::rt::Argument::<'_>::new_display::<std::string::String>",
+      24
+    ],
+    [
+      "<std::vec::Vec<vm_value::Value> as std::ops::Deref>::deref",
+      24
+    ],
+    [
+      "alloc::alloc::exchange_malloc",
+      23
+    ],
+    [
+      "<vm_value::Value as std::clone::Clone>::clone",
+      23
+    ],
+    [
+      "core::fmt::rt::Argument::<'_>::new_display::<&std::string::String>",
+      22
+    ],
+    [
+      "std::fmt::Formatter::<'_>::debug_tuple_field1_finish",
+      21
+    ],
+    [
+      "std::fmt::Formatter::<'_>::write_str",
+      21
+    ],
+    [
+      "core::fmt::rt::Argument::<'_>::new_display::<usize>",
+      20
+    ],
+    [
+      "<vm_insts::Inst as std::clone::Clone>::clone",
+      20
+    ],
+    [
+      "<std::cell::RefMut<'_, emit::EmitContext> as std::ops::DerefMut>::deref_mut",
+      19
+    ],
+    [
+      "<std::cell::RefMut<'_, vm::CallFrame> as std::ops::Deref>::deref",
+      19
+    ],
+    [
+      "std::cell::RefCell::<emit::EmitContext>::borrow_mut",
+      19
+    ],
+    [
+      "std::fmt::Arguments::<'_>::new_v1::<2, 2>",
+      19
+    ],
+    [
+      "core::panicking::panic",
+      18
+    ],
+    [
+      "std::boxed::Box::<parse::Node>::new",
+      18
+    ],
+    [
+      "std::option::Option::<&vm_value::Value>::unwrap_or",
+      18
+    ],
+    [
+      "core::fmt::rt::Argument::<'_>::new_display::<i8>",
+      17
+    ],
+    [
+      "std::fmt::Arguments::<'_>::new_v1::<3, 2>",
+      17
+    ],
+    [
+      "<&std::string::String as std::cmp::PartialEq>::eq",
+      17
+    ],
+    [
+      "<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/square/src/emit.rs:324:21: 324:35} as std::ops::Fn<(vm_insts::Inst,)>>::call",
+      17
+    ],
+    [
+      "vm::CallFrame::push",
+      17
+    ],
+    [
+      "std::ffi::CString::new::<&str>",
+      16
+    ],
+    [
+      "std::sync::atomic::AtomicPtr::<Node<T>>::load",
+      16
+    ],
+    [
+      "hashbrown::HashMap::<&str, (vm_value::Value, std::option::Option<std::rc::Rc<dyn for<'a, 'b> std::ops::Fn(&'a mut vm::VM, std::rc::Rc<std::cell::RefCell<std::vec::Vec<vm_value::Value>>>, &'b vm_insts::Inst) -> std::result::Result<(), errors::SquareError>>>)>::insert",
+      16
+    ],
+    [
+      "std::iter::Peekable::<std::slice::Iter<'_, char>>::peek",
+      16
+    ],
+    [
+      "vm::<impl vm_insts::Inst>::binop",
+      16
+    ],
+    [
+      "std::rt::panic_fmt",
+      16
+    ],
+    [
+      "<&str as std::cmp::PartialEq>::eq",
+      15
+    ],
+    [
+      "<std::result::Result<std::boxed::Box<parse::Node>, errors::SquareError> as std::ops::Try>::branch",
+      15
+    ],
+    [
+      "<std::vec::Vec<vm_value::Value> as std::ops::Index<usize>>::index",
+      15
+    ],
+    [
+      "core::slice::<impl [char]>::iter",
+      15
+    ],
+    [
+      "std::cell::RefCell::<vm_value::Function>::new",
+      15
+    ],
+    [
+      "std::rc::Rc::<std::cell::RefCell<vm_value::Function>>::new",
+      15
+    ],
+    [
+      "std::vec::Vec::<vm_insts::Inst>::len",
+      15
+    ],
+    [
+      "std::ffi::CString::into_raw",
+      14
+    ],
+    [
+      "scan::skip_whitespace",
+      14
+    ],
+    [
+      "core::fmt::rt::Placeholder::new",
+      13
+    ],
+    [
+      "std::vec::Vec::<*mut Node<u32>>::push",
+      13
+    ],
+    [
+      "std::fmt::Formatter::<'_>::debug_tuple_field2_finish",
+      13
+    ],
+    [
+      "std::vec::Vec::<vm_value::Value>::len",
+      13
+    ],
+    [
+      "core::fmt::rt::Argument::<'_>::new_display::<u64>",
+      12
+    ],
+    [
+      "core::slice::<impl [vm_value::Value]>::get::<usize>",
+      12
+    ],
+    [
+      "emit::emit_node",
+      12
+    ],
+    [
+      "scan::raise_token",
+      12
+    ],
+    [
+      "std::vec::Vec::<std::boxed::Box<parse::Node>>::push",
+      12
+    ],
+    [
+      "core::fmt::rt::Argument::<'_>::new_display::<i32>",
+      11
+    ],
+    [
+      "std::boxed::Box::<i32>::into_raw",
+      11
+    ],
+    [
+      "std::boxed::Box::<i32>::new",
+      11
+    ],
+    [
+      "std::ffi::CString::from_raw",
+      10
+    ],
+    [
+      "core::fmt::rt::Argument::<'_>::new_display::<&str>",
+      10
+    ],
+    [
+      "Node::<u32>::new",
+      10
+    ],
+    [
+      "std::boxed::Box::<Node<u32>>::into_raw",
+      10
+    ],
+    [
+      "std::boxed::Box::<Node<u32>>::new",
+      10
+    ],
+    [
+      "<&scan::Token as std::cmp::PartialEq>::eq",
+      10
+    ],
+    [
+      "<scan::Token as std::clone::Clone>::clone",
+      10
+    ],
+    [
+      "<std::boxed::Box<parse::Node> as std::convert::AsRef<parse::Node>>::as_ref",
+      10
+    ],
+    [
+      "<std::vec::Vec<std::boxed::Box<parse::Node>> as std::ops::Deref>::deref",
+      10
+    ],
+    [
+      "<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/square/src/emit.rs:329:28: 329:42} as std::ops::Fn<(vm_insts::Inst,)>>::call",
+      10
+    ],
+    [
+      "parse::create_wrapper",
+      10
+    ],
+    [
+      "scan::lookahead",
+      10
+    ],
+    [
+      "std::string::String::push",
+      10
+    ],
+    [
+      "std::vec::Vec::<std::boxed::Box<parse::Node>>::len",
+      10
+    ],
+    [
+      "std::result::Result::<std::ffi::CString, std::ffi::NulError>::unwrap",
+      9
+    ],
+    [
+      "std::boxed::Box::<i32>::from_raw",
+      9
+    ],
+    [
+      "core::fmt::rt::Argument::<'_>::new_debug::<std::option::Option<i32>>",
+      9
+    ],
+    [
+      "core::str::<impl str>::chars",
+      9
+    ]
+  ]
+}

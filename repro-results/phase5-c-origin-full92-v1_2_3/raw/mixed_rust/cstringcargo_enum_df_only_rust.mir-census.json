@@ -1,0 +1,113 @@
+{
+  "call_counts": {
+    "<log::Level as std::cmp::PartialOrd<log::LevelFilter>>::le": 2,
+    "alloc::alloc::exchange_malloc": 1,
+    "core::fmt::rt::Argument::<'_>::new_debug::<&str>": 1,
+    "core::fmt::rt::Argument::<'_>::new_debug::<*mut i8>": 1,
+    "core::fmt::rt::Argument::<'_>::new_display::<std::ffi::NulError>": 1,
+    "log::__private_api::loc": 1,
+    "log::__private_api::log::<'_, (), log::__private_api::GlobalLogger>": 1,
+    "log::max_level": 1,
+    "std::ffi::CString::from_raw": 2,
+    "std::ffi::CString::into_raw": 1,
+    "std::ffi::CString::new::<&str>": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 1>": 1,
+    "std::fmt::Arguments::<'_>::new_v1::<2, 2>": 1,
+    "std::io::_print": 1,
+    "std::option::Option::<&str>::unwrap": 1,
+    "std::process::abort": 1,
+    "std::slice::<impl [&str]>::into_vec::<std::alloc::Global>": 1,
+    "std::vec::Vec::<&str>::pop": 1
+  },
+  "call_total": 20,
+  "memory_api_counts": {
+    "alloc": 2,
+    "cstring_from_raw": 2,
+    "cstring_into_raw": 1
+  },
+  "memory_api_examples": {
+    "alloc": [
+      "alloc::alloc::exchange_malloc",
+      "std::slice::<impl [&str]>::into_vec::<std::alloc::Global>"
+    ],
+    "cstring_from_raw": [
+      "std::ffi::CString::from_raw"
+    ],
+    "cstring_into_raw": [
+      "std::ffi::CString::into_raw"
+    ]
+  },
+  "rvalue_examples": {
+    "aggregate_unhandled": [
+      "[move _31, move _33]",
+      "(move _37, const \"main\", copy _38)",
+      "[move _45]",
+      "[const \"foo\", move _7, move _8, move _9]"
+    ],
+    "arithmetic_binary": [
+      "Sub(copy _52, const 1_usize)",
+      "BitAnd(copy _51, copy _53)"
+    ],
+    "comparison": [
+      "Eq(copy _54, const 0_usize)"
+    ],
+    "pointer_cast": [
+      "copy _49 as *const () (PtrToPtr)"
+    ],
+    "ref": [
+      "&mut _1",
+      "&_18",
+      "&_13",
+      "&_25",
+      "&_10",
+      "&_17",
+      "&_30",
+      "&_36"
+    ],
+    "scalar_cast": [
+      "copy _50 as usize (Transmute)"
+    ],
+    "scalar_nullary": [
+      "SizeOf([&str; 4])",
+      "AlignOf([&str; 4])"
+    ],
+    "unknown_unhandled": [
+      "ShallowInitBox(move _5, [&str; 4])",
+      "const \"bar\"",
+      "const \"invalid\\0name\"",
+      "const \"baz\"",
+      "copy (((_6.0: std::ptr::Unique<[&str; 4]>).0: std::ptr::NonNull<[&str; 4]>).0: *const [&str; 4])",
+      "discriminant(_14)",
+      "move ((_14 as Err).0: std::ffi::NulError)",
+      "log::Level::Error"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "aggregate_unhandled": 4,
+    "arithmetic_binary": 2,
+    "comparison": 1,
+    "pointer_cast": 1,
+    "ref": 10,
+    "scalar_cast": 1,
+    "scalar_nullary": 3,
+    "unknown_unhandled": 14
+  },
+  "rvalue_total": 36,
+  "rvalue_unhandled_counts": {
+    "aggregate_unhandled": 4,
+    "unknown_unhandled": 14
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "cstringcargo_enum_df_only_rust",
+  "terminator_kind_counts": {
+    "Assert": 1,
+    "Call": 20,
+    "Drop": 5,
+    "Goto": 1,
+    "Return": 1,
+    "SwitchInt": 3,
+    "Unreachable": 1,
+    "UnwindResume": 1
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "cstr_expect_uaf_and_ub_ffi": [
+    "UAF",
+    "UB_FFI"
+  ]
+}

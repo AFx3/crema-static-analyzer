@@ -1,0 +1,309 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+    |                                                           ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+    |                                                                    ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2002:50
+     |
+2002 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return_place, ..}) = &mir_block.terminator {   
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: method `is_default` is never used
+   --> src/abstract_domain.rs:112:12
+    |
+81  | impl CellValue {
+    | -------------- method in this implementation
+...
+112 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:468:8
+    |
+468 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintStateMap {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 5 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstringcargo_enum_df_only_rust`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstringcargo_enum_df_only_rust
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstringcargo_enum_df_only_rust /home/af/Documenti/a-phd/crema`
+warning: unused import: `std::ptr`
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstringcargo_enum_df_only_rust/src/main.rs:4:5
+  |
+4 | use std::ptr;
+  |     ^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: 1 warning emitted
+
+No C files found in the project.
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package cstringcargo_enum target cstringcargo_enum at /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstringcargo_enum_df_only_rust/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstringcargo_enum_df_only_rust/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstringcargo_enum_df_only_rust/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstringcargo_enum_df_only_rust/target/debug",
+    "--extern=log=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstringcargo_enum_df_only_rust/target/debug/deps/liblog-e327f6095fb1dfa5.rlib",
+    "--extern=log=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstringcargo_enum_df_only_rust/target/debug/deps/liblog-628dc7f2e448385a.rlib",
+]
+warning: unused import: `std::ptr`
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstringcargo_enum_df_only_rust/src/main.rs:4:5
+  |
+4 | use std::ptr;
+  |     ^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+Global ICFG saved to global_icfg.json
+warning: 1 warning emitted
+
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+Final Abstract State: {"rust::main::bb15": {{"Local(_1)"}: ALLOC, {"Local(_14)"}: ALLOC}, "rust::main::bb25": {{"Local(_1)"}: ALLOC, {"Local(_13)", "Local(_46)"}: MV, {"Local(_14)"}: ALLOC, {"Local(_47)"}: FREED, {"Local(_48)"}: FREED}, "rust::main::bb10": {{"Local(_1)"}: ALLOC, {"Local(_14)"}: ALLOC}, "rust::main::bb17": {{"Local(_1)"}: ALLOC, {"Local(_14)"}: ALLOC}, "rust::main::bb9": {{"Local(_1)"}: ALLOC, {"Local(_13)", "Local(_46)"}: MV, {"Local(_14)"}: ALLOC}, "rust::main::bb6": {{"Local(_1)"}: ALLOC, {"Local(_14)"}: ALLOC}, "rust::main::bb12": {{"Local(_1)"}: ALLOC, {"Local(_14)"}: ALLOC}, "rust::main::bb22": {{"Local(_1)"}: ALLOC, {"Local(_13)", "Local(_46)"}: MV, {"Local(_14)"}: ALLOC, {"Local(_47)"}: MV}, "rust::main::bb1": {}, "rust::main::bb2": {{"Local(_1)"}: ALLOC}, "rust::main::bb14": {{"Local(_1)"}: ALLOC, {"Local(_14)"}: ALLOC}, "rust::main::bb29": {{"Local(_1)"}: FREED, {"Local(_13)", "Local(_46)"}: MV, {"Local(_14)"}: ALLOC, {"Local(_17)"}: FREED, {"Local(_47)"}: TOP, {"Local(_48)"}: TOP}, "rust::main::bb31": {{"Local(_1)"}: ALLOC}, "rust::main::bb0": {}, "rust::main::bb30": {{"Local(_1)"}: FREED, {"Local(_13)", "Local(_46)"}: MV, {"Local(_14)"}: ALLOC, {"Local(_17)"}: FREED, {"Local(_47)"}: TOP, {"Local(_48)"}: TOP}, "rust::main::bb24": {{"Local(_1)"}: ALLOC, {"Local(_13)", "Local(_46)"}: MV, {"Local(_14)"}: ALLOC, {"Local(_47)"}: FREED, {"Local(_48)"}: MV}, "rust::main::bb16": {{"Local(_1)"}: ALLOC, {"Local(_14)"}: ALLOC}, "rust::main::bb3": {{"Local(_1)"}: ALLOC}, "rust::main::bb19": {{"Local(_1)"}: ALLOC, {"Local(_14)"}: ALLOC}, "rust::main::bb8": {{"Local(_1)"}: ALLOC, {"Local(_13)"}: MV, {"Local(_14)"}: ALLOC}, "rust::main::terminate": {{"Local(_1)"}: TOP, {"Local(_13)", "Local(_46)"}: MV, {"Local(_14)"}: ALLOC, {"Local(_17)"}: FREED, {"Local(_47)"}: TOP, {"Local(_48)"}: TOP}, "rust::main::bb27": {{"Local(_1)"}: FREED, {"Local(_13)", "Local(_46)"}: MV, {"Local(_14)"}: ALLOC, {"Local(_47)"}: FREED, {"Local(_48)"}: FREED}, "rust::main::bb5": {{"Local(_1)"}: ALLOC, {"Local(_14)"}: ALLOC}, "rust::main::bb26": {{"Local(_1)"}: FREED, {"Local(_13)", "Local(_46)"}: MV, {"Local(_14)"}: ALLOC, {"Local(_47)"}: FREED, {"Local(_48)"}: FREED}, "rust::main::bb21": {{"Local(_1)"}: ALLOC, {"Local(_13)", "Local(_46)"}: MV, {"Local(_14)"}: ALLOC}, "rust::main::bb18": {{"Local(_1)"}: ALLOC, {"Local(_14)"}: ALLOC}, "rust::main::bb11": {{"Local(_1)"}: ALLOC, {"Local(_14)"}: ALLOC}, "rust::main::bb4": {{"Local(_1)"}: ALLOC, {"Local(_14)"}: ALLOC}, "rust::main::bb23": {{"Local(_1)"}: ALLOC, {"Local(_13)", "Local(_46)"}: MV, {"Local(_14)"}: ALLOC, {"Local(_47)"}: FREED}, "rust::main::bb13": {{"Local(_1)"}: ALLOC, {"Local(_14)"}: ALLOC}, "rust::main::bb32": {{"Local(_1)"}: ALLOC, {"Local(_14)"}: ALLOC}, "rust::main::bb7": {{"Local(_1)"}: ALLOC, {"Local(_14)"}: ALLOC}, "rust::main::bb20": {{"Local(_1)"}: ALLOC, {"Local(_13)", "Local(_46)"}: MV, {"Local(_14)"}: ALLOC}, "rust::main::bb28": {{"Local(_1)"}: ALLOC, {"Local(_14)"}: ALLOC, {"Local(_17)"}: FREED}}
+Final Taint State: {
+    "rust::main::bb14": {},
+    "rust::main::bb23": {
+        "Local(_47)": {
+            "free",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_46)": {
+            "assign",
+        },
+    },
+    "rust::main::bb11": {},
+    "rust::main::bb2": {},
+    "rust::main::bb20": {
+        "Local(_46)": {
+            "assign",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb29": {
+        "Local(_46)": {
+            "assign",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_17)": {
+            "free",
+        },
+    },
+    "rust::main::bb21": {
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_46)": {
+            "assign",
+        },
+    },
+    "rust::main::bb24": {
+        "Local(_48)": {
+            "assign",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_46)": {
+            "assign",
+        },
+        "Local(_47)": {
+            "free",
+        },
+    },
+    "rust::main::terminate": {
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_17)": {
+            "free",
+        },
+        "Local(_46)": {
+            "assign",
+        },
+    },
+    "rust::main::bb31": {},
+    "rust::main::bb27": {
+        "Local(_46)": {
+            "assign",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_48)": {
+            "free",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_47)": {
+            "free",
+        },
+    },
+    "rust::main::bb0": {},
+    "rust::main::bb19": {},
+    "rust::main::bb9": {
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_46)": {
+            "assign",
+        },
+    },
+    "rust::main::bb15": {},
+    "rust::main::bb7": {},
+    "rust::main::bb18": {},
+    "rust::main::bb22": {
+        "Local(_46)": {
+            "assign",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_47)": {
+            "assign",
+        },
+    },
+    "rust::main::bb5": {},
+    "rust::main::bb26": {
+        "Local(_46)": {
+            "assign",
+        },
+        "Local(_47)": {
+            "free",
+        },
+        "Local(_48)": {
+            "free",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_1)": {
+            "free",
+        },
+    },
+    "rust::main::bb4": {},
+    "rust::main::bb17": {},
+    "rust::main::bb3": {},
+    "rust::main::bb12": {},
+    "rust::main::bb6": {},
+    "rust::main::bb30": {
+        "Local(_17)": {
+            "free",
+        },
+        "Local(_1)": {
+            "free",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+        "Local(_46)": {
+            "assign",
+        },
+    },
+    "rust::main::bb1": {},
+    "rust::main::bb13": {},
+    "rust::main::bb8": {
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb16": {},
+    "rust::main::bb32": {},
+    "rust::main::bb25": {
+        "Local(_47)": {
+            "free",
+        },
+        "Local(_48)": {
+            "free",
+        },
+        "Local(_46)": {
+            "assign",
+        },
+        "Local(_13)": {
+            "assign",
+        },
+    },
+    "rust::main::bb28": {
+        "Local(_17)": {
+            "free",
+        },
+    },
+    "rust::main::bb10": {},
+}
+Tracking variable 'Local(_13)' from block 'rust::main::bb23' (markers: {"assign"})
+Tracking variable 'Local(_46)' from block 'rust::main::bb23' (markers: {"assign"})
+Tracking variable 'Local(_46)' from block 'rust::main::bb20' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb20' (markers: {"assign"})
+Tracking variable 'Local(_46)' from block 'rust::main::bb29' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb29' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb21' (markers: {"assign"})
+Tracking variable 'Local(_46)' from block 'rust::main::bb21' (markers: {"assign"})
+Tracking variable 'Local(_48)' from block 'rust::main::bb24' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb24' (markers: {"assign"})
+Tracking variable 'Local(_46)' from block 'rust::main::bb24' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::terminate' (markers: {"assign"})
+Tracking variable 'Local(_46)' from block 'rust::main::terminate' (markers: {"assign"})
+Tracking variable 'Local(_46)' from block 'rust::main::bb27' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb27' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb9' (markers: {"assign"})
+Tracking variable 'Local(_46)' from block 'rust::main::bb9' (markers: {"assign"})
+Tracking variable 'Local(_46)' from block 'rust::main::bb22' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb22' (markers: {"assign"})
+Tracking variable 'Local(_47)' from block 'rust::main::bb22' (markers: {"assign"})
+Tracking variable 'Local(_46)' from block 'rust::main::bb26' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb26' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb30' (markers: {"assign"})
+Tracking variable 'Local(_46)' from block 'rust::main::bb30' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb8' (markers: {"assign"})
+Tracking variable 'Local(_46)' from block 'rust::main::bb25' (markers: {"assign"})
+Tracking variable 'Local(_13)' from block 'rust::main::bb25' (markers: {"assign"})
+Aliased via from_raw: 'Local(_13)' -> '_47'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstringcargo_enum_df_only_rust/src/main.rs:33:50: 33:51 (#0), scope: scope[3] }, kind: drop(_47) -> [return: bb24, unwind: bb29] }' -> '_47'
+Aliased via from_raw: 'Local(_13)' -> '_48'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstringcargo_enum_df_only_rust/src/main.rs:39:50: 39:51 (#0), scope: scope[3] }, kind: drop(_48) -> [return: bb26, unwind: bb29] }' -> '_48'
+Found drop pattern: 'Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstringcargo_enum_df_only_rust/src/main.rs:82:1: 82:2 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb27, unwind continue] }' -> '_1'
+No tracked variable found per '_1' o 'Local(_1)'
+-> Skip Drop in 'rust::main::bb28' because has an unwind incoming edge
+-> Skip Drop in 'rust::main::bb29' because has an unwind incoming edge
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/cstringcargo_enum_df_only_rust/src/main.rs:33:50: 33:51 (#0)
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

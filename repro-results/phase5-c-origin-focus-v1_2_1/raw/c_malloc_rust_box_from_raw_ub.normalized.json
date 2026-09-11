@@ -1,0 +1,5 @@
+{
+  "c_malloc_rust_box_from_raw_ub": [
+    "UB_FFI"
+  ]
+}

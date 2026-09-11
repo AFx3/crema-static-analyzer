@@ -1,0 +1,102 @@
+=== noGenerator ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_8), Local(_9)}": 1, "{Local(_10)}": 1}
+
+
+=== wasm-demo ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_0)}": 1}
+
+
+=== skip-list-test ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_37)}": 1, "{Local(_33)}": 1, "{Local(_13)}": 1, "{Local(_1)}": 1, "{Local(_21)}": 1, "{Local(_5)}": 1, "{Local(_9)}": 1, "{Local(_29)}": 1, "{Local(_17)}": 1, "{Local(_25)}": 1}
+
+
+=== rusant ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_0)}": 1}
+
+
+=== napkin-math-test ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_18), Local(_4), Local(_7)}": 1}
+
+
+=== shared-register ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/found vulns/shared-register/src/shared_register.rs:37:5: 37:6 (#0)
+☢ Never Free Issues ☢:
+{"{Local(_17)}": 1}
+
+=== whisper-rs-example ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_7)}": 1, "{Local(_6)}": 1}
+
+
+=== lock-free ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_14), Local(_2), _14}": 1}
+
+
+=== rust_memory ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_33)}": 1, "{Local(_13)}": 1, "{Local(_14)}": 1, "{Local(_34)}": 1}
+
+
+=== unsized_struct ===
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Never Free Issues ☢: {"{Local(_0), Local(_2) [mutable], _0}": 1}
+
+
+=== unsafely-created-owned-type ===
+🤖💬 NO Issues detected: ✅
+
+
+=== lock_free_non_blocking_linked_list ===
+🤖💬 NO Issues detected: ✅
+
+
+=== c-callback-rust-closure ===
+🤖💬 NO Issues detected: ✅
+
+
+=== concurrent-verification ===
+🤖💬 NO Issues detected: ✅
+
+
+=== stackswap-coroutines ===
+🤖💬 NO Issues detected: ✅
+
+
+=== rc-playground ===
+🤖💬 NO Issues detected: ✅
+
+
+=== square ===
+🤖💬 NO Issues detected: ✅
+
+
+=== rust_hw3 ===
+🤖💬 NO Issues detected: ✅
+
+
+=== openapi-client-gen ===
+🤖💬 NO Issues detected: ✅
+
+
+=== rust-boks ===
+🤖💬 NO Issues detected: ✅
+
+

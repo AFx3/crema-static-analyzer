@@ -1,0 +1,251 @@
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused variable: `details`
+   --> src/icfg.rs:611:59
+    |
+611 | ...ator::Goto { target, details, source_info }) = &block.terminator {
+    |                         ^^^^^^^ help: try ignoring the field: `details: _`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+   --> src/icfg.rs:611:68
+    |
+611 | ...target, details, source_info }) = &block.terminator {
+    |                     ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:2128:50
+     |
+2128 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return...
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: variant `BOXTIMES` is never constructed
+  --> src/abstract_domain.rs:82:5
+   |
+78 | pub enum CellValue {
+   |          --------- variant in this enum
+...
+82 |     BOXTIMES,
+   |     ^^^^^^^^
+   |
+   = note: `CellValue` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` on by default
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:130:12
+    |
+97  | impl CellValue {
+    | -------------- methods in this implementation
+...
+130 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+148 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:594:8
+    |
+594 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintState...
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 6 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+     Running `target/debug/crema /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/closure_df`
+Analyzing Cargo project at: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/closure_df
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/closure_df /home/af/Documenti/a-phd/crema`
+warning: unused import: `core::alloc`
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/closure_df/src/main.rs:1:5
+  |
+1 | use core::alloc;
+  |     ^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: 1 warning emitted
+
+No C files found in the project.
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package closure_df target closure_df at /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/closure_df/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/closure_df/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/closure_df/target/debug/deps",
+    "-L",
+    "/home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/closure_df/target/debug",
+]
+warning: unused import: `core::alloc`
+ --> /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/closure_df/src/main.rs:1:5
+  |
+1 | use core::alloc;
+  |     ^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+Global ICFG saved to global_icfg.json
+warning: 1 warning emitted
+
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+--- ENTER DummyRet DummyNode { dummy_node_name: "dummyRet", incoming_edge: "dummyCall::rust::main::bb2::rust::main::bb2_internal", outgoing_edge: "rust::main::bb3", id: "9b24fa0b29ff1ede", mir_var: None, llvm_var: None, is_internal: Some(true) }
+Final Abstract State: {"rust::main::{closure#0}::bb1": {{"Local(_2)", "Local(_3)", "Local(_6)", "_5"}: FREED}, "rust::main::{closure#0}::bb2": {{"Local(_2)", "Local(_3)", "Local(_6)", "_5"}: MV}, "rust::main::bb3": {{"Local(_2)", "Local(_3)", "Local(_6)", "_5"}: TOP}, "dummyRet::rust::main::_5::rust::main::bb2_internal": {{"Local(_2)", "Local(_3)", "Local(_6)", "_5"}: TOP}, "rust::main::{closure#0}::bb0": {{"Local(_2)", "Local(_3)", "Local(_6)", "_5"}: MV}, "rust::main::bb0": {{"Local(_1)"}: ALLOC}, "rust::main::bb1": {{"Local(_2)"}: MV}, "rust::main::{closure#0}::bb3": {{"Local(_2)", "Local(_3)", "Local(_6)", "_5"}: FREED}, "rust::main::{closure#0}::bb4": {{"Local(_2)", "Local(_3)", "Local(_6)", "_5"}: FREED}, "rust::main::bb2": {{"Local(_2)", "Local(_3)", "Local(_6)"}: MV}, "dummyCall::rust::main::bb2::rust::main::bb2_internal": {{"Local(_2)", "Local(_3)", "Local(_6)", "_5"}: MV}}
+Final Taint State: {
+    "rust::main::bb3": {},
+    "rust::main::{closure#0}::bb1": {
+        "Local(_2)": {
+            "free",
+        },
+        "Local(_3)": {
+            "free",
+        },
+        "Local(_6)": {
+            "free",
+        },
+        "_5": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::bb2": {
+        "Local(_6)": {
+            "assign",
+        },
+        "_5": {
+            "assign",
+        },
+        "Local(_3)": {
+            "assign",
+        },
+        "Local(_2)": {
+            "assign",
+        },
+    },
+    "rust::main::bb2": {
+        "Local(_2)": {
+            "assign",
+        },
+        "Local(_3)": {
+            "assign",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+    },
+    "rust::main::bb1": {
+        "Local(_2)": {
+            "assign",
+        },
+    },
+    "dummyRet::rust::main::_5::rust::main::bb2_internal": {
+        "Local(_6)": {
+            "assign",
+            "free",
+        },
+        "Local(_2)": {
+            "free",
+            "assign",
+        },
+        "Local(_3)": {
+            "free",
+            "assign",
+        },
+        "_5": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::bb0": {
+        "_5": {
+            "assign",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "Local(_2)": {
+            "assign",
+        },
+        "Local(_3)": {
+            "assign",
+        },
+    },
+    "dummyCall::rust::main::bb2::rust::main::bb2_internal": {
+        "Local(_2)": {
+            "assign",
+        },
+        "Local(_6)": {
+            "assign",
+        },
+        "_5": {
+            "assign",
+        },
+        "Local(_3)": {
+            "assign",
+        },
+    },
+    "rust::main::bb0": {},
+    "rust::main::{closure#0}::bb4": {
+        "Local(_3)": {
+            "free",
+        },
+        "_5": {
+            "free",
+        },
+        "Local(_2)": {
+            "free",
+        },
+        "Local(_6)": {
+            "free",
+        },
+    },
+    "rust::main::{closure#0}::bb3": {
+        "Local(_3)": {
+            "free",
+        },
+        "_5": {
+            "free",
+        },
+        "Local(_6)": {
+            "free",
+        },
+        "Local(_2)": {
+            "free",
+        },
+    },
+}
+Tracking variable 'Local(_6)' from block 'rust::main::{closure#0}::bb2' (markers: {"assign"})
+Tracking variable '_5' from block 'rust::main::{closure#0}::bb2' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::main::{closure#0}::bb2' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'rust::main::{closure#0}::bb2' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::bb2' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'rust::main::bb1' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'dummyRet::rust::main::_5::rust::main::bb2_internal' (markers: {"assign", "free"})
+Tracking variable 'Local(_2)' from block 'dummyRet::rust::main::_5::rust::main::bb2_internal' (markers: {"free", "assign"})
+Tracking variable 'Local(_3)' from block 'dummyRet::rust::main::_5::rust::main::bb2_internal' (markers: {"free", "assign"})
+Tracking variable '_5' from block 'rust::main::{closure#0}::bb0' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'rust::main::{closure#0}::bb0' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'rust::main::{closure#0}::bb0' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'rust::main::{closure#0}::bb0' (markers: {"assign"})
+Tracking variable 'Local(_2)' from block 'dummyCall::rust::main::bb2::rust::main::bb2_internal' (markers: {"assign"})
+Tracking variable 'Local(_6)' from block 'dummyCall::rust::main::bb2::rust::main::bb2_internal' (markers: {"assign"})
+Tracking variable '_5' from block 'dummyCall::rust::main::bb2::rust::main::bb2_internal' (markers: {"assign"})
+Tracking variable 'Local(_3)' from block 'dummyCall::rust::main::bb2::rust::main::bb2_internal' (markers: {"assign"})
+No tracking info per MIR var 'Local(_6) [mutable]'
+-> DummyRet node 'dummyRet::rust::main::_5::rust::main::bb2_internal': transferring from LLVM var None to MIR var None
+Aliased via from_raw: 'Local(_4) [mutable]' -> '_3'
+Aliased via from_raw: 'Local(_7) [mutable]' -> '_6'
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦
+🤖💬 Potential memory issues detected 🚀:
+
+☢ Double Free Issues ☢:
+Free detected at source line: /home/af/Documenti/a-phd/tests_and_target_repos/a-code_full_rust/closure_df/src/main.rs:35:9: 35:33 (#0)
+⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦⬦

@@ -1,0 +1,40 @@
+{
+  "call_counts": {
+    "std::boxed::Box::<&str>::new": 1,
+    "std::fmt::Arguments::<'_>::new_const::<1>": 1,
+    "std::io::_print": 1,
+    "std::mem::forget::<std::boxed::Box<&str>>": 1
+  },
+  "call_total": 4,
+  "memory_api_counts": {
+    "box_new": 1,
+    "mem_forget": 1
+  },
+  "memory_api_examples": {
+    "box_new": [
+      "std::boxed::Box::<&str>::new"
+    ],
+    "mem_forget": [
+      "std::mem::forget::<std::boxed::Box<&str>>"
+    ]
+  },
+  "rvalue_examples": {
+    "unknown_unhandled": [
+      "const main::promoted[0]"
+    ]
+  },
+  "rvalue_kind_counts": {
+    "unknown_unhandled": 1
+  },
+  "rvalue_total": 1,
+  "rvalue_unhandled_counts": {
+    "unknown_unhandled": 1
+  },
+  "schema_version": 1,
+  "source_icfg": "/home/af/Documenti/a-phd/crema/global_icfg.json",
+  "target": "std_mem_forget_mem_leak_rust",
+  "terminator_kind_counts": {
+    "Call": 4,
+    "Return": 1
+  }
+}
