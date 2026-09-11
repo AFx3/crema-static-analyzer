@@ -1017,6 +1017,457 @@ fn unary_rvalue_arg(e: &str) -> Option<&str> {
     None
 }
 
+
+fn comparison_rvalue_args(e: &str) -> Option<(&str, &str)> {
+    const OPS: [&str; 6] = ["Eq", "Lt", "Le", "Ne", "Ge", "Gt"];
+
+    let e = e.trim();
+    for op in OPS {
+        let prefix = format!("{}(", op);
+        if e.starts_with(&prefix) && e.ends_with(')') {
+            let inner = &e[prefix.len()..e.len() - 1];
+            return split_top_level_binary_args(inner);
+        }
+    }
+
+    None
+}
+
+fn pointer_cast_source(e: &str) -> Option<String> {
+    let e = e.trim();
+    let target_is_raw_pointer = e
+        .rsplit_once(" as ")
+        .and_then(|(_, after_as)| after_as.split_whitespace().next())
+        .is_some_and(|ty| ty.starts_with("*mut") || ty.starts_with("*const"));
+
+    if !target_is_raw_pointer {
+        return None;
+    }
+
+    extract_first_local_token(e)
+}
+
+fn pointer_offset_source(e: &str) -> Option<String> {
+    let e = e.trim();
+    if !e.starts_with("Offset(") || !e.ends_with(')') {
+        return None;
+    }
+
+    let inner = &e["Offset(".len()..e.len() - 1];
+    let (ptr_operand, _) = split_top_level_binary_args(inner)?;
+    extract_first_local_token(ptr_operand)
+}
+
+/// Return the directly borrowed stack local for MIR Ref/AddressOf forms such as
+/// `&_1`, `&mut _1`, `&raw const _1`, and `&raw mut _1`.
+///
+/// This is a relation between MIR stack places. It is deliberately NOT a heap
+/// alias relation: a reference to a local containing `Box<T>` points to the
+/// local storage of the Box value, not to the Box allocation.
+fn direct_stack_borrow_source(e: &str) -> Option<Name> {
+    let e = e.trim();
+
+    if e.contains("(*") {
+        return None;
+    }
+
+    let rest = if let Some(rest) = e.strip_prefix("&raw const ") {
+        rest
+    } else if let Some(rest) = e.strip_prefix("&raw mut ") {
+        rest
+    } else if let Some(rest) = e.strip_prefix("&mut ") {
+        rest
+    } else if let Some(rest) = e.strip_prefix('&') {
+        rest.trim_start()
+    } else {
+        return None;
+    };
+
+    let local = LOCAL_TOKEN_RE.find(rest)?;
+    if local.start() == 0 && local.end() == rest.len() {
+        Some(full_local_name(local.as_str()))
+    } else {
+        None
+    }
+}
+
+/// Extract the local containing the reference/pointer dereferenced by a direct
+/// MIR value load (`copy (*_N)` / `move (*_N)`).
+fn direct_deref_value_source(e: &str) -> Option<Name> {
+    let e = e.trim();
+
+    for prefix in ["copy (*", "move (*"] {
+        if let Some(rest) = e.strip_prefix(prefix) {
+            let local = LOCAL_TOKEN_RE.find(rest)?;
+            if local.start() != 0 {
+                return None;
+            }
+
+            if rest[local.end()..].trim() == ")" {
+                return Some(full_local_name(local.as_str()));
+            }
+        }
+    }
+
+    None
+}
+
+/// Canonical detector spelling: `_4`, `Local(_4)`, and
+/// `Local(_4) [mutable]` all become `Local(_4)`.
+fn canonical_mir_local(name: &str) -> Name {
+    full_local_name(name.trim())
+}
+
+/// Immediate may-targets of a stack reference.
+fn resolve_stack_ref_values(
+    reference: &Name,
+    refs: &BTreeMap<Name, BTreeSet<Name>>,
+) -> BTreeSet<Name> {
+    refs.get(reference).cloned().unwrap_or_default()
+}
+
+
+/// MIR pretty-print spelling for a closure aggregate, e.g.
+///
+/// `{closure@...} { ptr: move _4, other: copy _7 }`
+///
+/// The operand order is the closure-field order used by later `.0`, `.1`, ...
+/// projections in the closure body.
+fn closure_aggregate_capture_operands(e: &str) -> Option<Vec<Name>> {
+    let e = e.trim();
+    if !e.starts_with("{closure@") {
+        return None;
+    }
+
+    let (_, fields) = e.split_once("} {")?;
+    let fields = fields.strip_suffix('}')?.trim();
+
+    if fields.is_empty() {
+        return Some(Vec::new());
+    }
+
+    let mut out = Vec::new();
+    for field in fields.split(',') {
+        let (_, rhs) = field.split_once(':')?;
+        let rhs = rhs.trim();
+
+        if let Some(local) = exact_local_operand(rhs, "move ")
+            .or_else(|| exact_local_operand(rhs, "copy "))
+        {
+            out.push(full_local_name(&local));
+        } else {
+            // A closure capture that is not a direct MIR local operand cannot
+            // yet be represented by the current detector relation.
+            return None;
+        }
+    }
+
+    Some(out)
+}
+
+static CLOSURE_FIELD_COPY_FOR_DEREF_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r"^deref_copy\s+\((?:\(\*_[0-9]+\)|_[0-9]+)\.([0-9]+):"
+    ).unwrap()
+});
+
+/// Field index read by a CopyForDeref from a closure/self aggregate.
+///
+/// Recognized examples:
+/// - `deref_copy ((*_1).0: &*mut i32)`
+/// - `deref_copy (_1.0: &LockFreeStack<i32>)`
+fn closure_field_copy_for_deref_index(e: &str) -> Option<usize> {
+    let caps = CLOSURE_FIELD_COPY_FOR_DEREF_RE.captures(e.trim())?;
+    caps.get(1)?.as_str().parse::<usize>().ok()
+}
+
+fn is_copy_for_deref_rvalue(e: &str) -> bool {
+    e.trim().starts_with("deref_copy ")
+}
+
+static DIRECT_DEREF_USE_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^(?:copy|move) \(\*_[0-9]+\)$").unwrap()
+});
+
+/// Rvalue::Use of a directly dereferenced place, e.g. `copy (*_8)`.
+///
+/// The value exists, but the current CellValue domain does not model arbitrary
+/// memory contents behind a stack/raw reference; TOP is therefore conservative.
+fn is_direct_deref_use_rvalue(e: &str) -> bool {
+    DIRECT_DEREF_USE_RE.is_match(e.trim())
+}
+
+fn is_closure_aggregate_rvalue(e: &str) -> bool {
+    e.trim().starts_with("{closure@")
+}
+
+/// Return the MIR function scope encoded in a GlobalICFG MIR node id.
+///
+/// `rust::main::{closure#0}::bb3` -> `rust::main::{closure#0}`
+fn mir_function_scope_from_node_id(node_id: &str) -> Option<String> {
+    let (scope, bb) = node_id.rsplit_once("::bb")?;
+    if !bb.is_empty() && bb.chars().all(|c| c.is_ascii_digit()) {
+        Some(scope.to_string())
+    } else {
+        None
+    }
+}
+
+/// Resolve a direct-reference chain within one MIR function scope to its leaf
+/// stack places.  Returning an empty set means that `local` is not known to be
+/// a stack-reference local.
+fn resolve_scoped_stack_ref_leaves(
+    scope: &str,
+    local: &Name,
+    refs: &BTreeMap<(String, Name), BTreeSet<Name>>,
+) -> BTreeSet<Name> {
+    let start = canonical_mir_local(local);
+    let start_key = (scope.to_string(), start.clone());
+
+    if !refs.contains_key(&start_key) {
+        return BTreeSet::new();
+    }
+
+    let mut leaves = BTreeSet::new();
+    let mut seen = BTreeSet::new();
+    let mut work = vec![start];
+
+    while let Some(current) = work.pop() {
+        if !seen.insert(current.clone()) {
+            continue;
+        }
+
+        let key = (scope.to_string(), current.clone());
+        if let Some(nexts) = refs.get(&key) {
+            for next in nexts {
+                work.push(canonical_mir_local(next));
+            }
+        } else {
+            leaves.insert(current);
+        }
+    }
+
+    leaves
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct ClosureCaptureBinding {
+    /// The captured field stores a reference to these outer stack places.
+    stack_ref_targets: BTreeSet<Name>,
+    /// The captured field stores these values directly.
+    by_value_sources: BTreeSet<Name>,
+}
+
+fn merge_closure_capture_vectors(
+    dst: &mut Vec<ClosureCaptureBinding>,
+    src: &[ClosureCaptureBinding],
+) {
+    if dst.len() < src.len() {
+        dst.resize(src.len(), ClosureCaptureBinding::default());
+    }
+
+    for (idx, item) in src.iter().enumerate() {
+        dst[idx]
+            .stack_ref_targets
+            .extend(item.stack_ref_targets.iter().cloned());
+        dst[idx]
+            .by_value_sources
+            .extend(item.by_value_sources.iter().cloned());
+    }
+}
+
+/// Find the actual closure entry reached from one closure call site using the
+/// GlobalICFG edges inserted by `icfg.rs`:
+///
+/// call-site -> dummyCall -> rust::<...{closure#N}>::bb0
+fn closure_entry_scope_for_call(
+    icfg: &GlobalICFGOrdered,
+    call_node_id: &str,
+) -> Option<String> {
+    let dummy = icfg
+        .icfg_edges
+        .iter()
+        .find(|e| {
+            e.source == call_node_id
+                && e.destination.starts_with("dummyCall")
+                && e.label
+                    .as_deref()
+                    .map(|l| l.contains("Closure Call"))
+                    .unwrap_or(false)
+        })?
+        .destination
+        .clone();
+
+    let entry = icfg
+        .icfg_edges
+        .iter()
+        .find(|e| {
+            e.source == dummy
+                && e.destination.starts_with("rust::")
+                && e.destination.contains("{closure#")
+                && e.destination.ends_with("::bb0")
+        })?
+        .destination
+        .clone();
+
+    mir_function_scope_from_node_id(&entry)
+}
+
+/// Precompute closure-capture semantics independently from detector traversal
+/// order.
+///
+/// This is deliberately separate from heap aliasing:
+/// - `&_2` records stack-reference flow;
+/// - `{closure...} { ptr: move _4 }` records what the closure field stores;
+/// - the closure call ICFG edges identify which closure body receives that
+///   environment.
+fn build_closure_capture_bindings(
+    icfg: &GlobalICFGOrdered,
+) -> BTreeMap<String, Vec<ClosureCaptureBinding>> {
+    let mut scoped_refs: BTreeMap<(String, Name), BTreeSet<Name>> =
+        BTreeMap::new();
+
+    // Pass 1: direct Ref/AddressOf relations within each MIR function.
+    for (node_id, node) in &icfg.ordered_nodes {
+        let GlobalICFGNode::Mir(bb) = node else {
+            continue;
+        };
+        let Some(scope) = mir_function_scope_from_node_id(node_id) else {
+            continue;
+        };
+
+        for stmt in &bb.statements {
+            let (Some(dest), Some(rvalue)) = (&stmt.place, &stmt.rvalue) else {
+                continue;
+            };
+
+            if let Some(src) = direct_stack_borrow_source(rvalue) {
+                scoped_refs
+                    .entry((scope.clone(), canonical_mir_local(dest)))
+                    .or_default()
+                    .insert(canonical_mir_local(&src));
+            }
+        }
+    }
+
+    // Pass 2: closure environment locals -> ordered field capture bindings.
+    let mut envs: BTreeMap<(String, Name), Vec<ClosureCaptureBinding>> =
+        BTreeMap::new();
+
+    for (node_id, node) in &icfg.ordered_nodes {
+        let GlobalICFGNode::Mir(bb) = node else {
+            continue;
+        };
+        let Some(scope) = mir_function_scope_from_node_id(node_id) else {
+            continue;
+        };
+
+        for stmt in &bb.statements {
+            let (Some(dest), Some(rvalue)) = (&stmt.place, &stmt.rvalue) else {
+                continue;
+            };
+
+            let Some(operands) = closure_aggregate_capture_operands(rvalue) else {
+                continue;
+            };
+
+            let mut captures = Vec::with_capacity(operands.len());
+            for operand in operands {
+                let leaves =
+                    resolve_scoped_stack_ref_leaves(&scope, &operand, &scoped_refs);
+
+                let mut binding = ClosureCaptureBinding::default();
+                if leaves.is_empty() {
+                    binding
+                        .by_value_sources
+                        .insert(canonical_mir_local(&operand));
+                } else {
+                    binding.stack_ref_targets.extend(leaves);
+                }
+                captures.push(binding);
+            }
+
+            envs.insert(
+                (scope.clone(), canonical_mir_local(dest)),
+                captures,
+            );
+        }
+    }
+
+    // Pass 3: map each call to the concrete closure body selected by ICFG.
+    let mut by_closure_scope: BTreeMap<
+        String,
+        Vec<ClosureCaptureBinding>,
+    > = BTreeMap::new();
+
+    for (node_id, node) in &icfg.ordered_nodes {
+        let GlobalICFGNode::Mir(bb) = node else {
+            continue;
+        };
+        let Some(scope) = mir_function_scope_from_node_id(node_id) else {
+            continue;
+        };
+
+        let Some(MirTerminator::Call {
+            function_called,
+            arguments,
+            ..
+        }) = &bb.terminator
+        else {
+            continue;
+        };
+
+        if !function_called.contains("{closure@") {
+            continue;
+        }
+
+        let Some(first_arg) = arguments.first() else {
+            continue;
+        };
+
+        let arg = canonical_mir_local(&first_arg.arg);
+        let mut env_candidates =
+            resolve_scoped_stack_ref_leaves(&scope, &arg, &scoped_refs);
+
+        if env_candidates.is_empty() {
+            env_candidates.insert(arg);
+        }
+
+        let Some(closure_scope) =
+            closure_entry_scope_for_call(icfg, node_id)
+        else {
+            continue;
+        };
+
+        for env_local in env_candidates {
+            if let Some(captures) =
+                envs.get(&(scope.clone(), canonical_mir_local(&env_local)))
+            {
+                merge_closure_capture_vectors(
+                    by_closure_scope
+                        .entry(closure_scope.clone())
+                        .or_default(),
+                    captures,
+                );
+            }
+        }
+    }
+
+    by_closure_scope
+}
+
+fn is_heap_dependent_value(v: CellValue) -> bool {
+    matches!(
+        v,
+        CellValue::ALLOC
+            | CellValue::FREED
+            | CellValue::MB
+            | CellValue::IMMB
+            | CellValue::MV
+            | CellValue::TOP
+    )
+}
+
 /// Abstract evaluation of a MIR Rvalue for the memory-management domain.
 ///
 /// Implemented formal/core cases:
@@ -1039,6 +1490,17 @@ pub fn eval_rvalue(e: &str, sigma: &AbstractMemory) -> CellValue {
         return BOXTIMES;
     }
 
+    // Closure aggregates and CopyForDeref are valid represented MIR values,
+    // but their field/content value is not expressible in the current
+    // non-field-sensitive CellValue domain. TOP is conservative; BOTTOM would
+    // incorrectly mean that no normal value is represented.
+    if is_closure_aggregate_rvalue(trimmed)
+        || is_copy_for_deref_rvalue(trimmed)
+        || is_direct_deref_use_rvalue(trimmed)
+    {
+        return TOP;
+    }
+
     if let Some(local) = exact_local_operand(trimmed, "copy ") {
         return sigma.get_cell_value(&full_local_name(&local));
     }
@@ -1053,6 +1515,20 @@ pub fn eval_rvalue(e: &str, sigma: &AbstractMemory) -> CellValue {
     }
     if trimmed.starts_with("& mut") {
         return MB;
+    }
+
+    // MIR comparison operations return bool even when comparing raw pointers.
+    // The result is therefore a scalar BOXTIMES whenever both operands denote
+    // a represented value. BOTTOM still means no represented normal value.
+    if let Some((lhs, rhs)) = comparison_rvalue_args(trimmed) {
+        let lhs = eval_rvalue(lhs, sigma);
+        let rhs = eval_rvalue(rhs, sigma);
+
+        return if lhs == BOTTOM || rhs == BOTTOM {
+            BOTTOM
+        } else {
+            BOXTIMES
+        };
     }
 
     if let Some((lhs, rhs)) = binary_rvalue_args(trimmed) {
@@ -1144,29 +1620,6 @@ static BOX_NEW_NODE_GENERIC_REGEX: Lazy<Regex> = Lazy::new(|| {
 ////////////////////////////////////////////////////////////////////////////////
 
 //mem forget regex
-static MEM_FORGET_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"std::mem::forget::<std::boxed::Box<[^>]+>>").unwrap()
-});
-
-static MEM_FORGET_VEC_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"std::mem::forget::<std::vec::Vec<[^>]+>>").unwrap()
-});
-
-static MEM_FORGET_BOX_VEC_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"std::mem::forget::<Box<Vec<[^>]+>>").unwrap()
-});
-
-
-////////////////////////////////////////////////////////////////////////////////
-//into raw regex
-static INTO_RAW_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"std::boxed::Box::<[^>]+>::into_raw").unwrap()
-});
-
-static BOX_VEC_INTO_RAW_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"std::boxed::Box::<std::vec::Vec<[^>]+>>::into_raw").unwrap()
-});
-
 static VEC_INTO_RAW_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"Box::<Vec<[^>]+>>::into_raw").unwrap()
 });
@@ -1193,6 +1646,189 @@ static BOX_FROM_RAW_NODE_GENERIC_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(std::boxed::)?Box::<Node<[^>]+>>::from_raw").unwrap()
 });
 //////////////////////////////////////////////////////////////////////////////////
+// Standard-library memory effects added in Phase 4.
+//
+// These predicates are deliberately semantic rather than type-enumeration based.
+// The old type-specific matchers remain below for backward compatibility with
+// the published corpus, while the new cases cover generic standard APIs whose
+// documented ownership/deallocation effect is type-independent.
+
+fn is_box_new_call(s: &str) -> bool {
+    (s.contains("std::boxed::Box::<") || s.contains("alloc::boxed::Box::<"))
+        && s.contains(">::new")
+}
+
+fn is_box_into_raw_call(s: &str) -> bool {
+    (s.contains("std::boxed::Box::<") || s.contains("alloc::boxed::Box::<"))
+        && s.contains(">::into_raw")
+}
+
+fn is_box_from_raw_call(s: &str) -> bool {
+    (s.contains("std::boxed::Box::<") || s.contains("alloc::boxed::Box::<"))
+        && s.contains(">::from_raw")
+}
+
+fn is_cstring_into_raw_call(s: &str) -> bool {
+    s.contains("std::ffi::CString::into_raw")
+        || s.contains("alloc::ffi::c_str::<impl std::ffi::CString>::into_raw")
+}
+
+fn is_cstring_from_raw_call(s: &str) -> bool {
+    s.contains("std::ffi::CString::from_raw")
+        || s.contains("alloc::ffi::c_str::<impl std::ffi::CString>::from_raw")
+}
+
+fn is_owning_into_raw_call(s: &str) -> bool {
+    is_box_into_raw_call(s) || is_cstring_into_raw_call(s)
+}
+
+fn is_owning_from_raw_call(s: &str) -> bool {
+    is_box_from_raw_call(s) || is_cstring_from_raw_call(s)
+}
+
+fn is_mem_forget_call(s: &str) -> bool {
+    s.contains("std::mem::forget::<") || s.contains("core::mem::forget::<")
+}
+
+fn is_box_leak_call(s: &str) -> bool {
+    (s.contains("std::boxed::Box::<") || s.contains("alloc::boxed::Box::<"))
+        && s.contains(">::leak")
+}
+
+fn is_vec_from_raw_parts_call(s: &str) -> bool {
+    (s.contains("std::vec::Vec::<") || s.contains("alloc::vec::Vec::<"))
+        && s.contains(">::from_raw_parts")
+}
+
+fn is_string_from_raw_parts_call(s: &str) -> bool {
+    s.contains("std::string::String::from_raw_parts")
+        || s.contains("alloc::string::String::from_raw_parts")
+}
+
+fn is_raw_alloc_zeroed_call(s: &str) -> bool {
+    s.contains("std::alloc::alloc_zeroed")
+        || s.contains("alloc::alloc::alloc_zeroed")
+}
+
+fn is_raw_alloc_call(s: &str) -> bool {
+    (s.contains("std::alloc::alloc") || s.contains("alloc::alloc::alloc"))
+        && !is_raw_alloc_zeroed_call(s)
+        && !s.contains("handle_alloc_error")
+}
+
+fn is_raw_dealloc_call(s: &str) -> bool {
+    s.contains("std::alloc::dealloc") || s.contains("alloc::alloc::dealloc")
+}
+
+fn is_raw_realloc_call(s: &str) -> bool {
+    s.contains("std::alloc::realloc") || s.contains("alloc::alloc::realloc")
+}
+
+fn is_cstr_from_ptr_call(s: &str) -> bool {
+    s.contains("std::ffi::CStr::from_ptr")
+        || s.contains("core::ffi::CStr::from_ptr")
+        || s.contains("ffi::c_str::<impl std::ffi::CStr>::from_ptr")
+}
+
+
+/// APIs that expose a raw pointer borrowed from an existing owner/view without
+/// transferring ownership. We keep this type-filtered: `MaybeUninit::as_mut_ptr`
+/// for example points into a stack/local object and must not be confused with
+/// a tracked heap allocation.
+fn is_borrowed_raw_pointer_view_call(s: &str) -> bool {
+    let as_ptr = s.contains("::as_ptr") || s.contains("::as_mut_ptr");
+    as_ptr
+        && (s.contains("CString")
+            || s.contains("CStr")
+            || s.contains("Vec::<")
+            || s.contains("String")
+            || s.contains("NonNull::<")
+            || s.contains("str>::as_ptr")
+            || s.contains("slice::<impl ["))
+}
+
+fn is_ptr_read_call(s: &str) -> bool {
+    s.contains("std::ptr::read::<")
+        || s.contains("core::ptr::read::<")
+        || s.contains("std::ptr::read_unaligned::<")
+        || s.contains("core::ptr::read_unaligned::<")
+        || s.contains("std::ptr::read_volatile::<")
+        || s.contains("core::ptr::read_volatile::<")
+}
+
+fn is_ptr_write_call(s: &str) -> bool {
+    s.contains("std::ptr::write::<")
+        || s.contains("core::ptr::write::<")
+        || s.contains("std::ptr::write_unaligned::<")
+        || s.contains("core::ptr::write_unaligned::<")
+        || s.contains("std::ptr::write_volatile::<")
+        || s.contains("core::ptr::write_volatile::<")
+}
+
+fn is_ptr_drop_in_place_call(s: &str) -> bool {
+    s.contains("std::ptr::drop_in_place::<")
+        || s.contains("core::ptr::drop_in_place::<")
+}
+
+fn is_pointer_memory_use_call(s: &str) -> bool {
+    is_ptr_read_call(s) || is_ptr_write_call(s) || is_ptr_drop_in_place_call(s)
+}
+
+/// Return the first direct MIR local operand (`move _N` or `copy _N`) that
+/// appears in the call-argument portion of a textual MIR Call.
+///
+/// This intentionally does not reuse `extract_moved_var` / `extract_copied_var`:
+/// those historical helpers split on whitespace and therefore keep punctuation
+/// such as the comma in `copy _1, copy _2`, yielding the invalid name `_1,`.
+///
+/// We select whichever of `move`/`copy` occurs first, then use LOCAL_TOKEN_RE so
+/// punctuation never becomes part of the local name.
+fn first_call_local_from_details(details: &str) -> Option<Name> {
+    let call_part = details.split("->").next().unwrap_or(details);
+
+    let move_pos = call_part.find("move ");
+    let copy_pos = call_part.find("copy ");
+
+    let (start, keyword_len) = match (move_pos, copy_pos) {
+        (Some(m), Some(c)) if m <= c => (m, "move ".len()),
+        (Some(_), Some(c)) => (c, "copy ".len()),
+        (Some(m), None) => (m, "move ".len()),
+        (None, Some(c)) => (c, "copy ".len()),
+        (None, None) => return None,
+    };
+
+    let operand = &call_part[start + keyword_len..];
+    let local = LOCAL_TOKEN_RE.find(operand)?;
+
+    if local.start() == 0 {
+        Some(full_local_name(local.as_str()))
+    } else {
+        None
+    }
+}
+
+fn leak_ghost_name(source: &Name) -> Name {
+    format!("Leak({})", normalize_name(source))
+}
+
+fn replace_consumed_local_with(
+    mem: &mut AbstractMemory,
+    source: &Name,
+    replacement: Name,
+    value: CellValue,
+) {
+    if let Some(old_alloc) = mem.get_allocation(source) {
+        mem.state.remove(&old_alloc);
+        let mut set = old_alloc.set;
+        set.remove(source);
+        set.insert(replacement);
+        mem.state.insert(Allocation { set }, value);
+    } else {
+        mem.state.insert(Allocation::new(replacement), value);
+    }
+}
+
+//////////////////////////////////////////////////////////////////////////////////
 
 pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place: &str) -> (CellValue, AbstractMemory) {
     let _ffi_functions = match load_ffi_functions("./ffi_functions.json") {
@@ -1205,7 +1841,183 @@ pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place
 
     // ALLOC 
     let mut new_mem = mem.clone();
-    let ret_val = if
+    let ret_val = if is_box_new_call(func_call_details) {
+        // Box::new creates a fresh owning allocation. A fresh return local must
+        // not be merged with another allocation merely because both are ALLOC.
+        let full_ret = full_local_name(return_place);
+        new_mem.assign_local_value(&full_ret, CellValue::ALLOC);
+        CellValue::ALLOC
+
+    } else if is_owning_into_raw_call(func_call_details) {
+        // Box/CString into_raw consume the owner and return a pointer to the
+        // SAME allocation. Preserve any pre-existing aliases while replacing
+        // the consumed owner local with the returned raw handle.
+        let full_ret = full_local_name(return_place);
+        if let Some(source) = first_call_local_from_details(func_call_details) {
+            replace_consumed_local_with(
+                &mut new_mem,
+                &source,
+                full_ret,
+                CellValue::MV,
+            );
+        } else {
+            new_mem.assign_local_value(&full_ret, CellValue::MV);
+        }
+        CellValue::MV
+
+    } else if is_owning_from_raw_call(func_call_details) {
+        // from_raw restores an owning handle to the same allocation. Keep the
+        // raw local as an alias: raw pointers are Copy and reusing it can be a
+        // real double-free/UAF source. The one-value-per-alias-component
+        // representation remains MV until the domain is split by handle kind.
+        let full_ret = full_local_name(return_place);
+        if let Some(source) = first_call_local_from_details(func_call_details) {
+            if let Some(old_alloc) = new_mem.get_allocation(&source) {
+                new_mem.state.remove(&old_alloc);
+                let mut set = old_alloc.set;
+                set.insert(full_ret.clone());
+                new_mem.state.insert(Allocation { set }, CellValue::MV);
+            } else {
+                new_mem.assign_local_value(&full_ret, CellValue::MV);
+            }
+        } else {
+            new_mem.assign_local_value(&full_ret, CellValue::MV);
+        }
+        CellValue::MV
+
+    } else if is_mem_forget_call(func_call_details) {
+        // mem::forget consumes its argument and returns ().  It suppresses
+        // destructor execution; if the argument owns a tracked allocation,
+        // keep a synthetic allocation witness so leak provenance survives even
+        // though the source local itself has been moved.
+        if let Some(source) = first_call_local_from_details(func_call_details) {
+            if new_mem.get_allocation(&source).is_some() {
+                let ghost = leak_ghost_name(&source);
+                replace_consumed_local_with(
+                    &mut new_mem,
+                    &source,
+                    ghost,
+                    CellValue::MV,
+                );
+            }
+        }
+        CellValue::BOXTIMES
+
+    } else if is_box_leak_call(func_call_details) {
+        // Box::leak consumes the Box and intentionally relinquishes automatic
+        // destruction.  The returned &mut T is the surviving handle to the
+        // same allocation.  At allocation level CREMA records this as MV
+        // ("ownership no longer automatically reclaimed").
+        let full_ret = full_local_name(return_place);
+        if let Some(source) = first_call_local_from_details(func_call_details) {
+            replace_consumed_local_with(
+                &mut new_mem,
+                &source,
+                full_ret,
+                CellValue::MV,
+            );
+        } else {
+            new_mem
+                .state
+                .insert(Allocation::new(full_ret), CellValue::MV);
+        }
+        CellValue::MV
+
+    } else if is_vec_from_raw_parts_call(func_call_details)
+        || is_string_from_raw_parts_call(func_call_details)
+    {
+        // from_raw_parts transfers responsibility for an existing raw
+        // allocation to an owning container.  The current implementation stores
+        // one CellValue per alias component, so we keep the component in MV
+        // while adding the returned owner as an alias; normal Drop accounting
+        // will still reclaim the component.
+        let full_ret = full_local_name(return_place);
+        if let Some(source) = first_call_local_from_details(func_call_details) {
+            if let Some(old_alloc) = new_mem.get_allocation(&source) {
+                new_mem.state.remove(&old_alloc);
+                let mut set = old_alloc.set;
+                set.insert(full_ret.clone());
+                new_mem
+                    .state
+                    .insert(Allocation { set }, CellValue::MV);
+            } else {
+                new_mem
+                    .state
+                    .insert(Allocation::new(full_ret.clone()), CellValue::MV);
+            }
+        } else {
+            new_mem
+                .state
+                .insert(Allocation::new(full_ret.clone()), CellValue::MV);
+        }
+        CellValue::MV
+
+    } else if is_borrowed_raw_pointer_view_call(func_call_details) {
+        // as_ptr/as_mut_ptr-style APIs expose a borrowed raw pointer; they do
+        // not consume the owner and do not transfer deallocation responsibility.
+        let full_ret = full_local_name(return_place);
+        if let Some(source) = first_call_local_from_details(func_call_details) {
+            let value = new_mem.get_cell_value(&source);
+            if value != CellValue::BOTTOM && new_mem.get_allocation(&source).is_some() {
+                new_mem.propagate_cell_value(&source, &full_ret);
+                value
+            } else {
+                new_mem.assign_local_value(&full_ret, CellValue::TOP);
+                CellValue::TOP
+            }
+        } else {
+            new_mem.assign_local_value(&full_ret, CellValue::TOP);
+            CellValue::TOP
+        }
+
+    } else if is_raw_alloc_call(func_call_details)
+        || is_raw_alloc_zeroed_call(func_call_details)
+    {
+        // std::alloc::{alloc,alloc_zeroed} return a nullable raw pointer.
+        // Without a NULL lattice element, TOP is the sound abstraction:
+        // either no allocation was returned, or a live raw allocation exists.
+        let full_ret = full_local_name(return_place);
+        if let Some(old) = new_mem.get_allocation(&full_ret) {
+            new_mem.state.remove(&old);
+        }
+        new_mem
+            .state
+            .insert(Allocation::new(full_ret), CellValue::TOP);
+        CellValue::TOP
+
+    } else if is_raw_dealloc_call(func_call_details) {
+        // dealloc invalidates the allocation but returns ().
+        if let Some(source) = first_call_local_from_details(func_call_details) {
+            if new_mem.get_allocation(&source).is_some() {
+                new_mem = update_state(new_mem, &source, CellValue::FREED);
+            }
+        }
+        CellValue::BOXTIMES
+
+    } else if is_ptr_read_call(func_call_details) {
+        // ptr::read leaves the source memory unchanged.  The returned T can be
+        // arbitrary (and for non-Copy T can duplicate ownership), which this
+        // local-based memory domain cannot classify without type/drop metadata.
+        // Keep the memory unchanged and conservatively classify only the return.
+        CellValue::TOP
+
+    } else if is_ptr_write_call(func_call_details)
+        || is_ptr_drop_in_place_call(func_call_details)
+    {
+        // Both APIs require a valid destination pointer.  Their nested
+        // destructor/resource effect is type-dependent and is handled only as
+        // a deferred "use" in the detector for now.
+        CellValue::BOXTIMES
+
+    } else if is_raw_realloc_call(func_call_details) {
+        // realloc has success/failure-dependent ownership: on success the old
+        // block may be invalidated and a new pointer returned; on failure the
+        // old allocation remains valid. A single non-disjunctive CellValue
+        // cannot encode both precisely, so do not mutate the old allocation.
+        // TOP on the result records the nullable/unknown raw pointer.
+        CellValue::TOP
+
+    } else if
 
     // REGEX
     BOX_NEW_REGEX.is_match(func_call_details) 
@@ -1280,8 +2092,6 @@ pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place
     || func_call_details.contains("std::ffi::CString::into_raw")
 
     // into raw regex
-    ||  INTO_RAW_REGEX.is_match(func_call_details) 
-    || BOX_VEC_INTO_RAW_REGEX.is_match(func_call_details)
     || VEC_INTO_RAW_REGEX.is_match(func_call_details)
     || BOX_INTO_RAW_NODE_GENERIC_REGEX.is_match(func_call_details)
 
@@ -1293,27 +2103,6 @@ pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place
     || func_call_details.contains("std::boxed::Box::<std::option::Option<F>>::into_raw")
     // MV MSG SENDER
     || func_call_details.contains("std::boxed::Box::<std::sync::mpsc::Sender<SegmentMessage>>::into_raw")
-
-    // MEM FORGET
-    || func_call_details.contains("std::mem::forget::<std::boxed::Box<u8>>")   || func_call_details.contains("std::mem::forget::<std::boxed::Box<i8>>")
-    || func_call_details.contains("std::mem::forget::<std::boxed::Box<i16>>") || func_call_details.contains("std::mem::forget::<std::boxed::Box<u16>>")
-    || func_call_details.contains("std::mem::forget::<std::boxed::Box<i32>>")  || func_call_details.contains("std::mem::forget::<std::boxed::Box<u32>>") 
-    || func_call_details.contains("std::mem::forget::<std::boxed::Box<i64>>") || func_call_details.contains("std::mem::forget::<std::boxed::Box<u64>>")
-    || func_call_details.contains("std::mem::forget::<std::boxed::Box<i128>>") || func_call_details.contains("std::mem::forget::<std::boxed::Box<u128>>")
-    || func_call_details.contains("std::mem::forget::<std::boxed::Box<f32>>") || func_call_details.contains("std::mem::forget::<std::boxed::Box<f64>>") 
-    || func_call_details.contains("std::mem::forget::<std::boxed::Box<bool>>") || func_call_details.contains("std::mem::forget::<std::boxed::Box<char>>")
-    || func_call_details.contains("std::mem::forget::<std::boxed::Box<usize>>") || func_call_details.contains("std::mem::forget::<std::boxed::Box<isize>>")
-
-    || func_call_details.contains("std::mem::forget::<std::boxed::Box<std::string::String>>")
-    || func_call_details.contains("std::mem::forget::<std::ffi::CString>")
-    || func_call_details.contains("std::mem::forget::<std::boxed::Box<std::ffi::CString>>")
-   
-    || func_call_details.contains("std::mem::forget::<std::boxed::Box<&str>>") 
-
-    // Mem forget regex
-    ||  MEM_FORGET_REGEX.is_match(func_call_details) 
-    || MEM_FORGET_VEC_REGEX.is_match(func_call_details)
-    || MEM_FORGET_BOX_VEC_REGEX.is_match(func_call_details)
 
     {
     // DO
@@ -1427,38 +2216,46 @@ pub fn apply_mir_statement(mem: &AbstractMemory, taint: &mut TaintStateMap, stmt
         "Nop" => { /* no change */ }
         "Assign" => {
             if let Some(rvalue) = &stmt.rvalue {
-                // RAW REFERENCE CAPTURE: if the rvalue is a reference to a variable -> propagate the cell value
-                // e.g. Assign((_4, &_2)) in closure lowering
-                // for example within a closure, the expression Assign((_4, &_2)) merges Local(_2) and Local(_4) into one allocation key
+                // A direct MIR Ref/AddressOf points to the stack *place*.
+                // It must not be merged with an allocation owned/denoted by the
+                // value stored in that place.
+                if direct_stack_borrow_source(rvalue).is_some() {
+                    if let Some(dest) = &stmt.place {
+                        let dest_key = full_local_name(dest);
+                        new_mem.assign_local_value(&dest_key, CellValue::TOP);
+                        taint.remove(&dest_key);
+                    }
+                    return new_mem;
+                }
+
                 if rvalue.starts_with('&') {
                     if let Some(dest) = &stmt.place {
                         let dest_key = full_local_name(dest);
 
+                        // Remaining forms include dereference/projection borrows,
+                        // which can denote an already tracked pointee allocation.
                         if let Some(src_var) = extract_first_local_token(rvalue) {
                             let src_key = full_local_name(&src_var);
                             let src_value = new_mem.get_cell_value(&src_key);
 
-                            // A reference to a known scalar/non-heap local is a
-                            // location, not the scalar value itself. The formal
-                            // Loc# abstraction cannot represent such a stack
-                            // location precisely in CellValue, hence TOP.
-                            if matches!(src_value, CellValue::BOXTIMES | CellValue::BOTTOM) {
-                                new_mem.assign_local_value(&dest_key, CellValue::TOP);
-                                taint.remove(&dest_key);
-                                return new_mem;
-                            }
-
-                            // Preserve the existing heap/reference behavior
-                            // when the referenced local is a tracked allocation.
-                            if src_value != CellValue::BOTTOM {
+                            if src_value != CellValue::BOTTOM
+                                && new_mem.get_allocation(&src_key).is_some()
+                            {
                                 new_mem.propagate_cell_value(&src_key, &dest_key);
 
                                 let t_src = taint.get(&src_key).cloned().unwrap_or_default();
                                 let t_dest = taint.get(&dest_key).cloned().unwrap_or_default();
-                                let joined = t_src.union(&t_dest).cloned().collect::<HashSet<_>>();
+                                let joined =
+                                    t_src.union(&t_dest).cloned().collect::<HashSet<_>>();
                                 taint.insert(src_key.clone(), joined.clone());
                                 taint.insert(dest_key, joined);
+                            } else {
+                                new_mem.assign_local_value(&dest_key, CellValue::TOP);
+                                taint.remove(&dest_key);
                             }
+                        } else {
+                            new_mem.assign_local_value(&dest_key, CellValue::TOP);
+                            taint.remove(&dest_key);
                         }
                     }
                     return new_mem;
@@ -1493,95 +2290,49 @@ pub fn apply_mir_statement(mem: &AbstractMemory, taint: &mut TaintStateMap, stmt
                             taint.remove(&src_key);
                         }
                     }
-                } else if rvalue.contains("copy ") && rvalue.contains(" as *mut i32 (PtrToPtr)") {
-                    // POINTER COPY semantics: dst and src will share the same allocation
-                    let src_var = extract_copied_var(rvalue); 
-                        if let Some(dest) = &stmt.place {
-                            let src_key = full_local_name(&src_var);
-                            let dest_key = full_local_name(dest);
-                            // propagate the cell value from the source to the destination,
-                            // which (per propagate_cell_value) will merge the allocations
-                            new_mem.propagate_cell_value(&src_key, &dest_key);
-                            
-                            // propagate taint from src_key to dest_key:
-                             let taint_state_src = taint.get(&src_key).cloned().unwrap_or_default();
-                            taint.entry(dest_key).or_insert_with(HashSet::new).extend(taint_state_src);
-                        }
-                    
- // case:
-/*
-        rust::main::bb3",
-      {
-        "node_type": "Mir",
-        "node_data": {
-          "block_id": 3,
-          "statements": [
-            {
-              "source_info": {
-                "span": "/home/af/Documenti/a-phd/cargo_project_test/cstr_cargo/src/main.rs:39:41: 39:44 (#0)",
-                "scope": "scope[2]"
-              },
-              "kind": "Assign",
-              "details": "Assign((_7, copy _4 as *const i8 (PtrToPtr)))",
-              "place": "Local(_7) [mutable]",
-              "is_mutable": true,
-              "rvalue": "copy _4 as *const i8 (PtrToPtr)"
-            }
-          ],
-          "terminator": {
-            "kind": "Call",
-            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/cargo_project_test/cstr_cargo/src/main.rs:39:26: 39:45 (#0), scope: scope[2] }, kind: _6 = std::ffi::CStr::from_ptr::<'_>(move _7) -> [return: bb4, unwind continue] }",
-            "source_info": "/home/af/Documenti/a-phd/cargo_project_test/cstr_cargo/src/main.rs:39:26: 39:45 (#0)",
-            "function_called": "std::ffi::CStr::from_ptr::<'_>",
-            "arguments": [
-              {
-                "arg": "Local(_7) [mutable]",
-                "is_mutable": true
-              }
-            ],
-            "return_place": "_6",
-            "return_target": "bb4",
-            "unwind_target": "continue"
-          }
-        }
-      }
-    ],
-*/
-                }  else if rvalue.contains("copy ") && rvalue.contains(" as *const i8 (PtrToPtr)") {
-                    // POINTER COPY semantics: dst and src will share the same allocation
-                    let src_var = extract_copied_var(rvalue); 
-                        if let Some(dest) = &stmt.place {
-                            let src_key = full_local_name(&src_var);
-                            let dest_key = full_local_name(dest);
-                            // propagate the cell value from the source to the destination,
-                            // which (per propagate_cell_value) will merge the allocations
-                            new_mem.propagate_cell_value(&src_key, &dest_key);
-                            
-                            // propagate taint from src_key to dest_key:
-                             let taint_state_src = taint.get(&src_key).cloned().unwrap_or_default();
-                            taint.entry(dest_key).or_insert_with(HashSet::new).extend(taint_state_src);
-                        }
-                    }
+                } else if let Some(src_var) = pointer_cast_source(rvalue) {
+                    let src_key = full_local_name(&src_var);
+                    let dest_key = full_local_name(
+                        stmt.place
+                            .as_ref()
+                            .expect("pointer cast assignment must have destination"),
+                    );
+                    let value = new_mem.get_cell_value(&src_key);
 
-                // eg "Assign((_30, copy _27 as *mut std::string::String (PtrToPtr)))"
-                else if rvalue.contains("copy ") && rvalue.contains(" as *mut std::string::String (PtrToPtr)"){
-                
-                    let src_var = extract_copied_var(rvalue); 
-                    if let Some(dest) = &stmt.place {
-                        let src_key = full_local_name(&src_var);
-                        let dest_key = full_local_name(dest);
-                        // propagate the cell value from the source to the destination,
-                        // which (per propagate_cell_value) will merge the allocations
+                    if is_heap_dependent_value(value)
+                        && new_mem.get_allocation(&src_key).is_some()
+                    {
                         new_mem.propagate_cell_value(&src_key, &dest_key);
-                        
-                        // propagate taint from src_key to dest_key:
-                        let taint_state_src = taint.get(&src_key).cloned().unwrap_or_default();
-                        taint.entry(dest_key).or_insert_with(HashSet::new).extend(taint_state_src);
-
+                        let tags = taint.get(&src_key).cloned().unwrap_or_default();
+                        taint.entry(dest_key).or_default().extend(tags);
+                    } else {
+                        // Integer/scalar -> pointer or untracked provenance:
+                        // the resulting raw pointer may point anywhere.
+                        new_mem.assign_local_value(&dest_key, CellValue::TOP);
+                        taint.remove(&dest_key);
                     }
-                }
 
-                else if rvalue.contains("&(*") {
+                } else if let Some(src_var) = pointer_offset_source(rvalue) {
+                    let src_key = full_local_name(&src_var);
+                    let dest_key = full_local_name(
+                        stmt.place
+                            .as_ref()
+                            .expect("Offset assignment must have destination"),
+                    );
+                    let value = new_mem.get_cell_value(&src_key);
+
+                    if is_heap_dependent_value(value)
+                        && new_mem.get_allocation(&src_key).is_some()
+                    {
+                        new_mem.propagate_cell_value(&src_key, &dest_key);
+                        let tags = taint.get(&src_key).cloned().unwrap_or_default();
+                        taint.entry(dest_key).or_default().extend(tags);
+                    } else {
+                        new_mem.assign_local_value(&dest_key, CellValue::TOP);
+                        taint.remove(&dest_key);
+                    }
+
+                }                 else if rvalue.contains("&(*") {
                     println!();
                     // copy semantics: propagate the cell value from the place in the rvalue expression to the local destination
                     /* 
@@ -1653,9 +2404,30 @@ pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term:
 
     match term {
         MirTerminator::Call {details, function_called, arguments, return_place, ..} => {
+            // CStr::from_ptr creates a borrowed C-string view. It does not
+            // retake ownership of the pointed allocation.
+            if is_cstr_from_ptr_call(function_called) {
+                if let Some(first_arg) = arguments.get(0) {
+                    let src_var = extract_arg_name(&first_arg.arg);
+                    let full_src = full_local_name(&src_var);
+                    let full_ret = full_local_name(return_place);
+                    let value = new_mem.get_cell_value(&full_src);
+
+                    if value != CellValue::BOTTOM
+                        && new_mem.get_allocation(&full_src).is_some()
+                    {
+                        new_mem.propagate_cell_value(&full_src, &full_ret);
+
+                        let tags = taint.get(&full_src).cloned().unwrap_or_default();
+                        taint.entry(full_ret).or_default().extend(tags);
+                    } else {
+                        new_mem.assign_local_value(&full_ret, CellValue::TOP);
+                        taint.remove(&full_ret);
+                    }
+                }
+
             // HANDLE Result::expect on CString
-            if function_called.contains("std::result::Result::<std::ffi::CString, std::ffi::NulError>::expect") 
-            || function_called.contains("std::ffi::CStr::from_ptr::<'_>")
+            } else if function_called.contains("std::result::Result::<std::ffi::CString, std::ffi::NulError>::expect") 
            /* 
            con CStr(args).to_string_lossy() ritorna un valore di tipo Cow<'_, str> (copy on write)
            */
@@ -1726,7 +2498,97 @@ pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term:
                 }
 
                 // UPDATE TAINT
-                if function_called.contains("NOT_HANDLED") {
+                if is_box_new_call(function_called) {
+                    let full_ret = full_local_name(return_place);
+                    taint.remove(&full_ret);
+
+                } else if is_owning_into_raw_call(function_called) {
+                    let full_ret = full_local_name(return_place);
+                    let mut tags = HashSet::new();
+                    tags.insert("assign".to_string());
+                    if let Some(source) = first_call_local_from_details(details) {
+                        if let Some(old) = taint.remove(&source) {
+                            tags.extend(old);
+                        }
+                    }
+                    taint.insert(full_ret, tags);
+
+                } else if is_owning_from_raw_call(function_called) {
+                    let full_ret = full_local_name(return_place);
+                    let mut tags = HashSet::new();
+                    tags.insert("assign".to_string());
+                    if let Some(source) = first_call_local_from_details(details) {
+                        if let Some(old) = taint.get(&source) {
+                            tags.extend(old.iter().cloned());
+                        }
+                    }
+                    taint.entry(full_ret).or_default().extend(tags);
+
+                } else if is_mem_forget_call(function_called) {
+                    let full_ret = full_local_name(return_place);
+                    taint.remove(&full_ret);
+
+                    if let Some(source) = first_call_local_from_details(details) {
+                        let ghost = leak_ghost_name(&source);
+                        taint.remove(&source);
+                        taint
+                            .entry(ghost)
+                            .or_default()
+                            .insert("assign".to_string());
+                    }
+
+                } else if is_box_leak_call(function_called) {
+                    let full_ret = full_local_name(return_place);
+                    taint
+                        .entry(full_ret)
+                        .or_default()
+                        .insert("assign".to_string());
+
+                    if let Some(source) = first_call_local_from_details(details) {
+                        taint.remove(&source);
+                    }
+
+                } else if is_borrowed_raw_pointer_view_call(function_called) {
+                    let full_ret = full_local_name(return_place);
+                    if let Some(source) = first_call_local_from_details(details) {
+                        let tags = taint.get(&source).cloned().unwrap_or_default();
+                        if !tags.is_empty() {
+                            taint.entry(full_ret).or_default().extend(tags);
+                        }
+                    }
+
+                } else if is_vec_from_raw_parts_call(function_called)
+                    || is_string_from_raw_parts_call(function_called)
+                    || is_raw_alloc_call(function_called)
+                    || is_raw_alloc_zeroed_call(function_called)
+                {
+                    let full_ret = full_local_name(return_place);
+                    taint
+                        .entry(full_ret)
+                        .or_default()
+                        .insert("assign".to_string());
+
+                } else if is_raw_dealloc_call(function_called) {
+                    let full_ret = full_local_name(return_place);
+                    taint.remove(&full_ret);
+
+                    if let Some(source) = first_call_local_from_details(details) {
+                        taint
+                            .entry(source)
+                            .or_default()
+                            .insert("free".to_string());
+                    }
+
+                } else if is_ptr_read_call(function_called)
+                    || is_ptr_write_call(function_called)
+                    || is_ptr_drop_in_place_call(function_called)
+                    || is_raw_realloc_call(function_called)
+                {
+                    // State/provenance is handled by the detector and/or the
+                    // conservative return value above. Do not manufacture
+                    // ownership-transfer taint here.
+
+                } else if function_called.contains("NOT_HANDLED") {
                     taint.entry(full_ret_place.clone())
                         .or_insert_with(HashSet::new)
                         .insert("NOT_HANDLED".to_string());
@@ -1743,8 +2605,6 @@ pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term:
                     || function_called.contains("std::boxed::Box::<bool>::into_raw") || function_called.contains("std::boxed::Box::<char>::into_raw")
                     || function_called.contains("std::boxed::Box::<usize>::into_raw") || function_called.contains("std::boxed::Box::<isize>::into_raw")
                     // INTO RAW regex
-                    ||  INTO_RAW_REGEX.is_match(&function_called) 
-                    || BOX_VEC_INTO_RAW_REGEX.is_match(&function_called)
                     || VEC_INTO_RAW_REGEX.is_match(&function_called)
                     || BOX_INTO_RAW_NODE_GENERIC_REGEX.is_match(&function_called)
 
@@ -1755,26 +2615,6 @@ pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term:
                     // MV MSG SENDER
                     || function_called.contains("std::boxed::Box::<std::sync::mpsc::Sender<SegmentMessage>>::into_raw")
                     
-
-                    // MEM FORGET
-                    || function_called.contains("std::mem::forget::<std::boxed::Box<i32>>") || function_called.contains("std::mem::forget::<std::boxed::Box<u32>>")
-                    || function_called.contains("std::mem::forget::<std::boxed::Box<u8>>") || function_called.contains("std::mem::forget::<std::boxed::Box<i8>>")
-                    || function_called.contains("std::mem::forget::<std::boxed::Box<i16>>") || function_called.contains("std::mem::forget::<std::boxed::Box<u16>>")
-                    || function_called.contains("std::mem::forget::<std::boxed::Box<i64>>") || function_called.contains("std::mem::forget::<std::boxed::Box<u64>>")
-                    || function_called.contains("std::mem::forget::<std::boxed::Box<i128>>") || function_called.contains("std::mem::forget::<std::boxed::Box<u128>>")
-                    || function_called.contains("std::mem::forget::<std::boxed::Box<f32>>") || function_called.contains("std::mem::forget::<std::boxed::Box<f64>>")
-                    || function_called.contains("std::mem::forget::<std::boxed::Box<usize>>") || function_called.contains("std::mem::forget::<std::boxed::Box<isize>>")
-                    || function_called.contains("std::mem::forget::<std::boxed::Box<std::string::String>>")
-                    || function_called.contains("std::mem::forget::<std::ffi::CString>")
-                    || function_called.contains("std::mem::forget::<std::boxed::Box<std::ffi::CString>>")
-                    || function_called.contains("std::mem::forget::<std::boxed::Box<&str>>")
-
-                    || function_called.contains("std::mem::forget::<std::boxed::Box<bool>>") || function_called.contains("std::mem::forget::<std::boxed::Box<char>>")
-
-                  //  MEM FORGET regex
-                    ||  MEM_FORGET_REGEX.is_match(&function_called) 
-                    || MEM_FORGET_VEC_REGEX.is_match(&function_called)
-                    || MEM_FORGET_BOX_VEC_REGEX.is_match(&function_called)
 
                 {
                     taint.entry(full_ret_place.clone())
@@ -2147,6 +2987,7 @@ fn span_to_line(span: &str) -> Option<usize> {
 enum FreeKind {
     LLVM,
     Drop,
+    StdDealloc,
 }
 
 #[derive(Debug, Clone)]
@@ -2269,6 +3110,18 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
     // execution order.  Record normal drops first and resolve them after the
     // complete alias/free-flow relation has been constructed.
     let mut pending_mir_drops: Vec<(Name, String)> = Vec::new();
+    let mut pending_std_deallocs: Vec<(Name, String)> = Vec::new();
+    let mut pending_pointer_uses: Vec<(Name, String)> = Vec::new();
+
+
+    // Directed MAY relation for references to MIR stack places. This is
+    // intentionally separate from heap free-flow/alias equivalence.
+    let mut stack_ref_targets: BTreeMap<Name, BTreeSet<Name>> = BTreeMap::new();
+
+    // Closure environment semantics are precomputed from MIR statements and
+    // the concrete GlobalICFG closure-call edges. This makes capture recovery
+    // independent from the incidental detector worklist order.
+    let closure_capture_bindings = build_closure_capture_bindings(icfg);
 
     // find & union per Name
     let find = |x: &Name, parent: &mut BTreeMap<Name, Name>| -> Name {
@@ -2295,6 +3148,139 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
             GlobalICFGNode::Mir(mir_block) => {
                // println!("-> MIR node (block_id: {}) with {} statement(s)", mir_block.block_id, mir_block.statements.len());
                 for stmt in &mir_block.statements {
+                    // Record direct stack-place references without merging them
+                    // into heap free-flow.
+                    if let Some(dest_raw) = &stmt.place {
+                        let dest = canonical_mir_local(dest_raw);
+
+                        // `deref_copy ((*_1).N: Ty)` reads field N from the
+                        // closure environment.  The call graph prepass tells us
+                        // what that field captured.
+                        if let Some(rvalue) = stmt.rvalue.as_deref() {
+                            if let Some(field_idx) =
+                                closure_field_copy_for_deref_index(rvalue)
+                            {
+                                if let Some(scope) =
+                                    mir_function_scope_from_node_id(&node_id)
+                                {
+                                    if let Some(binding) =
+                                        closure_capture_bindings
+                                            .get(&scope)
+                                            .and_then(|v| v.get(field_idx))
+                                    {
+                                        // Captured by reference: CopyForDeref
+                                        // materializes the reference value, not
+                                        // the pointee.  Preserve it in the
+                                        // separate stack-reference relation.
+                                        if !binding.stack_ref_targets.is_empty() {
+                                            stack_ref_targets
+                                                .entry(dest.clone())
+                                                .or_default()
+                                                .extend(
+                                                    binding
+                                                        .stack_ref_targets
+                                                        .iter()
+                                                        .cloned(),
+                                                );
+                                        }
+
+                                        // Captured by value: CopyForDeref
+                                        // materializes the captured value
+                                        // itself, so heap/raw-handle free-flow
+                                        // can be connected directly.
+                                        for source in &binding.by_value_sources {
+                                            let source =
+                                                canonical_mir_local(source);
+                                            free_flow_parent
+                                                .entry(dest.clone())
+                                                .or_insert(dest.clone());
+                                            free_flow_parent
+                                                .entry(source.clone())
+                                                .or_insert(source.clone());
+                                            union(
+                                                &dest,
+                                                &source,
+                                                &mut free_flow_parent,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        let direct_src = stmt
+                            .rvalue
+                            .as_deref()
+                            .and_then(direct_stack_borrow_source)
+                            .or_else(|| {
+                                let pos = stmt.details.find('&')?;
+                                let tail = &stmt.details[pos..];
+                                let end = tail.find(')').unwrap_or(tail.len());
+                                direct_stack_borrow_source(&tail[..end])
+                            });
+
+                        if let Some(src) = direct_src {
+                            let src = canonical_mir_local(&src);
+                            stack_ref_targets
+                                .entry(dest.clone())
+                                .or_default()
+                                .insert(src);
+                        }
+
+                        // Materializing the value through a reference is the
+                        // point at which the loaded value may reconnect to a
+                        // heap/raw-handle free-flow component.
+                        let deref_source = stmt
+                            .rvalue
+                            .as_deref()
+                            .and_then(direct_deref_value_source)
+                            .or_else(|| {
+                                for marker in ["copy (*", "move (*"] {
+                                    if let Some(pos) = stmt.details.find(marker) {
+                                        let tail = &stmt.details[pos..];
+                                        if let Some(close) = tail.find(')') {
+                                            if let Some(source) =
+                                                direct_deref_value_source(&tail[..=close])
+                                            {
+                                                return Some(source);
+                                            }
+                                        }
+                                    }
+                                }
+                                None
+                            });
+
+                        if let Some(reference) = deref_source {
+                            let reference = canonical_mir_local(&reference);
+                            let targets =
+                                resolve_stack_ref_values(&reference, &stack_ref_targets);
+
+                            for target in targets {
+                                let target = canonical_mir_local(&target);
+
+                                // If the referenced stack value is itself a
+                                // reference, one dereference materializes that
+                                // reference value rather than its pointee.
+                                if let Some(nested_targets) =
+                                    stack_ref_targets.get(&target).cloned()
+                                {
+                                    stack_ref_targets
+                                        .entry(dest.clone())
+                                        .or_default()
+                                        .extend(nested_targets);
+                                } else {
+                                    free_flow_parent
+                                        .entry(dest.clone())
+                                        .or_insert(dest.clone());
+                                    free_flow_parent
+                                        .entry(target.clone())
+                                        .or_insert(target.clone());
+                                    union(&dest, &target, &mut free_flow_parent);
+                                }
+                            }
+                        }
+                    }
+
                     // USE: search pattern "&(*"
                     if stmt.details.contains("&(*") {
                         if let Some(start_idx) = stmt.details.find("&(*") {
@@ -2414,24 +3400,7 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                             }
                         } 
                     }
-                    // detect the MIR-generated borrows 'Assign((_4, &_2))' OR 'Assign((_7, &_2))'
-                    else if stmt.details.starts_with("Assign(") && stmt.details.contains("(&") {
-                        let raw_place = stmt.place.as_ref().unwrap();
-                        let dst = normalize_name(raw_place);
-                        // extract the content of borrow (&_<num>)
-                        if let Some(start) = stmt.details.find("&_") {
-                            if let Some(end) = stmt.details[start..].find(')') {
-                                let src = normalize_name(&format!("Local(_{})", &stmt.details[start+1..start+1+end-1]));
-                                // add both to var_info AND union-find
-                                var_info.entry(dst.clone()).or_insert_with(VarInfo::new);
-                                var_info.entry(src.clone()).or_insert_with(VarInfo::new);
-                                free_flow_parent.entry(dst.clone()).or_insert(dst.clone());
-                                free_flow_parent.entry(src.clone()).or_insert(src.clone());
-                                union(&dst, &src, &mut free_flow_parent);
-                                //   println!("Aliased borrow: '{}' <-> '{}'", src, dst);
-                            }
-                        }
-                    }
+
                 }
 
                 if let Some(MirTerminator::Drop { details, source_info, .. }) = &mir_block.terminator {
@@ -2477,29 +3446,42 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
 
                 if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return_place, ..}) = &mir_block.terminator {   
                     // new alias case: multiple allocation on CString::from_raw
-                    if function_called.contains("std::ffi::CString::from_raw")
+                    if is_owning_from_raw_call(function_called)
                         || FROM_RAW_REGEX.is_match(&function_called)
                         || BOX_VEC_FROM_RAW_REGEX.is_match(&function_called)
                         || VEC_FROM_RAW_REGEX.is_match(&function_called)
                         || BOX_FROM_RAW_NODE_GENERIC_REGEX.is_match(&function_called)
+                        || is_vec_from_raw_parts_call(function_called)
+                        || is_string_from_raw_parts_call(function_called)
                     {
                         /* get the mir names:
                            - src is the local having ptr, e.g. "_13"
                            - dst is new CString local, e.g. "_47" */
                         let src = normalize_name(&arguments[0].arg);
+                        let src_canonical = canonical_mir_local(&src);
                         let dst = normalize_name(return_place);
                         // ENSURE both have VarInfo
                         var_info.entry(src.clone()).or_insert_with(VarInfo::new);
                         var_info.entry(dst.clone()).or_insert_with(VarInfo::new);
                         
-                        // COPY existing info from src -> dst (keep src)
-                        if let Some(info) = var_info.get(&src).cloned() {
+                        // COPY existing info from src -> dst (keep src).
+                        // Fall back to canonical spelling used by stack-ref flow.
+                        if let Some(info) = var_info
+                            .get(&src)
+                            .cloned()
+                            .or_else(|| var_info.get(&src_canonical).cloned())
+                        {
                             var_info.insert(dst.clone(), info);
                         }
                         // UNION in free-flow: set union‐find sets for Name, then union 
                         free_flow_parent.entry(src.clone()).or_insert(src.clone());
+                        free_flow_parent
+                            .entry(src_canonical.clone())
+                            .or_insert(src_canonical.clone());
                         free_flow_parent.entry(dst.clone()).or_insert(dst.clone());
-                        union(&src, &dst, &mut free_flow_parent);
+
+                        union(&src, &src_canonical, &mut free_flow_parent);
+                        union(&src_canonical, &dst, &mut free_flow_parent);
 
                         // handle also “Local(_47)”
                         let dst_local = format!("Local({})", dst);
@@ -2508,6 +3490,30 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                         free_flow_parent.entry(dst_local.clone()).or_insert(dst_local.clone());
                         union(&dst, &dst_local, &mut free_flow_parent);
                         println!("Aliased via from_raw: '{}' -> '{}'", src, dst);
+                    }
+
+                    // Direct allocator deallocation is an explicit free event.
+                    if is_raw_dealloc_call(function_called) {
+                        if let Some(arg) = arguments.get(0) {
+                            pending_std_deallocs.push((
+                                normalize_name(&arg.arg),
+                                source_info.clone(),
+                            ));
+                        }
+                    }
+
+                    // Pointer operations below require the pointer to denote a
+                    // live/valid object. Record a deferred "use" so that alias
+                    // information discovered later in traversal can resolve it.
+                    if is_pointer_memory_use_call(function_called)
+                        || is_cstr_from_ptr_call(function_called)
+                    {
+                        if let Some(arg) = arguments.get(0) {
+                            pending_pointer_uses.push((
+                                normalize_name(&arg.arg),
+                                source_info.clone(),
+                            ));
+                        }
                     }
 
                     // EXPLICIT std::mem::drop FUNCTION CALL
@@ -2763,6 +3769,37 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
         free_flow_keys.insert(rep.clone(), format!("{{{}}}", group.join(", ")));
     }
 
+    // ---- RESOLVE DIRECT std::alloc::dealloc AFTER ALIAS DISCOVERY ----
+    for (var_freed, source_info) in pending_std_deallocs {
+        if let Some(key) =
+            resolve_drop_tracking_key(&var_freed, &var_info, &free_flow_keys)
+        {
+            if let Some(info) = var_info.get_mut(&key) {
+                if info.drop_free == 0 {
+                    info.drop_free = 1;
+                    info.free_span =
+                        Some((source_info.clone(), FreeKind::StdDealloc));
+                } else {
+                    info.drop_free += 1;
+                }
+            }
+        }
+    }
+
+    // ---- RESOLVE POINTER/CStr USES AFTER ALIAS DISCOVERY ----
+    for (var_used, source_info) in pending_pointer_uses {
+        if let Some(key) =
+            resolve_drop_tracking_key(&var_used, &var_info, &free_flow_keys)
+        {
+            if let Some(info) = var_info.get_mut(&key) {
+                info.used = true;
+                if info.use_span.is_none() {
+                    info.use_span = Some(source_info);
+                }
+            }
+        }
+    }
+
     // ---- RESOLVE NORMAL MIR DROPS AFTER ALIAS DISCOVERY ----
     //
     // This makes free accounting independent from the incidental ICFG traversal
@@ -2882,7 +3919,7 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                         multiset_add(&mut use_after_free, alloc_key.clone());
                     }
                     // case Drop MIR: compare spans
-                    Some((free_span, FreeKind::Drop)) => {
+                    Some((free_span, FreeKind::Drop | FreeKind::StdDealloc)) => {
                         if let Some(use_span) = use_span_opt {
                             if let (Some(use_line), Some(free_line)) =
                                 (span_to_line(use_span), span_to_line(free_span))
@@ -3659,6 +4696,596 @@ mod phase3_1_stabilization_tests {
             Some(("<test>".to_string(), FreeKind::Drop));
 
         assert_eq!(info.effective_free(), 1);
+    }
+}
+
+#[cfg(test)]
+mod phase4_std_memory_tests {
+    use super::{
+        apply_mir_statement, apply_mir_terminator, eval_rvalue, leak_ghost_name, transfer_call,
+        AbstractMemory, CellValue, TaintStateMap, first_call_local_from_details,
+        direct_stack_borrow_source,
+        direct_deref_value_source,
+        resolve_stack_ref_values,
+        closure_aggregate_capture_operands,
+        closure_field_copy_for_deref_index,
+        is_copy_for_deref_rvalue,
+        is_closure_aggregate_rvalue,
+        mir_function_scope_from_node_id,
+        resolve_scoped_stack_ref_leaves,
+        is_direct_deref_use_rvalue
+    };
+    use std::collections::{BTreeMap, BTreeSet};
+    use crate::structs::{MirCallArgument, MirStatement, MirTerminator, SourceInfoData};
+
+    fn n(s: &str) -> String {
+        s.to_string()
+    }
+
+    fn assign_stmt(place: &str, rvalue: &str) -> MirStatement {
+        MirStatement {
+            source_info: SourceInfoData {
+                span: "<phase4-test>".to_string(),
+                scope: "<phase4-test>".to_string(),
+            },
+            kind: "Assign".to_string(),
+            details: format!("Assign(({}, {}))", place, rvalue),
+            place: Some(place.to_string()),
+            is_mutable: Some(true),
+            rvalue: Some(rvalue.to_string()),
+        }
+    }
+
+    #[test]
+    fn generic_box_new_creates_fresh_allocation() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_9)"), CellValue::ALLOC);
+
+        let details =
+            "std::boxed::Box::<crate::Nested<Vec<i32>>>::new(move _1) -> [return: bb1, unwind continue]";
+        let (ret, mem) = transfer_call(&mem, details, "_2");
+
+        assert_eq!(ret, CellValue::ALLOC);
+        assert_eq!(mem.get_cell_value(&n("Local(_2)")), CellValue::ALLOC);
+        assert_ne!(
+            mem.get_allocation(&n("Local(_2)")),
+            mem.get_allocation(&n("Local(_9)"))
+        );
+    }
+
+    #[test]
+    fn generic_box_into_raw_preserves_existing_alias_component() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::ALLOC);
+        mem.propagate_cell_value(&n("Local(_1)"), &n("Local(_9)"));
+
+        let details =
+            "std::boxed::Box::<crate::Nested<Vec<i32>>>::into_raw(move _1) -> [return: bb1, unwind continue]";
+        let (ret, mem) = transfer_call(&mem, details, "_2");
+
+        assert_eq!(ret, CellValue::MV);
+        assert_eq!(mem.get_cell_value(&n("Local(_1)")), CellValue::BOTTOM);
+        assert_eq!(mem.get_cell_value(&n("Local(_2)")), CellValue::MV);
+        assert_eq!(
+            mem.get_allocation(&n("Local(_2)")),
+            mem.get_allocation(&n("Local(_9)"))
+        );
+    }
+
+    #[test]
+    fn generic_box_from_raw_keeps_raw_alias_for_double_free_detection() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::MV);
+
+        let details =
+            "std::boxed::Box::<crate::Nested<Vec<i32>>>::from_raw(copy _1) -> [return: bb1, unwind continue]";
+        let (ret, mem) = transfer_call(&mem, details, "_2");
+
+        assert_eq!(ret, CellValue::MV);
+        assert_eq!(
+            mem.get_allocation(&n("Local(_1)")),
+            mem.get_allocation(&n("Local(_2)"))
+        );
+    }
+
+    #[test]
+    fn pointer_comparison_is_scalar_even_for_raw_allocation_values() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::MV);
+        mem.set_cell_value(&n("Local(_2)"), CellValue::MV);
+
+        assert_eq!(
+            eval_rvalue("Eq(copy _1, copy _2)", &mem),
+            CellValue::BOXTIMES
+        );
+    }
+
+    #[test]
+    fn generic_pointer_cast_preserves_tracked_allocation_alias() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::MV);
+        let mut taint = TaintStateMap::default();
+        taint
+            .entry(n("Local(_1)"))
+            .or_default()
+            .insert("assign".to_string());
+
+        let mem = apply_mir_statement(
+            &mem,
+            &mut taint,
+            &assign_stmt(
+                "Local(_2)",
+                "copy _1 as *mut crate::Node<i32> (PtrToPtr)",
+            ),
+        );
+
+        assert_eq!(
+            mem.get_allocation(&n("Local(_1)")),
+            mem.get_allocation(&n("Local(_2)"))
+        );
+        assert_eq!(mem.get_cell_value(&n("Local(_2)")), CellValue::MV);
+    }
+
+    #[test]
+    fn integer_to_pointer_cast_is_top_not_heap_alias() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::BOXTIMES);
+        let mut taint = TaintStateMap::default();
+
+        let mem = apply_mir_statement(
+            &mem,
+            &mut taint,
+            &assign_stmt("Local(_2)", "copy _1 as *mut i32 (IntToPtr)"),
+        );
+
+        assert_eq!(mem.get_cell_value(&n("Local(_2)")), CellValue::TOP);
+        assert_ne!(
+            mem.get_allocation(&n("Local(_1)")),
+            mem.get_allocation(&n("Local(_2)"))
+        );
+    }
+
+    #[test]
+    fn direct_reference_to_owner_is_stack_place_not_heap_alias() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::ALLOC);
+
+        let mut taint = TaintStateMap::default();
+        let mem = apply_mir_statement(
+            &mem,
+            &mut taint,
+            &assign_stmt("Local(_2)", "&_1"),
+        );
+
+        assert_eq!(mem.get_cell_value(&n("Local(_1)")), CellValue::ALLOC);
+        assert_eq!(mem.get_cell_value(&n("Local(_2)")), CellValue::TOP);
+        assert_ne!(
+            mem.get_allocation(&n("Local(_1)")),
+            mem.get_allocation(&n("Local(_2)"))
+        );
+    }
+
+    #[test]
+    fn direct_reference_to_raw_handle_is_stack_place_not_heap_alias() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::MV);
+
+        let mut taint = TaintStateMap::default();
+        taint
+            .entry(n("Local(_1)"))
+            .or_default()
+            .insert("assign".to_string());
+
+        let mem = apply_mir_statement(
+            &mem,
+            &mut taint,
+            &assign_stmt("Local(_2)", "&_1"),
+        );
+
+        assert_eq!(mem.get_cell_value(&n("Local(_1)")), CellValue::MV);
+        assert_eq!(mem.get_cell_value(&n("Local(_2)")), CellValue::TOP);
+        assert_ne!(
+            mem.get_allocation(&n("Local(_1)")),
+            mem.get_allocation(&n("Local(_2)"))
+        );
+    }
+
+    #[test]
+    fn stack_borrow_parser_distinguishes_direct_place_from_deref_borrow() {
+        assert_eq!(
+            direct_stack_borrow_source("&_7"),
+            Some(n("Local(_7)"))
+        );
+        assert_eq!(
+            direct_stack_borrow_source("&mut _7"),
+            Some(n("Local(_7)"))
+        );
+        assert_eq!(
+            direct_stack_borrow_source("&raw const _7"),
+            Some(n("Local(_7)"))
+        );
+        assert_eq!(direct_stack_borrow_source("&(*_7)"), None);
+    }
+
+    #[test]
+    fn direct_deref_parser_recovers_reference_local() {
+        assert_eq!(
+            direct_deref_value_source("copy (*_4)"),
+            Some(n("Local(_4)"))
+        );
+        assert_eq!(
+            direct_deref_value_source("move (*_9)"),
+            Some(n("Local(_9)"))
+        );
+        assert_eq!(direct_deref_value_source("copy ((*_4).0: i32)"), None);
+    }
+
+    #[test]
+    fn stack_reference_resolution_is_a_may_relation() {
+        let mut refs: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        refs.entry(n("Local(_4)"))
+            .or_default()
+            .insert(n("Local(_2)"));
+        refs.entry(n("Local(_4)"))
+            .or_default()
+            .insert(n("Local(_8)"));
+
+        let targets = resolve_stack_ref_values(&n("Local(_4)"), &refs);
+        assert_eq!(
+            targets,
+            BTreeSet::from([n("Local(_2)"), n("Local(_8)")])
+        );
+    }
+
+    #[test]
+    fn closure_aggregate_parser_preserves_capture_field_order() {
+        let rv =
+            "{closure@/tmp/main.rs:33:23: 33:25} { ptr: move _4, len: copy _7 }";
+
+        assert_eq!(
+            closure_aggregate_capture_operands(rv),
+            Some(vec![n("Local(_4)"), n("Local(_7)")])
+        );
+    }
+
+    #[test]
+    fn closure_copy_for_deref_parser_recognizes_observed_mir_spellings() {
+        assert_eq!(
+            closure_field_copy_for_deref_index(
+                "deref_copy ((*_1).0: &*mut i32)"
+            ),
+            Some(0)
+        );
+        assert_eq!(
+            closure_field_copy_for_deref_index(
+                "deref_copy (_1.3: &LockFreeStack<i32>)"
+            ),
+            Some(3)
+        );
+        assert_eq!(
+            closure_field_copy_for_deref_index("deref_copy (*_18)"),
+            None
+        );
+    }
+
+    #[test]
+    fn closure_and_copy_for_deref_are_positive_top_not_bottom() {
+        let mem = AbstractMemory::default();
+
+        assert!(is_closure_aggregate_rvalue(
+            "{closure@/tmp/main.rs:1:1: 1:3} { ptr: move _4 }"
+        ));
+        assert_eq!(
+            eval_rvalue(
+                "{closure@/tmp/main.rs:1:1: 1:3} { ptr: move _4 }",
+                &mem
+            ),
+            CellValue::TOP
+        );
+
+        assert!(is_copy_for_deref_rvalue(
+            "deref_copy ((*_1).0: &*mut i32)"
+        ));
+        assert_eq!(
+            eval_rvalue("deref_copy ((*_1).0: &*mut i32)", &mem),
+            CellValue::TOP
+        );
+    }
+
+    #[test]
+    fn direct_deref_use_is_positive_top_not_bottom() {
+        let mem = AbstractMemory::default();
+
+        assert!(is_direct_deref_use_rvalue("copy (*_8)"));
+        assert!(is_direct_deref_use_rvalue("move (*_9)"));
+        assert!(!is_direct_deref_use_rvalue("copy _8"));
+
+        assert_eq!(
+            eval_rvalue("copy (*_8)", &mem),
+            CellValue::TOP
+        );
+    }
+
+    #[test]
+    fn scoped_stack_reference_resolution_reaches_outer_value_leaf() {
+        let mut refs: BTreeMap<(String, String), BTreeSet<String>> =
+            BTreeMap::new();
+        refs.entry(("rust::main".to_string(), n("Local(_4)")))
+            .or_default()
+            .insert(n("Local(_2)"));
+
+        assert_eq!(
+            resolve_scoped_stack_ref_leaves(
+                "rust::main",
+                &n("Local(_4)"),
+                &refs
+            ),
+            BTreeSet::from([n("Local(_2)")])
+        );
+
+        // A normal by-value local is not misclassified as a reference.
+        assert!(
+            resolve_scoped_stack_ref_leaves(
+                "rust::main",
+                &n("Local(_7)"),
+                &refs
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn mir_scope_parser_is_function_and_closure_aware() {
+        assert_eq!(
+            mir_function_scope_from_node_id("rust::main::bb2"),
+            Some("rust::main".to_string())
+        );
+        assert_eq!(
+            mir_function_scope_from_node_id(
+                "rust::main::{closure#0}::bb3"
+            ),
+            Some("rust::main::{closure#0}".to_string())
+        );
+    }
+
+    #[test]
+    fn raw_address_does_not_alias_managed_heap_allocation() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::ALLOC);
+        let mut taint = TaintStateMap::default();
+
+        let mem = apply_mir_statement(
+            &mem,
+            &mut taint,
+            &assign_stmt("Local(_2)", "&raw const _1"),
+        );
+
+        assert_eq!(mem.get_cell_value(&n("Local(_2)")), CellValue::TOP);
+        assert_ne!(
+            mem.get_allocation(&n("Local(_1)")),
+            mem.get_allocation(&n("Local(_2)"))
+        );
+    }
+
+    #[test]
+    fn pointer_offset_preserves_allocation_alias() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::MV);
+        mem.set_cell_value(&n("Local(_3)"), CellValue::BOXTIMES);
+        let mut taint = TaintStateMap::default();
+
+        let mem = apply_mir_statement(
+            &mem,
+            &mut taint,
+            &assign_stmt("Local(_2)", "Offset(copy _1, copy _3)"),
+        );
+
+        assert_eq!(
+            mem.get_allocation(&n("Local(_1)")),
+            mem.get_allocation(&n("Local(_2)"))
+        );
+    }
+
+    #[test]
+    fn mem_forget_returns_unit_and_keeps_leak_witness() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::ALLOC);
+
+        let details =
+            "std::mem::forget::<std::boxed::Box<i32>>(move _1) -> [return: bb1, unwind continue]";
+        let (ret, mem) = transfer_call(&mem, details, "_0");
+
+        assert_eq!(ret, CellValue::BOXTIMES);
+        assert_eq!(mem.get_cell_value(&n("Local(_1)")), CellValue::BOTTOM);
+
+        let ghost = leak_ghost_name(&n("Local(_1)"));
+        assert_eq!(mem.get_cell_value(&ghost), CellValue::MV);
+    }
+
+    #[test]
+    fn box_leak_consumes_owner_and_retains_leaked_allocation() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::ALLOC);
+
+        let details =
+            "std::boxed::Box::<i32>::leak::<'_>(move _1) -> [return: bb1, unwind continue]";
+        let (ret, mem) = transfer_call(&mem, details, "_2");
+
+        assert_eq!(ret, CellValue::MV);
+        assert_eq!(mem.get_cell_value(&n("Local(_1)")), CellValue::BOTTOM);
+        assert_eq!(mem.get_cell_value(&n("Local(_2)")), CellValue::MV);
+    }
+
+    #[test]
+    fn call_operand_parser_strips_comma_from_first_copied_argument() {
+        let details =
+            "std::vec::Vec::<i32>::from_raw_parts(copy _1, copy _2, copy _3) -> [return: bb1, unwind continue]";
+
+        assert_eq!(
+            first_call_local_from_details(details),
+            Some(n("Local(_1)"))
+        );
+    }
+
+    #[test]
+    fn call_operand_parser_selects_first_operand_independent_of_move_copy_kind() {
+        let copy_then_move =
+            "foo(copy _3, move _4) -> [return: bb1, unwind continue]";
+        let move_then_copy =
+            "foo(move _5, copy _6) -> [return: bb1, unwind continue]";
+
+        assert_eq!(
+            first_call_local_from_details(copy_then_move),
+            Some(n("Local(_3)"))
+        );
+        assert_eq!(
+            first_call_local_from_details(move_then_copy),
+            Some(n("Local(_5)"))
+        );
+    }
+
+    #[test]
+    fn vec_from_raw_parts_reuses_raw_allocation_component() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::MV);
+
+        let details =
+            "std::vec::Vec::<i32>::from_raw_parts(copy _1, copy _2, copy _3) -> [return: bb1, unwind continue]";
+        let (ret, mem) = transfer_call(&mem, details, "_4");
+
+        assert_eq!(ret, CellValue::MV);
+        assert_eq!(
+            mem.get_allocation(&n("Local(_1)")),
+            mem.get_allocation(&n("Local(_4)"))
+        );
+    }
+
+    #[test]
+    fn vec_as_mut_ptr_is_borrowed_raw_view_not_ownership_transfer() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::ALLOC);
+
+        let details =
+            "std::vec::Vec::<i32>::as_mut_ptr(move _1) -> [return: bb1, unwind continue]";
+        let (ret, mem) = transfer_call(&mem, details, "_2");
+
+        assert_eq!(ret, CellValue::ALLOC);
+        assert_eq!(mem.get_cell_value(&n("Local(_1)")), CellValue::ALLOC);
+        assert_eq!(
+            mem.get_allocation(&n("Local(_1)")),
+            mem.get_allocation(&n("Local(_2)"))
+        );
+    }
+
+    #[test]
+    fn raw_alloc_is_top_because_alloc_may_return_null() {
+        let mem = AbstractMemory::default();
+        let details =
+            "std::alloc::alloc(move _1) -> [return: bb1, unwind continue]";
+        let (ret, mem) = transfer_call(&mem, details, "_2");
+
+        assert_eq!(ret, CellValue::TOP);
+        assert_eq!(mem.get_cell_value(&n("Local(_2)")), CellValue::TOP);
+    }
+
+    #[test]
+    fn raw_dealloc_frees_tracked_raw_allocation_and_returns_unit() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::MV);
+
+        let details =
+            "std::alloc::dealloc(copy _1, copy _2) -> [return: bb1, unwind continue]";
+        let (ret, mem) = transfer_call(&mem, details, "_0");
+
+        assert_eq!(ret, CellValue::BOXTIMES);
+        assert_eq!(mem.get_cell_value(&n("Local(_1)")), CellValue::FREED);
+    }
+
+    #[test]
+    fn cstr_from_ptr_is_borrow_not_ownership_transfer() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::MV);
+        let mut taint = TaintStateMap::default();
+        taint
+            .entry(n("Local(_1)"))
+            .or_default()
+            .insert("assign".to_string());
+
+        let term = MirTerminator::Call {
+            details: "_2 = std::ffi::CStr::from_ptr::<'_>(copy _1)".to_string(),
+            source_info: "<phase4-test>".to_string(),
+            function_called: "std::ffi::CStr::from_ptr::<'_>".to_string(),
+            arguments: vec![MirCallArgument {
+                arg: "Local(_1) [mutable]".to_string(),
+                is_mutable: Some(true),
+            }],
+            return_place: "_2".to_string(),
+            return_target: Some("bb1".to_string()),
+            unwind_target: "continue".to_string(),
+        };
+
+        let mem = apply_mir_terminator(&mem, &mut taint, &term);
+
+        assert_eq!(mem.get_cell_value(&n("Local(_1)")), CellValue::MV);
+        assert_eq!(
+            mem.get_allocation(&n("Local(_1)")),
+            mem.get_allocation(&n("Local(_2)"))
+        );
+        assert!(taint
+            .get("Local(_2)")
+            .is_some_and(|tags| tags.contains("assign")));
+    }
+
+    #[test]
+    fn raw_realloc_is_explicitly_conservative_and_keeps_old_allocation() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::MV);
+
+        let details =
+            "std::alloc::realloc(copy _1, copy _2, copy _3) -> [return: bb1, unwind continue]";
+        let (ret, mem2) = transfer_call(&mem, details, "_4");
+
+        assert_eq!(ret, CellValue::TOP);
+        assert_eq!(mem2.get_cell_value(&n("Local(_1)")), CellValue::MV);
+    }
+
+    #[test]
+    fn ptr_write_does_not_claim_backing_allocation_was_freed() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::MV);
+
+        let details =
+            "std::ptr::write::<i32>(copy _1, move _2) -> [return: bb1, unwind continue]";
+        let (ret, mem2) = transfer_call(&mem, details, "_0");
+
+        assert_eq!(ret, CellValue::BOXTIMES);
+        assert_eq!(mem2.get_cell_value(&n("Local(_1)")), CellValue::MV);
+    }
+
+    #[test]
+    fn ptr_drop_in_place_is_not_equated_with_backing_deallocation() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::MV);
+
+        let details =
+            "std::ptr::drop_in_place::<i32>(copy _1) -> [return: bb1, unwind continue]";
+        let (ret, mem2) = transfer_call(&mem, details, "_0");
+
+        assert_eq!(ret, CellValue::BOXTIMES);
+        assert_eq!(mem2.get_cell_value(&n("Local(_1)")), CellValue::MV);
+    }
+
+    #[test]
+    fn ptr_read_does_not_free_source_allocation() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::MV);
+
+        let details =
+            "std::ptr::read::<i32>(copy _1) -> [return: bb1, unwind continue]";
+        let (ret, mem2) = transfer_call(&mem, details, "_2");
+
+        assert_eq!(ret, CellValue::TOP);
+        assert_eq!(mem2.get_cell_value(&n("Local(_1)")), CellValue::MV);
     }
 }
 
