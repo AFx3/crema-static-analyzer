@@ -115,8 +115,8 @@ fn main() {
         }
 
     let (abstract_state, taint_state) = fixed_point_analysis(&global_icfg);
-   // println!("Final Abstract State: {:#?}", abstract_state);
-   // println!("Final Taint State: {:#?}", taint_state);
+    println!("Final Abstract State: {:#?}", abstract_state);
+    println!("Final Taint State: {:#?}", taint_state);
 
     detect_mem_issues(&global_icfg, &taint_state, &abstract_state);
 }
@@ -226,30 +226,43 @@ fn analyze_target(target: &Target, crate_type: &str, project_path: &PathBuf, _li
     }
 }
 
-// recursively searches for C files (files ending in .c) within the project directory
+// Discover authored C sources deterministically.
+//
+// Cargo/build-script output lives under `target/` and may itself contain C
+// helper files (for example cc-rs `flag_check.c`). Those generated files are
+// analyzer inputs neither semantically nor reproducibly: `read_dir` order is
+// unspecified, so selecting the first recursively observed `.c` can change
+// which program is sent to SVF. Exclude generated trees and sort explicitly.
 fn find_c_files(project_path: &PathBuf) -> Vec<String> {
     let mut c_files = Vec::new();
-    visit_dirs(project_path, &mut |entry| {
-        if let Some(ext) = entry.path().extension() {
-            if ext == "c" {
-                c_files.push(entry.path().to_string_lossy().to_string());
-            }
-        }
-    }).expect("Failed to traverse project directory");
+    visit_c_source_dirs(project_path, &mut c_files)
+        .expect("Failed to traverse project directory");
+    c_files.sort();
     c_files
 }
 
-// recursively visits directories and applies the callback to every entry
-fn visit_dirs(dir: &Path, cb: &mut dyn FnMut(&fs::DirEntry)) -> std::io::Result<()> {
-    if dir.is_dir() {
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            cb(&entry);
-            if entry.path().is_dir() {
-                visit_dirs(&entry.path(), cb)?;
+fn visit_c_source_dirs(dir: &Path, c_files: &mut Vec<String>) -> std::io::Result<()> {
+    if !dir.is_dir() {
+        return Ok(());
+    }
+
+    let mut entries = fs::read_dir(dir)?.collect::<Result<Vec<_>, _>>()?;
+    entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in entries {
+        let path = entry.path();
+        if path.is_dir() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name == "target" || name == ".git" {
+                continue;
             }
+            visit_c_source_dirs(&path, c_files)?;
+        } else if path.extension().is_some_and(|ext| ext == "c") {
+            c_files.push(path.to_string_lossy().to_string());
         }
     }
+
     Ok(())
 }
 
@@ -257,8 +270,18 @@ fn visit_dirs(dir: &Path, cb: &mut dyn FnMut(&fs::DirEntry)) -> std::io::Result<
 // compiles the C file into an object file, and creates a static library;
 // returns the path to the created library.
 fn compile_c_files(c_files: &Vec<String>, project_path: &PathBuf) -> String {
-    // use the first C file in the list
+    // Preserve the historical one-C-module analysis scope, but make the
+    // choice deterministic and restricted to authored source files.
     let c_file = &c_files[0];
+    if c_files.len() > 1 {
+        eprintln!(
+            "CREMA note: {} authored C files found; Phase-5 analyzes the first \
+lexicographically: {}",
+            c_files.len(),
+            c_file
+        );
+    }
+    println!("Selected C source for SVF: {}", c_file);
 
     // define paths 
     let output_llvm_cfile = "../SVF-example/ffi.ll";
@@ -315,4 +338,45 @@ fn compile_c_files(c_files: &Vec<String>, project_path: &PathBuf) -> String {
     output_lib.to_string_lossy().to_string()
 }
 
+#[cfg(test)]
+mod c_source_discovery_tests {
+    use super::find_c_files;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
+    #[test]
+    fn ignores_generated_target_c_and_sorts_authored_sources() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "crema-c-source-discovery-{}-{}",
+            std::process::id(),
+            nonce
+        ));
+        let src = root.join("src");
+        let generated = root.join("target/debug/build/cc/out");
+        fs::create_dir_all(&src).unwrap();
+        fs::create_dir_all(&generated).unwrap();
+
+        let a = src.join("a.c");
+        let z = src.join("z.c");
+        fs::write(&z, "int z(void){return 0;}\n").unwrap();
+        fs::write(&a, "int a(void){return 0;}\n").unwrap();
+        fs::write(generated.join("flag_check.c"), "int main(void){return 0;}\n")
+            .unwrap();
+
+        let got = find_c_files(&PathBuf::from(&root));
+        assert_eq!(
+            got,
+            vec![
+                a.to_string_lossy().to_string(),
+                z.to_string_lossy().to_string(),
+            ]
+        );
+
+        fs::remove_dir_all(root).unwrap();
+    }
+}

@@ -83,6 +83,15 @@ pub struct LlvmJsonNode {
     pub outgoing_edges: Vec<LlvmEdge>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SvfPhiOperand {
+    pub op_var_id: usize,
+    /// ICFG node associated with this incoming Phi operand in the legacy
+    /// SVF exporter schema.  It is not required for provenance propagation,
+    /// but retaining it makes deserialization lossless for existing artifacts.
+    pub icfg_node: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SvfStatement {
     pub stmt_id: usize,
     pub stmt_type: String,
@@ -93,10 +102,52 @@ pub struct SvfStatement {
     pub rhs_var_id: Option<usize>,
     pub res_var_id: Option<usize>,
     pub operand_var_ids: Option<Vec<usize>>,
+    /// Backward-compatible representation emitted by the pre-Phase-5
+    /// `svf-ex.cpp` for PhiStmt.
+    pub operand_vars: Option<Vec<SvfPhiOperand>>,
     pub call_inst: Option<String>,
     pub is_conditional: Option<bool>,
     pub condition_var_id: Option<usize>,
     pub successors: Option<Vec<BranchSuccessor>>,
+}
+
+impl SvfStatement {
+    /// Canonical SSA result variable for statements whose producer schemas
+    /// historically used either `lhs_var_id` or `res_var_id`.
+    ///
+    /// The Phase-5 consumer must accept both because existing SVF artifacts
+    /// encode PhiStmt results as `res_var_id`, while the canonical exporter
+    /// added by Phase 5 also emits `lhs_var_id`.
+    pub fn result_var_id(&self) -> Option<usize> {
+        self.lhs_var_id.or(self.res_var_id)
+    }
+
+    /// Canonical ordered list of operand VarIDs across both supported SVF
+    /// JSON schemas. The canonical `operand_var_ids` field has precedence;
+    /// `operand_vars[*].op_var_id` is a backward-compatibility fallback only.
+    /// Duplicate IDs are removed without changing first-seen order.
+    pub fn normalized_operand_var_ids(&self) -> Vec<usize> {
+        let mut out = Vec::new();
+
+        if let Some(ids) = &self.operand_var_ids {
+            for id in ids {
+                if !out.contains(id) {
+                    out.push(*id);
+                }
+            }
+            return out;
+        }
+
+        if let Some(operands) = &self.operand_vars {
+            for operand in operands {
+                if !out.contains(&operand.op_var_id) {
+                    out.push(operand.op_var_id);
+                }
+            }
+        }
+
+        out
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

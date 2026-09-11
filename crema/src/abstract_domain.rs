@@ -574,6 +574,29 @@ impl AbstractState {
         }
         None
     }
+
+    /// Union of every alias component containing `var` across all program
+    /// points represented in this AbstractState.
+    ///
+    /// `state_map` is a HashMap, so selecting the first matching allocation is
+    /// not a stable way to reconstruct a global MAY-alias relation.  Different
+    /// basic blocks may legitimately contain different alias components for the
+    /// same local (for example `{p,q}` on one path and `{p,q,r}` on another).
+    /// The detector is path-insensitive, therefore its global free-flow closure
+    /// must conservatively include every alias witnessed at any block.
+    fn get_may_aliases(&self, var: &Name) -> BTreeSet<Name> {
+        let mut aliases = BTreeSet::new();
+
+        for mem in self.state_map.values() {
+            for alloc in mem.state.keys() {
+                if alloc.set.contains(var) {
+                    aliases.extend(alloc.set.iter().cloned());
+                }
+            }
+        }
+
+        aliases
+    }
 }
 
 // ============================================================================
@@ -587,6 +610,19 @@ impl AbstractState {
 pub type Taint = HashSet<String>;           // e.g. "assign", "free", "use"
 pub type TaintStateMap = HashMap<Name, Taint>; // mapping: variable -> markers (for one basic block)
 pub type TaintState = HashMap<String, TaintStateMap>; // mapping: block ID -> (var -> markers)
+
+/// Positive allocator-family provenance for a pointer returned by the C
+/// malloc/calloc family.
+///
+/// This is an auxiliary MAY property rather than a CellValue: malloc/calloc
+/// may return null, so the primary lattice cannot soundly claim definite
+/// ALLOC.
+const TAINT_C_MALLOC_FAMILY: &str = "alloc_family:c_malloc";
+const TAINT_ASSIGN: &str = "assign";
+
+fn taint_has_c_malloc_origin(tags: &Taint) -> bool {
+    tags.contains(TAINT_C_MALLOC_FAMILY)
+}
 
 
 /// Least upper bound for the auxiliary may-taint/provenance component.
@@ -667,14 +703,23 @@ pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNod
 // ----------------------------------------------------------------------
 // TRANSFER FUNCTION DISPATCH
 // ----------------------------------------------------------------------
-pub fn transfer_function(node: &GlobalICFGNode, in_mem: &AbstractMemory, in_taint: &TaintStateMap) -> (AbstractMemory, TaintStateMap) {
+pub fn transfer_function(
+    node_id: &str,
+    node: &GlobalICFGNode,
+    in_mem: &AbstractMemory,
+    in_taint: &TaintStateMap,
+) -> (AbstractMemory, TaintStateMap) {
     match node {
         GlobalICFGNode::Mir(bb) => process_mir_basic_block(bb, in_mem, in_taint),
-        GlobalICFGNode::DummyCall(dummy_call) => transfer_dummycall_node(dummy_call, in_mem, in_taint),
-        GlobalICFGNode::DummyRet(dummy_ret) => transfer_dummyret_node(dummy_ret, in_mem, in_taint),
-        GlobalICFGNode::Llvm(llvm_node) => transfer_llvm_node(llvm_node, in_mem, in_taint),
-        
-       // _ => (in_mem.clone(), in_taint.clone()),
+        GlobalICFGNode::DummyCall(dummy_call) => {
+            transfer_dummycall_node(dummy_call, in_mem, in_taint)
+        }
+        GlobalICFGNode::DummyRet(dummy_ret) => {
+            transfer_dummyret_node(dummy_ret, in_mem, in_taint)
+        }
+        GlobalICFGNode::Llvm(llvm_node) => {
+            transfer_llvm_node(node_id, llvm_node, in_mem, in_taint)
+        }
     }
 }
 
@@ -688,41 +733,42 @@ fn normalize(var: &str) -> String {
     }
 }
 
-pub fn transfer_dummyret_node(dummy: &DummyNode, in_mem: &AbstractMemory, in_taint: &TaintStateMap) -> (AbstractMemory, TaintStateMap) {
-    let mut mem_ret   = in_mem.clone();
+pub fn transfer_dummyret_node(
+    dummy: &DummyNode,
+    in_mem: &AbstractMemory,
+    in_taint: &TaintStateMap,
+) -> (AbstractMemory, TaintStateMap) {
+    let mut mem_ret = in_mem.clone();
     let mut taint_ret = in_taint.clone();
 
-    eprintln!("--- ENTER DummyRet {:?}", dummy);
-
-    if dummy.is_internal.unwrap_or(false) {
-        if let (Some(mir_var), Some(llvm_var)) = (&dummy.mir_var, &dummy.llvm_var) {
-            // normalize var names
-            let full_mir  = normalize(mir_var);
+    if let (Some(mir_var), Some(llvm_var)) = (&dummy.mir_var, &dummy.llvm_var) {
+        if dummy.is_internal.unwrap_or(false) {
+            let full_mir = normalize(mir_var);
             let full_llvm = normalize(llvm_var);
 
-            eprintln!("DUMMYRET normalize: '{}'->'{}', '{}'->'{}'", mir_var, full_mir, llvm_var, full_llvm);
-
-            // leggo i due valori
             let old = mem_ret.get_cell_value(&full_mir);
             let ret = mem_ret.get_cell_value(&full_llvm);
-            eprintln!("BEFORE JOIN: {}={:?}, {}={:?}", full_mir, old, full_llvm, ret);
+            mem_ret.set_cell_value(&full_mir, old.join(ret));
 
-            // join e and write
-            let j = old.join(ret);
-            eprintln!("JOINED {}={:?}", full_mir, j);
-            mem_ret.set_cell_value(&full_mir, j);
-            eprintln!("AFTER SET: mem_ret[{}]={:?}", full_mir, mem_ret.get_cell_value(&full_mir));
-
-            // taint similary manages
             let mut t0 = taint_ret.remove(&full_mir).unwrap_or_default();
             let t1 = taint_ret.remove(&full_llvm).unwrap_or_default();
-            t0.extend(t1.into_iter());
-            taint_ret.insert(full_mir.clone(), t0.clone());
-            eprintln!("TAINT {}={:?}", full_mir, t0);
+            t0.extend(t1);
+            taint_ret.insert(full_mir, t0);
+        } else {
+            // C -> Rust return bridge.
+            let full_mir = full_local_name(mir_var);
+            let returned_tags =
+                taint_ret.get(llvm_var).cloned().unwrap_or_default();
+
+            if taint_has_c_malloc_origin(&returned_tags) {
+                mem_ret.assign_local_value(&full_mir, CellValue::TOP);
+                let entry = taint_ret.entry(full_mir).or_default();
+                entry.extend(returned_tags);
+                entry.insert(TAINT_ASSIGN.to_string());
+            }
         }
     }
 
-    // non serve nemmeno fare union, per ora (credo!!!!) da testare
     (mem_ret, taint_ret)
 }
 
@@ -1116,6 +1162,22 @@ fn direct_deref_value_source(e: &str) -> Option<Name> {
 /// `Local(_4) [mutable]` all become `Local(_4)`.
 fn canonical_mir_local(name: &str) -> Name {
     full_local_name(name.trim())
+}
+
+/// Return the MIR locals participating in a raw-pointer cast assignment.
+///
+/// The detector records them as free-flow participants, but deliberately does
+/// not union them here.  The later AbstractState alias reconciliation is the
+/// semantic proof that the cast preserved an already tracked allocation. This
+/// avoids manufacturing aliases for integer-to-pointer or otherwise untracked
+/// casts while still making a real `raw.cast::<c_void>()` visible to direct
+/// foreign `free` resolution.
+fn detector_pointer_cast_participants(
+    stmt: &MirStatement,
+) -> Option<(Name, Name)> {
+    let dest = canonical_mir_local(stmt.place.as_ref()?);
+    let source = pointer_cast_source(stmt.rvalue.as_deref()?)?;
+    Some((dest, canonical_mir_local(&source)))
 }
 
 /// Immediate may-targets of a stack reference.
@@ -1731,11 +1793,25 @@ fn is_cstr_from_ptr_call(s: &str) -> bool {
 }
 
 
+/// Raw-pointer method cast emitted as a MIR Call terminator by the pinned
+/// toolchain, e.g.
+/// `std::ptr::mut_ptr::<impl *mut i32>::cast::<std::ffi::c_void>`.
+/// This is an address-preserving view conversion, not an ownership transfer.
+fn is_raw_pointer_cast_method_call(s: &str) -> bool {
+    let mut_ptr = s.contains("::ptr::mut_ptr::<impl *mut ");
+    let const_ptr = s.contains("::ptr::const_ptr::<impl *const ");
+    (mut_ptr || const_ptr) && s.contains(">::cast::<")
+}
+
 /// APIs that expose a raw pointer borrowed from an existing owner/view without
 /// transferring ownership. We keep this type-filtered: `MaybeUninit::as_mut_ptr`
 /// for example points into a stack/local object and must not be confused with
 /// a tracked heap allocation.
 fn is_borrowed_raw_pointer_view_call(s: &str) -> bool {
+    if is_raw_pointer_cast_method_call(s) {
+        return true;
+    }
+
     let as_ptr = s.contains("::as_ptr") || s.contains("::as_mut_ptr");
     as_ptr
         && (s.contains("CString")
@@ -1831,7 +1907,7 @@ fn replace_consumed_local_with(
 //////////////////////////////////////////////////////////////////////////////////
 
 pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place: &str) -> (CellValue, AbstractMemory) {
-    let _ffi_functions = match load_ffi_functions("./ffi_functions.json") {
+    let ffi_functions = match load_ffi_functions("./ffi_functions.json") {
         Ok(set) => set,
         Err(e) => {
             eprintln!("Failed to load FFI functions: {:?}", e);
@@ -1992,6 +2068,15 @@ pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place
                 new_mem = update_state(new_mem, &source, CellValue::FREED);
             }
         }
+        CellValue::BOXTIMES
+
+    } else if is_c_free_call_text(func_call_details, &ffi_functions) {
+        // A Rust call site can still invoke the C malloc-family deallocator.
+        //
+        // Keep the primary abstract state conservative: a C-origin pointer is
+        // nullable and CellValue has no NULL element/path split.  The detector
+        // records the explicit free event after complete alias/provenance
+        // discovery.
         CellValue::BOXTIMES
 
     } else if is_ptr_read_call(func_call_details) {
@@ -2265,7 +2350,10 @@ pub fn apply_mir_statement(mem: &AbstractMemory, taint: &mut TaintStateMap, stmt
                     if let Some(_var) = &stmt.place {
                         // update taint for alloc
                     }
-                } else if rvalue.contains("move") && !rvalue.contains("[") { // only move transferr the ownership, [move] array (no heap)
+                } else if rvalue.contains("move")
+                    && !rvalue.contains("[")
+                    && pointer_cast_source(rvalue).is_none()
+                { // only plain move transfers ownership; pointer casts preserve allocation identity
                     // MOVE semantics: TRANSFER the OWNERSHIP of the value
                     let src_var = extract_moved_var(rvalue);
                     if !src_var.is_empty() {
@@ -2559,14 +2647,27 @@ pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term:
 
                 } else if is_vec_from_raw_parts_call(function_called)
                     || is_string_from_raw_parts_call(function_called)
-                    || is_raw_alloc_call(function_called)
+                {
+                    let full_ret = full_local_name(return_place);
+                    let mut tags = HashSet::new();
+                    tags.insert(TAINT_ASSIGN.to_string());
+
+                    if let Some(source) = first_call_local_from_details(details) {
+                        if let Some(source_tags) = taint.get(&source) {
+                            tags.extend(source_tags.iter().cloned());
+                        }
+                    }
+
+                    taint.entry(full_ret).or_default().extend(tags);
+
+                } else if is_raw_alloc_call(function_called)
                     || is_raw_alloc_zeroed_call(function_called)
                 {
                     let full_ret = full_local_name(return_place);
                     taint
                         .entry(full_ret)
                         .or_default()
-                        .insert("assign".to_string());
+                        .insert(TAINT_ASSIGN.to_string());
 
                 } else if is_raw_dealloc_call(function_called) {
                     let full_ret = full_local_name(return_place);
@@ -2699,16 +2800,294 @@ pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term:
 
 
 // ----------------------------------------------------------------------
+// LLVM / SVF ALLOCATION-PROVENANCE HELPERS
+// ----------------------------------------------------------------------
+
+/// Example replicated node:
+/// `llvm::alloc_c_string::node12::rust::main::bb4`.
+fn llvm_call_suffix_from_global_node_id(node_id: &str) -> Option<&str> {
+    node_id.rfind("::rust::").map(|pos| &node_id[pos + 2..])
+}
+
+fn scoped_llvm_var(var_id: usize, node_id: &str) -> Name {
+    match llvm_call_suffix_from_global_node_id(node_id) {
+        Some(suffix) => format!("{}@{}", var_id, suffix),
+        None => var_id.to_string(),
+    }
+}
+
+fn scoped_llvm_ir_var(ir_id: usize, node_id: &str) -> Name {
+    match llvm_call_suffix_from_global_node_id(node_id) {
+        Some(suffix) => format!("%{}@{}", ir_id, suffix),
+        None => format!("%{}", ir_id),
+    }
+}
+
+fn is_c_malloc_family_alloc_call(info: &str) -> bool {
+    info.contains("@malloc(") || info.contains("@calloc(")
+}
+
+
+/// SVF represents the malloc/calloc return pointer by an AddrStmt at the
+/// allocator CallICFGNode. Its lhs is the returned pointer-valued SVF VarID.
+fn llvm_c_allocation_result_vars(node: &LlvmJsonNode) -> Vec<usize> {
+    if node.node_kind_string != "FunCallBlock"
+        || !is_c_malloc_family_alloc_call(&node.info)
+    {
+        return Vec::new();
+    }
+
+    node.svf_statements
+        .iter()
+        .filter(|stmt| stmt.stmt_type == "AddrStmt")
+        .filter_map(|stmt| stmt.lhs_var_id)
+        .collect()
+}
+
+/// Relations that can carry a pointer/value provenance fact.
+///
+/// CmpStmt/BinaryOPStmt are excluded: a bool/integer computed from a pointer
+/// is not an allocation handle.
+fn llvm_provenance_flow_sources(stmt: &SvfStatement) -> Vec<usize> {
+    match stmt.stmt_type.as_str() {
+        "AssignStmt"
+        | "CopyStmt"
+        | "LoadStmt"
+        | "StoreStmt"
+        | "GepStmt"
+        | "PhiStmt"
+        | "SelectStmt" => {
+            let mut out = Vec::new();
+
+            if let Some(rhs) = stmt.rhs_var_id {
+                out.push(rhs);
+            }
+            for operand in stmt.normalized_operand_var_ids() {
+                if !out.contains(&operand) {
+                    out.push(operand);
+                }
+            }
+
+            out
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn propagate_llvm_provenance(
+    node_id: &str,
+    stmt: &SvfStatement,
+    mem: &mut AbstractMemory,
+    taint: &mut TaintStateMap,
+) {
+    let Some(lhs) = stmt.result_var_id() else {
+        return;
+    };
+
+    let carries_c_malloc = llvm_provenance_flow_sources(stmt)
+        .into_iter()
+        .map(|source| scoped_llvm_var(source, node_id))
+        .filter_map(|source| taint.get(&source))
+        .any(taint_has_c_malloc_origin);
+
+    if !carries_c_malloc {
+        return;
+    }
+
+    let lhs_name = scoped_llvm_var(lhs, node_id);
+    taint
+        .entry(lhs_name.clone())
+        .or_default()
+        .insert(TAINT_C_MALLOC_FAMILY.to_string());
+
+    // Do not propagate the generic `assign` marker through every SVF
+    // temporary/stack slot. Only allocation witnesses and the Rust FFI return
+    // local are detector roots; intermediate SVF values carry provenance only.
+    mem.assign_local_value(&lhs_name, CellValue::TOP);
+}
+
+/// Positive C malloc-family provenance is sufficient to report a possible
+/// allocator / ownership contract mismatch at these Rust APIs. Absence of the
+/// marker does NOT establish safety, and this phase does not claim otherwise.
+fn c_malloc_rust_allocator_contract_warning(function_called: &str) -> Option<&'static str> {
+    if is_cstring_from_raw_call(function_called) {
+        Some(
+            "CString::from_raw requires CString::into_raw provenance; \
+foreign malloc-family ownership violates that contract",
+        )
+    } else if is_box_from_raw_call(function_called) {
+        Some(
+            "Box::from_raw requires Global-allocator provenance and the exact Box<T> \
+layout/value contract; plain C malloc-family provenance does not prove those preconditions",
+        )
+    } else if is_vec_from_raw_parts_call(function_called) {
+        Some(
+            "Vec::from_raw_parts requires Global-allocator provenance plus exact \
+layout/length/capacity invariants; plain C malloc-family provenance does not prove them",
+        )
+    } else if is_string_from_raw_parts_call(function_called) {
+        Some(
+            "String::from_raw_parts requires the String/Vec Global-allocator and \
+layout/capacity/UTF-8 invariants; plain C malloc-family provenance does not prove them",
+        )
+    } else if is_raw_dealloc_call(function_called) {
+        Some(
+            "std::alloc::dealloc requires allocation by the Rust Global allocator \
+with the matching Layout; plain C malloc-family provenance does not prove that contract",
+        )
+    } else {
+        None
+    }
+}
+
+
+/// Recognize the C malloc-family deallocator when the call occurs in Rust MIR.
+///
+/// A bare `free` is accepted only when CREMA's FFI scan found an `extern`
+/// declaration named `free`.  This avoids classifying an unrelated Rust
+/// function named `free` as libc's deallocator.
+///
+/// A `libc::...::free` path is accepted directly because the declaration lives
+/// in the dependency crate, not in the analyzed crate's foreign module.
+fn is_c_free_function(
+    function_called: &str,
+    ffi_functions: &HashSet<String>,
+) -> bool {
+    let f = function_called.trim();
+
+    if f == "free" {
+        return ffi_functions.contains("free");
+    }
+
+    f.contains("libc::") && f.ends_with("::free")
+}
+
+/// `transfer_call` receives the textual MIR call rather than the isolated
+/// `function_called` field, so use an equivalent conservative recognizer there.
+fn is_c_free_call_text(
+    call_details: &str,
+    ffi_functions: &HashSet<String>,
+) -> bool {
+    if call_details.contains("libc::") && call_details.contains("::free(") {
+        return true;
+    }
+
+    ffi_functions.contains("free")
+        && (call_details.trim_start().starts_with("free(")
+            || call_details.contains(" free("))
+}
+
+/// Positive proof that `var` belongs to a free-flow component carrying
+/// malloc/calloc provenance.
+///
+/// Absence of this marker is UNKNOWN.  It is not used as proof that C `free`
+/// is invalid.
+fn is_known_c_malloc_family(
+    var: &Name,
+    free_flow_keys: &BTreeMap<Name, String>,
+    c_malloc_origin_vars: &HashSet<Name>,
+) -> bool {
+    if c_malloc_origin_vars.contains(var) {
+        return true;
+    }
+
+    let Some(group) = lookup_free_flow_group(var, free_flow_keys) else {
+        return false;
+    };
+
+    group
+        .trim_matches(|c| c == '{' || c == '}')
+        .split(',')
+        .map(str::trim)
+        .any(|member| c_malloc_origin_vars.contains(member))
+}
+
+static LLVM_FREE_IR_ARG_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"@free\([^%]*%([0-9]+)").unwrap());
+
+fn llvm_free_ir_argument_id(info: &str) -> Option<usize> {
+    LLVM_FREE_IR_ARG_REGEX
+        .captures(info)
+        .and_then(|caps| caps.get(1))
+        .and_then(|m| m.as_str().parse::<usize>().ok())
+}
+
+
+/// Reachability in the already inlined GlobalICFG.
+///
+/// This is intentionally graph-semantic rather than source-line based: a C
+/// `free` event has an LLVM node, while a later Rust use has a MIR node and the
+/// two source spans are not comparable.  A path `free_node ->* use_node`
+/// witnesses a possible execution in which the use occurs after the free.
+fn icfg_may_reach(
+    icfg: &GlobalICFGOrdered,
+    from: &str,
+    to: &str,
+) -> bool {
+    if from == to {
+        return true;
+    }
+
+    let mut seen = BTreeSet::new();
+    let mut work = VecDeque::from([from.to_string()]);
+    seen.insert(from.to_string());
+
+    while let Some(node) = work.pop_front() {
+        for edge in icfg.icfg_edges.iter().filter(|e| e.source == node) {
+            if edge.destination == to {
+                return true;
+            }
+            if seen.insert(edge.destination.clone()) {
+                work.push_back(edge.destination.clone());
+            }
+        }
+    }
+
+    false
+}
+
+fn c_malloc_has_use_after_inlined_free(
+    icfg: &GlobalICFGOrdered,
+    free_nodes: &BTreeSet<String>,
+    use_nodes: &BTreeSet<String>,
+) -> bool {
+    free_nodes.iter().any(|free_node| {
+        use_nodes
+            .iter()
+            .any(|use_node| icfg_may_reach(icfg, free_node, use_node))
+    })
+}
+
+// ----------------------------------------------------------------------
 // LLVM TRANSFER FUNCTIONS (super blueprint)
 // ----------------------------------------------------------------------
-fn transfer_llvm_node(llvm_node: &LlvmJsonNode, in_mem: &AbstractMemory, in_taint: &TaintStateMap) -> (AbstractMemory, TaintStateMap) {
+fn transfer_llvm_node(
+    node_id: &str,
+    llvm_node: &LlvmJsonNode,
+    in_mem: &AbstractMemory,
+    in_taint: &TaintStateMap,
+) -> (AbstractMemory, TaintStateMap) {
     let mut current_mem = in_mem.clone();
-    let current_taint = in_taint.clone();
-    for stmt in &llvm_node.svf_statements {
-        current_mem = apply_llvm_statement(&current_mem, stmt);
-        // (update taint for LLVM statements)
+    let mut current_taint = in_taint.clone();
 
+    for result in llvm_c_allocation_result_vars(llvm_node) {
+        let result_name = scoped_llvm_var(result, node_id);
+        current_mem.assign_local_value(&result_name, CellValue::TOP);
+        let tags = current_taint.entry(result_name).or_default();
+        tags.insert(TAINT_ASSIGN.to_string());
+        tags.insert(TAINT_C_MALLOC_FAMILY.to_string());
     }
+
+    for stmt in &llvm_node.svf_statements {
+        propagate_llvm_provenance(
+            node_id,
+            stmt,
+            &mut current_mem,
+            &mut current_taint,
+        );
+        current_mem = apply_llvm_statement(&current_mem, stmt);
+    }
+
     (current_mem, current_taint)
 }
 
@@ -2841,6 +3220,7 @@ pub fn fixed_point_analysis(icfg: &GlobalICFGOrdered) -> (AbstractState, TaintSt
     {
         let node = get_node_by_id(icfg, &entry);
         let (m, t) = transfer_function(
+            &entry,
             &node,
             &abs_state.get(&entry).unwrap_or_default(),
             &taint_state.get(&entry).cloned().unwrap_or_default()
@@ -2866,7 +3246,7 @@ pub fn fixed_point_analysis(icfg: &GlobalICFGOrdered) -> (AbstractState, TaintSt
         if let Some(succs) = succs_map.get(&current) {
             for succ in succs {
                 let node = get_node_by_id(icfg, succ);
-                let (new_mem, new_taint) = transfer_function(&node, &curr_mem, &curr_taint);
+                let (new_mem, new_taint) = transfer_function(succ, &node, &curr_mem, &curr_taint);
 
                 let old_mem   = abs_state.get(succ).unwrap_or_default();
                 let old_taint = taint_state.get(succ).cloned().unwrap_or_default();
@@ -2986,6 +3366,10 @@ fn span_to_line(span: &str) -> Option<usize> {
 #[derive(Debug, Clone)]
 enum FreeKind {
     LLVM,
+    /// Matching malloc/calloc -> free observed in LLVM/SVF.
+    CMallocFree,
+    /// C `free` called directly from a Rust MIR call site.
+    CMallocFreeRustCall,
     Drop,
     StdDealloc,
 }
@@ -2994,9 +3378,19 @@ enum FreeKind {
 struct VarInfo {
     llvm_free: usize,
     drop_free: usize,
+    /// Explicit C `free` calls observed at Rust MIR call sites.
+    c_free_mir: usize,
     used: bool,
     use_span: Option<String>,
-    free_span: Option<(String, FreeKind)>, // stores the first free span and its kind (LLVM or Drop)
+    free_span: Option<(String, FreeKind)>, // first free span and its kind
+    /// ICFG nodes at which the allocation/pointee is used.
+    use_nodes: BTreeSet<String>,
+    /// Inlined LLVM nodes containing matching C `free` events.
+    llvm_free_nodes: BTreeSet<String>,
+    /// MIR nodes containing a direct matching C `free` call.  Keeping node
+    /// identity lets UAF detection use graph reachability rather than source
+    /// line order.
+    c_free_mir_nodes: BTreeSet<String>,
 }
 
 impl VarInfo {
@@ -3004,9 +3398,13 @@ impl VarInfo {
         Self {
             llvm_free: 0,
             drop_free: 0,
+            c_free_mir: 0,
             used: false,
             use_span: None,
             free_span: None,
+            use_nodes: BTreeSet::new(),
+            llvm_free_nodes: BTreeSet::new(),
+            c_free_mir_nodes: BTreeSet::new(),
         }
     }
  
@@ -3014,11 +3412,16 @@ impl VarInfo {
     // otherwise return the sum.
     // this way an LLVM free + a Drop free produces effective_free == 1.
     fn effective_free(&self) -> usize {
-        if self.llvm_free > 0 && self.drop_free > 0 {
+        // Preserve CREMA's historical LLVM-vs-Drop deduplication.  A direct
+        // Rust call to C `free` is nevertheless a separate explicit
+        // deallocation event (so `free(p); free(p);` counts as two).
+        let legacy = if self.llvm_free > 0 && self.drop_free > 0 {
             std::cmp::max(self.llvm_free, self.drop_free)
         } else {
             self.llvm_free + self.drop_free
-        }
+        };
+
+        legacy + self.c_free_mir
     }
 }
 /// Resolve a MIR local mentioned by a Drop terminator to an already tracked
@@ -3062,26 +3465,65 @@ fn resolve_drop_tracking_key(
 }
 
 
+/// Choose the single logical source required by CREMA's historical
+/// allocation-identity map without making Phase-5 C-origin behavior depend on
+/// Phi/Select operand serialization order.
+///
+/// If any candidate already carries positive C malloc-family provenance, choose
+/// a deterministic C-origin representative. Otherwise preserve the historical
+/// first-source policy to avoid changing the frozen Phase-4.4 semantics.
+fn preferred_provenance_source(
+    source_names: &[Name],
+    c_malloc_origin_vars: &HashSet<Name>,
+) -> Option<Name> {
+    let mut c_candidates: Vec<Name> = source_names
+        .iter()
+        .filter(|name| c_malloc_origin_vars.contains(*name))
+        .cloned()
+        .collect();
+    c_candidates.sort();
+    c_candidates.dedup();
+
+    c_candidates
+        .into_iter()
+        .next()
+        .or_else(|| source_names.first().cloned())
+}
+
 // DETECTION OF MEMORY ISSUES
 pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, abs_state: &AbstractState) -> (MultiSet, MultiSet, MultiSet) {
 
     // SETUP
-    // SVF‐level: VarID -> Name normalized
-    let mut svf_to_name = BTreeMap::new();
-    let mut ir_to_name  = BTreeMap::new();
-    let mut var_info    = BTreeMap::new();
+    // Numeric LLVM/SVF identifiers are scoped by the replicated FFI call site.
+    let mut svf_to_name: BTreeMap<Name, Name> = BTreeMap::new();
+    let mut ir_to_name: BTreeMap<Name, Name> = BTreeMap::new();
+    let mut var_info = BTreeMap::new();
 
     //////////////////////////////////////////////////////////////////////////////
-    // variables freed in LLVM
+    // Cross-language allocator diagnostics.
     let mut llvm_warnings: Vec<(String, String)> = Vec::new();
+    let mut ffi_allocator_warnings: Vec<(String, String, String)> = Vec::new();
+    let mut c_malloc_origin_vars: HashSet<Name> = HashSet::new();
+    let mut c_free_mismatch_warnings: Vec<(String, String)> = Vec::new();
+
+    // Used only to disambiguate a bare user-declared foreign `free` from an
+    // unrelated Rust function with the same name.
+    let ffi_functions = load_ffi_functions("./ffi_functions.json")
+        .unwrap_or_default();
     //////////////////////////////////////////////////////////////////////////////
-    
+
     for (block, vars) in taint_states.iter() {
         for (var, markers) in vars.iter() {
-            if markers.contains("assign") {
+            if markers.contains(TAINT_ASSIGN) {
                 let norm = normalize_name(var);
-                println!("Tracking variable '{}' from block '{}' (markers: {:?})", norm, block, markers);
-                var_info.entry(norm).or_insert(VarInfo::new());
+                println!(
+                    "Tracking variable '{}' from block '{}' (markers: {:?})",
+                    norm, block, markers
+                );
+                var_info.entry(norm.clone()).or_insert(VarInfo::new());
+                if taint_has_c_malloc_origin(markers) {
+                    c_malloc_origin_vars.insert(norm);
+                }
             }
         }
     }
@@ -3101,9 +3543,12 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
     }
 
     // free-flow e union-find
-    let mut free_flow_vars   = BTreeSet::new();
     let mut free_flow_parent = BTreeMap::new();
     let mut processed_llvm_free = BTreeSet::new();
+
+    for var in &c_malloc_origin_vars {
+        free_flow_parent.insert(var.clone(), var.clone());
+    }
 
     // MIR Drop nodes may be encountered before the allocation-producing
     // from_raw node because GlobalICFG traversal order is not a semantic
@@ -3111,7 +3556,12 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
     // complete alias/free-flow relation has been constructed.
     let mut pending_mir_drops: Vec<(Name, String)> = Vec::new();
     let mut pending_std_deallocs: Vec<(Name, String)> = Vec::new();
-    let mut pending_pointer_uses: Vec<(Name, String)> = Vec::new();
+    let mut pending_c_free_calls: Vec<(Name, String, String)> = Vec::new();
+    // Store the scoped textual LLVM IR argument key rather than resolving it
+    // immediately.  The SVF->logical mapping and MIR<->LLVM alias relation are
+    // only complete after the whole GlobalICFG traversal.
+    let mut pending_llvm_free_calls: Vec<(Name, String, String)> = Vec::new();
+    let mut pending_pointer_uses: Vec<(Name, String, String)> = Vec::new();
 
 
     // Directed MAY relation for references to MIR stack places. This is
@@ -3148,6 +3598,23 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
             GlobalICFGNode::Mir(mir_block) => {
                // println!("-> MIR node (block_id: {}) with {} statement(s)", mir_block.block_id, mir_block.statements.len());
                 for stmt in &mir_block.statements {
+                    // A pointer cast can introduce the exact MIR local later
+                    // passed to a direct foreign `free` (for example `_4` from
+                    // `raw.cast::<c_void>()`). Register both endpoints in the
+                    // detector relation. Do not union them yet: the global
+                    // AbstractState reconciliation below will connect them only
+                    // when transfer semantics actually proved an alias.
+                    if let Some((dest, source)) =
+                        detector_pointer_cast_participants(stmt)
+                    {
+                        free_flow_parent
+                            .entry(dest.clone())
+                            .or_insert(dest);
+                        free_flow_parent
+                            .entry(source.clone())
+                            .or_insert(source);
+                    }
+
                     // Record direct stack-place references without merging them
                     // into heap free-flow.
                     if let Some(dest_raw) = &stmt.place {
@@ -3290,6 +3757,7 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                                // println!("Found use pattern: '{}' -> '{}'", stmt.details, var_used);
                                 if let Some(info) = var_info.get_mut(&var_used) {
                                     info.used = true;
+                                    info.use_nodes.insert(node_id.clone());
                                     if info.use_span.is_none() {
                                         info.use_span = Some(stmt.source_info.span.clone());
                                    //     println!("Marking '{}' as used at span: {}", var_used, stmt.source_info.span);
@@ -3299,6 +3767,7 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                                     let alt = normalize_name(&alt);
                                     if let Some(info) = var_info.get_mut(&alt) {
                                         info.used = true;
+                                        info.use_nodes.insert(node_id.clone());
                                         if info.use_span.is_none() {
                                             info.use_span = Some(stmt.source_info.span.clone());
                                         //    println!("Marking alternative '{}' as used at span: {}", alt, stmt.source_info.span);
@@ -3324,6 +3793,7 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                                 // first try direct lookup:
                                 if let Some(info) = var_info.get_mut(&var_used_norm) {
                                     info.used = true;
+                                    info.use_nodes.insert(node_id.clone());
                                     if info.use_span.is_none() {
                                         info.use_span = Some(stmt.source_info.span.clone());
                                        // println!("Marking '{}' as used at span: {}", var_used_norm, stmt.source_info.span);
@@ -3333,6 +3803,7 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                                     let alt = normalize_name(&format!("Local({})", var_used_norm));
                                     if let Some(info) = var_info.get_mut(&alt) {
                                         info.used = true;
+                                        info.use_nodes.insert(node_id.clone());
                                         if info.use_span.is_none() {
                                             info.use_span = Some(stmt.source_info.span.clone());
                                           //  println!("Marking alternative '{}' as used at span: {}", alt, stmt.source_info.span);
@@ -3343,6 +3814,7 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                                         if rep != alt {
                                             if let Some(info) = var_info.get_mut(&rep) {
                                                 info.used = true;
+                                                info.use_nodes.insert(node_id.clone());
                                                 if info.use_span.is_none() {
                                                     info.use_span = Some(stmt.source_info.span.clone());
                                                 }
@@ -3386,6 +3858,7 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                                 for key in cands {
                                     if let Some(info) = var_info.get_mut(&key) {
                                         info.used = true;
+                                        info.use_nodes.insert(node_id.clone());
                                         if info.use_span.is_none() {
                                             info.use_span = Some(stmt.source_info.span.clone());
                                         }
@@ -3445,6 +3918,29 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
 
 
                 if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return_place, ..}) = &mir_block.terminator {   
+                    if let Some(reason) =
+                        c_malloc_rust_allocator_contract_warning(function_called)
+                    {
+                        if let Some(first_arg) = arguments.first() {
+                            let source = canonical_mir_local(&first_arg.arg);
+                            let block_has_origin = taint_states
+                                .get(&node_id)
+                                .and_then(|m| m.get(&source))
+                                .map(taint_has_c_malloc_origin)
+                                .unwrap_or(false);
+
+                            if block_has_origin
+                                || c_malloc_origin_vars.contains(&source)
+                            {
+                                ffi_allocator_warnings.push((
+                                    source,
+                                    source_info.clone(),
+                                    reason.to_string(),
+                                ));
+                            }
+                        }
+                    }
+
                     // new alias case: multiple allocation on CString::from_raw
                     if is_owning_from_raw_call(function_called)
                         || FROM_RAW_REGEX.is_match(&function_called)
@@ -3502,6 +3998,19 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                         }
                     }
 
+                    // A C-family free can be called directly from Rust.  The
+                    // call site is MIR, but allocator compatibility is defined
+                    // by the malloc/free family rather than by source language.
+                    if is_c_free_function(function_called, &ffi_functions) {
+                        if let Some(arg) = arguments.get(0) {
+                            pending_c_free_calls.push((
+                                canonical_mir_local(&arg.arg),
+                                source_info.clone(),
+                                node_id.clone(),
+                            ));
+                        }
+                    }
+
                     // Pointer operations below require the pointer to denote a
                     // live/valid object. Record a deferred "use" so that alias
                     // information discovered later in traversal can resolve it.
@@ -3512,6 +4021,7 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                             pending_pointer_uses.push((
                                 normalize_name(&arg.arg),
                                 source_info.clone(),
+                                node_id.clone(),
                             ));
                         }
                     }
@@ -3550,12 +4060,16 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                                         VarInfo {
                                             llvm_free: 0,
                                             drop_free: 1,
+                                            c_free_mir: 0,
                                             used: false,
                                             use_span: None,
                                             free_span: Some((
                                                 source_info.clone(),
                                                 FreeKind::Drop,
                                             )),
+                                            use_nodes: BTreeSet::new(),
+                                            llvm_free_nodes: BTreeSet::new(),
+                                            c_free_mir_nodes: BTreeSet::new(),
                                         },
                                     );
                                 }
@@ -3572,20 +4086,26 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                     let mir_var = normalize_name(mir_var);
                     let llvm_var = normalize_name(llvm_var);
             
-                    if let Some((num_str, _)) = llvm_var.split_once('@') {
-                        if let Ok(svf_id) = num_str.parse::<usize>() {
-                            svf_to_name.insert(svf_id, llvm_var.clone());
-                        }
-                    }
+                    svf_to_name.insert(llvm_var.clone(), llvm_var.clone());
             
                     if !dummy_call.is_internal.unwrap_or(false) {
-                        if let Some(info) = var_info.remove(&mir_var) {
-                       //     println!("Transferring from '{}' to '{}' with free tracking", mir_var, llvm_var);
-                            var_info.insert(llvm_var.clone(), info);
-                            free_flow_vars.insert(llvm_var.clone());
-                            free_flow_parent.insert(llvm_var.clone(), llvm_var.clone());
-                            free_flow_vars.insert(mir_var.clone());
-                            free_flow_parent.insert(mir_var.clone(), llvm_var.clone());
+                        if var_info.contains_key(&mir_var) {
+                            // Passing an argument to C is non-consuming.  Do
+                            // not move/copy historical event counters into the
+                            // formal VarInfo: that would duplicate prior frees
+                            // when the same pointer is passed more than once.
+                            // Instead create an empty event record for the LLVM
+                            // alias and relate both names in free-flow.
+                            var_info
+                                .entry(llvm_var.clone())
+                                .or_insert_with(VarInfo::new);
+                            free_flow_parent
+                                .entry(llvm_var.clone())
+                                .or_insert(llvm_var.clone());
+                            free_flow_parent
+                                .entry(mir_var.clone())
+                                .or_insert(mir_var.clone());
+                            union(&mir_var, &llvm_var, &mut free_flow_parent);
                         } else {
                             println!("No tracking info per MIR var '{}'", mir_var);
                         }
@@ -3600,114 +4120,113 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                 }
             },
             GlobalICFGNode::Llvm(llvm_node) => {
-              //  println!("-> LLVM node (id: {}) con {} SVF statements", llvm_node.node_id, llvm_node.svf_statements.len());
+                for result in llvm_c_allocation_result_vars(&llvm_node) {
+                    let key = scoped_llvm_var(result, &node_id);
+                    svf_to_name.entry(key.clone()).or_insert(key);
+                }
+
                 for stmt in &llvm_node.svf_statements {
-                    // 1) PROPAGATE THE MAPPING varid to name
-                    if let (Some(lhs), Some(rhs)) = (stmt.lhs_var_id, stmt.rhs_var_id) {
-                        if let Some(name) = svf_to_name.get(&rhs).cloned() {
-                            svf_to_name.insert(lhs, name.clone());
+                    let lhs_key = stmt
+                        .result_var_id()
+                        .map(|id| scoped_llvm_var(id, &node_id));
+
+                    let source_names: Vec<Name> =
+                        llvm_provenance_flow_sources(stmt)
+                            .into_iter()
+                            .map(|id| scoped_llvm_var(id, &node_id))
+                            .map(|key| {
+                                svf_to_name.get(&key).cloned().unwrap_or(key)
+                            })
+                            .collect();
+
+                    if let Some(lhs_key) = lhs_key {
+                        if let Some(source) = preferred_provenance_source(
+                            &source_names,
+                            &c_malloc_origin_vars,
+                        ) {
+                            svf_to_name.insert(lhs_key.clone(), source);
+                        } else {
+                            svf_to_name
+                                .entry(lhs_key.clone())
+                                .or_insert(lhs_key.clone());
                         }
-                    }
-                    // 2) EXTRACT SVF varid X e IR id N 
-                    if let Some(eq_pos) = stmt.stmt_info.find('=') {
-                        let before_eq = &stmt.stmt_info[..eq_pos];
-                        if let Some(percent_pos) = before_eq.rfind('%') {
-                            let digits: String = before_eq[percent_pos + 1..]
-                                .chars()
-                                .take_while(|c| c.is_ascii_digit())
-                                .collect();
-                            if !digits.is_empty() {
+
+                        if let Some(eq_pos) = stmt.stmt_info.find('=') {
+                            let before_eq = &stmt.stmt_info[..eq_pos];
+                            if let Some(percent_pos) = before_eq.rfind('%') {
+                                let digits: String =
+                                    before_eq[percent_pos + 1..]
+                                        .chars()
+                                        .take_while(|c| c.is_ascii_digit())
+                                        .collect();
+
                                 if let Ok(ir_id) = digits.parse::<usize>() {
-                                    if let Some(lhs) = stmt.lhs_var_id {
-                                        if let Some(name) = svf_to_name.get(&lhs).cloned() {
-                                            ir_to_name.insert(ir_id, name.clone());
-                                          //  println!("Mapped IR-temp '%{}' → {}", ir_id, name);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    // 3) PROPAGATION LOGIC VAR_INFO + UNION-FIND
-                    if let Some(rhs) = stmt.rhs_var_id {
-                        let rhs_name = normalize_name(&rhs.to_string());
-                        if var_info.contains_key(&rhs_name) {
-                            if let Some(lhs) = stmt.lhs_var_id {
-                                let lhs_name = normalize_name(&lhs.to_string());
-                              //  println!("LLVM assignment: '{}' propaga {} -> {}", stmt.stmt_info, rhs_name, lhs_name);
-                                // move VarInfo da rhs_name a lhs_name
-                                if let Some(info) = var_info.remove(&rhs_name) {
-                                    var_info.insert(lhs_name.clone(), info);
-                                }
-                                // update union-find if needed
-                                if free_flow_vars.contains(&rhs_name)
-                                    || free_flow_vars.contains(&lhs_name)
-                                    || free_flow_parent.contains_key(&rhs_name)
-                                    || free_flow_parent.contains_key(&lhs_name)
-                                {
-                                    free_flow_vars.insert(lhs_name.clone());
-                                    union(&rhs_name, &lhs_name, &mut free_flow_parent);
+                                    let logical = svf_to_name
+                                        .get(&lhs_key)
+                                        .cloned()
+                                        .unwrap_or(lhs_key.clone());
+                                    ir_to_name.insert(
+                                        scoped_llvm_ir_var(ir_id, &node_id),
+                                        logical,
+                                    );
                                 }
                             }
                         }
                     }
                 }
-                
-                // handling free calls in the llvm:
-                if llvm_node.info.contains("@free(") && llvm_node.node_kind_string == "FunCallBlock" {
-                 //   println!("LLVM node {} è una free call; risolvo via IR-map", llvm_node.node_id);
 
-                    // 4) ESTRACTION N from "%N"
-                    if let Some(p) = llvm_node.info.find('%') {
-                        let rest = &llvm_node.info[p + 1..];
-                        if let Some(len) = rest.find(|c: char| !c.is_ascii_digit()) {
-                            if let Ok(ir_id) = rest[..len].parse::<usize>() {
-                                // 4.1) first, try in ir_to_name
-                                let mut var_name_opt = ir_to_name.get(&ir_id).cloned();
-                                
-                                // if it fails, use free_flow_vars
-                                if var_name_opt.is_none() {
-                                    var_name_opt = free_flow_vars
-                                        .iter()
-                                        .find(|v| var_info.contains_key(*v))
-                                        .cloned();
-                                }
-                                if let Some(var_name) = var_name_opt {
-                                    let rep = find(&var_name, &mut free_flow_parent);
-                                    if !processed_llvm_free.contains(&rep) {
-                                        if let Some(info) = var_info.get_mut(&var_name) {
-                                            info.llvm_free += 1;
-                                            info.free_span = Some((llvm_node.info.clone(), FreeKind::LLVM));
-                                         //   println!("Incremented LLVM free count per '{}'", var_name);
-
-                                            if info.drop_free == 0 {
-                                                // no drop registered -> warning
-                                                llvm_warnings.push((var_name.clone(), llvm_node.info.clone()));
-                                            }
-                                        }
-                                        processed_llvm_free.insert(rep);
-                                    } else {
-                                       println!("Group '{}' già processato per LLVM free", rep);
-                                    }
-                                } else {
-                                   println!("No variabile found at free call %{}", ir_id);
-                                }
-                            }
-                        }
+                if llvm_node.info.contains("@free(")
+                    && llvm_node.node_kind_string == "FunCallBlock"
+                {
+                    if let Some(ir_id) =
+                        llvm_free_ir_argument_id(&llvm_node.info)
+                    {
+                        pending_llvm_free_calls.push((
+                            scoped_llvm_ir_var(ir_id, &node_id),
+                            llvm_node.info.clone(),
+                            node_id.clone(),
+                        ));
                     }
                 }
             },
             GlobalICFGNode::DummyRet(dummy_ret) => {
-                println!("-> DummyRet node '{}': transferring from LLVM var {:?} to MIR var {:?}", node_id, dummy_ret.llvm_var, dummy_ret.mir_var);
-                if let (Some(mir_var), Some(llvm_var)) = (&dummy_ret.mir_var, &dummy_ret.llvm_var) {
-                    let mir_var = normalize_name(mir_var);
+                println!(
+                    "-> DummyRet node '{}': transferring from LLVM var {:?} to MIR var {:?}",
+                    node_id, dummy_ret.llvm_var, dummy_ret.mir_var
+                );
+
+                if let (Some(mir_var), Some(llvm_var)) =
+                    (&dummy_ret.mir_var, &dummy_ret.llvm_var)
+                {
+                    let mir_var = canonical_mir_local(mir_var);
                     let llvm_var = normalize_name(llvm_var);
-                    if let Some(info) = var_info.remove(&llvm_var) {
-                        println!("Transferring from '{}' to '{}'", llvm_var, mir_var);
+                    let logical_llvm = svf_to_name
+                        .get(&llvm_var)
+                        .cloned()
+                        .unwrap_or_else(|| llvm_var.clone());
+
+                    if let Some(info) = var_info
+                        .remove(&logical_llvm)
+                        .or_else(|| var_info.remove(&llvm_var))
+                    {
                         var_info.insert(mir_var.clone(), info);
-                        if free_flow_vars.remove(&llvm_var) {
-                            free_flow_vars.insert(mir_var.clone());
-                            union(&llvm_var, &mir_var, &mut free_flow_parent);
+
+                        free_flow_parent
+                            .entry(logical_llvm.clone())
+                            .or_insert(logical_llvm.clone());
+                        free_flow_parent
+                            .entry(mir_var.clone())
+                            .or_insert(mir_var.clone());
+                        union(
+                            &logical_llvm,
+                            &mir_var,
+                            &mut free_flow_parent,
+                        );
+
+                        if c_malloc_origin_vars.contains(&logical_llvm)
+                            || c_malloc_origin_vars.contains(&llvm_var)
+                        {
+                            c_malloc_origin_vars.insert(mir_var.clone());
                         }
                     }
                 }
@@ -3742,13 +4261,15 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
         .collect();
 
     for var in all_vars.iter() {
-        if let Some(alloc) = abs_state.get_allocation(var) {
-            for candidate in alloc.set.iter() {
-                let cn = normalize_name(candidate);
-                if all_vars.contains(&cn) {
-                    free_flow_parent.entry(var.clone()).or_insert(var.clone());
-                    union(var, &cn, &mut free_flow_parent);
-                }
+        // Reconcile against the complete MAY-alias relation accumulated over
+        // every abstract program point.  Using only `get_allocation(var)` here
+        // selected one arbitrary HashMap entry and could split a real alias
+        // component depending on map iteration order.
+        for candidate in abs_state.get_may_aliases(var) {
+            let cn = normalize_name(&candidate);
+            if all_vars.contains(&cn) {
+                free_flow_parent.entry(var.clone()).or_insert(var.clone());
+                union(var, &cn, &mut free_flow_parent);
             }
         }
     }
@@ -3769,6 +4290,98 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
         free_flow_keys.insert(rep.clone(), format!("{{{}}}", group.join(", ")));
     }
 
+    // ---- RESOLVE INLINED LLVM free() AFTER ALIAS DISCOVERY ----
+    //
+    // This makes C free accounting independent from incidental ordered_nodes
+    // order and from whether the MIR<->LLVM formal bridge was visited before
+    // the free node.  There is deliberately no "pick any tracked variable"
+    // fallback: an unresolved free stays unresolved rather than being assigned
+    // to the wrong allocation.
+    for (ir_key, free_info, free_node_id) in pending_llvm_free_calls {
+        let Some(mapped) = ir_to_name.get(&ir_key).cloned() else {
+            continue;
+        };
+
+        let Some(key) =
+            resolve_drop_tracking_key(&mapped, &var_info, &free_flow_keys)
+        else {
+            continue;
+        };
+
+        let matching_c_family = is_known_c_malloc_family(
+            &key,
+            &free_flow_keys,
+            &c_malloc_origin_vars,
+        );
+
+        let processed_key = if matching_c_family {
+            format!("{}@@{}", key, free_node_id)
+        } else {
+            lookup_free_flow_group(&key, &free_flow_keys)
+                .unwrap_or_else(|| key.clone())
+        };
+
+        if processed_llvm_free.insert(processed_key) {
+            if let Some(info) = var_info.get_mut(&key) {
+                info.llvm_free += 1;
+                if matching_c_family {
+                    info.llvm_free_nodes.insert(free_node_id.clone());
+                }
+                if info.free_span.is_none() {
+                    info.free_span = Some((
+                        free_info.clone(),
+                        if matching_c_family {
+                            FreeKind::CMallocFree
+                        } else {
+                            FreeKind::LLVM
+                        },
+                    ));
+                }
+
+                if !matching_c_family && info.drop_free == 0 {
+                    llvm_warnings.push((key.clone(), free_info));
+                }
+            }
+        }
+    }
+
+    // ---- RESOLVE DIRECT C free() CALLS AFTER ALIAS DISCOVERY ----
+    for (var_freed, source_info, free_node_id) in pending_c_free_calls {
+        if let Some(key) =
+            resolve_drop_tracking_key(&var_freed, &var_info, &free_flow_keys)
+        {
+            let matching_c_family = is_known_c_malloc_family(
+                &key,
+                &free_flow_keys,
+                &c_malloc_origin_vars,
+            );
+
+            if let Some(info) = var_info.get_mut(&key) {
+                info.c_free_mir += 1;
+                if matching_c_family {
+                    info.c_free_mir_nodes.insert(free_node_id);
+                }
+                if info.free_span.is_none() {
+                    info.free_span = Some((
+                        source_info.clone(),
+                        FreeKind::CMallocFreeRustCall,
+                    ));
+                }
+            }
+
+            // If CREMA tracks the allocation but has no positive C-malloc
+            // provenance for its component, keep the pre-existing Rust->C
+            // allocator-mismatch warning.  Untracked/unknown origins do not
+            // reach this branch and are not classified.
+            if !matching_c_family {
+                c_free_mismatch_warnings.push((
+                    key,
+                    source_info,
+                ));
+            }
+        }
+    }
+
     // ---- RESOLVE DIRECT std::alloc::dealloc AFTER ALIAS DISCOVERY ----
     for (var_freed, source_info) in pending_std_deallocs {
         if let Some(key) =
@@ -3787,12 +4400,13 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
     }
 
     // ---- RESOLVE POINTER/CStr USES AFTER ALIAS DISCOVERY ----
-    for (var_used, source_info) in pending_pointer_uses {
+    for (var_used, source_info, use_node_id) in pending_pointer_uses {
         if let Some(key) =
             resolve_drop_tracking_key(&var_used, &var_info, &free_flow_keys)
         {
             if let Some(info) = var_info.get_mut(&key) {
                 info.used = true;
+                info.use_nodes.insert(use_node_id);
                 if info.use_span.is_none() {
                     info.use_span = Some(source_info);
                 }
@@ -3847,9 +4461,12 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                     if last_keys.contains(k) {
                         true
                     } else if let Some(group) = lookup_free_flow_group(k, &free_flow_keys) {
-                        group_contains_any(&group, &last_keys) || info.effective_free() > 0
+                        group_contains_any(&group, &last_keys)
+                            || info.effective_free() > 0
+                            || group_contains_any(&group, &c_malloc_origin_vars)
                     } else {
                         info.effective_free() > 0
+                            || c_malloc_origin_vars.contains(k)
                     }
                 });
             } else {
@@ -3859,10 +4476,13 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
     }
         // FINAL MERGE: from var_info -> alloc_info, mantaining use_span e (span, FreeKind)
         let mut alloc_info: HashMap<String,(
-            usize,                    // free count
-            bool,                     // used ?
-            Option<String>,           // use_span
-            Option<(String, FreeKind)> // free_span + kind
+            usize,                     // free count
+            bool,                      // used ?
+            Option<String>,            // use_span
+            Option<(String, FreeKind)>, // free_span + kind
+            BTreeSet<String>,           // semantic use ICFG nodes
+            BTreeSet<String>,           // matching LLVM C-free nodes
+            BTreeSet<String>            // matching MIR direct-C-free nodes
         )> = HashMap::new();
 
         for (var, info) in var_info.into_iter() {
@@ -3881,9 +4501,20 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
         };
 
         let entry = alloc_info.entry(alloc_key.clone())
-            .or_insert((0, false, None, None));
+            .or_insert((
+                0,
+                false,
+                None,
+                None,
+                BTreeSet::new(),
+                BTreeSet::new(),
+                BTreeSet::new(),
+            ));
         entry.0 += fc;
         entry.1 = entry.1 || used;
+        entry.4.extend(info.use_nodes.iter().cloned());
+        entry.5.extend(info.llvm_free_nodes.iter().cloned());
+        entry.6.extend(info.c_free_mir_nodes.iter().cloned());
 
         if entry.2.is_none() {
             entry.2 = use_span.clone();
@@ -3898,7 +4529,18 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
         let mut double_free: MultiSet = MultiSet::new();
         let mut never_free: MultiSet = MultiSet::new();
 
-        for (alloc_key, (fc, used, use_span_opt, free_span_opt)) in &alloc_info {
+        for (
+            alloc_key,
+            (
+                fc,
+                used,
+                use_span_opt,
+                free_span_opt,
+                use_nodes,
+                llvm_free_nodes,
+                c_free_mir_nodes,
+            ),
+        ) in &alloc_info {
             // double-free
             if *fc >= 2 {
                 multiset_add(&mut double_free, alloc_key.clone());
@@ -3918,7 +4560,34 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                     Some((_, FreeKind::LLVM)) => {
                         multiset_add(&mut use_after_free, alloc_key.clone());
                     }
-                    // case Drop MIR: compare spans
+                    Some((_, FreeKind::CMallocFree)) => {
+                        // C source spans and Rust source spans are not
+                        // comparable.  Use the inlined semantic ICFG instead:
+                        // a path from a matching C free node to a use node is a
+                        // possible use-after-free execution.
+                        if c_malloc_has_use_after_inlined_free(
+                            icfg,
+                            llvm_free_nodes,
+                            use_nodes,
+                        ) {
+                            multiset_add(&mut use_after_free, alloc_key.clone());
+                        }
+                    }
+                    Some((_, FreeKind::CMallocFreeRustCall)) => {
+                        // Both events are represented in the GlobalICFG, so use
+                        // graph semantics rather than lexical source-line order.
+                        // This avoids false ordering across mutually exclusive
+                        // branches and remains conservative for loops.
+                        if c_malloc_has_use_after_inlined_free(
+                            icfg,
+                            c_free_mir_nodes,
+                            use_nodes,
+                        ) {
+                            multiset_add(&mut use_after_free, alloc_key.clone());
+                        }
+                    }
+                    // Historical Rust-owned deallocation behavior is retained
+                    // unchanged for Phase-4.4 compatibility.
                     Some((free_span, FreeKind::Drop | FreeKind::StdDealloc)) => {
                         if let Some(use_span) = use_span_opt {
                             if let (Some(use_line), Some(free_line)) =
@@ -3937,17 +4606,39 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
 
         // visit alloc_info with only Option<String> for the "free_span"
         let report_alloc_info: HashMap<String, (usize, bool, Option<String>, Option<String>)> =
-            alloc_info.into_iter().map(|(k, (fc, used, use_span, free_span_opt))| {
-                let free_span_str = free_span_opt.map(|(span, _kind)| span);
-                (k, (fc, used, use_span, free_span_str))
-            }).collect();
+            alloc_info
+                .into_iter()
+                .map(|(k, (fc, used, use_span, free_span_opt, _, _, _))| {
+                    let free_span_str = free_span_opt.map(|(span, _kind)| span);
+                    (k, (fc, used, use_span, free_span_str))
+                })
+                .collect();
 
        
         print_final_report(&report_alloc_info, &use_after_free, &double_free, &never_free);
 
         // warning per free LLVM
         for (var, span) in llvm_warnings {
-            println!("\u{1FAB2}  WARNING: variable '{}' was allocated in Rust and then freed in C (LLVM free) at `{}`", var, span);
+            println!(
+                "WARNING: variable '{}' was allocated in Rust and then freed in C (LLVM free) at `{}`",
+                var, span
+            );
+            println!("Possible UNDEFINED BEHAVIOUR!");
+        }
+
+        for (var, span, reason) in ffi_allocator_warnings {
+            println!(
+                "WARNING: C malloc-family allocation '{}' reaches a Rust allocator/ownership API whose safety contract is not established at `{}`: {}",
+                var, span, reason
+            );
+            println!("Possible UNDEFINED BEHAVIOUR!");
+        }
+
+        for (var, span) in c_free_mismatch_warnings {
+            println!(
+                "WARNING: tracked allocation '{}' without positive C malloc-family provenance is passed directly to C free() at `{}`",
+                var, span
+            );
             println!("Possible UNDEFINED BEHAVIOUR!");
         }
 
@@ -4236,7 +4927,7 @@ mod lattice_law_tests {
 
 #[cfg(test)]
 mod abstract_memory_invariant_tests {
-    use super::{AbstractMemory, Allocation, CellValue};
+    use super::{AbstractMemory, AbstractState, Allocation, CellValue};
     use std::cmp::Ordering;
 
     fn n(s: &str) -> String {
@@ -4362,6 +5053,32 @@ mod abstract_memory_invariant_tests {
 
         assert!(no_alias.leq(&may_alias));
         assert!(!may_alias.leq(&no_alias));
+    }
+
+    #[test]
+    fn abstract_state_may_aliases_union_all_program_points_independent_of_insertion_order() {
+        let mut short = AbstractMemory::default();
+        short.set_cell_value(&n("p"), CellValue::MV);
+        short.propagate_cell_value(&n("p"), &n("q"));
+
+        let mut long = AbstractMemory::default();
+        long.set_cell_value(&n("p"), CellValue::MV);
+        long.propagate_cell_value(&n("p"), &n("q"));
+        long.propagate_cell_value(&n("p"), &n("r"));
+
+        let mut forward = AbstractState::default();
+        forward.insert("bb_short".to_string(), short.clone());
+        forward.insert("bb_long".to_string(), long.clone());
+
+        let mut reverse = AbstractState::default();
+        reverse.insert("bb_long".to_string(), long);
+        reverse.insert("bb_short".to_string(), short);
+
+        let expected: std::collections::BTreeSet<_> =
+            ["p", "q", "r"].into_iter().map(n).collect();
+
+        assert_eq!(forward.get_may_aliases(&n("p")), expected);
+        assert_eq!(reverse.get_may_aliases(&n("p")), expected);
     }
 }
 
@@ -4699,6 +5416,565 @@ mod phase3_1_stabilization_tests {
     }
 }
 
+
+#[cfg(test)]
+mod phase5_c_origin_ffi_tests {
+    use super::{
+        c_malloc_rust_allocator_contract_warning, llvm_call_suffix_from_global_node_id,
+        scoped_llvm_var, transfer_dummyret_node, transfer_llvm_node,
+        AbstractMemory, CellValue, DummyNode, LlvmJsonNode, SvfStatement,
+        TaintStateMap, TAINT_ASSIGN, TAINT_C_MALLOC_FAMILY,
+        is_c_free_function,
+        is_c_free_call_text,
+        VarInfo,
+        is_known_c_malloc_family,
+        is_c_malloc_family_alloc_call,
+        c_malloc_has_use_after_inlined_free,
+        icfg_may_reach,
+        llvm_provenance_flow_sources,
+        preferred_provenance_source,
+        detector_pointer_cast_participants
+    };
+    use std::collections::{BTreeMap, BTreeSet, HashSet};
+    use crate::structs::{GlobalICFGOrdered, IcfgEdge, MirStatement, SourceInfoData};
+
+    fn stmt(
+        stmt_type: &str,
+        stmt_info: &str,
+        lhs: Option<usize>,
+        rhs: Option<usize>,
+        operands: Option<Vec<usize>>,
+    ) -> SvfStatement {
+        SvfStatement {
+            stmt_id: 1,
+            stmt_type: stmt_type.to_string(),
+            stmt_info: stmt_info.to_string(),
+            edge_id: None,
+            pta_edge: None,
+            lhs_var_id: lhs,
+            rhs_var_id: rhs,
+            res_var_id: None,
+            operand_var_ids: operands,
+            operand_vars: None,
+            call_inst: None,
+            is_conditional: None,
+            condition_var_id: None,
+            successors: None,
+        }
+    }
+
+    fn assign_stmt(place: &str, rvalue: &str) -> MirStatement {
+        MirStatement {
+            source_info: SourceInfoData {
+                span: "<phase5-test>".to_string(),
+                scope: "<phase5-test>".to_string(),
+            },
+            kind: "Assign".to_string(),
+            details: format!("Assign(({}, {}))", place, rvalue),
+            place: Some(place.to_string()),
+            is_mutable: Some(true),
+            rvalue: Some(rvalue.to_string()),
+        }
+    }
+
+    fn llvm_node(
+        kind: &str,
+        info: &str,
+        statements: Vec<SvfStatement>,
+    ) -> LlvmJsonNode {
+        LlvmJsonNode {
+            node_id: 12,
+            node_type: false,
+            info: info.to_string(),
+            node_kind_string: kind.to_string(),
+            node_kind: 0,
+            node_source_loc: String::new(),
+            function_name: Some("c_alloc".to_string()),
+            basic_block: None,
+            basic_block_name: None,
+            basic_block_info: None,
+            svf_statements: statements,
+            incoming_edges: Vec::new(),
+            outgoing_edges: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn llvm_var_ids_are_scoped_per_replicated_ffi_callsite() {
+        let node_id = "llvm::c_alloc::node12::rust::main::bb4";
+        assert_eq!(
+            llvm_call_suffix_from_global_node_id(node_id),
+            Some("rust::main::bb4")
+        );
+        assert_eq!(
+            scoped_llvm_var(20, node_id),
+            "20@rust::main::bb4"
+        );
+    }
+
+    #[test]
+    fn malloc_result_is_nullable_top_with_positive_c_family_provenance() {
+        let node_id = "llvm::c_alloc::node12::rust::main::bb4";
+        let node = llvm_node(
+            "FunCallBlock",
+            "CallICFGNode12 {fun: c_alloc}\n%call = call noalias ptr @malloc(i64 %n)",
+            vec![stmt(
+                "AddrStmt",
+                "AddrStmt: [Var20 <-- Var21]",
+                Some(20),
+                Some(21),
+                None,
+            )],
+        );
+
+        let (mem, taint) = transfer_llvm_node(
+            node_id,
+            &node,
+            &AbstractMemory::default(),
+            &TaintStateMap::default(),
+        );
+
+        assert_eq!(
+            mem.get_cell_value(&"20@rust::main::bb4".to_string()),
+            CellValue::TOP
+        );
+        let tags = &taint["20@rust::main::bb4"];
+        assert!(tags.contains(TAINT_ASSIGN));
+        assert!(tags.contains(TAINT_C_MALLOC_FAMILY));
+    }
+
+    #[test]
+    fn malloc_provenance_flows_store_load_phi_without_alloc_certainty() {
+        let suffix = "rust::main::bb4";
+        let mut mem = AbstractMemory::default();
+        let mut taint = TaintStateMap::default();
+        taint
+            .entry(format!("20@{}", suffix))
+            .or_default()
+            .extend([
+                TAINT_ASSIGN.to_string(),
+                TAINT_C_MALLOC_FAMILY.to_string(),
+            ]);
+
+        let steps = [
+            (
+                14,
+                stmt(
+                    "StoreStmt",
+                    "StoreStmt: [Var11 <-- Var20]",
+                    Some(11),
+                    Some(20),
+                    None,
+                ),
+            ),
+            (
+                15,
+                stmt(
+                    "LoadStmt",
+                    "LoadStmt: [Var30 <-- Var11]",
+                    Some(30),
+                    Some(11),
+                    None,
+                ),
+            ),
+            (
+                2,
+                stmt(
+                    "PhiStmt",
+                    "PhiStmt: [Var6 <-- ([Var30, ICFGNode20],)]",
+                    Some(6),
+                    None,
+                    Some(vec![30]),
+                ),
+            ),
+        ];
+
+        for (node_num, statement) in steps {
+            let node_id =
+                format!("llvm::c_alloc::node{}::{}", node_num, suffix);
+            let stmt_info = statement.stmt_info.clone();
+            let node = llvm_node(
+                "IntraBlock",
+                &stmt_info,
+                vec![statement],
+            );
+            let (next_mem, next_taint) =
+                transfer_llvm_node(&node_id, &node, &mem, &taint);
+            mem = next_mem;
+            taint = next_taint;
+        }
+
+        assert!(
+            taint["6@rust::main::bb4"]
+                .contains(TAINT_C_MALLOC_FAMILY)
+        );
+        assert_eq!(
+            mem.get_cell_value(&"6@rust::main::bb4".to_string()),
+            CellValue::TOP
+        );
+    }
+
+    #[test]
+    fn legacy_exporter_phi_schema_propagates_c_malloc_provenance() {
+        let raw = r#"{
+            "stmt_id": 1,
+            "stmt_type": "PhiStmt",
+            "stmt_info": "PhiStmt: [Var6 <-- ([Var30, ICFGNode20],)]",
+            "edge_id": null,
+            "pta_edge": true,
+            "res_var_id": 6,
+            "operand_vars": [{"op_var_id": 30, "icfg_node": 20}],
+            "call_inst": null,
+            "is_conditional": null,
+            "condition_var_id": null,
+            "successors": null
+        }"#;
+        let phi: SvfStatement = serde_json::from_str(raw).unwrap();
+        assert_eq!(phi.result_var_id(), Some(6));
+        assert_eq!(llvm_provenance_flow_sources(&phi), vec![30]);
+
+        let mut mem = AbstractMemory::default();
+        let mut taint = TaintStateMap::default();
+        taint
+            .entry("30@rust::main::bb4".to_string())
+            .or_default()
+            .insert(TAINT_C_MALLOC_FAMILY.to_string());
+
+        let stmt_info = phi.stmt_info.clone();
+        let node = llvm_node("FunExitBlock", &stmt_info, vec![phi]);
+        (mem, taint) = transfer_llvm_node(
+            "llvm::c_alloc::node2::rust::main::bb4",
+            &node,
+            &mem,
+            &taint,
+        );
+
+        assert!(
+            taint["6@rust::main::bb4"].contains(TAINT_C_MALLOC_FAMILY)
+        );
+        assert_eq!(
+            mem.get_cell_value(&"6@rust::main::bb4".to_string()),
+            CellValue::TOP
+        );
+    }
+
+    #[test]
+    fn c_origin_representative_is_invariant_to_phi_operand_order() {
+        let c_origin = "30@rust::main::bb4".to_string();
+        let other = "40@rust::main::bb4".to_string();
+        let origins = HashSet::from([c_origin.clone()]);
+
+        assert_eq!(
+            preferred_provenance_source(
+                &[c_origin.clone(), other.clone()],
+                &origins,
+            ),
+            Some(c_origin.clone())
+        );
+        assert_eq!(
+            preferred_provenance_source(
+                &[other, c_origin.clone()],
+                &origins,
+            ),
+            Some(c_origin)
+        );
+    }
+
+    #[test]
+    fn external_dummyret_materializes_c_allocation_in_rust_return_local() {
+        let mut taint = TaintStateMap::default();
+        taint
+            .entry("6@rust::main::bb4".to_string())
+            .or_default()
+            .extend([
+                TAINT_ASSIGN.to_string(),
+                TAINT_C_MALLOC_FAMILY.to_string(),
+            ]);
+
+        let dummy = DummyNode {
+            dummy_node_name: "dummyRet".to_string(),
+            incoming_edge:
+                "llvm::c_alloc::node2::rust::main::bb4".to_string(),
+            outgoing_edge: "rust::main::bb5".to_string(),
+            id: "test".to_string(),
+            mir_var: Some("Local(_7) [mutable]".to_string()),
+            llvm_var: Some("6@rust::main::bb4".to_string()),
+            is_internal: Some(false),
+        };
+
+        let (mem, out_taint) = transfer_dummyret_node(
+            &dummy,
+            &AbstractMemory::default(),
+            &taint,
+        );
+
+        assert_eq!(
+            mem.get_cell_value(&"Local(_7)".to_string()),
+            CellValue::TOP
+        );
+        assert!(
+            out_taint["Local(_7)"]
+                .contains(TAINT_C_MALLOC_FAMILY)
+        );
+        assert!(out_taint["Local(_7)"].contains(TAINT_ASSIGN));
+    }
+
+    #[test]
+    fn c_malloc_family_is_positive_may_provenance_over_free_flow_group() {
+        let mut groups = BTreeMap::new();
+        groups.insert(
+            "Local(_1)".to_string(),
+            "{Local(_1), Local(_2)}".to_string(),
+        );
+
+        let origins =
+            HashSet::from(["Local(_1)".to_string()]);
+
+        assert!(is_known_c_malloc_family(
+            &"Local(_2)".to_string(),
+            &groups,
+            &origins,
+        ));
+        assert!(!is_known_c_malloc_family(
+            &"Local(_9)".to_string(),
+            &groups,
+            &origins,
+        ));
+    }
+
+    #[test]
+    fn realloc_is_not_classified_as_phase5_malloc_allocation() {
+        assert!(is_c_malloc_family_alloc_call(
+            "call ptr @malloc(i64 8)"
+        ));
+        assert!(is_c_malloc_family_alloc_call(
+            "call ptr @calloc(i64 1, i64 8)"
+        ));
+        assert!(!is_c_malloc_family_alloc_call(
+            "call ptr @realloc(ptr %p, i64 16)"
+        ));
+        assert!(!is_c_malloc_family_alloc_call(
+            "call ptr @aligned_alloc(i64 16, i64 32)"
+        ));
+        assert!(!is_c_malloc_family_alloc_call(
+            "call ptr @strdup(ptr %s)"
+        ));
+    }
+
+    fn edge(a: &str, b: &str) -> IcfgEdge {
+        IcfgEdge {
+            source: a.to_string(),
+            destination: b.to_string(),
+            label: None,
+            source_label: None,
+            destination_label: None,
+        }
+    }
+
+    #[test]
+    fn inlined_c_free_then_reachable_rust_use_is_uaf() {
+        let g = GlobalICFGOrdered {
+            ordered_nodes: Vec::new(),
+            icfg_edges: vec![
+                edge("alloc", "c_free"),
+                edge("c_free", "dummy_ret"),
+                edge("dummy_ret", "rust_use"),
+            ],
+        };
+        let frees = BTreeSet::from(["c_free".to_string()]);
+        let uses = BTreeSet::from(["rust_use".to_string()]);
+
+        assert!(icfg_may_reach(&g, "c_free", "rust_use"));
+        assert!(c_malloc_has_use_after_inlined_free(
+            &g, &frees, &uses
+        ));
+    }
+
+    #[test]
+    fn use_before_inlined_c_free_is_not_uaf() {
+        let g = GlobalICFGOrdered {
+            ordered_nodes: Vec::new(),
+            icfg_edges: vec![
+                edge("alloc", "rust_use"),
+                edge("rust_use", "c_free"),
+                edge("c_free", "exit"),
+            ],
+        };
+        let frees = BTreeSet::from(["c_free".to_string()]);
+        let uses = BTreeSet::from(["rust_use".to_string()]);
+
+        assert!(!c_malloc_has_use_after_inlined_free(
+            &g, &frees, &uses
+        ));
+    }
+
+    #[test]
+    fn mutually_exclusive_free_and_use_are_not_ordered_by_source_position() {
+        let g = GlobalICFGOrdered {
+            ordered_nodes: Vec::new(),
+            icfg_edges: vec![
+                edge("entry", "c_free"),
+                edge("c_free", "exit"),
+                edge("entry", "rust_use"),
+                edge("rust_use", "exit"),
+            ],
+        };
+        let frees = BTreeSet::from(["c_free".to_string()]);
+        let uses = BTreeSet::from(["rust_use".to_string()]);
+
+        assert!(!icfg_may_reach(&g, "c_free", "rust_use"));
+        assert!(!c_malloc_has_use_after_inlined_free(
+            &g, &frees, &uses
+        ));
+    }
+
+    #[test]
+    fn detector_registers_actual_mir_pointer_cast_endpoints_for_direct_c_free() {
+        let stmt = assign_stmt(
+            "Local(_4)",
+            "move _2 as *mut std::ffi::c_void (PtrToPtr)",
+        );
+
+        assert_eq!(
+            detector_pointer_cast_participants(&stmt),
+            Some((
+                "Local(_4)".to_string(),
+                "Local(_2)".to_string(),
+            ))
+        );
+    }
+
+    #[test]
+    fn c_malloc_provenance_does_not_flow_through_pointer_comparison_or_integer_binary() {
+        let cmp = stmt(
+            "CmpStmt",
+            "CmpStmt: [Var40 <-- (Var20 == Var30)]",
+            Some(40),
+            Some(20),
+            Some(vec![20, 30]),
+        );
+        let bin = stmt(
+            "BinaryOPStmt",
+            "BinaryOPStmt: [Var41 <-- (Var20 + Var30)]",
+            Some(41),
+            Some(20),
+            Some(vec![20, 30]),
+        );
+
+        assert!(llvm_provenance_flow_sources(&cmp).is_empty());
+        assert!(llvm_provenance_flow_sources(&bin).is_empty());
+    }
+
+    #[test]
+    fn external_dummyret_without_positive_c_origin_does_not_invent_allocation() {
+        let dummy = DummyNode {
+            dummy_node_name: "dummyRet".to_string(),
+            incoming_edge:
+                "llvm::c_static::node2::rust::main::bb4".to_string(),
+            outgoing_edge: "rust::main::bb5".to_string(),
+            id: "test-negative".to_string(),
+            mir_var: Some("Local(_7) [mutable]".to_string()),
+            llvm_var: Some("6@rust::main::bb4".to_string()),
+            is_internal: Some(false),
+        };
+
+        let (mem, taint) = transfer_dummyret_node(
+            &dummy,
+            &AbstractMemory::default(),
+            &TaintStateMap::default(),
+        );
+
+        assert_eq!(
+            mem.get_cell_value(&"Local(_7)".to_string()),
+            CellValue::BOTTOM
+        );
+        assert!(!taint
+            .get("Local(_7)")
+            .map(|t| t.contains(TAINT_C_MALLOC_FAMILY))
+            .unwrap_or(false));
+    }
+
+    #[test]
+    fn bare_free_requires_foreign_declaration_but_libc_path_is_recognized() {
+        let mut ffi = HashSet::new();
+
+        assert!(!is_c_free_function("free", &ffi));
+        assert!(!is_c_free_function("my_crate::free", &ffi));
+
+        ffi.insert("free".to_string());
+        assert!(is_c_free_function("free", &ffi));
+        assert!(is_c_free_call_text(
+            "free(copy _1) -> [return: bb1, unwind continue]",
+            &ffi
+        ));
+
+        let empty = HashSet::new();
+        assert!(is_c_free_function("libc::unix::free", &empty));
+        assert!(!is_c_free_function("std::alloc::dealloc", &empty));
+    }
+
+    #[test]
+    fn direct_c_free_counts_each_explicit_call() {
+        let mut info = VarInfo::new();
+        info.c_free_mir = 1;
+        assert_eq!(info.effective_free(), 1);
+
+        info.c_free_mir = 2;
+        assert_eq!(info.effective_free(), 2);
+    }
+
+    #[test]
+    fn direct_c_free_is_distinct_from_legacy_llvm_drop_deduplication() {
+        let mut info = VarInfo::new();
+        info.llvm_free = 1;
+        info.drop_free = 1;
+        info.c_free_mir = 1;
+
+        // LLVM+Drop is the historical single deallocation event; the explicit
+        // C free is a second event.
+        assert_eq!(info.effective_free(), 2);
+    }
+
+    #[test]
+    fn c_malloc_origin_flags_unproven_owning_contracts_but_not_borrows() {
+        assert!(
+            c_malloc_rust_allocator_contract_warning(
+                "std::ffi::CString::from_raw"
+            )
+            .is_some()
+        );
+        assert!(
+            c_malloc_rust_allocator_contract_warning(
+                "std::boxed::Box::<i32>::from_raw"
+            )
+            .is_some()
+        );
+        assert!(
+            c_malloc_rust_allocator_contract_warning(
+                "std::vec::Vec::<i32>::from_raw_parts"
+            )
+            .is_some()
+        );
+        assert!(
+            c_malloc_rust_allocator_contract_warning(
+                "std::string::String::from_raw_parts"
+            )
+            .is_some()
+        );
+        assert!(
+            c_malloc_rust_allocator_contract_warning("std::alloc::dealloc")
+                .is_some()
+        );
+        assert!(
+            c_malloc_rust_allocator_contract_warning(
+                "std::ffi::CStr::from_ptr::<'_>"
+            )
+            .is_none()
+        );
+    }
+}
+
+
 #[cfg(test)]
 mod phase4_std_memory_tests {
     use super::{
@@ -4713,7 +5989,10 @@ mod phase4_std_memory_tests {
         is_closure_aggregate_rvalue,
         mir_function_scope_from_node_id,
         resolve_scoped_stack_ref_leaves,
-        is_direct_deref_use_rvalue
+        is_direct_deref_use_rvalue,
+        is_raw_pointer_cast_method_call,
+        TAINT_ASSIGN,
+        TAINT_C_MALLOC_FAMILY
     };
     use std::collections::{BTreeMap, BTreeSet};
     use crate::structs::{MirCallArgument, MirStatement, MirTerminator, SourceInfoData};
@@ -4824,6 +6103,71 @@ mod phase4_std_memory_tests {
             mem.get_allocation(&n("Local(_2)"))
         );
         assert_eq!(mem.get_cell_value(&n("Local(_2)")), CellValue::MV);
+    }
+
+    #[test]
+    fn moved_pointer_cast_preserves_tracked_allocation_alias() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_2)"), CellValue::TOP);
+        let mut taint = TaintStateMap::default();
+        taint
+            .entry(n("Local(_2)"))
+            .or_default()
+            .extend([TAINT_ASSIGN.to_string(), TAINT_C_MALLOC_FAMILY.to_string()]);
+
+        let mem = apply_mir_statement(
+            &mem,
+            &mut taint,
+            &assign_stmt(
+                "Local(_1)",
+                "move _2 as *mut u8 (PtrToPtr)",
+            ),
+        );
+
+        assert_eq!(
+            mem.get_allocation(&n("Local(_1)")),
+            mem.get_allocation(&n("Local(_2)"))
+        );
+        assert!(taint
+            .get("Local(_1)")
+            .is_some_and(|tags| tags.contains(TAINT_C_MALLOC_FAMILY)));
+    }
+
+    #[test]
+    fn raw_pointer_cast_method_call_preserves_alias_and_c_origin() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::TOP);
+        let mut taint = TaintStateMap::default();
+        taint
+            .entry(n("Local(_1)"))
+            .or_default()
+            .extend([TAINT_ASSIGN.to_string(), TAINT_C_MALLOC_FAMILY.to_string()]);
+
+        let term = MirTerminator::Call {
+            details: "_11 = std::ptr::mut_ptr::<impl *mut i32>::cast::<std::ffi::c_void>(copy _1)".to_string(),
+            source_info: "<phase5-real-shape>".to_string(),
+            function_called: "std::ptr::mut_ptr::<impl *mut i32>::cast::<std::ffi::c_void>".to_string(),
+            arguments: vec![MirCallArgument {
+                arg: "Local(_1)".to_string(),
+                is_mutable: Some(false),
+            }],
+            return_place: "_11".to_string(),
+            return_target: Some("bb7".to_string()),
+            unwind_target: "unreachable".to_string(),
+        };
+
+        let mem = apply_mir_terminator(&mem, &mut taint, &term);
+
+        assert!(is_raw_pointer_cast_method_call(
+            "std::ptr::mut_ptr::<impl *mut i32>::cast::<std::ffi::c_void>"
+        ));
+        assert_eq!(
+            mem.get_allocation(&n("Local(_1)")),
+            mem.get_allocation(&n("Local(_11)"))
+        );
+        assert!(taint
+            .get("Local(_11)")
+            .is_some_and(|tags| tags.contains(TAINT_C_MALLOC_FAMILY)));
     }
 
     #[test]

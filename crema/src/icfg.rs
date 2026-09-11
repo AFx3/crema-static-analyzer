@@ -1,7 +1,7 @@
 use rustc_driver::Callbacks;
 use rustc_interface::Queries;
 use rustc_middle::mir::{Place, PlaceElem, Statement, StatementKind, Terminator, TerminatorKind, Operand};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{Write, Read};
 use serde_json;
@@ -12,7 +12,7 @@ use std::fs::read_dir;
 use rustc_hir::def::DefKind;
 
 use crate::structs::{MirStatement, MirTerminator, MirBasicBlock, MirRepresentation, SourceInfoData,
-    LlvmRepresentation, LlvmFunction, LlvmJson, LlvmEdge, IcfgEdge, DummyNode, GlobalICFGNode, GlobalICFGOrdered, MirCallArgument };
+    LlvmRepresentation, LlvmFunction, LlvmJson, LlvmJsonNode, SvfStatement, LlvmEdge, IcfgEdge, DummyNode, GlobalICFGNode, GlobalICFGOrdered, MirCallArgument };
 use crate::utils::{unwind_action_to_string,compute_hash, load_ffi_functions};
 
 // NOTE: i'm treating an unwind target terminate as a mir node, from 1.86, the unwind actions are:
@@ -33,6 +33,59 @@ Depending on the platform and situation this may cause a non-unwindable panic or
 Cleanup(BasicBlock)
 Cleanups to be done.
 */
+/// Empirical bridge for the currently supported single-relevant-parameter
+/// FFI wrappers.
+///
+/// In the pinned SVF JSON, a pointer formal appears at FunEntry as a StoreStmt
+/// whose rhs VarID is the incoming pointer value and whose lhs is its stack
+/// slot.  We intentionally do not guess beyond this evidence.  General
+/// multi-parameter mapping is deferred to a later phase.
+fn svf_first_formal_param_var_id(function: &LlvmFunction) -> Option<usize> {
+    // Real SVF output from the pinned producer does not guarantee that the
+    // parameter-spill StoreStmt is attached to FunEntryBlock.  Clang/SVF can
+    // place the alloca and store in the first IntraBlock instead.  Recover the
+    // first supported formal from structured SVF statements across the whole
+    // function: a StoreStmt whose lhs is a stack object created by AddrStmt.
+    //
+    // Phase 5 deliberately supports only the first relevant formal.  General
+    // argument-index -> formal mapping remains future work.
+    let stack_slots: HashSet<usize> = function
+        .nodes
+        .iter()
+        .flat_map(|node| node.svf_statements.iter())
+        .filter(|stmt| stmt.stmt_type == "AddrStmt")
+        .filter_map(|stmt| stmt.lhs_var_id)
+        .collect();
+
+    function
+        .nodes
+        .iter()
+        .flat_map(|node| node.svf_statements.iter())
+        .find(|stmt| {
+            stmt.stmt_type == "StoreStmt"
+                && stmt
+                    .lhs_var_id
+                    .is_some_and(|lhs| stack_slots.contains(&lhs))
+        })
+        .and_then(|stmt| stmt.rhs_var_id)
+}
+
+/// Empirical C -> Rust pointer-return bridge.
+///
+/// Under the pinned SVF pipeline, the externally visible pointer returned from
+/// the C wrapper reaches FunExit through a PhiStmt.  Its lhs VarID is the value
+/// bridged to MIR `return_place`.
+///
+/// If this evidence is absent we return None: guessing another lhs would be
+/// unsound and could manufacture allocator provenance.
+fn svf_function_return_var_id(exit_node: &LlvmJsonNode) -> Option<usize> {
+    exit_node
+        .svf_statements
+        .iter()
+        .filter(|stmt| stmt.stmt_type == "PhiStmt")
+        .find_map(SvfStatement::result_var_id)
+}
+
 pub struct MirExtractor {
     pub mir_representation: MirRepresentation,
     pub llvm_representation: Option<LlvmRepresentation>, // store parsed LLVM IR
@@ -355,7 +408,14 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                             if let Some(llvm_func) = llvm_repr.functions.get(function_called).cloned() {
                                 if !llvm_func.nodes.is_empty() {
                                     let dummy_call_id = get_dummy_call_id(rust_func, block.block_id, &call_suffix, false);
-                                    if let Some(entry_node) = llvm_func.nodes.first() {
+                                    if let Some(entry_node) = llvm_func
+                                        .nodes
+                                        .iter()
+                                        .find(|node| {
+                                            node.node_kind_string == "FunEntryBlock"
+                                        })
+                                        .or_else(|| llvm_func.nodes.first())
+                                    {
                                         // set call_suffix to rename the entry node
                                         let llvm_entry = format!("llvm::{}::node{}::{}", function_called, entry_node.node_id, call_suffix);
                                         // MODIFIED: concatate  call_suffix to original var name
@@ -713,26 +773,57 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                 }) = &block.terminator {
                     if ffi_functions.contains(function_called) {
                         // --- FFI CALL DUMMY NODES ---
-                        let mir_arg = arguments.first().map(|arg| arg.arg.clone()).unwrap_or_else(|| "".to_string());
-                        // use same call suffix usato in5
-                        let call_suffix = format!("rust::{}::bb{}", rust_func, block.block_id);
-                        let dummy_call_id = get_dummy_call_id(rust_func, block.block_id, &call_suffix, false);
+                        let mir_arg =
+                            arguments.first().map(|arg| arg.arg.clone());
+                        let call_suffix =
+                            format!("rust::{}::bb{}", rust_func, block.block_id);
+                        let dummy_call_id = get_dummy_call_id(
+                            rust_func,
+                            block.block_id,
+                            &call_suffix,
+                            false,
+                        );
+
                         if let Some(llvm_repr) = &self.llvm_representation {
-                            if let Some(llvm_func) = llvm_repr.functions.get(function_called).cloned() {
-                                if let Some(entry_node) = llvm_func.nodes.first() {
-                                    let llvm_entry = format!("llvm::{}::node{}::{}", function_called, entry_node.node_id, call_suffix);
-                                    // Concateno il call_suffix anche in questo ramo per avere il riferimento univoco
-                                    let llvm_var = entry_node.svf_statements.first().and_then(|stmt| {
-                                        stmt.rhs_var_id.map(|id| format!("{}@{}", id, call_suffix))
-                                    });
+                            if let Some(llvm_func) =
+                                llvm_repr.functions.get(function_called).cloned()
+                            {
+                                if let Some(entry_node) = llvm_func
+                                    .nodes
+                                    .iter()
+                                    .find(|node| {
+                                        node.node_kind_string == "FunEntryBlock"
+                                    })
+                                    .or_else(|| llvm_func.nodes.first())
+                                {
+                                    let llvm_entry = format!(
+                                        "llvm::{}::node{}::{}",
+                                        function_called,
+                                        entry_node.node_id,
+                                        call_suffix
+                                    );
+
+                                    let llvm_var = if mir_arg.is_some() {
+                                        svf_first_formal_param_var_id(&llvm_func)
+                                            .map(|id| {
+                                                format!("{}@{}", id, call_suffix)
+                                            })
+                                    } else {
+                                        None
+                                    };
+
                                     ordered_icfg_nodes.push((
                                         dummy_call_id.clone(),
                                         GlobalICFGNode::DummyCall(DummyNode {
-                                            dummy_node_name: "dummyCall".to_string(),
+                                            dummy_node_name:
+                                                "dummyCall".to_string(),
                                             incoming_edge: mir_node_id.clone(),
                                             outgoing_edge: llvm_entry.clone(),
-                                            id: compute_hash(&(mir_node_id.clone(), llvm_entry.clone())),
-                                            mir_var: Some(mir_arg.clone()),
+                                            id: compute_hash(&(
+                                                mir_node_id.clone(),
+                                                llvm_entry.clone(),
+                                            )),
+                                            mir_var: mir_arg.clone(),
                                             llvm_var,
                                             is_internal: Some(false),
                                         }),
@@ -765,15 +856,27 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                 }) {
                                     let call_suffix = format!("rust::{}::bb{}", rust_func, block.block_id);
                                     let llvm_exit = format!("llvm::{}::node{}::{}", function_called, exit_node.node_id, call_suffix);
+                                    let llvm_return_var =
+                                        svf_function_return_var_id(exit_node)
+                                            .map(|id| {
+                                                format!("{}@{}", id, call_suffix)
+                                            });
+
                                     ordered_icfg_nodes.push((
                                         dummy_ret_id.clone(),
                                         GlobalICFGNode::DummyRet(DummyNode {
-                                            dummy_node_name: "dummyRet".to_string(),
+                                            dummy_node_name:
+                                                "dummyRet".to_string(),
                                             incoming_edge: llvm_exit.clone(),
-                                            outgoing_edge: rust_return_node.clone(),
-                                            id: compute_hash(&(rust_return_node.clone(), llvm_exit.clone())),
-                                            mir_var: None,
-                                            llvm_var: exit_node.basic_block_info.clone().or_else(|| Some("llvm_param".to_string())),
+                                            outgoing_edge:
+                                                rust_return_node.clone(),
+                                            id: compute_hash(&(
+                                                rust_return_node.clone(),
+                                                llvm_exit.clone(),
+                                            )),
+                                            mir_var:
+                                                Some(return_place.clone()),
+                                            llvm_var: llvm_return_var,
                                             is_internal: Some(false),
                                         }),
                                     ));
@@ -1017,3 +1120,165 @@ pub fn parse_llvm_json(file_path: &str) -> Result<LlvmRepresentation, Box<dyn Er
     
     Ok(LlvmRepresentation { functions, global_edges })
 }
+
+#[cfg(test)]
+mod phase5_ffi_bridge_tests {
+    use super::{
+        svf_first_formal_param_var_id, svf_function_return_var_id,
+        LlvmFunction, LlvmJsonNode, SvfStatement,
+    };
+
+    fn stmt(
+        stmt_type: &str,
+        lhs: Option<usize>,
+        rhs: Option<usize>,
+        operands: Option<Vec<usize>>,
+    ) -> SvfStatement {
+        SvfStatement {
+            stmt_id: 1,
+            stmt_type: stmt_type.to_string(),
+            stmt_info: String::new(),
+            edge_id: None,
+            pta_edge: None,
+            lhs_var_id: lhs,
+            rhs_var_id: rhs,
+            res_var_id: None,
+            operand_var_ids: operands,
+            operand_vars: None,
+            call_inst: None,
+            is_conditional: None,
+            condition_var_id: None,
+            successors: None,
+        }
+    }
+
+    fn node(kind: &str, statements: Vec<SvfStatement>) -> LlvmJsonNode {
+        LlvmJsonNode {
+            node_id: 1,
+            node_type: false,
+            info: String::new(),
+            node_kind_string: kind.to_string(),
+            node_kind: 0,
+            node_source_loc: String::new(),
+            function_name: Some("f".to_string()),
+            basic_block: None,
+            basic_block_name: None,
+            basic_block_info: None,
+            svf_statements: statements,
+            incoming_edges: Vec::new(),
+            outgoing_edges: Vec::new(),
+        }
+    }
+
+    fn function(nodes: Vec<LlvmJsonNode>) -> LlvmFunction {
+        LlvmFunction {
+            function_name: "f".to_string(),
+            nodes,
+        }
+    }
+
+    #[test]
+    fn ffi_formal_parameter_is_store_rhs_not_alloca_object() {
+        let f = function(vec![node(
+            "FunEntryBlock",
+            vec![
+                stmt("AddrStmt", Some(8), Some(9), None),
+                stmt("StoreStmt", Some(8), Some(7), None),
+            ],
+        )]);
+
+        assert_eq!(svf_first_formal_param_var_id(&f), Some(7));
+    }
+
+    #[test]
+    fn ffi_formal_bridge_is_deliberately_first_store_only() {
+        let f = function(vec![node(
+            "FunEntryBlock",
+            vec![
+                stmt("AddrStmt", Some(8), Some(80), None),
+                stmt("AddrStmt", Some(10), Some(100), None),
+                stmt("StoreStmt", Some(8), Some(7), None),
+                stmt("StoreStmt", Some(10), Some(9), None),
+            ],
+        )]);
+
+        // Phase 5 supports only the first relevant formal bridge. A later phase
+        // must derive argument-index -> formal-VarID mapping explicitly.
+        assert_eq!(svf_first_formal_param_var_id(&f), Some(7));
+    }
+
+    #[test]
+    fn ffi_formal_parameter_accepts_real_svf_shape_with_empty_funentry() {
+        let f = function(vec![
+            node("FunEntryBlock", vec![]),
+            node("IntraBlock", vec![stmt("AddrStmt", Some(37), Some(38), None)]),
+            node("IntraBlock", vec![stmt("StoreStmt", Some(37), Some(36), None)]),
+        ]);
+
+        // Real c_free_i32 output observed in the focus corpus:
+        //   Var37 = alloca ptr
+        //   StoreStmt: [Var37 <-- Var36]
+        assert_eq!(svf_first_formal_param_var_id(&f), Some(36));
+    }
+
+    #[test]
+    fn ffi_return_value_is_funexit_phi_lhs() {
+        let exit = node(
+            "FunExitBlock",
+            vec![stmt("PhiStmt", Some(6), None, Some(vec![30]))],
+        );
+
+        assert_eq!(svf_function_return_var_id(&exit), Some(6));
+    }
+
+    #[test]
+    fn ffi_return_value_accepts_legacy_svf_phi_schema() {
+        // This is the schema emitted by the pre-Phase-5 SVF exporter:
+        // Phi result in `res_var_id`, incoming values in `operand_vars`.
+        let raw = r#"{
+            "node_id": 2,
+            "node_type": false,
+            "info": "",
+            "node_kind_string": "FunExitBlock",
+            "node_kind": 0,
+            "node_source_loc": "",
+            "function_name": "c_alloc",
+            "basic_block": null,
+            "basic_block_name": null,
+            "basic_block_info": null,
+            "svf_statements": [{
+                "stmt_id": 1,
+                "stmt_type": "PhiStmt",
+                "stmt_info": "PhiStmt: [Var6 <-- ([Var30, ICFGNode20],)]",
+                "edge_id": null,
+                "pta_edge": true,
+                "res_var_id": 6,
+                "operand_vars": [{"op_var_id": 30, "icfg_node": 20}],
+                "call_inst": null,
+                "is_conditional": null,
+                "condition_var_id": null,
+                "successors": null
+            }],
+            "incoming_edges": [],
+            "outgoing_edges": []
+        }"#;
+
+        let exit: LlvmJsonNode = serde_json::from_str(raw).unwrap();
+        assert_eq!(svf_function_return_var_id(&exit), Some(6));
+        assert_eq!(
+            exit.svf_statements[0].normalized_operand_var_ids(),
+            vec![30]
+        );
+    }
+    #[test]
+    fn ffi_return_bridge_does_not_guess_non_phi_lhs() {
+        let exit = node(
+            "FunExitBlock",
+            vec![stmt("CopyStmt", Some(77), Some(30), None)],
+        );
+
+        assert_eq!(svf_function_return_var_id(&exit), None);
+    }
+
+}
+
