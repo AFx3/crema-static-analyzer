@@ -1,0 +1,4 @@
+{
+  "found vulns/wasm-demo": "rust::demo_new_state::bb0",
+  "found vulns/lock-free": "rust::LockFreeStack::<T>::push::bb0"
+}

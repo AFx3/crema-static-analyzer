@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "entry": "rust::main::bb0",
+  "variables": [
+    {"id":"rust::main::Local(_1)","language":"rust","display":"Local(_1)","function":"rust::main"},
+    {"id":"c::free_wrapper::%1@callsite0","language":"c","display":"%1","function":"c::free_wrapper"}
+  ],
+  "nodes": [
+    {
+      "id":"rust::main::bb0",
+      "successors":["c::free_wrapper::entry@callsite0"],
+      "labels":[{"predicate":"alloc","variable":"rust::main::Local(_1)"}],
+      "pre":{"cells":[]},
+      "post":{"cells":[{"aliases":["rust::main::Local(_1)"],"value":"ALLOC"}]}
+    },
+    {
+      "id":"c::free_wrapper::entry@callsite0",
+      "successors":["rust::main::bb1"],
+      "labels":[{"predicate":"drop","variable":"c::free_wrapper::%1@callsite0"}],
+      "pre":{"cells":[{"aliases":["rust::main::Local(_1)","c::free_wrapper::%1@callsite0"],"value":"ALLOC"}]},
+      "post":{"cells":[{"aliases":["rust::main::Local(_1)","c::free_wrapper::%1@callsite0"],"value":"FREED"}]}
+    },
+    {
+      "id":"rust::main::bb1",
+      "successors":[],
+      "labels":[{"predicate":"read","variable":"rust::main::Local(_1)"}],
+      "pre":{"cells":[{"aliases":["rust::main::Local(_1)"],"value":"FREED"}]},
+      "post":{"cells":[{"aliases":["rust::main::Local(_1)"],"value":"FREED"}]}
+    }
+  ]
+}

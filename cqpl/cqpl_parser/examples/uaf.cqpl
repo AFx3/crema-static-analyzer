@@ -1,8 +1,0 @@
-# df
-## domain: memory
-v: *|*|*
-
-taint_src: \forall x. alloc(x)
-taint_snk: DROP(x)
-|>
-taint_snk: use(x)

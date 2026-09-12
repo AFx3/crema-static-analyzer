@@ -1,0 +1,8 @@
+# Double-free query from the theoretical CQPL presentation.
+exists x. EF (
+  alloc(x) &&
+  EX EF (
+    drop_l(x) &&
+    EX E[(!alloc_l(x)) U drop_l(x)]
+  )
+)

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://crema.local/schemas/cqpl-annotated-icfg-v1.json",
+  "title": "CREMA CQPL Annotated ICFG v1",
+  "type": "object",
+  "required": ["schema_version", "entry", "variables", "nodes"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "entry": {"type": "string", "minLength": 1},
+    "variables": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "language"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "language": {"enum": ["rust", "c", "other"]},
+          "display": {"type": ["string", "null"]},
+          "function": {"type": ["string", "null"]}
+        },
+        "additionalProperties": false
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "successors": {"type": "array", "items": {"type": "string"}},
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["predicate", "variable"],
+              "properties": {
+                "predicate": {"enum": ["alloc", "drop", "read", "write", "use"]},
+                "variable": {"type": "string"}
+              },
+              "additionalProperties": false
+            }
+          },
+          "pre": {"$ref": "#/$defs/memory"},
+          "post": {"$ref": "#/$defs/memory"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "cellValue": {"enum": ["BOTTOM", "BOXTIMES", "ALLOC", "FREED", "MB", "IMMB", "MV", "TOP"]},
+    "abstractCell": {
+      "type": "object",
+      "required": ["aliases", "value"],
+      "properties": {
+        "aliases": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+        "value": {"$ref": "#/$defs/cellValue"}
+      },
+      "additionalProperties": false
+    },
+    "memory": {
+      "type": "object",
+      "properties": {
+        "cells": {"type": "array", "items": {"$ref": "#/$defs/abstractCell"}}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

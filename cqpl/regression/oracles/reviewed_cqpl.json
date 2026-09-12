@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "status": "reviewed expectations only; absence means not yet reviewed",
+  "targets": {
+    "c_malloc_rust_free_then_use_uaf": {
+      "use_after_free": "unk",
+      "evidence": "Observed end-to-end CREMA AnnotatedIcfg -> CQPL on 2026-09-12. Leak/DF intentionally not inferred."
+    }
+  }
+}

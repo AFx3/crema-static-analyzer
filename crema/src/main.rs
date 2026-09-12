@@ -16,6 +16,7 @@ mod utils;
 mod icfg;            
 mod dumpdot;         
 mod abstract_domain; 
+mod cqpl_export;
 
 use cargo_metadata::{MetadataCommand, Target};
 use icfg::MirExtractor;
@@ -32,26 +33,50 @@ use crate::structs::GlobalICFGOrdered;
 use crate::abstract_domain::{fixed_point_analysis, detect_mem_issues};
 use std::path::PathBuf;
 use crate::abstract_domain::set_entrypoint;
+use crate::cqpl_export::export_cqpl_annotated_icfg;
 
 static GLOBAL_ICFG_JSON: &str = "global_icfg.json";
+static CQPL_ANNOTATED_ICFG_JSON: &str = "cqpl_annotated_icfg.json";
 
 fn main() {
     // --- step 0: process cmd args ---
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        eprintln!("Usage: cargo run -- /path/to/cargo/project [-f <entry>]");  
+        eprintln!(
+            "Usage: cargo run -- /path/to/cargo/project [-f <entry>] \
+[--only-icfg-annotated] [--annotated-icfg-out <path>]"
+        );
         exit(1);
     }
     let project_path = PathBuf::from(&args[1]);
 
-    // entry‐point override:
-    // if user sets -f flag, override the entry point (no longer the main function but the one as input) 
+    // CLI options. Default execution remains the legacy CREMA pipeline.
+    // --only-icfg-annotated still computes the same ICFG and fixed point,
+    // exports the CQPL boundary artifact, then returns before detect_mem_issues.
     let mut entry_override: Option<String> = None;
+    let mut only_icfg_annotated = false;
+    let mut annotated_icfg_out = PathBuf::from(CQPL_ANNOTATED_ICFG_JSON);
     let mut idx = 2;
-    while idx + 1 < args.len() {
+    while idx < args.len() {
         match args[idx].as_str() {
             "-f" => {
+                if idx + 1 >= args.len() {
+                    eprintln!("Missing value after -f");
+                    exit(1);
+                }
                 entry_override = Some(args[idx + 1].clone());
+                idx += 2;
+            }
+            "--only-icfg-annotated" => {
+                only_icfg_annotated = true;
+                idx += 1;
+            }
+            "--annotated-icfg-out" => {
+                if idx + 1 >= args.len() {
+                    eprintln!("Missing path after --annotated-icfg-out");
+                    exit(1);
+                }
+                annotated_icfg_out = PathBuf::from(&args[idx + 1]);
                 idx += 2;
             }
             other => {
@@ -109,15 +134,51 @@ fn main() {
         .expect("Failed to deserialize global ICFG");
 
 
-    // if entry point is given as input, set the entry point
+    // Keep the selected entry identical for the fixed point and CQPL export.
+    let selected_entry = entry_override
+        .clone()
+        .unwrap_or_else(|| "rust::main::bb0".to_string());
     if let Some(ep) = entry_override {
-            set_entrypoint(ep);
-        }
+        set_entrypoint(ep);
+    }
 
     let (abstract_state, taint_state) = fixed_point_analysis(&global_icfg);
+
+    // Read-only side export. In default mode an exporter failure must not
+    // suppress CREMA's legacy detector; in --only-icfg-annotated mode the
+    // requested artifact is the primary output, so an export failure is fatal.
+    let export_result = export_cqpl_annotated_icfg(
+        &global_icfg,
+        &abstract_state,
+        &selected_entry,
+        &annotated_icfg_out,
+    );
+
+    if only_icfg_annotated {
+        match export_result {
+            Ok(()) => {
+                println!(
+                    "CQPL annotated ICFG saved to {}",
+                    annotated_icfg_out.display()
+                );
+                return;
+            }
+            Err(err) => {
+                eprintln!("Failed to export CQPL annotated ICFG: {}", err);
+                exit(1);
+            }
+        }
+    } else if let Err(err) = export_result {
+        eprintln!(
+            "CREMA warning: CQPL annotated ICFG export failed; \
+continuing legacy detection unchanged: {}",
+            err
+        );
+    }
+
+    // Legacy output and detector remain unchanged in default mode.
     println!("Final Abstract State: {:#?}", abstract_state);
     println!("Final Taint State: {:#?}", taint_state);
-
     detect_mem_issues(&global_icfg, &taint_state, &abstract_state);
 }
 

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "entry": "rust::main::bb0",
+  "variables": [
+    {"id":"rust::main::Local(_1)","language":"rust","display":"Local(_1)","function":"rust::main"}
+  ],
+  "nodes": [
+    {
+      "id":"rust::main::bb0",
+      "successors":[],
+      "labels":[],
+      "pre":{"cells":[{"aliases":["rust::main::Local(_1)"],"value":"TOP"}]},
+      "post":{"cells":[{"aliases":["rust::main::Local(_1)"],"value":"TOP"}]}
+    }
+  ]
+}

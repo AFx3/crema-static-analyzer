@@ -1,0 +1,2 @@
+# Leak query, equivalent to: exists x. E(F(alloc(x) and EX EG not drop(x)))
+exists x. EF (alloc(x) && EX EG !drop(x))

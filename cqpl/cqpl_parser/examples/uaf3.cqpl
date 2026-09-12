@@ -1,8 +1,0 @@
-# uaf_3
-## domain: memory
-v: *|*|*
-
-taint_src: \forall x. alloc(x)
-taint_snk: drop(x)
-|>
-taint_snk: use(x)
