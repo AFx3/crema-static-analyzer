@@ -486,6 +486,10 @@ fn analyze_target(
         eprintln!("Error analyzing target {}: {:?}", target.name, err);
         exit(1);
     }
+    if let Some(boundary) = callbacks.instance_dispatch_boundary.as_deref() {
+        eprintln!("{}", boundary);
+        exit(2);
+    }
 }
 
 /// Create a collision-resistant per-invocation directory for SVF artifacts.

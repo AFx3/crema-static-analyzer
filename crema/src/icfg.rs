@@ -10,6 +10,7 @@ use rustc_middle::mir::{Local, LocalDecl, Mutability};
 use rustc_index::IndexVec;
 use std::fs::read_dir;
 use rustc_hir::def::DefKind;
+use rustc_hir::def_id::DefId;
 use rustc_middle::ty::{self, TyCtxt, TyKind};
 
 use crate::structs::{MirStatement, MirTerminator, MirBasicBlock, MirRepresentation, SourceInfoData,
@@ -99,6 +100,11 @@ pub struct MirExtractor {
     /// User-selected concrete entry used only to seed v6L rustc Instance
     /// propagation. It is not a heuristic target selector.
     pub instance_entry_hint: String,
+    /// Reserved semantic boundary discovered while preparing concrete Instance
+    /// dispatch. Generic entries are not a global boundary: they are analyzed
+    /// parametrically, with genuinely unresolved local trait dispatch rejected
+    /// at the callsite instead of rejecting the whole entry.
+    pub instance_dispatch_boundary: Option<String>,
 }
 
 impl MirExtractor {
@@ -110,6 +116,7 @@ impl MirExtractor {
             llvm_output_dir,
             rust_function_arg_counts: HashMap::new(),
             instance_entry_hint,
+            instance_dispatch_boundary: None,
         }
     }
     
@@ -378,7 +385,7 @@ struct ConcreteCallDispatch {
 fn resolve_reachable_instance_dispatch<'tcx>(
     tcx: TyCtxt<'tcx>,
     requested_entry: &str,
-) -> BTreeMap<(String, usize), ConcreteCallDispatch> {
+) -> Result<BTreeMap<(String, usize), ConcreteCallDispatch>, String> {
     let normalized = requested_entry
         .strip_prefix("rust::")
         .unwrap_or(requested_entry)
@@ -411,13 +418,32 @@ fn resolve_reachable_instance_dispatch<'tcx>(
             requested_entry,
             candidates.len()
         );
-        return BTreeMap::new();
+        return Ok(BTreeMap::new());
     }
 
     let entry_def = candidates[0].to_def_id();
-    // The public CLI does not carry generic arguments.  Therefore an entry that
-    // cannot be represented by Instance::mono is outside this v6L feature's
-    // contract; the supported/default `main` entry is monomorphic.
+    // A generic CLI entry denotes the generic MIR body itself, as it did before
+    // v6L.  Do not invent a type argument and do not call Instance::mono on a
+    // definition that still requires monomorphization.  Instead, analyze that
+    // MIR body parametrically and retain the v6K canonical direct-call resolver.
+    // Concrete Instance enrichment is simply unavailable for this root.
+    //
+    // Soundness boundary: a local trait-item call reached from the parametric
+    // body cannot be assigned an arbitrary implementation.  Such callsites are
+    // marked unresolved below, so schema-v2 export still fails closed locally
+    // when concrete dispatch is genuinely required.
+    if tcx.generics_of(entry_def).requires_monomorphization(tcx) {
+        eprintln!(
+            "v6L Instance dispatch: selected entry '{}' ({}) is generic; analyzing generic MIR parametrically without choosing concrete type/const arguments",
+            requested_entry,
+            tcx.def_path_str(entry_def)
+        );
+        return Ok(resolve_parametric_generic_entry_dispatch(
+            tcx,
+            entry_def,
+            &local_body_paths,
+        ));
+    }
     let entry = ty::Instance::mono(tcx, entry_def);
     // Every caller carried by this worklist is a concrete rustc Instance.
     // Resolution therefore belongs to rustc's fully-monomorphized, post-typeck
@@ -493,6 +519,68 @@ fn resolve_reachable_instance_dispatch<'tcx>(
             }
         }
     }
+    Ok(out)
+}
+
+/// Traverse a generic entry without inventing monomorphization arguments.
+///
+/// Direct local functions/closures are left to the canonical DefPath resolver,
+/// which analyzes their generic MIR bodies parametrically.  Local *trait-item*
+/// calls are different: choosing one implementation would require a concrete
+/// receiver/type context, so those callsites are explicitly marked unresolved.
+/// External calls remain summaries and existing callback fail-closed handling
+/// continues to apply.
+fn resolve_parametric_generic_entry_dispatch<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    entry_def: DefId,
+    local_body_paths: &BTreeSet<String>,
+) -> BTreeMap<(String, usize), ConcreteCallDispatch> {
+    let mut out: BTreeMap<(String, usize), ConcreteCallDispatch> = BTreeMap::new();
+    let mut worklist = std::collections::VecDeque::from([entry_def]);
+    let mut seen: Vec<DefId> = Vec::new();
+
+    while let Some(caller_def) = worklist.pop_front() {
+        if !caller_def.is_local() || seen.contains(&caller_def) {
+            continue;
+        }
+        seen.push(caller_def);
+        let caller_path = tcx.def_path_str(caller_def);
+        if !local_body_paths.contains(&caller_path) {
+            continue;
+        }
+        let body = tcx.optimized_mir(caller_def);
+        for (bb, data) in body.basic_blocks.iter_enumerated() {
+            let Some(term) = data.terminator.as_ref() else { continue; };
+            let TerminatorKind::Call { func, .. } = &term.kind else { continue; };
+            let func_ty = func.ty(&body.local_decls, tcx);
+            let (callee_def, _) = match func_ty.kind() {
+                TyKind::FnDef(def_id, args) => (*def_id, *args),
+                _ => continue,
+            };
+
+            if !callee_def.is_local() {
+                continue;
+            }
+
+            // A trait declaration item is not a concrete implementation.  In a
+            // generic entry its dispatch may depend on an unknown type parameter;
+            // never connect it to an arbitrary generic trait body.
+            if matches!(tcx.def_kind(callee_def), DefKind::AssocFn)
+                && matches!(tcx.def_kind(tcx.parent(callee_def)), DefKind::Trait)
+            {
+                let dispatch = out.entry((caller_path.clone(), bb.index())).or_default();
+                dispatch.observed = true;
+                dispatch.unresolved = true;
+                continue;
+            }
+
+            let callee_path = tcx.def_path_str(callee_def);
+            if local_body_paths.contains(&callee_path) {
+                worklist.push_back(callee_def);
+            }
+        }
+    }
+
     out
 }
 
@@ -659,7 +747,13 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
     let mut ffi_call_sites: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
     queries.global_ctxt().unwrap().enter(|tcx| {
         // --- 1. build concrete rustc Instance dispatch from the selected entry ---
-        let concrete_dispatch = resolve_reachable_instance_dispatch(tcx, &self.instance_entry_hint);
+        let concrete_dispatch = match resolve_reachable_instance_dispatch(tcx, &self.instance_entry_hint) {
+            Ok(dispatch) => dispatch,
+            Err(boundary) => {
+                self.instance_dispatch_boundary = Some(boundary);
+                BTreeMap::new()
+            }
+        };
 
         // --- 2. costruisco la MIR per ogni funzione ---
         for def_id in tcx.hir().body_owners() {
