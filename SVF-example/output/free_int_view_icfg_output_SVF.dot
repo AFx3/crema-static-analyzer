@@ -1,0 +1,52 @@
+digraph ICFG {
+  "42" [label="ID: 42\nType: 0\nKind: 0\nInfo: IntraICFGNode42 {fun: free_int}
+AddrStmt: [Var59 <-- Var60]	
+ValVar ID: 59
+   %ptr.addr = alloca ptr, align 8 \nFunction: free_int\nBasic Block: entry\nStatements: [105243412315696, ]"];
+  "42" -> "43" [label="Intra"];
+  "43" [label="ID: 43\nType: 0\nKind: 0\nInfo: IntraICFGNode43 {fun: free_int}
+AddrStmt: [Var61 <-- Var62]	
+ValVar ID: 61
+   %int_ptr = alloca ptr, align 8 \nFunction: free_int\nBasic Block: entry\nStatements: [105243412316960, ]"];
+  "43" -> "44" [label="Intra"];
+  "44" [label="ID: 44\nType: 0\nKind: 0\nInfo: IntraICFGNode44 {fun: free_int}
+StoreStmt: [Var59 <-- Var58]	
+ValVar ID: 63
+   store ptr %ptr, ptr %ptr.addr, align 8 \nFunction: free_int\nBasic Block: entry\nStatements: [105243412635760, ]"];
+  "44" -> "45" [label="Intra"];
+  "45" [label="ID: 45\nType: 0\nKind: 0\nInfo: IntraICFGNode45 {fun: free_int}
+LoadStmt: [Var64 <-- Var59]	
+ValVar ID: 64
+   %0 = load ptr, ptr %ptr.addr, align 8 \nFunction: free_int\nBasic Block: entry\nStatements: [105243412488832, ]"];
+  "45" -> "46" [label="Intra"];
+  "46" [label="ID: 46\nType: 0\nKind: 0\nInfo: IntraICFGNode46 {fun: free_int}
+CopyStmt: [Var65 <-- Var64]	
+ValVar ID: 65
+   %1 = bitcast ptr %0 to ptr \nFunction: free_int\nBasic Block: entry\nStatements: [105243412490000, ]"];
+  "46" -> "47" [label="Intra"];
+  "47" [label="ID: 47\nType: 0\nKind: 0\nInfo: IntraICFGNode47 {fun: free_int}
+StoreStmt: [Var61 <-- Var65]	
+ValVar ID: 66
+   store ptr %1, ptr %int_ptr, align 8 \nFunction: free_int\nBasic Block: entry\nStatements: [105243412471472, ]"];
+  "47" -> "48" [label="Intra"];
+  "48" [label="ID: 48\nType: 0\nKind: 0\nInfo: IntraICFGNode48 {fun: free_int}
+LoadStmt: [Var67 <-- Var61]	
+ValVar ID: 67
+   %2 = load ptr, ptr %int_ptr, align 8 \nFunction: free_int\nBasic Block: entry\nStatements: [105243412472576, ]"];
+  "48" -> "49" [label="Intra"];
+  "49" [label="ID: 49\nType: 0\nKind: 0\nInfo: IntraICFGNode49 {fun: free_int}
+CopyStmt: [Var68 <-- Var67]	
+ValVar ID: 68
+   %3 = bitcast ptr %2 to ptr \nFunction: free_int\nBasic Block: entry\nStatements: [105243412619984, ]"];
+  "49" -> "50" [label="Intra"];
+  "50" [label="ID: 50\nType: 0x5fb7e4318520\nKind: 4\nInfo: CallICFGNode50 {fun: free_int}
+   call void @free(ptr noundef %3) #2 CallICFGNode: \nFunction: free_int\nBasic Block: entry\nStatements: None"];
+  "50" -> "51" [label="Intra"];
+  "51" [label="ID: 51\nType: 0x5fb7e4318520\nKind: 5\nInfo: RetICFGNode51 {fun: free_int}
+   call void @free(ptr noundef %3) #2 RetICFGNode: \nFunction: free_int\nBasic Block: entry\nStatements: None"];
+  "51" -> "52" [label="Intra"];
+  "52" [label="ID: 52\nType: 0\nKind: 0\nInfo: IntraICFGNode52 {fun: free_int}
+   ret void \nFunction: free_int\nBasic Block: entry\nStatements: None"];
+  "52" -> "8" [label="Intra"];
+  "8" [label="ID: 8\nType: 0\nKind: 3\nInfo: FunExitICFGNode8 {fun: free_int}\nFunction: free_int\nBasic Block: entry\nStatements: None"];
+}

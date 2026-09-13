@@ -1,0 +1,91 @@
+digraph ICFG {
+  "5" [label="ID: 5\nType: 0\nKind: 0\nInfo: IntraICFGNode5 {fun: cast}
+AddrStmt: [Var13 <-- Var14]	
+ValVar ID: 13
+   %ptr.addr = alloca ptr, align 8 \nFunction: cast\nBasic Block: entry\nStatements: [106191985225168, ]"];
+  "5" -> "6" [label="Intra"];
+  "6" [label="ID: 6\nType: 0\nKind: 0\nInfo: IntraICFGNode6 {fun: cast}
+AddrStmt: [Var16 <-- Var17]	
+ValVar ID: 16
+   %int_ptr = alloca ptr, align 8 \nFunction: cast\nBasic Block: entry\nStatements: [106191985163232, ]"];
+  "6" -> "7" [label="Intra"];
+  "7" [label="ID: 7\nType: 0\nKind: 0\nInfo: IntraICFGNode7 {fun: cast}
+StoreStmt: [Var13 <-- Var12]	
+ValVar ID: 18
+   store ptr %ptr, ptr %ptr.addr, align 8 \nFunction: cast\nBasic Block: entry\nStatements: [106191985176864, ]"];
+  "7" -> "8" [label="Intra"];
+  "8" [label="ID: 8\nType: 0\nKind: 0\nInfo: IntraICFGNode8 {fun: cast}
+LoadStmt: [Var19 <-- Var13]	
+ValVar ID: 19
+   %0 = load ptr, ptr %ptr.addr, align 8 \nFunction: cast\nBasic Block: entry\nStatements: [106191985152208, ]"];
+  "8" -> "9" [label="Intra"];
+  "9" [label="ID: 9\nType: 0\nKind: 0\nInfo: IntraICFGNode9 {fun: cast}
+CmpStmt: [Var20 <-- (Var19 predicate33 Var0)]	
+ValVar ID: 20
+   %cmp = icmp ne ptr %0, null \nFunction: cast\nBasic Block: entry\nStatements: [106191985330080, ]"];
+  "9" -> "10" [label="Intra"];
+  "10" [label="ID: 10\nType: 0\nKind: 0\nInfo: IntraICFGNode10 {fun: cast}
+BranchStmt: [Condition Var20]
+Successor 0 ICFGNode11   Successor 1 ICFGNode12   
+ValVar ID: 21
+   br i1 %cmp, label %if.then, label %if.end \nFunction: cast\nBasic Block: entry\nStatements: [106191985217760, ]"];
+  "10" -> "11" [label="Intra"];
+  "10" -> "12" [label="Intra"];
+  "11" [label="ID: 11\nType: 0\nKind: 0\nInfo: IntraICFGNode11 {fun: cast}
+LoadStmt: [Var22 <-- Var13]	
+ValVar ID: 22
+   %1 = load ptr, ptr %ptr.addr, align 8 \nFunction: cast\nBasic Block: if.then\nStatements: [106191985214816, ]"];
+  "11" -> "13" [label="Intra"];
+  "12" [label="ID: 12\nType: 0\nKind: 0\nInfo: IntraICFGNode12 {fun: cast}
+   ret void \nFunction: cast\nBasic Block: if.end\nStatements: None"];
+  "12" -> "2" [label="Intra"];
+  "13" [label="ID: 13\nType: 0\nKind: 0\nInfo: IntraICFGNode13 {fun: cast}
+CopyStmt: [Var23 <-- Var22]	
+ValVar ID: 23
+   %2 = bitcast ptr %1 to ptr \nFunction: cast\nBasic Block: if.then\nStatements: [106191985215328, ]"];
+  "13" -> "14" [label="Intra"];
+  "2" [label="ID: 2\nType: 0\nKind: 3\nInfo: FunExitICFGNode2 {fun: cast}\nFunction: cast\nBasic Block: if.end\nStatements: None"];
+  "14" [label="ID: 14\nType: 0\nKind: 0\nInfo: IntraICFGNode14 {fun: cast}
+StoreStmt: [Var16 <-- Var23]	
+ValVar ID: 24
+   store ptr %2, ptr %int_ptr, align 8 \nFunction: cast\nBasic Block: if.then\nStatements: [106191985535936, ]"];
+  "14" -> "15" [label="Intra"];
+  "15" [label="ID: 15\nType: 0\nKind: 0\nInfo: IntraICFGNode15 {fun: cast}
+LoadStmt: [Var25 <-- Var16]	
+ValVar ID: 25
+   %3 = load ptr, ptr %int_ptr, align 8 \nFunction: cast\nBasic Block: if.then\nStatements: [106191985530672, ]"];
+  "15" -> "16" [label="Intra"];
+  "16" [label="ID: 16\nType: 0\nKind: 0\nInfo: IntraICFGNode16 {fun: cast}
+LoadStmt: [Var26 <-- Var25]	
+ValVar ID: 26
+   %4 = load i32, ptr %3, align 4 \nFunction: cast\nBasic Block: if.then\nStatements: [106191985135040, ]"];
+  "16" -> "17" [label="Intra"];
+  "17" [label="ID: 17\nType: 0x6094bf9629f0\nKind: 4\nInfo: CallICFGNode17 {fun: cast}
+   %call = call i32 (ptr, ...) @printf(ptr noundef @.str, i32 noundef %4) CallICFGNode: \nFunction: cast\nBasic Block: if.then\nStatements: None"];
+  "17" -> "18" [label="Intra"];
+  "18" [label="ID: 18\nType: 0x6094bf9629f0\nKind: 5\nInfo: RetICFGNode18 {fun: cast}
+   %call = call i32 (ptr, ...) @printf(ptr noundef @.str, i32 noundef %4) RetICFGNode: \nFunction: cast\nBasic Block: if.then\nStatements: None"];
+  "18" -> "19" [label="Intra"];
+  "19" [label="ID: 19\nType: 0\nKind: 0\nInfo: IntraICFGNode19 {fun: cast}
+LoadStmt: [Var30 <-- Var16]	
+ValVar ID: 30
+   %5 = load ptr, ptr %int_ptr, align 8 \nFunction: cast\nBasic Block: if.then\nStatements: [106191985531904, ]"];
+  "19" -> "20" [label="Intra"];
+  "20" [label="ID: 20\nType: 0\nKind: 0\nInfo: IntraICFGNode20 {fun: cast}
+CopyStmt: [Var31 <-- Var30]	
+ValVar ID: 31
+   %6 = bitcast ptr %5 to ptr \nFunction: cast\nBasic Block: if.then\nStatements: [106191985411440, ]"];
+  "20" -> "21" [label="Intra"];
+  "21" [label="ID: 21\nType: 0x6094bf8dd450\nKind: 4\nInfo: CallICFGNode21 {fun: cast}
+   call void @free(ptr noundef %6) #3 CallICFGNode: \nFunction: cast\nBasic Block: if.then\nStatements: None"];
+  "21" -> "22" [label="Intra"];
+  "22" [label="ID: 22\nType: 0x6094bf8dd450\nKind: 5\nInfo: RetICFGNode22 {fun: cast}
+   call void @free(ptr noundef %6) #3 RetICFGNode: \nFunction: cast\nBasic Block: if.then\nStatements: None"];
+  "22" -> "23" [label="Intra"];
+  "23" [label="ID: 23\nType: 0\nKind: 0\nInfo: IntraICFGNode23 {fun: cast}
+BranchStmt: [ Unconditional branch]
+Successor 0 ICFGNode12   
+ValVar ID: 35
+   br label %if.end \nFunction: cast\nBasic Block: if.then\nStatements: [106191985438144, ]"];
+  "23" -> "12" [label="Intra"];
+}

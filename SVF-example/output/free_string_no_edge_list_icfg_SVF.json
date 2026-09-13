@@ -1,0 +1,359 @@
+{
+	"edges" : [],
+	"nodes" : 
+	[
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 105243412297168,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 105243412138080,
+			"function_name" : "free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 105243412055072,
+					"edge_type" : "intra",
+					"source" : 105243412487024
+				}
+			],
+			"info" : "IntraICFGNode53 {fun: free_string}\nAddrStmt: [Var75 <-- Var76]\t\nValVar ID: 75\n   %str.addr = alloca ptr, align 8 ",
+			"node_id" : 105243412055072,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 105243412058704,
+					"edge_type" : "intra",
+					"source" : 105243412055072
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 105243412143456,
+					"stmt_info" : "AddrStmt: [Var75 <-- Var76]\t\nValVar ID: 75\n   %str.addr = alloca ptr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 105243412297168,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 105243412138080,
+			"function_name" : "free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 105243412058704,
+					"edge_type" : "intra",
+					"source" : 105243412055072
+				}
+			],
+			"info" : "IntraICFGNode54 {fun: free_string}\nStoreStmt: [Var75 <-- Var74]\t\nValVar ID: 77\n   store ptr %str, ptr %str.addr, align 8 ",
+			"node_id" : 105243412058704,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 105243412058144,
+					"edge_type" : "intra",
+					"source" : 105243412058704
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 105243412144768,
+					"stmt_info" : "StoreStmt: [Var75 <-- Var74]\t\nValVar ID: 77\n   store ptr %str, ptr %str.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 105243412297168,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 105243412138080,
+			"function_name" : "free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 105243412058144,
+					"edge_type" : "intra",
+					"source" : 105243412058704
+				}
+			],
+			"info" : "IntraICFGNode55 {fun: free_string}\nLoadStmt: [Var78 <-- Var75]\t\nValVar ID: 78\n   %0 = load ptr, ptr %str.addr, align 8 ",
+			"node_id" : 105243412058144,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 105243412192832,
+					"edge_type" : "intra",
+					"source" : 105243412058144
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 105243412293008,
+					"stmt_info" : "LoadStmt: [Var78 <-- Var75]\t\nValVar ID: 78\n   %0 = load ptr, ptr %str.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 105243412297168,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 105243412138080,
+			"function_name" : "free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 105243412192832,
+					"edge_type" : "intra",
+					"source" : 105243412058144
+				}
+			],
+			"info" : "IntraICFGNode56 {fun: free_string}\nCmpStmt: [Var79 <-- (Var78 predicate33 Var0)]\t\nValVar ID: 79\n   %cmp = icmp ne ptr %0, null ",
+			"node_id" : 105243412192832,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 105243412137584,
+					"edge_type" : "intra",
+					"source" : 105243412192832
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 105243412294304,
+					"stmt_info" : "CmpStmt: [Var79 <-- (Var78 predicate33 Var0)]\t\nValVar ID: 79\n   %cmp = icmp ne ptr %0, null "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 105243412297168,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 105243412138080,
+			"function_name" : "free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 105243412137584,
+					"edge_type" : "intra",
+					"source" : 105243412192832
+				}
+			],
+			"info" : "IntraICFGNode57 {fun: free_string}\nBranchStmt: [Condition Var79]\nSuccessor 0 ICFGNode58   Successor 1 ICFGNode59   \nValVar ID: 80\n   br i1 %cmp, label %if.then, label %if.end ",
+			"node_id" : 105243412137584,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 105243412627104,
+					"edge_type" : "intra",
+					"source" : 105243412137584
+				},
+				{
+					"destination" : 105243412451072,
+					"edge_type" : "intra",
+					"source" : 105243412137584
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 105243412291008,
+					"stmt_info" : "BranchStmt: [Condition Var79]\nSuccessor 0 ICFGNode58   Successor 1 ICFGNode59   \nValVar ID: 80\n   br i1 %cmp, label %if.then, label %if.end "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "if.then",
+			"basic_block" : 105243412062672,
+			"basic_block_info" : "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+			"function" : 105243412138080,
+			"function_name" : "free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 105243412627104,
+					"edge_type" : "intra",
+					"source" : 105243412137584
+				}
+			],
+			"info" : "IntraICFGNode58 {fun: free_string}\nLoadStmt: [Var81 <-- Var75]\t\nValVar ID: 81\n   %1 = load ptr, ptr %str.addr, align 8 ",
+			"node_id" : 105243412627104,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 105243412662224,
+					"edge_type" : "intra",
+					"source" : 105243412627104
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 105243412292128,
+					"stmt_info" : "LoadStmt: [Var81 <-- Var75]\t\nValVar ID: 81\n   %1 = load ptr, ptr %str.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "if.end",
+			"basic_block" : 105243412052592,
+			"basic_block_info" : "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+			"function" : 105243412138080,
+			"function_name" : "free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 105243412451072,
+					"edge_type" : "intra",
+					"source" : 105243412137584
+				},
+				{
+					"destination" : 105243412451072,
+					"edge_type" : "intra",
+					"source" : 105243412474512
+				}
+			],
+			"info" : "IntraICFGNode59 {fun: free_string}\n   ret void ",
+			"node_id" : 105243412451072,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 105243412048176,
+					"edge_type" : "intra",
+					"source" : 105243412451072
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "if.then",
+			"basic_block" : 105243412062672,
+			"basic_block_info" : "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+			"function" : 105243412138080,
+			"function_name" : "free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 105243412662224,
+					"edge_type" : "intra",
+					"source" : 105243412627104
+				}
+			],
+			"info" : "CallICFGNode60 {fun: free_string}\n   call void @free(ptr noundef %1) #2 CallICFGNode: ",
+			"node_id" : 105243412662224,
+			"node_kind" : 4,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 105243412667648,
+					"edge_type" : "intra",
+					"source" : 105243412662224
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "if.end",
+			"basic_block" : 105243412052592,
+			"basic_block_info" : "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+			"function" : 105243412138080,
+			"function_name" : "free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 105243412048176,
+					"edge_type" : "intra",
+					"source" : 105243412451072
+				}
+			],
+			"info" : "FunExitICFGNode10 {fun: free_string}",
+			"node_id" : 105243412048176,
+			"node_kind" : 3,
+			"node_type" : false,
+			"outgoing_edges" : [],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "if.then",
+			"basic_block" : 105243412062672,
+			"basic_block_info" : "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+			"function" : 105243412138080,
+			"function_name" : "free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 105243412667648,
+					"edge_type" : "intra",
+					"source" : 105243412662224
+				}
+			],
+			"info" : "RetICFGNode61 {fun: free_string}\n   call void @free(ptr noundef %1) #2 RetICFGNode: ",
+			"node_id" : 105243412667648,
+			"node_kind" : 5,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 105243412474512,
+					"edge_type" : "intra",
+					"source" : 105243412667648
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "if.then",
+			"basic_block" : 105243412062672,
+			"basic_block_info" : "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+			"function" : 105243412138080,
+			"function_name" : "free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 105243412474512,
+					"edge_type" : "intra",
+					"source" : 105243412667648
+				}
+			],
+			"info" : "IntraICFGNode62 {fun: free_string}\nBranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode59   \nValVar ID: 83\n   br label %if.end ",
+			"node_id" : 105243412474512,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 105243412451072,
+					"edge_type" : "intra",
+					"source" : 105243412474512
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 105243412483840,
+					"stmt_info" : "BranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode59   \nValVar ID: 83\n   br label %if.end "
+				}
+			]
+		}
+	]
+}

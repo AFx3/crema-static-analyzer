@@ -1,0 +1,128 @@
+digraph ICFG {
+  "3" [label="ID: 3\nType: 0\nKind: 0\nInfo: IntraICFGNode3 {fun: c_alloc_string}
+AddrStmt: [Var8 <-- Var9]	
+ValVar ID: 8
+   %src = alloca ptr, align 8 \nFunction: c_alloc_string\nBasic Block: entry\nStatements: [106284843098640, ]"];
+  "3" -> "4" [label="Intra"];
+  "4" [label="ID: 4\nType: 0\nKind: 0\nInfo: IntraICFGNode4 {fun: c_alloc_string}
+AddrStmt: [Var11 <-- Var12]	
+ValVar ID: 11
+   %n = alloca i64, align 8 \nFunction: c_alloc_string\nBasic Block: entry\nStatements: [106284842482960, ]"];
+  "4" -> "5" [label="Intra"];
+  "5" [label="ID: 5\nType: 0\nKind: 0\nInfo: IntraICFGNode5 {fun: c_alloc_string}
+AddrStmt: [Var13 <-- Var14]	
+ValVar ID: 13
+   %p = alloca ptr, align 8 \nFunction: c_alloc_string\nBasic Block: entry\nStatements: [106284842519280, ]"];
+  "5" -> "6" [label="Intra"];
+  "6" [label="ID: 6\nType: 0\nKind: 0\nInfo: IntraICFGNode6 {fun: c_alloc_string}
+StoreStmt: [Var8 <-- Var4]	
+ValVar ID: 15
+   store ptr @.str, ptr %src, align 8 \nFunction: c_alloc_string\nBasic Block: entry\nStatements: [106284842601712, ]"];
+  "6" -> "7" [label="Intra"];
+  "7" [label="ID: 7\nType: 0\nKind: 0\nInfo: IntraICFGNode7 {fun: c_alloc_string}
+LoadStmt: [Var16 <-- Var8]	
+ValVar ID: 16
+   %0 = load ptr, ptr %src, align 8 \nFunction: c_alloc_string\nBasic Block: entry\nStatements: [106284843030848, ]"];
+  "7" -> "8" [label="Intra"];
+  "8" [label="ID: 8\nType: 0x60aa5e5151b0\nKind: 4\nInfo: CallICFGNode8 {fun: c_alloc_string}
+   %call = call i64 @strlen(ptr noundef %0) #4 CallICFGNode: \nFunction: c_alloc_string\nBasic Block: entry\nStatements: None"];
+  "8" -> "9" [label="Intra"];
+  "9" [label="ID: 9\nType: 0x60aa5e5151b0\nKind: 5\nInfo: RetICFGNode9 {fun: c_alloc_string}
+   %call = call i64 @strlen(ptr noundef %0) #4 RetICFGNode: \nFunction: c_alloc_string\nBasic Block: entry\nStatements: None"];
+  "9" -> "10" [label="Intra"];
+  "10" [label="ID: 10\nType: 0\nKind: 0\nInfo: IntraICFGNode10 {fun: c_alloc_string}
+BinaryOPStmt: [Var20 <-- (Var17 opcode13 Var21)]	
+ValVar ID: 20
+   %add = add i64 %call, 1 \nFunction: c_alloc_string\nBasic Block: entry\nStatements: [106284842798672, ]"];
+  "10" -> "11" [label="Intra"];
+  "11" [label="ID: 11\nType: 0\nKind: 0\nInfo: IntraICFGNode11 {fun: c_alloc_string}
+StoreStmt: [Var11 <-- Var20]	
+ValVar ID: 22
+   store i64 %add, ptr %n, align 8 \nFunction: c_alloc_string\nBasic Block: entry\nStatements: [106284842670144, ]"];
+  "11" -> "12" [label="Intra"];
+  "12" [label="ID: 12\nType: 0\nKind: 0\nInfo: IntraICFGNode12 {fun: c_alloc_string}
+LoadStmt: [Var23 <-- Var11]	
+ValVar ID: 23
+   %1 = load i64, ptr %n, align 8 \nFunction: c_alloc_string\nBasic Block: entry\nStatements: [106284842767056, ]"];
+  "12" -> "13" [label="Intra"];
+  "13" [label="ID: 13\nType: 0x60aa5e4c1600\nKind: 4\nInfo: CallICFGNode13 {fun: c_alloc_string}
+AddrStmt: [Var24 <-- Var25]	
+ValVar ID: 24
+   %call1 = call noalias ptr @malloc(i64 noundef %1) #5 \nFunction: c_alloc_string\nBasic Block: entry\nStatements: [106284842797904, ]"];
+  "13" -> "14" [label="Intra"];
+  "14" [label="ID: 14\nType: 0x60aa5e4c1600\nKind: 5\nInfo: RetICFGNode14 {fun: c_alloc_string}
+   %call1 = call noalias ptr @malloc(i64 noundef %1) #5 RetICFGNode: \nFunction: c_alloc_string\nBasic Block: entry\nStatements: None"];
+  "14" -> "15" [label="Intra"];
+  "15" [label="ID: 15\nType: 0\nKind: 0\nInfo: IntraICFGNode15 {fun: c_alloc_string}
+StoreStmt: [Var13 <-- Var24]	
+ValVar ID: 28
+   store ptr %call1, ptr %p, align 8 \nFunction: c_alloc_string\nBasic Block: entry\nStatements: [106284842741024, ]"];
+  "15" -> "16" [label="Intra"];
+  "16" [label="ID: 16\nType: 0\nKind: 0\nInfo: IntraICFGNode16 {fun: c_alloc_string}
+LoadStmt: [Var29 <-- Var13]	
+ValVar ID: 29
+   %2 = load ptr, ptr %p, align 8 \nFunction: c_alloc_string\nBasic Block: entry\nStatements: [106284842522576, ]"];
+  "16" -> "17" [label="Intra"];
+  "17" [label="ID: 17\nType: 0\nKind: 0\nInfo: IntraICFGNode17 {fun: c_alloc_string}
+CmpStmt: [Var30 <-- (Var29 predicate33 Var0)]	
+ValVar ID: 30
+   %cmp = icmp ne ptr %2, null \nFunction: c_alloc_string\nBasic Block: entry\nStatements: [106284843080112, ]"];
+  "17" -> "18" [label="Intra"];
+  "18" [label="ID: 18\nType: 0\nKind: 0\nInfo: IntraICFGNode18 {fun: c_alloc_string}
+BranchStmt: [Condition Var30]
+Successor 0 ICFGNode19   Successor 1 ICFGNode20   
+ValVar ID: 31
+   br i1 %cmp, label %if.then, label %if.end \nFunction: c_alloc_string\nBasic Block: entry\nStatements: [106284842503024, ]"];
+  "18" -> "19" [label="Intra"];
+  "18" -> "20" [label="Intra"];
+  "19" [label="ID: 19\nType: 0\nKind: 0\nInfo: IntraICFGNode19 {fun: c_alloc_string}
+LoadStmt: [Var32 <-- Var13]	
+ValVar ID: 32
+   %3 = load ptr, ptr %p, align 8 \nFunction: c_alloc_string\nBasic Block: if.then\nStatements: [106284842513952, ]"];
+  "19" -> "21" [label="Intra"];
+  "20" [label="ID: 20\nType: 0\nKind: 0\nInfo: IntraICFGNode20 {fun: c_alloc_string}
+LoadStmt: [Var41 <-- Var13]	
+ValVar ID: 41
+   %6 = load ptr, ptr %p, align 8 \nFunction: c_alloc_string\nBasic Block: if.end\nStatements: [106284842669408, ]"];
+  "20" -> "22" [label="Intra"];
+  "21" [label="ID: 21\nType: 0\nKind: 0\nInfo: IntraICFGNode21 {fun: c_alloc_string}
+LoadStmt: [Var33 <-- Var8]	
+ValVar ID: 33
+   %4 = load ptr, ptr %src, align 8 \nFunction: c_alloc_string\nBasic Block: if.then\nStatements: [106284842660256, ]"];
+  "21" -> "23" [label="Intra"];
+  "22" [label="ID: 22\nType: 0\nKind: 0\nInfo: IntraICFGNode22 {fun: c_alloc_string}
+   ret ptr %6 \nFunction: c_alloc_string\nBasic Block: if.end\nStatements: None"];
+  "22" -> "2" [label="Intra"];
+  "23" [label="ID: 23\nType: 0\nKind: 0\nInfo: IntraICFGNode23 {fun: c_alloc_string}
+LoadStmt: [Var34 <-- Var11]	
+ValVar ID: 34
+   %5 = load i64, ptr %n, align 8 \nFunction: c_alloc_string\nBasic Block: if.then\nStatements: [106284842860400, ]"];
+  "23" -> "24" [label="Intra"];
+  "2" [label="ID: 2\nType: 0\nKind: 3\nInfo: FunExitICFGNode2 {fun: c_alloc_string}
+PhiStmt: [Var7 <-- ([Var41, ICFGNode22],)]	
+ValVar ID: 42
+   ret ptr %6 \nFunction: c_alloc_string\nBasic Block: if.end\nStatements: [106284842666544, ]"];
+  "24" [label="ID: 24\nType: 0x60aa5e4aab60\nKind: 4\nInfo: CallICFGNode24 {fun: c_alloc_string}
+GepStmt: [Var53 <-- Var32]	
+ValVar ID: 35
+   call void @llvm.memcpy.p0.p0.i64(ptr align 1 %3, ptr align 1 %4, i64 %5, i1 false) 
+GepStmt: [Var54 <-- Var33]	
+ValVar ID: 35
+   call void @llvm.memcpy.p0.p0.i64(ptr align 1 %3, ptr align 1 %4, i64 %5, i1 false) 
+LoadStmt: [Var55 <-- Var54]	
+ValVar ID: 35
+   call void @llvm.memcpy.p0.p0.i64(ptr align 1 %3, ptr align 1 %4, i64 %5, i1 false) 
+StoreStmt: [Var53 <-- Var55]	
+ValVar ID: 35
+   call void @llvm.memcpy.p0.p0.i64(ptr align 1 %3, ptr align 1 %4, i64 %5, i1 false) \nFunction: c_alloc_string\nBasic Block: if.then\nStatements: [106284842468752, 106284842529296, 106284842547472, 106284842671168, ]"];
+  "24" -> "25" [label="Intra"];
+  "25" [label="ID: 25\nType: 0x60aa5e4aab60\nKind: 5\nInfo: RetICFGNode25 {fun: c_alloc_string}
+   call void @llvm.memcpy.p0.p0.i64(ptr align 1 %3, ptr align 1 %4, i64 %5, i1 false) RetICFGNode: \nFunction: c_alloc_string\nBasic Block: if.then\nStatements: None"];
+  "25" -> "26" [label="Intra"];
+  "26" [label="ID: 26\nType: 0\nKind: 0\nInfo: IntraICFGNode26 {fun: c_alloc_string}
+BranchStmt: [ Unconditional branch]
+Successor 0 ICFGNode20   
+ValVar ID: 39
+   br label %if.end \nFunction: c_alloc_string\nBasic Block: if.then\nStatements: [106284842671696, ]"];
+  "26" -> "20" [label="Intra"];
+}

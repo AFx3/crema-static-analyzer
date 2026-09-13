@@ -1,0 +1,254 @@
+{
+	"edges" : 
+	[
+		{
+			"destination" : 95649433704656,
+			"edge_type" : "intra",
+			"source" : 95649433693920
+		},
+		{
+			"destination" : 95649433850736,
+			"edge_type" : "intra",
+			"source" : 95649433704656
+		},
+		{
+			"destination" : 95649433858592,
+			"edge_type" : "intra",
+			"source" : 95649433850736
+		},
+		{
+			"destination" : 95649433861216,
+			"edge_type" : "intra",
+			"source" : 95649433858592
+		},
+		{
+			"destination" : 95649433678256,
+			"edge_type" : "intra",
+			"source" : 95649433861216
+		},
+		{
+			"destination" : 95649433429664,
+			"edge_type" : "intra",
+			"source" : 95649433678256
+		},
+		{
+			"destination" : 95649433487856,
+			"edge_type" : "intra",
+			"source" : 95649433429664
+		},
+		{
+			"destination" : 95649433965200,
+			"edge_type" : "intra",
+			"source" : 95649433487856
+		},
+		{
+			"destination" : 95649433499312,
+			"edge_type" : "intra",
+			"source" : 95649433965200
+		},
+		{
+			"destination" : 95649434049744,
+			"edge_type" : "intra",
+			"source" : 95649433499312
+		},
+		{
+			"destination" : 95649433449808,
+			"edge_type" : "intra",
+			"source" : 95649434049744
+		},
+		{
+			"destination" : 95649433619824,
+			"edge_type" : "intra",
+			"source" : 95649433449808
+		}
+	],
+	"nodes" : 
+	[
+		{
+			"basic_block" : 95649433525136,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433463568,
+			"function_name" : "bridge_open_url",
+			"info" : "IntraICFGNode73 {fun: bridge_open_url}\nAddrStmt: [Var113 <-- Var114]\t\nValVar ID: 113\n   %f.addr = alloca ptr, align 8 ",
+			"node_id" : 95649433693920,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433669952
+			]
+		},
+		{
+			"basic_block" : 95649433525136,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433463568,
+			"function_name" : "bridge_open_url",
+			"info" : "IntraICFGNode74 {fun: bridge_open_url}\nAddrStmt: [Var115 <-- Var116]\t\nValVar ID: 115\n   %url.addr = alloca ptr, align 8 ",
+			"node_id" : 95649433704656,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433671120
+			]
+		},
+		{
+			"basic_block" : 95649433525136,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433463568,
+			"function_name" : "bridge_open_url",
+			"info" : "IntraICFGNode75 {fun: bridge_open_url}\nAddrStmt: [Var117 <-- Var118]\t\nValVar ID: 117\n   %userdata.addr = alloca ptr, align 8 ",
+			"node_id" : 95649433850736,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433948640
+			]
+		},
+		{
+			"basic_block" : 95649433525136,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433463568,
+			"function_name" : "bridge_open_url",
+			"info" : "IntraICFGNode76 {fun: bridge_open_url}\nStoreStmt: [Var113 <-- Var110]\t\nValVar ID: 119\n   store ptr %f, ptr %f.addr, align 8 ",
+			"node_id" : 95649433858592,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433949952
+			]
+		},
+		{
+			"basic_block" : 95649433525136,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433463568,
+			"function_name" : "bridge_open_url",
+			"info" : "IntraICFGNode77 {fun: bridge_open_url}\nStoreStmt: [Var115 <-- Var111]\t\nValVar ID: 120\n   store ptr %url, ptr %url.addr, align 8 ",
+			"node_id" : 95649433861216,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433951104
+			]
+		},
+		{
+			"basic_block" : 95649433525136,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433463568,
+			"function_name" : "bridge_open_url",
+			"info" : "IntraICFGNode78 {fun: bridge_open_url}\nStoreStmt: [Var117 <-- Var112]\t\nValVar ID: 121\n   store ptr %userdata, ptr %userdata.addr, align 8 ",
+			"node_id" : 95649433678256,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433942384
+			]
+		},
+		{
+			"basic_block" : 95649433525136,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433463568,
+			"function_name" : "bridge_open_url",
+			"info" : "IntraICFGNode79 {fun: bridge_open_url}\nLoadStmt: [Var122 <-- Var113]\t\nValVar ID: 122\n   %0 = load ptr, ptr %f.addr, align 8 ",
+			"node_id" : 95649433429664,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433943488
+			]
+		},
+		{
+			"basic_block" : 95649433525136,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433463568,
+			"function_name" : "bridge_open_url",
+			"info" : "IntraICFGNode80 {fun: bridge_open_url}\nLoadStmt: [Var123 <-- Var115]\t\nValVar ID: 123\n   %1 = load ptr, ptr %url.addr, align 8 ",
+			"node_id" : 95649433487856,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433944704
+			]
+		},
+		{
+			"basic_block" : 95649433525136,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433463568,
+			"function_name" : "bridge_open_url",
+			"info" : "IntraICFGNode81 {fun: bridge_open_url}\nLoadStmt: [Var124 <-- Var117]\t\nValVar ID: 124\n   %2 = load ptr, ptr %userdata.addr, align 8 ",
+			"node_id" : 95649433965200,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433886832
+			]
+		},
+		{
+			"basic_block" : 95649433525136,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433463568,
+			"function_name" : "bridge_open_url",
+			"info" : "CallICFGNode82 {fun: bridge_open_url}\n   %call = call ptr %0(ptr noundef %1, ptr noundef %2) CallICFGNode: ",
+			"node_id" : 95649433499312,
+			"node_kind" : 4,
+			"node_type" : true,
+			"svf_statements" : []
+		},
+		{
+			"basic_block" : 95649433525136,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433463568,
+			"function_name" : "bridge_open_url",
+			"info" : "RetICFGNode83 {fun: bridge_open_url}\n   %call = call ptr %0(ptr noundef %1, ptr noundef %2) RetICFGNode: ",
+			"node_id" : 95649434049744,
+			"node_kind" : 5,
+			"node_type" : true,
+			"svf_statements" : []
+		},
+		{
+			"basic_block" : 95649433525136,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433463568,
+			"function_name" : "bridge_open_url",
+			"info" : "IntraICFGNode84 {fun: bridge_open_url}\n   ret ptr %call ",
+			"node_id" : 95649433449808,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : []
+		},
+		{
+			"basic_block" : 95649433525136,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433463568,
+			"function_name" : "bridge_open_url",
+			"info" : "FunExitICFGNode8 {fun: bridge_open_url}\nPhiStmt: [Var109 <-- ([Var125, ICFGNode84],)]\t\nValVar ID: 126\n   ret ptr %call ",
+			"node_id" : 95649433619824,
+			"node_kind" : 3,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433888624
+			]
+		}
+	]
+}

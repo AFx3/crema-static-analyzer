@@ -1,0 +1,627 @@
+{
+	"edges" : [],
+	"nodes" : 
+	[
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649433448448,
+					"edge_type" : "intra",
+					"source" : 95649433885360
+				}
+			],
+			"info" : "IntraICFGNode55 {fun: bridge_on_handle_call}\nAddrStmt: [Var85 <-- Var86]\t\nValVar ID: 85\n   %f.addr = alloca ptr, align 8 ",
+			"node_id" : 95649433448448,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649433503120,
+					"edge_type" : "intra",
+					"source" : 95649433448448
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 95649434041840,
+					"stmt_info" : "AddrStmt: [Var85 <-- Var86]\t\nValVar ID: 85\n   %f.addr = alloca ptr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649433503120,
+					"edge_type" : "intra",
+					"source" : 95649433448448
+				}
+			],
+			"info" : "IntraICFGNode56 {fun: bridge_on_handle_call}\nAddrStmt: [Var87 <-- Var88]\t\nValVar ID: 87\n   %route_id.addr = alloca ptr, align 8 ",
+			"node_id" : 95649433503120,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649434010912,
+					"edge_type" : "intra",
+					"source" : 95649433503120
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 95649434042912,
+					"stmt_info" : "AddrStmt: [Var87 <-- Var88]\t\nValVar ID: 87\n   %route_id.addr = alloca ptr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649434010912,
+					"edge_type" : "intra",
+					"source" : 95649433503120
+				}
+			],
+			"info" : "IntraICFGNode57 {fun: bridge_on_handle_call}\nAddrStmt: [Var89 <-- Var90]\t\nValVar ID: 89\n   %channel_id.addr = alloca ptr, align 8 ",
+			"node_id" : 95649434010912,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649434045360,
+					"edge_type" : "intra",
+					"source" : 95649434010912
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 95649434044176,
+					"stmt_info" : "AddrStmt: [Var89 <-- Var90]\t\nValVar ID: 89\n   %channel_id.addr = alloca ptr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649434045360,
+					"edge_type" : "intra",
+					"source" : 95649434010912
+				}
+			],
+			"info" : "IntraICFGNode58 {fun: bridge_on_handle_call}\nAddrStmt: [Var91 <-- Var92]\t\nValVar ID: 91\n   %raddr.addr = alloca ptr, align 8 ",
+			"node_id" : 95649434045360,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649433434048,
+					"edge_type" : "intra",
+					"source" : 95649434045360
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 95649434032144,
+					"stmt_info" : "AddrStmt: [Var91 <-- Var92]\t\nValVar ID: 91\n   %raddr.addr = alloca ptr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649433434048,
+					"edge_type" : "intra",
+					"source" : 95649434045360
+				}
+			],
+			"info" : "IntraICFGNode59 {fun: bridge_on_handle_call}\nAddrStmt: [Var93 <-- Var94]\t\nValVar ID: 93\n   %userdata.addr = alloca ptr, align 8 ",
+			"node_id" : 95649433434048,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649433826880,
+					"edge_type" : "intra",
+					"source" : 95649433434048
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 95649434033408,
+					"stmt_info" : "AddrStmt: [Var93 <-- Var94]\t\nValVar ID: 93\n   %userdata.addr = alloca ptr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649433826880,
+					"edge_type" : "intra",
+					"source" : 95649433434048
+				}
+			],
+			"info" : "IntraICFGNode60 {fun: bridge_on_handle_call}\nStoreStmt: [Var85 <-- Var80]\t\nValVar ID: 95\n   store ptr %f, ptr %f.addr, align 8 ",
+			"node_id" : 95649433826880,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649433502464,
+					"edge_type" : "intra",
+					"source" : 95649433826880
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 95649434034720,
+					"stmt_info" : "StoreStmt: [Var85 <-- Var80]\t\nValVar ID: 95\n   store ptr %f, ptr %f.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649433502464,
+					"edge_type" : "intra",
+					"source" : 95649433826880
+				}
+			],
+			"info" : "IntraICFGNode61 {fun: bridge_on_handle_call}\nStoreStmt: [Var87 <-- Var81]\t\nValVar ID: 96\n   store ptr %route_id, ptr %route_id.addr, align 8 ",
+			"node_id" : 95649433502464,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649433738032,
+					"edge_type" : "intra",
+					"source" : 95649433502464
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 95649434035872,
+					"stmt_info" : "StoreStmt: [Var87 <-- Var81]\t\nValVar ID: 96\n   store ptr %route_id, ptr %route_id.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649433738032,
+					"edge_type" : "intra",
+					"source" : 95649433502464
+				}
+			],
+			"info" : "IntraICFGNode62 {fun: bridge_on_handle_call}\nStoreStmt: [Var89 <-- Var82]\t\nValVar ID: 97\n   store ptr %channel_id, ptr %channel_id.addr, align 8 ",
+			"node_id" : 95649433738032,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649434010368,
+					"edge_type" : "intra",
+					"source" : 95649433738032
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 95649433774416,
+					"stmt_info" : "StoreStmt: [Var89 <-- Var82]\t\nValVar ID: 97\n   store ptr %channel_id, ptr %channel_id.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649434010368,
+					"edge_type" : "intra",
+					"source" : 95649433738032
+				}
+			],
+			"info" : "IntraICFGNode63 {fun: bridge_on_handle_call}\nStoreStmt: [Var91 <-- Var83]\t\nValVar ID: 98\n   store ptr %raddr, ptr %raddr.addr, align 8 ",
+			"node_id" : 95649434010368,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649434014736,
+					"edge_type" : "intra",
+					"source" : 95649434010368
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 95649433775568,
+					"stmt_info" : "StoreStmt: [Var91 <-- Var83]\t\nValVar ID: 98\n   store ptr %raddr, ptr %raddr.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649434014736,
+					"edge_type" : "intra",
+					"source" : 95649434010368
+				}
+			],
+			"info" : "IntraICFGNode64 {fun: bridge_on_handle_call}\nStoreStmt: [Var93 <-- Var84]\t\nValVar ID: 99\n   store ptr %userdata, ptr %userdata.addr, align 8 ",
+			"node_id" : 95649434014736,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649433738432,
+					"edge_type" : "intra",
+					"source" : 95649434014736
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 95649433776720,
+					"stmt_info" : "StoreStmt: [Var93 <-- Var84]\t\nValVar ID: 99\n   store ptr %userdata, ptr %userdata.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649433738432,
+					"edge_type" : "intra",
+					"source" : 95649434014736
+				}
+			],
+			"info" : "IntraICFGNode65 {fun: bridge_on_handle_call}\nLoadStmt: [Var100 <-- Var85]\t\nValVar ID: 100\n   %0 = load ptr, ptr %f.addr, align 8 ",
+			"node_id" : 95649433738432,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649433477440,
+					"edge_type" : "intra",
+					"source" : 95649433738432
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 95649433777824,
+					"stmt_info" : "LoadStmt: [Var100 <-- Var85]\t\nValVar ID: 100\n   %0 = load ptr, ptr %f.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649433477440,
+					"edge_type" : "intra",
+					"source" : 95649433738432
+				}
+			],
+			"info" : "IntraICFGNode66 {fun: bridge_on_handle_call}\nLoadStmt: [Var101 <-- Var87]\t\nValVar ID: 101\n   %1 = load ptr, ptr %route_id.addr, align 8 ",
+			"node_id" : 95649433477440,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649433692032,
+					"edge_type" : "intra",
+					"source" : 95649433477440
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 95649433931488,
+					"stmt_info" : "LoadStmt: [Var101 <-- Var87]\t\nValVar ID: 101\n   %1 = load ptr, ptr %route_id.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649433692032,
+					"edge_type" : "intra",
+					"source" : 95649433477440
+				}
+			],
+			"info" : "IntraICFGNode67 {fun: bridge_on_handle_call}\nLoadStmt: [Var102 <-- Var89]\t\nValVar ID: 102\n   %2 = load ptr, ptr %channel_id.addr, align 8 ",
+			"node_id" : 95649433692032,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649434066000,
+					"edge_type" : "intra",
+					"source" : 95649433692032
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 95649433932704,
+					"stmt_info" : "LoadStmt: [Var102 <-- Var89]\t\nValVar ID: 102\n   %2 = load ptr, ptr %channel_id.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649434066000,
+					"edge_type" : "intra",
+					"source" : 95649433692032
+				}
+			],
+			"info" : "IntraICFGNode68 {fun: bridge_on_handle_call}\nLoadStmt: [Var103 <-- Var91]\t\nValVar ID: 103\n   %3 = load ptr, ptr %raddr.addr, align 8 ",
+			"node_id" : 95649434066000,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649433628304,
+					"edge_type" : "intra",
+					"source" : 95649434066000
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 95649433933920,
+					"stmt_info" : "LoadStmt: [Var103 <-- Var91]\t\nValVar ID: 103\n   %3 = load ptr, ptr %raddr.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649433628304,
+					"edge_type" : "intra",
+					"source" : 95649434066000
+				}
+			],
+			"info" : "IntraICFGNode69 {fun: bridge_on_handle_call}\nLoadStmt: [Var104 <-- Var93]\t\nValVar ID: 104\n   %4 = load ptr, ptr %userdata.addr, align 8 ",
+			"node_id" : 95649433628304,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649433799568,
+					"edge_type" : "intra",
+					"source" : 95649433628304
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 95649433935136,
+					"stmt_info" : "LoadStmt: [Var104 <-- Var93]\t\nValVar ID: 104\n   %4 = load ptr, ptr %userdata.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649433799568,
+					"edge_type" : "intra",
+					"source" : 95649433628304
+				}
+			],
+			"info" : "CallICFGNode70 {fun: bridge_on_handle_call}\n   %call = call ptr %0(ptr noundef %1, ptr noundef %2, ptr noundef %3, ptr noundef %4) CallICFGNode: ",
+			"node_id" : 95649433799568,
+			"node_kind" : 4,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649433687872,
+					"edge_type" : "intra",
+					"source" : 95649433799568
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649433687872,
+					"edge_type" : "intra",
+					"source" : 95649433799568
+				}
+			],
+			"info" : "RetICFGNode71 {fun: bridge_on_handle_call}\n   %call = call ptr %0(ptr noundef %1, ptr noundef %2, ptr noundef %3, ptr noundef %4) RetICFGNode: ",
+			"node_id" : 95649433687872,
+			"node_kind" : 5,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649433444400,
+					"edge_type" : "intra",
+					"source" : 95649433687872
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649433444400,
+					"edge_type" : "intra",
+					"source" : 95649433687872
+				}
+			],
+			"info" : "IntraICFGNode72 {fun: bridge_on_handle_call}\n   ret ptr %call ",
+			"node_id" : 95649433444400,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 95649433498880,
+					"edge_type" : "intra",
+					"source" : 95649433444400
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 95649433428288,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 95649433426736,
+			"function_name" : "bridge_on_handle_call",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 95649433498880,
+					"edge_type" : "intra",
+					"source" : 95649433444400
+				}
+			],
+			"info" : "FunExitICFGNode6 {fun: bridge_on_handle_call}\nPhiStmt: [Var79 <-- ([Var105, ICFGNode72],)]\t\nValVar ID: 106\n   ret ptr %call ",
+			"node_id" : 95649433498880,
+			"node_kind" : 3,
+			"node_type" : false,
+			"outgoing_edges" : [],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 95649433668336,
+					"stmt_info" : "PhiStmt: [Var79 <-- ([Var105, ICFGNode72],)]\t\nValVar ID: 106\n   ret ptr %call "
+				}
+			]
+		}
+	]
+}

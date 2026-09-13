@@ -1,0 +1,38 @@
+digraph ICFG {
+  "5" [label="ID: 5\nType: 0\nKind: 0\nInfo: IntraICFGNode5 {fun: print_and}
+AddrStmt: [Var9 <-- Var10]	
+ValVar ID: 9
+   %ptr.addr = alloca ptr, align 8 \nFunction: print_and\nBasic Block: entry\nStatements: [108342933512496, ]"];
+  "5" -> "6" [label="Intra"];
+  "6" [label="ID: 6\nType: 0\nKind: 0\nInfo: IntraICFGNode6 {fun: print_and}
+StoreStmt: [Var9 <-- Var8]	
+ValVar ID: 12
+   store ptr %ptr, ptr %ptr.addr, align 8 \nFunction: print_and\nBasic Block: entry\nStatements: [108342933746416, ]"];
+  "6" -> "7" [label="Intra"];
+  "7" [label="ID: 7\nType: 0\nKind: 0\nInfo: IntraICFGNode7 {fun: print_and}
+LoadStmt: [Var13 <-- Var9]	
+ValVar ID: 13
+   %0 = load ptr, ptr %ptr.addr, align 8 \nFunction: print_and\nBasic Block: entry\nStatements: [108342933663232, ]"];
+  "7" -> "8" [label="Intra"];
+  "8" [label="ID: 8\nType: 0x62898e14bef0\nKind: 4\nInfo: CallICFGNode8 {fun: print_and}
+   %call = call i32 (ptr, ...) @printf(ptr noundef @.str, ptr noundef %0) CallICFGNode: \nFunction: print_and\nBasic Block: entry\nStatements: None"];
+  "8" -> "9" [label="Intra"];
+  "9" [label="ID: 9\nType: 0x62898e14bef0\nKind: 5\nInfo: RetICFGNode9 {fun: print_and}
+   %call = call i32 (ptr, ...) @printf(ptr noundef @.str, ptr noundef %0) RetICFGNode: \nFunction: print_and\nBasic Block: entry\nStatements: None"];
+  "9" -> "10" [label="Intra"];
+  "10" [label="ID: 10\nType: 0\nKind: 0\nInfo: IntraICFGNode10 {fun: print_and}
+LoadStmt: [Var17 <-- Var9]	
+ValVar ID: 17
+   %1 = load ptr, ptr %ptr.addr, align 8 \nFunction: print_and\nBasic Block: entry\nStatements: [108342933524656, ]"];
+  "10" -> "11" [label="Intra"];
+  "11" [label="ID: 11\nType: 0x62898e136020\nKind: 4\nInfo: CallICFGNode11 {fun: print_and}
+   call void @free(ptr noundef %1) #3 CallICFGNode: \nFunction: print_and\nBasic Block: entry\nStatements: None"];
+  "11" -> "12" [label="Intra"];
+  "12" [label="ID: 12\nType: 0x62898e136020\nKind: 5\nInfo: RetICFGNode12 {fun: print_and}
+   call void @free(ptr noundef %1) #3 RetICFGNode: \nFunction: print_and\nBasic Block: entry\nStatements: None"];
+  "12" -> "13" [label="Intra"];
+  "13" [label="ID: 13\nType: 0\nKind: 0\nInfo: IntraICFGNode13 {fun: print_and}
+   ret void \nFunction: print_and\nBasic Block: entry\nStatements: None"];
+  "13" -> "2" [label="Intra"];
+  "2" [label="ID: 2\nType: 0\nKind: 3\nInfo: FunExitICFGNode2 {fun: print_and}\nFunction: print_and\nBasic Block: entry\nStatements: None"];
+}

@@ -1,0 +1,216 @@
+{
+	"edges" : 
+	[
+		{
+			"destination" : 105243412147184,
+			"edge_type" : "intra",
+			"source" : 105243412447536
+		},
+		{
+			"destination" : 105243412667328,
+			"edge_type" : "intra",
+			"source" : 105243412147184
+		},
+		{
+			"destination" : 105243412671856,
+			"edge_type" : "intra",
+			"source" : 105243412667328
+		},
+		{
+			"destination" : 105243412670464,
+			"edge_type" : "intra",
+			"source" : 105243412671856
+		},
+		{
+			"destination" : 105243412518448,
+			"edge_type" : "intra",
+			"source" : 105243412670464
+		},
+		{
+			"destination" : 105243412517936,
+			"edge_type" : "intra",
+			"source" : 105243412670464
+		},
+		{
+			"destination" : 105243412663184,
+			"edge_type" : "intra",
+			"source" : 105243412518448
+		},
+		{
+			"destination" : 105243412147872,
+			"edge_type" : "intra",
+			"source" : 105243412517936
+		},
+		{
+			"destination" : 105243412182480,
+			"edge_type" : "intra",
+			"source" : 105243412663184
+		},
+		{
+			"destination" : 105243412181088,
+			"edge_type" : "intra",
+			"source" : 105243412182480
+		},
+		{
+			"destination" : 105243412517936,
+			"edge_type" : "intra",
+			"source" : 105243412181088
+		}
+	],
+	"nodes" : 
+	[
+		{
+			"basic_block" : 105243412669456,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 105243412579392,
+			"function_name" : "free_bool",
+			"info" : "IntraICFGNode11 {fun: free_bool}\nAddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %ptr.addr = alloca ptr, align 8 ",
+			"node_id" : 105243412447536,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				105243412324032
+			]
+		},
+		{
+			"basic_block" : 105243412669456,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 105243412579392,
+			"function_name" : "free_bool",
+			"info" : "IntraICFGNode12 {fun: free_bool}\nStoreStmt: [Var8 <-- Var7]\t\nValVar ID: 11\n   store ptr %ptr, ptr %ptr.addr, align 8 ",
+			"node_id" : 105243412147184,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				105243412105072
+			]
+		},
+		{
+			"basic_block" : 105243412669456,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 105243412579392,
+			"function_name" : "free_bool",
+			"info" : "IntraICFGNode13 {fun: free_bool}\nLoadStmt: [Var12 <-- Var8]\t\nValVar ID: 12\n   %0 = load ptr, ptr %ptr.addr, align 8 ",
+			"node_id" : 105243412667328,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				105243412102480
+			]
+		},
+		{
+			"basic_block" : 105243412669456,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 105243412579392,
+			"function_name" : "free_bool",
+			"info" : "IntraICFGNode14 {fun: free_bool}\nCmpStmt: [Var13 <-- (Var12 predicate33 Var0)]\t\nValVar ID: 13\n   %cmp = icmp ne ptr %0, null ",
+			"node_id" : 105243412671856,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				105243412422048
+			]
+		},
+		{
+			"basic_block" : 105243412669456,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 105243412579392,
+			"function_name" : "free_bool",
+			"info" : "IntraICFGNode15 {fun: free_bool}\nBranchStmt: [Condition Var13]\nSuccessor 0 ICFGNode16   Successor 1 ICFGNode17   \nValVar ID: 14\n   br i1 %cmp, label %if.then, label %if.end ",
+			"node_id" : 105243412670464,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				105243412449296
+			]
+		},
+		{
+			"basic_block" : 105243412191984,
+			"basic_block_info" : "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+			"basic_block_name" : "if.then",
+			"function" : 105243412579392,
+			"function_name" : "free_bool",
+			"info" : "IntraICFGNode16 {fun: free_bool}\nLoadStmt: [Var15 <-- Var8]\t\nValVar ID: 15\n   %1 = load ptr, ptr %ptr.addr, align 8 ",
+			"node_id" : 105243412518448,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				105243412450144
+			]
+		},
+		{
+			"basic_block" : 105243412192640,
+			"basic_block_info" : "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+			"basic_block_name" : "if.end",
+			"function" : 105243412579392,
+			"function_name" : "free_bool",
+			"info" : "IntraICFGNode17 {fun: free_bool}\n   ret void ",
+			"node_id" : 105243412517936,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : []
+		},
+		{
+			"basic_block" : 105243412191984,
+			"basic_block_info" : "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+			"basic_block_name" : "if.then",
+			"function" : 105243412579392,
+			"function_name" : "free_bool",
+			"info" : "CallICFGNode18 {fun: free_bool}\n   call void @free(ptr noundef %1) #2 CallICFGNode: ",
+			"node_id" : 105243412663184,
+			"node_kind" : 4,
+			"node_type" : true,
+			"svf_statements" : []
+		},
+		{
+			"basic_block" : 105243412192640,
+			"basic_block_info" : "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+			"basic_block_name" : "if.end",
+			"function" : 105243412579392,
+			"function_name" : "free_bool",
+			"info" : "FunExitICFGNode2 {fun: free_bool}",
+			"node_id" : 105243412147872,
+			"node_kind" : 3,
+			"node_type" : false,
+			"svf_statements" : []
+		},
+		{
+			"basic_block" : 105243412191984,
+			"basic_block_info" : "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+			"basic_block_name" : "if.then",
+			"function" : 105243412579392,
+			"function_name" : "free_bool",
+			"info" : "RetICFGNode19 {fun: free_bool}\n   call void @free(ptr noundef %1) #2 RetICFGNode: ",
+			"node_id" : 105243412182480,
+			"node_kind" : 5,
+			"node_type" : true,
+			"svf_statements" : []
+		},
+		{
+			"basic_block" : 105243412191984,
+			"basic_block_info" : "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+			"basic_block_name" : "if.then",
+			"function" : 105243412579392,
+			"function_name" : "free_bool",
+			"info" : "IntraICFGNode20 {fun: free_bool}\nBranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode17   \nValVar ID: 19\n   br label %if.end ",
+			"node_id" : 105243412181088,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				105243412432320
+			]
+		}
+	]
+}

@@ -1,0 +1,11 @@
+digraph ICFG {
+  "3" -> "4" [label="Intra"];
+  "4" -> "5" [label="Intra"];
+  "5" -> "6" [label="Intra"];
+  "6" -> "7" [label="Intra"];
+  "7" -> "8" [label="Intra"];
+  "8" -> "9" [label="Intra"];
+  "9" -> "10" [label="Intra"];
+  "10" -> "11" [label="Intra"];
+  "11" -> "2" [label="Intra"];
+}

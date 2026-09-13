@@ -1,0 +1,9 @@
+digraph "Call Graph" {
+	label="Call Graph";
+
+	Node0x634d7bf65980 [shape=record,shape=box,label="{PTACallGraphNode ID: 0 \{fun: register_cb\}}"];
+	Node0x634d7bfc1070 [shape=record,shape=box,label="{PTACallGraphNode ID: 1 \{fun: trigger_cb\}|{<s0>1|<s1>2}}"];
+	Node0x634d7bfc1070:s0 -> Node0x634d7bf9bd30[color=black];
+	Node0x634d7bfc1070:s1 -> Node0x634d7bf9bd30[color=black];
+	Node0x634d7bf9bd30 [shape=record,shape=Mrecord,label="{PTACallGraphNode ID: 2 \{fun: printf\}}"];
+}

@@ -1,0 +1,231 @@
+{
+	"edges" : 
+	[
+		{
+			"destination" : 105243412274416,
+			"edge_type" : "intra",
+			"source" : 105243412179664
+		},
+		{
+			"destination" : 105243412061104,
+			"edge_type" : "intra",
+			"source" : 105243412274416
+		},
+		{
+			"destination" : 105243412259632,
+			"edge_type" : "intra",
+			"source" : 105243412061104
+		},
+		{
+			"destination" : 105243412622944,
+			"edge_type" : "intra",
+			"source" : 105243412259632
+		},
+		{
+			"destination" : 105243412151808,
+			"edge_type" : "intra",
+			"source" : 105243412622944
+		},
+		{
+			"destination" : 105243412151360,
+			"edge_type" : "intra",
+			"source" : 105243412151808
+		},
+		{
+			"destination" : 105243412618656,
+			"edge_type" : "intra",
+			"source" : 105243412151360
+		},
+		{
+			"destination" : 105243412192176,
+			"edge_type" : "intra",
+			"source" : 105243412618656
+		},
+		{
+			"destination" : 105243412661856,
+			"edge_type" : "intra",
+			"source" : 105243412192176
+		},
+		{
+			"destination" : 105243412425104,
+			"edge_type" : "intra",
+			"source" : 105243412661856
+		},
+		{
+			"destination" : 105243412242672,
+			"edge_type" : "intra",
+			"source" : 105243412425104
+		}
+	],
+	"nodes" : 
+	[
+		{
+			"basic_block" : 105243412663760,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 105243412052784,
+			"function_name" : "cast_and_free_pointer",
+			"info" : "IntraICFGNode31 {fun: cast_and_free_pointer}\nAddrStmt: [Var43 <-- Var44]\t\nValVar ID: 43\n   %ptr.addr = alloca ptr, align 8 ",
+			"node_id" : 105243412179664,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				105243412622288
+			]
+		},
+		{
+			"basic_block" : 105243412663760,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 105243412052784,
+			"function_name" : "cast_and_free_pointer",
+			"info" : "IntraICFGNode32 {fun: cast_and_free_pointer}\nAddrStmt: [Var45 <-- Var46]\t\nValVar ID: 45\n   %int_ptr = alloca ptr, align 8 ",
+			"node_id" : 105243412274416,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				105243412608912
+			]
+		},
+		{
+			"basic_block" : 105243412663760,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 105243412052784,
+			"function_name" : "cast_and_free_pointer",
+			"info" : "IntraICFGNode33 {fun: cast_and_free_pointer}\nStoreStmt: [Var43 <-- Var42]\t\nValVar ID: 47\n   store ptr %ptr, ptr %ptr.addr, align 8 ",
+			"node_id" : 105243412061104,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				105243412271568
+			]
+		},
+		{
+			"basic_block" : 105243412663760,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 105243412052784,
+			"function_name" : "cast_and_free_pointer",
+			"info" : "IntraICFGNode34 {fun: cast_and_free_pointer}\nLoadStmt: [Var48 <-- Var43]\t\nValVar ID: 48\n   %0 = load ptr, ptr %ptr.addr, align 8 ",
+			"node_id" : 105243412259632,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				105243412429024
+			]
+		},
+		{
+			"basic_block" : 105243412663760,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 105243412052784,
+			"function_name" : "cast_and_free_pointer",
+			"info" : "IntraICFGNode35 {fun: cast_and_free_pointer}\nCopyStmt: [Var49 <-- Var48]\t\nValVar ID: 49\n   %1 = bitcast ptr %0 to ptr ",
+			"node_id" : 105243412622944,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				105243412430192
+			]
+		},
+		{
+			"basic_block" : 105243412663760,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 105243412052784,
+			"function_name" : "cast_and_free_pointer",
+			"info" : "IntraICFGNode36 {fun: cast_and_free_pointer}\nStoreStmt: [Var45 <-- Var49]\t\nValVar ID: 50\n   store ptr %1, ptr %int_ptr, align 8 ",
+			"node_id" : 105243412151808,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				105243412093920
+			]
+		},
+		{
+			"basic_block" : 105243412663760,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 105243412052784,
+			"function_name" : "cast_and_free_pointer",
+			"info" : "IntraICFGNode37 {fun: cast_and_free_pointer}\nLoadStmt: [Var51 <-- Var45]\t\nValVar ID: 51\n   %2 = load ptr, ptr %int_ptr, align 8 ",
+			"node_id" : 105243412151360,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				105243412426432
+			]
+		},
+		{
+			"basic_block" : 105243412663760,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 105243412052784,
+			"function_name" : "cast_and_free_pointer",
+			"info" : "IntraICFGNode38 {fun: cast_and_free_pointer}\nCopyStmt: [Var52 <-- Var51]\t\nValVar ID: 52\n   %3 = bitcast ptr %2 to ptr ",
+			"node_id" : 105243412618656,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				105243412455664
+			]
+		},
+		{
+			"basic_block" : 105243412663760,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 105243412052784,
+			"function_name" : "cast_and_free_pointer",
+			"info" : "CallICFGNode39 {fun: cast_and_free_pointer}\n   call void @free(ptr noundef %3) #2 CallICFGNode: ",
+			"node_id" : 105243412192176,
+			"node_kind" : 4,
+			"node_type" : true,
+			"svf_statements" : []
+		},
+		{
+			"basic_block" : 105243412663760,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 105243412052784,
+			"function_name" : "cast_and_free_pointer",
+			"info" : "RetICFGNode40 {fun: cast_and_free_pointer}\n   call void @free(ptr noundef %3) #2 RetICFGNode: ",
+			"node_id" : 105243412661856,
+			"node_kind" : 5,
+			"node_type" : true,
+			"svf_statements" : []
+		},
+		{
+			"basic_block" : 105243412663760,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 105243412052784,
+			"function_name" : "cast_and_free_pointer",
+			"info" : "IntraICFGNode41 {fun: cast_and_free_pointer}\n   ret void ",
+			"node_id" : 105243412425104,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : []
+		},
+		{
+			"basic_block" : 105243412663760,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 105243412052784,
+			"function_name" : "cast_and_free_pointer",
+			"info" : "FunExitICFGNode6 {fun: cast_and_free_pointer}",
+			"node_id" : 105243412242672,
+			"node_kind" : 3,
+			"node_type" : false,
+			"svf_statements" : []
+		}
+	]
+}

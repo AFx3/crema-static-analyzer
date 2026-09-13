@@ -1,0 +1,40 @@
+{
+	"edges" : 
+	[
+		{
+			"destination" : 111231612104880,
+			"edge_type" : "intra",
+			"source" : 111231611920032
+		}
+	],
+	"nodes" : 
+	[
+		{
+			"basic_block" : 111231612450112,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 111231612127168,
+			"function_name" : "c_static_string",
+			"info" : "IntraICFGNode3 {fun: c_static_string}\n   ret ptr @.str ",
+			"node_id" : 111231611920032,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : []
+		},
+		{
+			"basic_block" : 111231612450112,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 111231612127168,
+			"function_name" : "c_static_string",
+			"info" : "FunExitICFGNode2 {fun: c_static_string}\nPhiStmt: [Var7 <-- ([Var4, ICFGNode3],)]\t\nValVar ID: 8\n   ret ptr @.str ",
+			"node_id" : 111231612104880,
+			"node_kind" : 3,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				111231612448080
+			]
+		}
+	]
+}

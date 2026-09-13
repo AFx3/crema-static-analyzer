@@ -1,0 +1,60 @@
+digraph ICFG {
+  "73" [label="ID: 73\nType: 0\nKind: 0\nInfo: IntraICFGNode73 {fun: bridge_open_url}
+AddrStmt: [Var113 <-- Var114]	
+ValVar ID: 113
+   %f.addr = alloca ptr, align 8 \nFunction: bridge_open_url\nBasic Block: entry\nStatements: [95649433669952, ]"];
+  "73" -> "74" [label="Intra"];
+  "74" [label="ID: 74\nType: 0\nKind: 0\nInfo: IntraICFGNode74 {fun: bridge_open_url}
+AddrStmt: [Var115 <-- Var116]	
+ValVar ID: 115
+   %url.addr = alloca ptr, align 8 \nFunction: bridge_open_url\nBasic Block: entry\nStatements: [95649433671120, ]"];
+  "74" -> "75" [label="Intra"];
+  "75" [label="ID: 75\nType: 0\nKind: 0\nInfo: IntraICFGNode75 {fun: bridge_open_url}
+AddrStmt: [Var117 <-- Var118]	
+ValVar ID: 117
+   %userdata.addr = alloca ptr, align 8 \nFunction: bridge_open_url\nBasic Block: entry\nStatements: [95649433948640, ]"];
+  "75" -> "76" [label="Intra"];
+  "76" [label="ID: 76\nType: 0\nKind: 0\nInfo: IntraICFGNode76 {fun: bridge_open_url}
+StoreStmt: [Var113 <-- Var110]	
+ValVar ID: 119
+   store ptr %f, ptr %f.addr, align 8 \nFunction: bridge_open_url\nBasic Block: entry\nStatements: [95649433949952, ]"];
+  "76" -> "77" [label="Intra"];
+  "77" [label="ID: 77\nType: 0\nKind: 0\nInfo: IntraICFGNode77 {fun: bridge_open_url}
+StoreStmt: [Var115 <-- Var111]	
+ValVar ID: 120
+   store ptr %url, ptr %url.addr, align 8 \nFunction: bridge_open_url\nBasic Block: entry\nStatements: [95649433951104, ]"];
+  "77" -> "78" [label="Intra"];
+  "78" [label="ID: 78\nType: 0\nKind: 0\nInfo: IntraICFGNode78 {fun: bridge_open_url}
+StoreStmt: [Var117 <-- Var112]	
+ValVar ID: 121
+   store ptr %userdata, ptr %userdata.addr, align 8 \nFunction: bridge_open_url\nBasic Block: entry\nStatements: [95649433942384, ]"];
+  "78" -> "79" [label="Intra"];
+  "79" [label="ID: 79\nType: 0\nKind: 0\nInfo: IntraICFGNode79 {fun: bridge_open_url}
+LoadStmt: [Var122 <-- Var113]	
+ValVar ID: 122
+   %0 = load ptr, ptr %f.addr, align 8 \nFunction: bridge_open_url\nBasic Block: entry\nStatements: [95649433943488, ]"];
+  "79" -> "80" [label="Intra"];
+  "80" [label="ID: 80\nType: 0\nKind: 0\nInfo: IntraICFGNode80 {fun: bridge_open_url}
+LoadStmt: [Var123 <-- Var115]	
+ValVar ID: 123
+   %1 = load ptr, ptr %url.addr, align 8 \nFunction: bridge_open_url\nBasic Block: entry\nStatements: [95649433944704, ]"];
+  "80" -> "81" [label="Intra"];
+  "81" [label="ID: 81\nType: 0\nKind: 0\nInfo: IntraICFGNode81 {fun: bridge_open_url}
+LoadStmt: [Var124 <-- Var117]	
+ValVar ID: 124
+   %2 = load ptr, ptr %userdata.addr, align 8 \nFunction: bridge_open_url\nBasic Block: entry\nStatements: [95649433886832, ]"];
+  "81" -> "82" [label="Intra"];
+  "82" [label="ID: 82\nType: 0x56fe1e818c60\nKind: 4\nInfo: CallICFGNode82 {fun: bridge_open_url}
+   %call = call ptr %0(ptr noundef %1, ptr noundef %2) CallICFGNode: \nFunction: bridge_open_url\nBasic Block: entry\nStatements: None"];
+  "82" -> "83" [label="Intra"];
+  "83" [label="ID: 83\nType: 0x56fe1e818c60\nKind: 5\nInfo: RetICFGNode83 {fun: bridge_open_url}
+   %call = call ptr %0(ptr noundef %1, ptr noundef %2) RetICFGNode: \nFunction: bridge_open_url\nBasic Block: entry\nStatements: None"];
+  "83" -> "84" [label="Intra"];
+  "84" [label="ID: 84\nType: 0\nKind: 0\nInfo: IntraICFGNode84 {fun: bridge_open_url}
+   ret ptr %call \nFunction: bridge_open_url\nBasic Block: entry\nStatements: None"];
+  "84" -> "8" [label="Intra"];
+  "8" [label="ID: 8\nType: 0\nKind: 3\nInfo: FunExitICFGNode8 {fun: bridge_open_url}
+PhiStmt: [Var109 <-- ([Var125, ICFGNode84],)]	
+ValVar ID: 126
+   ret ptr %call \nFunction: bridge_open_url\nBasic Block: entry\nStatements: [95649433888624, ]"];
+}

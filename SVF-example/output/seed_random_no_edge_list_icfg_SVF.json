@@ -1,0 +1,201 @@
+{
+	"edges" : [],
+	"nodes" : 
+	[
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 106191985166784,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 106191985208800,
+			"function_name" : "seed_random",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 106191985358400,
+					"edge_type" : "intra",
+					"source" : 106191985410976
+				}
+			],
+			"info" : "CallICFGNode24 {fun: seed_random}\n   %call = call i64 @time(ptr noundef null) #3 CallICFGNode: ",
+			"node_id" : 106191985358400,
+			"node_kind" : 4,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 106191985597168,
+					"edge_type" : "intra",
+					"source" : 106191985358400
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 106191985166784,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 106191985208800,
+			"function_name" : "seed_random",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 106191985597168,
+					"edge_type" : "intra",
+					"source" : 106191985358400
+				}
+			],
+			"info" : "RetICFGNode25 {fun: seed_random}\n   %call = call i64 @time(ptr noundef null) #3 RetICFGNode: ",
+			"node_id" : 106191985597168,
+			"node_kind" : 5,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 106191985336816,
+					"edge_type" : "intra",
+					"source" : 106191985597168
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 106191985166784,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 106191985208800,
+			"function_name" : "seed_random",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 106191985336816,
+					"edge_type" : "intra",
+					"source" : 106191985597168
+				}
+			],
+			"info" : "IntraICFGNode26 {fun: seed_random}\nCopyStmt: [Var48 <-- Var45]\t\nValVar ID: 48\n   %conv = trunc i64 %call to i32 ",
+			"node_id" : 106191985336816,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 106191985322736,
+					"edge_type" : "intra",
+					"source" : 106191985336816
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 106191985535280,
+					"stmt_info" : "CopyStmt: [Var48 <-- Var45]\t\nValVar ID: 48\n   %conv = trunc i64 %call to i32 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 106191985166784,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 106191985208800,
+			"function_name" : "seed_random",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 106191985322736,
+					"edge_type" : "intra",
+					"source" : 106191985336816
+				}
+			],
+			"info" : "CallICFGNode27 {fun: seed_random}\n   call void @srand(i32 noundef %conv) #3 CallICFGNode: ",
+			"node_id" : 106191985322736,
+			"node_kind" : 4,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 106191985751296,
+					"edge_type" : "intra",
+					"source" : 106191985322736
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 106191985166784,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 106191985208800,
+			"function_name" : "seed_random",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 106191985751296,
+					"edge_type" : "intra",
+					"source" : 106191985322736
+				}
+			],
+			"info" : "RetICFGNode28 {fun: seed_random}\n   call void @srand(i32 noundef %conv) #3 RetICFGNode: ",
+			"node_id" : 106191985751296,
+			"node_kind" : 5,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 106191985335232,
+					"edge_type" : "intra",
+					"source" : 106191985751296
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 106191985166784,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 106191985208800,
+			"function_name" : "seed_random",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 106191985335232,
+					"edge_type" : "intra",
+					"source" : 106191985751296
+				}
+			],
+			"info" : "IntraICFGNode29 {fun: seed_random}\n   ret void ",
+			"node_id" : 106191985335232,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 106191985225392,
+					"edge_type" : "intra",
+					"source" : 106191985335232
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 106191985166784,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 106191985208800,
+			"function_name" : "seed_random",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 106191985225392,
+					"edge_type" : "intra",
+					"source" : 106191985335232
+				}
+			],
+			"info" : "FunExitICFGNode4 {fun: seed_random}",
+			"node_id" : 106191985225392,
+			"node_kind" : 3,
+			"node_type" : false,
+			"outgoing_edges" : [],
+			"svf_statements" : []
+		}
+	]
+}

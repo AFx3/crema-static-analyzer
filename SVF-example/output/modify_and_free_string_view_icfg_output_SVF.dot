@@ -1,0 +1,92 @@
+digraph ICFG {
+  "3" [label="ID: 3\nType: 0\nKind: 0\nInfo: IntraICFGNode3 {fun: modify_and_free_string}
+AddrStmt: [Var10 <-- Var11]	
+ValVar ID: 10
+   %ptr.addr = alloca ptr, align 8 \nFunction: modify_and_free_string\nBasic Block: entry\nStatements: [97629484325408, ]"];
+  "3" -> "4" [label="Intra"];
+  "4" [label="ID: 4\nType: 0\nKind: 0\nInfo: IntraICFGNode4 {fun: modify_and_free_string}
+StoreStmt: [Var10 <-- Var9]	
+ValVar ID: 13
+   store ptr %ptr, ptr %ptr.addr, align 8 \nFunction: modify_and_free_string\nBasic Block: entry\nStatements: [97629484684032, ]"];
+  "4" -> "5" [label="Intra"];
+  "5" [label="ID: 5\nType: 0\nKind: 0\nInfo: IntraICFGNode5 {fun: modify_and_free_string}
+LoadStmt: [Var14 <-- Var10]	
+ValVar ID: 14
+   %0 = load ptr, ptr %ptr.addr, align 8 \nFunction: modify_and_free_string\nBasic Block: entry\nStatements: [97629484306016, ]"];
+  "5" -> "6" [label="Intra"];
+  "6" [label="ID: 6\nType: 0\nKind: 0\nInfo: IntraICFGNode6 {fun: modify_and_free_string}
+CmpStmt: [Var15 <-- (Var14 predicate32 Var0)]	
+ValVar ID: 15
+   %cmp = icmp eq ptr %0, null \nFunction: modify_and_free_string\nBasic Block: entry\nStatements: [97629484487168, ]"];
+  "6" -> "7" [label="Intra"];
+  "7" [label="ID: 7\nType: 0\nKind: 0\nInfo: IntraICFGNode7 {fun: modify_and_free_string}
+BranchStmt: [Condition Var15]
+Successor 0 ICFGNode8   Successor 1 ICFGNode9   
+ValVar ID: 16
+   br i1 %cmp, label %if.then, label %if.end \nFunction: modify_and_free_string\nBasic Block: entry\nStatements: [97629484486864, ]"];
+  "7" -> "8" [label="Intra"];
+  "7" -> "9" [label="Intra"];
+  "8" [label="ID: 8\nType: 0\nKind: 0\nInfo: IntraICFGNode8 {fun: modify_and_free_string}
+BranchStmt: [ Unconditional branch]
+Successor 0 ICFGNode10   
+ValVar ID: 17
+   br label %return \nFunction: modify_and_free_string\nBasic Block: if.then\nStatements: [97629484502544, ]"];
+  "8" -> "10" [label="Intra"];
+  "9" [label="ID: 9\nType: 0\nKind: 0\nInfo: IntraICFGNode9 {fun: modify_and_free_string}
+LoadStmt: [Var19 <-- Var10]	
+ValVar ID: 19
+   %1 = load ptr, ptr %ptr.addr, align 8 \nFunction: modify_and_free_string\nBasic Block: if.end\nStatements: [97629484332544, ]"];
+  "9" -> "11" [label="Intra"];
+  "10" [label="ID: 10\nType: 0\nKind: 0\nInfo: IntraICFGNode10 {fun: modify_and_free_string}
+   ret void \nFunction: modify_and_free_string\nBasic Block: return\nStatements: None"];
+  "10" -> "2" [label="Intra"];
+  "11" [label="ID: 11\nType: 0x58cb22be2680\nKind: 4\nInfo: CallICFGNode11 {fun: modify_and_free_string}
+GepStmt: [Var42 <-- Var19]	
+ValVar ID: 20
+   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 
+GepStmt: [Var43 <-- Var4]	
+ValVar ID: 20
+   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 
+LoadStmt: [Var44 <-- Var43]	
+ValVar ID: 20
+   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 
+StoreStmt: [Var42 <-- Var44]	
+ValVar ID: 20
+   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 
+CopyStmt: [Var20 <-- Var19]	
+ValVar ID: 20
+   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 \nFunction: modify_and_free_string\nBasic Block: if.end\nStatements: [97629484929904, 97629484519024, 97629484918256, 97629484905728, 97629484504560, ]"];
+  "11" -> "12" [label="Intra"];
+  "2" [label="ID: 2\nType: 0\nKind: 3\nInfo: FunExitICFGNode2 {fun: modify_and_free_string}\nFunction: modify_and_free_string\nBasic Block: return\nStatements: None"];
+  "12" [label="ID: 12\nType: 0x58cb22be2680\nKind: 5\nInfo: RetICFGNode12 {fun: modify_and_free_string}
+   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 RetICFGNode: \nFunction: modify_and_free_string\nBasic Block: if.end\nStatements: None"];
+  "12" -> "13" [label="Intra"];
+  "13" [label="ID: 13\nType: 0\nKind: 0\nInfo: IntraICFGNode13 {fun: modify_and_free_string}
+LoadStmt: [Var23 <-- Var10]	
+ValVar ID: 23
+   %2 = load ptr, ptr %ptr.addr, align 8 \nFunction: modify_and_free_string\nBasic Block: if.end\nStatements: [97629484496288, ]"];
+  "13" -> "14" [label="Intra"];
+  "14" [label="ID: 14\nType: 0x58cb22bfcf30\nKind: 4\nInfo: CallICFGNode14 {fun: modify_and_free_string}
+   %call1 = call i32 (ptr, ...) @printf(ptr noundef @.str.1, ptr noundef %2) CallICFGNode: \nFunction: modify_and_free_string\nBasic Block: if.end\nStatements: None"];
+  "14" -> "15" [label="Intra"];
+  "15" [label="ID: 15\nType: 0x58cb22bfcf30\nKind: 5\nInfo: RetICFGNode15 {fun: modify_and_free_string}
+   %call1 = call i32 (ptr, ...) @printf(ptr noundef @.str.1, ptr noundef %2) RetICFGNode: \nFunction: modify_and_free_string\nBasic Block: if.end\nStatements: None"];
+  "15" -> "16" [label="Intra"];
+  "16" [label="ID: 16\nType: 0\nKind: 0\nInfo: IntraICFGNode16 {fun: modify_and_free_string}
+LoadStmt: [Var27 <-- Var10]	
+ValVar ID: 27
+   %3 = load ptr, ptr %ptr.addr, align 8 \nFunction: modify_and_free_string\nBasic Block: if.end\nStatements: [97629484597984, ]"];
+  "16" -> "17" [label="Intra"];
+  "17" [label="ID: 17\nType: 0x58cb22be7100\nKind: 4\nInfo: CallICFGNode17 {fun: modify_and_free_string}
+   call void @free(ptr noundef %3) #3 CallICFGNode: \nFunction: modify_and_free_string\nBasic Block: if.end\nStatements: None"];
+  "17" -> "18" [label="Intra"];
+  "18" [label="ID: 18\nType: 0x58cb22be7100\nKind: 5\nInfo: RetICFGNode18 {fun: modify_and_free_string}
+   call void @free(ptr noundef %3) #3 RetICFGNode: \nFunction: modify_and_free_string\nBasic Block: if.end\nStatements: None"];
+  "18" -> "19" [label="Intra"];
+  "19" [label="ID: 19\nType: 0\nKind: 0\nInfo: IntraICFGNode19 {fun: modify_and_free_string}
+BranchStmt: [ Unconditional branch]
+Successor 0 ICFGNode10   
+ValVar ID: 31
+   br label %return \nFunction: modify_and_free_string\nBasic Block: if.end\nStatements: [97629484303376, ]"];
+  "19" -> "10" [label="Intra"];
+}

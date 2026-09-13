@@ -1,0 +1,120 @@
+digraph ICFG {
+  "3" [label="ID: 3\nType: 0\nKind: 0\nInfo: IntraICFGNode3 {fun: c_alloc_four_i32}
+AddrStmt: [Var7 <-- Var8]	
+ValVar ID: 7
+   %p = alloca ptr, align 8 \nFunction: c_alloc_four_i32\nBasic Block: entry\nStatements: [94249217285488, ]"];
+  "3" -> "4" [label="Intra"];
+  "4" [label="ID: 4\nType: 0x55b81b1e5990\nKind: 4\nInfo: CallICFGNode4 {fun: c_alloc_four_i32}
+AddrStmt: [Var10 <-- Var11]	
+ValVar ID: 10
+   %call = call noalias ptr @malloc(i64 noundef 16) #2 \nFunction: c_alloc_four_i32\nBasic Block: entry\nStatements: [94249217065200, ]"];
+  "4" -> "5" [label="Intra"];
+  "5" [label="ID: 5\nType: 0x55b81b1e5990\nKind: 5\nInfo: RetICFGNode5 {fun: c_alloc_four_i32}
+   %call = call noalias ptr @malloc(i64 noundef 16) #2 RetICFGNode: \nFunction: c_alloc_four_i32\nBasic Block: entry\nStatements: None"];
+  "5" -> "6" [label="Intra"];
+  "6" [label="ID: 6\nType: 0\nKind: 0\nInfo: IntraICFGNode6 {fun: c_alloc_four_i32}
+CopyStmt: [Var15 <-- Var10]	
+ValVar ID: 15
+   %0 = bitcast ptr %call to ptr \nFunction: c_alloc_four_i32\nBasic Block: entry\nStatements: [94249217173120, ]"];
+  "6" -> "7" [label="Intra"];
+  "7" [label="ID: 7\nType: 0\nKind: 0\nInfo: IntraICFGNode7 {fun: c_alloc_four_i32}
+StoreStmt: [Var7 <-- Var15]	
+ValVar ID: 16
+   store ptr %0, ptr %p, align 8 \nFunction: c_alloc_four_i32\nBasic Block: entry\nStatements: [94249217284160, ]"];
+  "7" -> "8" [label="Intra"];
+  "8" [label="ID: 8\nType: 0\nKind: 0\nInfo: IntraICFGNode8 {fun: c_alloc_four_i32}
+LoadStmt: [Var17 <-- Var7]	
+ValVar ID: 17
+   %1 = load ptr, ptr %p, align 8 \nFunction: c_alloc_four_i32\nBasic Block: entry\nStatements: [94249217320704, ]"];
+  "8" -> "9" [label="Intra"];
+  "9" [label="ID: 9\nType: 0\nKind: 0\nInfo: IntraICFGNode9 {fun: c_alloc_four_i32}
+CmpStmt: [Var18 <-- (Var17 predicate33 Var0)]	
+ValVar ID: 18
+   %cmp = icmp ne ptr %1, null \nFunction: c_alloc_four_i32\nBasic Block: entry\nStatements: [94249217054624, ]"];
+  "9" -> "10" [label="Intra"];
+  "10" [label="ID: 10\nType: 0\nKind: 0\nInfo: IntraICFGNode10 {fun: c_alloc_four_i32}
+BranchStmt: [Condition Var18]
+Successor 0 ICFGNode11   Successor 1 ICFGNode12   
+ValVar ID: 19
+   br i1 %cmp, label %if.then, label %if.end \nFunction: c_alloc_four_i32\nBasic Block: entry\nStatements: [94249217059344, ]"];
+  "10" -> "11" [label="Intra"];
+  "10" -> "12" [label="Intra"];
+  "11" [label="ID: 11\nType: 0\nKind: 0\nInfo: IntraICFGNode11 {fun: c_alloc_four_i32}
+LoadStmt: [Var20 <-- Var7]	
+ValVar ID: 20
+   %2 = load ptr, ptr %p, align 8 \nFunction: c_alloc_four_i32\nBasic Block: if.then\nStatements: [94249216988592, ]"];
+  "11" -> "13" [label="Intra"];
+  "12" [label="ID: 12\nType: 0\nKind: 0\nInfo: IntraICFGNode12 {fun: c_alloc_four_i32}
+LoadStmt: [Var41 <-- Var7]	
+ValVar ID: 41
+   %6 = load ptr, ptr %p, align 8 \nFunction: c_alloc_four_i32\nBasic Block: if.end\nStatements: [94249217419792, ]"];
+  "12" -> "14" [label="Intra"];
+  "13" [label="ID: 13\nType: 0\nKind: 0\nInfo: IntraICFGNode13 {fun: c_alloc_four_i32}
+GepStmt: [Var21 <-- Var20]	
+ValVar ID: 21
+   %arrayidx = getelementptr inbounds i32, ptr %2, i64 0 \nFunction: c_alloc_four_i32\nBasic Block: if.then\nStatements: [94249217245520, ]"];
+  "13" -> "15" [label="Intra"];
+  "14" [label="ID: 14\nType: 0\nKind: 0\nInfo: IntraICFGNode14 {fun: c_alloc_four_i32}
+   ret ptr %6 \nFunction: c_alloc_four_i32\nBasic Block: if.end\nStatements: None"];
+  "14" -> "2" [label="Intra"];
+  "15" [label="ID: 15\nType: 0\nKind: 0\nInfo: IntraICFGNode15 {fun: c_alloc_four_i32}
+StoreStmt: [Var21 <-- Var9]	
+ValVar ID: 23
+   store i32 1, ptr %arrayidx, align 4 \nFunction: c_alloc_four_i32\nBasic Block: if.then\nStatements: [94249216983264, ]"];
+  "15" -> "16" [label="Intra"];
+  "2" [label="ID: 2\nType: 0\nKind: 3\nInfo: FunExitICFGNode2 {fun: c_alloc_four_i32}
+PhiStmt: [Var6 <-- ([Var41, ICFGNode14],)]	
+ValVar ID: 42
+   ret ptr %6 \nFunction: c_alloc_four_i32\nBasic Block: if.end\nStatements: [94249217247296, ]"];
+  "16" [label="ID: 16\nType: 0\nKind: 0\nInfo: IntraICFGNode16 {fun: c_alloc_four_i32}
+LoadStmt: [Var24 <-- Var7]	
+ValVar ID: 24
+   %3 = load ptr, ptr %p, align 8 \nFunction: c_alloc_four_i32\nBasic Block: if.then\nStatements: [94249217606208, ]"];
+  "16" -> "17" [label="Intra"];
+  "17" [label="ID: 17\nType: 0\nKind: 0\nInfo: IntraICFGNode17 {fun: c_alloc_four_i32}
+GepStmt: [Var25 <-- Var24]	
+ValVar ID: 25
+   %arrayidx1 = getelementptr inbounds i32, ptr %3, i64 1 \nFunction: c_alloc_four_i32\nBasic Block: if.then\nStatements: [94249217436128, ]"];
+  "17" -> "18" [label="Intra"];
+  "18" [label="ID: 18\nType: 0\nKind: 0\nInfo: IntraICFGNode18 {fun: c_alloc_four_i32}
+StoreStmt: [Var25 <-- Var28]	
+ValVar ID: 27
+   store i32 2, ptr %arrayidx1, align 4 \nFunction: c_alloc_four_i32\nBasic Block: if.then\nStatements: [94249216995808, ]"];
+  "18" -> "19" [label="Intra"];
+  "19" [label="ID: 19\nType: 0\nKind: 0\nInfo: IntraICFGNode19 {fun: c_alloc_four_i32}
+LoadStmt: [Var29 <-- Var7]	
+ValVar ID: 29
+   %4 = load ptr, ptr %p, align 8 \nFunction: c_alloc_four_i32\nBasic Block: if.then\nStatements: [94249217441328, ]"];
+  "19" -> "20" [label="Intra"];
+  "20" [label="ID: 20\nType: 0\nKind: 0\nInfo: IntraICFGNode20 {fun: c_alloc_four_i32}
+GepStmt: [Var30 <-- Var29]	
+ValVar ID: 30
+   %arrayidx2 = getelementptr inbounds i32, ptr %4, i64 2 \nFunction: c_alloc_four_i32\nBasic Block: if.then\nStatements: [94249217067728, ]"];
+  "20" -> "21" [label="Intra"];
+  "21" [label="ID: 21\nType: 0\nKind: 0\nInfo: IntraICFGNode21 {fun: c_alloc_four_i32}
+StoreStmt: [Var30 <-- Var33]	
+ValVar ID: 32
+   store i32 3, ptr %arrayidx2, align 4 \nFunction: c_alloc_four_i32\nBasic Block: if.then\nStatements: [94249217246112, ]"];
+  "21" -> "22" [label="Intra"];
+  "22" [label="ID: 22\nType: 0\nKind: 0\nInfo: IntraICFGNode22 {fun: c_alloc_four_i32}
+LoadStmt: [Var34 <-- Var7]	
+ValVar ID: 34
+   %5 = load ptr, ptr %p, align 8 \nFunction: c_alloc_four_i32\nBasic Block: if.then\nStatements: [94249217416688, ]"];
+  "22" -> "23" [label="Intra"];
+  "23" [label="ID: 23\nType: 0\nKind: 0\nInfo: IntraICFGNode23 {fun: c_alloc_four_i32}
+GepStmt: [Var35 <-- Var34]	
+ValVar ID: 35
+   %arrayidx3 = getelementptr inbounds i32, ptr %5, i64 3 \nFunction: c_alloc_four_i32\nBasic Block: if.then\nStatements: [94249217244528, ]"];
+  "23" -> "24" [label="Intra"];
+  "24" [label="ID: 24\nType: 0\nKind: 0\nInfo: IntraICFGNode24 {fun: c_alloc_four_i32}
+StoreStmt: [Var35 <-- Var38]	
+ValVar ID: 37
+   store i32 4, ptr %arrayidx3, align 4 \nFunction: c_alloc_four_i32\nBasic Block: if.then\nStatements: [94249217444128, ]"];
+  "24" -> "25" [label="Intra"];
+  "25" [label="ID: 25\nType: 0\nKind: 0\nInfo: IntraICFGNode25 {fun: c_alloc_four_i32}
+BranchStmt: [ Unconditional branch]
+Successor 0 ICFGNode12   
+ValVar ID: 39
+   br label %if.end \nFunction: c_alloc_four_i32\nBasic Block: if.then\nStatements: [94249217409504, ]"];
+  "25" -> "12" [label="Intra"];
+}

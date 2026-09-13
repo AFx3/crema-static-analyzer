@@ -1,0 +1,85 @@
+digraph ICFG {
+  "3" [label="ID: 3\nType: 0\nKind: 0\nInfo: IntraICFGNode3 {fun: c_alloc_i32}
+AddrStmt: [Var8 <-- Var9]	
+ValVar ID: 8
+   %value.addr = alloca i32, align 4 \nFunction: c_alloc_i32\nBasic Block: entry\nStatements: [99423261872864, ]"];
+  "3" -> "4" [label="Intra"];
+  "4" [label="ID: 4\nType: 0\nKind: 0\nInfo: IntraICFGNode4 {fun: c_alloc_i32}
+AddrStmt: [Var11 <-- Var12]	
+ValVar ID: 11
+   %p = alloca ptr, align 8 \nFunction: c_alloc_i32\nBasic Block: entry\nStatements: [99423261851360, ]"];
+  "4" -> "5" [label="Intra"];
+  "5" [label="ID: 5\nType: 0\nKind: 0\nInfo: IntraICFGNode5 {fun: c_alloc_i32}
+StoreStmt: [Var8 <-- Var7]	
+ValVar ID: 13
+   store i32 %value, ptr %value.addr, align 4 \nFunction: c_alloc_i32\nBasic Block: entry\nStatements: [99423262306144, ]"];
+  "5" -> "6" [label="Intra"];
+  "6" [label="ID: 6\nType: 0x5a6cc831f140\nKind: 4\nInfo: CallICFGNode6 {fun: c_alloc_i32}
+AddrStmt: [Var14 <-- Var15]	
+ValVar ID: 14
+   %call = call noalias ptr @malloc(i64 noundef 4) #2 \nFunction: c_alloc_i32\nBasic Block: entry\nStatements: [99423262305280, ]"];
+  "6" -> "7" [label="Intra"];
+  "7" [label="ID: 7\nType: 0x5a6cc831f140\nKind: 5\nInfo: RetICFGNode7 {fun: c_alloc_i32}
+   %call = call noalias ptr @malloc(i64 noundef 4) #2 RetICFGNode: \nFunction: c_alloc_i32\nBasic Block: entry\nStatements: None"];
+  "7" -> "8" [label="Intra"];
+  "8" [label="ID: 8\nType: 0\nKind: 0\nInfo: IntraICFGNode8 {fun: c_alloc_i32}
+CopyStmt: [Var19 <-- Var14]	
+ValVar ID: 19
+   %0 = bitcast ptr %call to ptr \nFunction: c_alloc_i32\nBasic Block: entry\nStatements: [99423261896368, ]"];
+  "8" -> "9" [label="Intra"];
+  "9" [label="ID: 9\nType: 0\nKind: 0\nInfo: IntraICFGNode9 {fun: c_alloc_i32}
+StoreStmt: [Var11 <-- Var19]	
+ValVar ID: 20
+   store ptr %0, ptr %p, align 8 \nFunction: c_alloc_i32\nBasic Block: entry\nStatements: [99423261883120, ]"];
+  "9" -> "10" [label="Intra"];
+  "10" [label="ID: 10\nType: 0\nKind: 0\nInfo: IntraICFGNode10 {fun: c_alloc_i32}
+LoadStmt: [Var21 <-- Var11]	
+ValVar ID: 21
+   %1 = load ptr, ptr %p, align 8 \nFunction: c_alloc_i32\nBasic Block: entry\nStatements: [99423262308528, ]"];
+  "10" -> "11" [label="Intra"];
+  "11" [label="ID: 11\nType: 0\nKind: 0\nInfo: IntraICFGNode11 {fun: c_alloc_i32}
+CmpStmt: [Var22 <-- (Var21 predicate33 Var0)]	
+ValVar ID: 22
+   %cmp = icmp ne ptr %1, null \nFunction: c_alloc_i32\nBasic Block: entry\nStatements: [99423261714896, ]"];
+  "11" -> "12" [label="Intra"];
+  "12" [label="ID: 12\nType: 0\nKind: 0\nInfo: IntraICFGNode12 {fun: c_alloc_i32}
+BranchStmt: [Condition Var22]
+Successor 0 ICFGNode13   Successor 1 ICFGNode14   
+ValVar ID: 23
+   br i1 %cmp, label %if.then, label %if.end \nFunction: c_alloc_i32\nBasic Block: entry\nStatements: [99423262096208, ]"];
+  "12" -> "13" [label="Intra"];
+  "12" -> "14" [label="Intra"];
+  "13" [label="ID: 13\nType: 0\nKind: 0\nInfo: IntraICFGNode13 {fun: c_alloc_i32}
+LoadStmt: [Var24 <-- Var8]	
+ValVar ID: 24
+   %2 = load i32, ptr %value.addr, align 4 \nFunction: c_alloc_i32\nBasic Block: if.then\nStatements: [99423262133376, ]"];
+  "13" -> "15" [label="Intra"];
+  "14" [label="ID: 14\nType: 0\nKind: 0\nInfo: IntraICFGNode14 {fun: c_alloc_i32}
+LoadStmt: [Var29 <-- Var11]	
+ValVar ID: 29
+   %4 = load ptr, ptr %p, align 8 \nFunction: c_alloc_i32\nBasic Block: if.end\nStatements: [99423261699360, ]"];
+  "14" -> "16" [label="Intra"];
+  "15" [label="ID: 15\nType: 0\nKind: 0\nInfo: IntraICFGNode15 {fun: c_alloc_i32}
+LoadStmt: [Var25 <-- Var11]	
+ValVar ID: 25
+   %3 = load ptr, ptr %p, align 8 \nFunction: c_alloc_i32\nBasic Block: if.then\nStatements: [99423262296768, ]"];
+  "15" -> "17" [label="Intra"];
+  "16" [label="ID: 16\nType: 0\nKind: 0\nInfo: IntraICFGNode16 {fun: c_alloc_i32}
+   ret ptr %4 \nFunction: c_alloc_i32\nBasic Block: if.end\nStatements: None"];
+  "16" -> "2" [label="Intra"];
+  "17" [label="ID: 17\nType: 0\nKind: 0\nInfo: IntraICFGNode17 {fun: c_alloc_i32}
+StoreStmt: [Var25 <-- Var24]	
+ValVar ID: 26
+   store i32 %2, ptr %3, align 4 \nFunction: c_alloc_i32\nBasic Block: if.then\nStatements: [99423261958720, ]"];
+  "17" -> "18" [label="Intra"];
+  "2" [label="ID: 2\nType: 0\nKind: 3\nInfo: FunExitICFGNode2 {fun: c_alloc_i32}
+PhiStmt: [Var6 <-- ([Var29, ICFGNode16],)]	
+ValVar ID: 30
+   ret ptr %4 \nFunction: c_alloc_i32\nBasic Block: if.end\nStatements: [99423261691248, ]"];
+  "18" [label="ID: 18\nType: 0\nKind: 0\nInfo: IntraICFGNode18 {fun: c_alloc_i32}
+BranchStmt: [ Unconditional branch]
+Successor 0 ICFGNode14   
+ValVar ID: 27
+   br label %if.end \nFunction: c_alloc_i32\nBasic Block: if.then\nStatements: [99423261878912, ]"];
+  "18" -> "14" [label="Intra"];
+}

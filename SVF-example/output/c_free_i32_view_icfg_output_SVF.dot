@@ -1,0 +1,32 @@
+digraph ICFG {
+  "21" [label="ID: 21\nType: 0\nKind: 0\nInfo: IntraICFGNode21 {fun: c_free_i32}
+AddrStmt: [Var37 <-- Var38]	
+ValVar ID: 37
+   %p.addr = alloca ptr, align 8 \nFunction: c_free_i32\nBasic Block: entry\nStatements: [108325940335440, ]"];
+  "21" -> "22" [label="Intra"];
+  "22" [label="ID: 22\nType: 0\nKind: 0\nInfo: IntraICFGNode22 {fun: c_free_i32}
+StoreStmt: [Var37 <-- Var36]	
+ValVar ID: 39
+   store ptr %p, ptr %p.addr, align 8 \nFunction: c_free_i32\nBasic Block: entry\nStatements: [108325939898640, ]"];
+  "22" -> "23" [label="Intra"];
+  "23" [label="ID: 23\nType: 0\nKind: 0\nInfo: IntraICFGNode23 {fun: c_free_i32}
+LoadStmt: [Var40 <-- Var37]	
+ValVar ID: 40
+   %0 = load ptr, ptr %p.addr, align 8 \nFunction: c_free_i32\nBasic Block: entry\nStatements: [108325940275680, ]"];
+  "23" -> "24" [label="Intra"];
+  "24" [label="ID: 24\nType: 0\nKind: 0\nInfo: IntraICFGNode24 {fun: c_free_i32}
+CopyStmt: [Var41 <-- Var40]	
+ValVar ID: 41
+   %1 = bitcast ptr %0 to ptr \nFunction: c_free_i32\nBasic Block: entry\nStatements: [108325940428400, ]"];
+  "24" -> "25" [label="Intra"];
+  "25" [label="ID: 25\nType: 0x6285992aefb0\nKind: 4\nInfo: CallICFGNode25 {fun: c_free_i32}
+   call void @free(ptr noundef %1) #2 CallICFGNode: \nFunction: c_free_i32\nBasic Block: entry\nStatements: None"];
+  "25" -> "26" [label="Intra"];
+  "26" [label="ID: 26\nType: 0x6285992aefb0\nKind: 5\nInfo: RetICFGNode26 {fun: c_free_i32}
+   call void @free(ptr noundef %1) #2 RetICFGNode: \nFunction: c_free_i32\nBasic Block: entry\nStatements: None"];
+  "26" -> "27" [label="Intra"];
+  "27" [label="ID: 27\nType: 0\nKind: 0\nInfo: IntraICFGNode27 {fun: c_free_i32}
+   ret void \nFunction: c_free_i32\nBasic Block: entry\nStatements: None"];
+  "27" -> "4" [label="Intra"];
+  "4" [label="ID: 4\nType: 0\nKind: 3\nInfo: FunExitICFGNode4 {fun: c_free_i32}\nFunction: c_free_i32\nBasic Block: entry\nStatements: None"];
+}

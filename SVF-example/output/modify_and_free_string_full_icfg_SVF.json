@@ -1,0 +1,687 @@
+{
+	"edges" : 
+	[
+		{
+			"destination" : 97629484470192,
+			"edge_type" : "intra",
+			"source" : 97629484484336
+		},
+		{
+			"destination" : 97629484292400,
+			"edge_type" : "intra",
+			"source" : 97629484470192
+		},
+		{
+			"destination" : 97629484706224,
+			"edge_type" : "intra",
+			"source" : 97629484292400
+		},
+		{
+			"destination" : 97629484708608,
+			"edge_type" : "intra",
+			"source" : 97629484706224
+		},
+		{
+			"destination" : 97629484920320,
+			"edge_type" : "intra",
+			"source" : 97629484708608
+		},
+		{
+			"destination" : 97629484386688,
+			"edge_type" : "intra",
+			"source" : 97629484708608
+		},
+		{
+			"destination" : 97629484936912,
+			"edge_type" : "intra",
+			"source" : 97629484920320
+		},
+		{
+			"destination" : 97629484910016,
+			"edge_type" : "intra",
+			"source" : 97629484386688
+		},
+		{
+			"destination" : 97629484483024,
+			"edge_type" : "intra",
+			"source" : 97629484936912
+		},
+		{
+			"destination" : 97629484927616,
+			"edge_type" : "intra",
+			"source" : 97629484910016
+		},
+		{
+			"destination" : 97629484489568,
+			"edge_type" : "intra",
+			"source" : 97629484927616
+		},
+		{
+			"destination" : 97629484339872,
+			"edge_type" : "intra",
+			"source" : 97629484489568
+		},
+		{
+			"destination" : 97629484924336,
+			"edge_type" : "intra",
+			"source" : 97629484339872
+		},
+		{
+			"destination" : 97629484338224,
+			"edge_type" : "intra",
+			"source" : 97629484924336
+		},
+		{
+			"destination" : 97629484485152,
+			"edge_type" : "intra",
+			"source" : 97629484338224
+		},
+		{
+			"destination" : 97629484337264,
+			"edge_type" : "intra",
+			"source" : 97629484485152
+		},
+		{
+			"destination" : 97629484331840,
+			"edge_type" : "intra",
+			"source" : 97629484337264
+		},
+		{
+			"destination" : 97629484936912,
+			"edge_type" : "intra",
+			"source" : 97629484331840
+		}
+	],
+	"nodes" : 
+	[
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 97629484388048,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484484336,
+					"edge_type" : "intra",
+					"source" : 97629484519296
+				}
+			],
+			"info" : "IntraICFGNode3 {fun: modify_and_free_string}\nAddrStmt: [Var10 <-- Var11]\t\nValVar ID: 10\n   %ptr.addr = alloca ptr, align 8 ",
+			"node_id" : 97629484484336,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97629484470192,
+					"edge_type" : "intra",
+					"source" : 97629484484336
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 97629484325408,
+					"stmt_info" : "AddrStmt: [Var10 <-- Var11]\t\nValVar ID: 10\n   %ptr.addr = alloca ptr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 97629484388048,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484470192,
+					"edge_type" : "intra",
+					"source" : 97629484484336
+				}
+			],
+			"info" : "IntraICFGNode4 {fun: modify_and_free_string}\nStoreStmt: [Var10 <-- Var9]\t\nValVar ID: 13\n   store ptr %ptr, ptr %ptr.addr, align 8 ",
+			"node_id" : 97629484470192,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97629484292400,
+					"edge_type" : "intra",
+					"source" : 97629484470192
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 97629484684032,
+					"stmt_info" : "StoreStmt: [Var10 <-- Var9]\t\nValVar ID: 13\n   store ptr %ptr, ptr %ptr.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 97629484388048,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484292400,
+					"edge_type" : "intra",
+					"source" : 97629484470192
+				}
+			],
+			"info" : "IntraICFGNode5 {fun: modify_and_free_string}\nLoadStmt: [Var14 <-- Var10]\t\nValVar ID: 14\n   %0 = load ptr, ptr %ptr.addr, align 8 ",
+			"node_id" : 97629484292400,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97629484706224,
+					"edge_type" : "intra",
+					"source" : 97629484292400
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 97629484306016,
+					"stmt_info" : "LoadStmt: [Var14 <-- Var10]\t\nValVar ID: 14\n   %0 = load ptr, ptr %ptr.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 97629484388048,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484706224,
+					"edge_type" : "intra",
+					"source" : 97629484292400
+				}
+			],
+			"info" : "IntraICFGNode6 {fun: modify_and_free_string}\nCmpStmt: [Var15 <-- (Var14 predicate32 Var0)]\t\nValVar ID: 15\n   %cmp = icmp eq ptr %0, null ",
+			"node_id" : 97629484706224,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97629484708608,
+					"edge_type" : "intra",
+					"source" : 97629484706224
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 97629484487168,
+					"stmt_info" : "CmpStmt: [Var15 <-- (Var14 predicate32 Var0)]\t\nValVar ID: 15\n   %cmp = icmp eq ptr %0, null "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 97629484388048,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484708608,
+					"edge_type" : "intra",
+					"source" : 97629484706224
+				}
+			],
+			"info" : "IntraICFGNode7 {fun: modify_and_free_string}\nBranchStmt: [Condition Var15]\nSuccessor 0 ICFGNode8   Successor 1 ICFGNode9   \nValVar ID: 16\n   br i1 %cmp, label %if.then, label %if.end ",
+			"node_id" : 97629484708608,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97629484920320,
+					"edge_type" : "intra",
+					"source" : 97629484708608
+				},
+				{
+					"destination" : 97629484386688,
+					"edge_type" : "intra",
+					"source" : 97629484708608
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 97629484486864,
+					"stmt_info" : "BranchStmt: [Condition Var15]\nSuccessor 0 ICFGNode8   Successor 1 ICFGNode9   \nValVar ID: 16\n   br i1 %cmp, label %if.then, label %if.end "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "if.then",
+			"basic_block" : 97629484388752,
+			"basic_block_info" : "BasicBlock: if.then { \"basic block\": if.then, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484920320,
+					"edge_type" : "intra",
+					"source" : 97629484708608
+				}
+			],
+			"info" : "IntraICFGNode8 {fun: modify_and_free_string}\nBranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode10   \nValVar ID: 17\n   br label %return ",
+			"node_id" : 97629484920320,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97629484936912,
+					"edge_type" : "intra",
+					"source" : 97629484920320
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 97629484502544,
+					"stmt_info" : "BranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode10   \nValVar ID: 17\n   br label %return "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "if.end",
+			"basic_block" : 97629484389408,
+			"basic_block_info" : "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484386688,
+					"edge_type" : "intra",
+					"source" : 97629484708608
+				}
+			],
+			"info" : "IntraICFGNode9 {fun: modify_and_free_string}\nLoadStmt: [Var19 <-- Var10]\t\nValVar ID: 19\n   %1 = load ptr, ptr %ptr.addr, align 8 ",
+			"node_id" : 97629484386688,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97629484910016,
+					"edge_type" : "intra",
+					"source" : 97629484386688
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 97629484332544,
+					"stmt_info" : "LoadStmt: [Var19 <-- Var10]\t\nValVar ID: 19\n   %1 = load ptr, ptr %ptr.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "return",
+			"basic_block" : 97629484902128,
+			"basic_block_info" : "BasicBlock: return { \"basic block\": return, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484936912,
+					"edge_type" : "intra",
+					"source" : 97629484920320
+				},
+				{
+					"destination" : 97629484936912,
+					"edge_type" : "intra",
+					"source" : 97629484331840
+				}
+			],
+			"info" : "IntraICFGNode10 {fun: modify_and_free_string}\n   ret void ",
+			"node_id" : 97629484936912,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97629484483024,
+					"edge_type" : "intra",
+					"source" : 97629484936912
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "if.end",
+			"basic_block" : 97629484389408,
+			"basic_block_info" : "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484910016,
+					"edge_type" : "intra",
+					"source" : 97629484386688
+				}
+			],
+			"info" : "CallICFGNode11 {fun: modify_and_free_string}\nGepStmt: [Var42 <-- Var19]\t\nValVar ID: 20\n   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 \nGepStmt: [Var43 <-- Var4]\t\nValVar ID: 20\n   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 \nLoadStmt: [Var44 <-- Var43]\t\nValVar ID: 20\n   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 \nStoreStmt: [Var42 <-- Var44]\t\nValVar ID: 20\n   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 \nCopyStmt: [Var20 <-- Var19]\t\nValVar ID: 20\n   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 ",
+			"node_id" : 97629484910016,
+			"node_kind" : 4,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97629484927616,
+					"edge_type" : "intra",
+					"source" : 97629484910016
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 97629484929904,
+					"stmt_info" : "GepStmt: [Var42 <-- Var19]\t\nValVar ID: 20\n   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 "
+				},
+				{
+					"stmt_id" : 97629484519024,
+					"stmt_info" : "GepStmt: [Var43 <-- Var4]\t\nValVar ID: 20\n   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 "
+				},
+				{
+					"stmt_id" : 97629484918256,
+					"stmt_info" : "LoadStmt: [Var44 <-- Var43]\t\nValVar ID: 20\n   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 "
+				},
+				{
+					"stmt_id" : 97629484905728,
+					"stmt_info" : "StoreStmt: [Var42 <-- Var44]\t\nValVar ID: 20\n   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 "
+				},
+				{
+					"stmt_id" : 97629484504560,
+					"stmt_info" : "CopyStmt: [Var20 <-- Var19]\t\nValVar ID: 20\n   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "return",
+			"basic_block" : 97629484902128,
+			"basic_block_info" : "BasicBlock: return { \"basic block\": return, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484483024,
+					"edge_type" : "intra",
+					"source" : 97629484936912
+				}
+			],
+			"info" : "FunExitICFGNode2 {fun: modify_and_free_string}",
+			"node_id" : 97629484483024,
+			"node_kind" : 3,
+			"node_type" : false,
+			"outgoing_edges" : [],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "if.end",
+			"basic_block" : 97629484389408,
+			"basic_block_info" : "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484927616,
+					"edge_type" : "intra",
+					"source" : 97629484910016
+				}
+			],
+			"info" : "RetICFGNode12 {fun: modify_and_free_string}\n   %call = call ptr @strcpy(ptr noundef %1, ptr noundef @.str) #3 RetICFGNode: ",
+			"node_id" : 97629484927616,
+			"node_kind" : 5,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97629484489568,
+					"edge_type" : "intra",
+					"source" : 97629484927616
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "if.end",
+			"basic_block" : 97629484389408,
+			"basic_block_info" : "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484489568,
+					"edge_type" : "intra",
+					"source" : 97629484927616
+				}
+			],
+			"info" : "IntraICFGNode13 {fun: modify_and_free_string}\nLoadStmt: [Var23 <-- Var10]\t\nValVar ID: 23\n   %2 = load ptr, ptr %ptr.addr, align 8 ",
+			"node_id" : 97629484489568,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97629484339872,
+					"edge_type" : "intra",
+					"source" : 97629484489568
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 97629484496288,
+					"stmt_info" : "LoadStmt: [Var23 <-- Var10]\t\nValVar ID: 23\n   %2 = load ptr, ptr %ptr.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "if.end",
+			"basic_block" : 97629484389408,
+			"basic_block_info" : "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484339872,
+					"edge_type" : "intra",
+					"source" : 97629484489568
+				}
+			],
+			"info" : "CallICFGNode14 {fun: modify_and_free_string}\n   %call1 = call i32 (ptr, ...) @printf(ptr noundef @.str.1, ptr noundef %2) CallICFGNode: ",
+			"node_id" : 97629484339872,
+			"node_kind" : 4,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97629484924336,
+					"edge_type" : "intra",
+					"source" : 97629484339872
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "if.end",
+			"basic_block" : 97629484389408,
+			"basic_block_info" : "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484924336,
+					"edge_type" : "intra",
+					"source" : 97629484339872
+				}
+			],
+			"info" : "RetICFGNode15 {fun: modify_and_free_string}\n   %call1 = call i32 (ptr, ...) @printf(ptr noundef @.str.1, ptr noundef %2) RetICFGNode: ",
+			"node_id" : 97629484924336,
+			"node_kind" : 5,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97629484338224,
+					"edge_type" : "intra",
+					"source" : 97629484924336
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "if.end",
+			"basic_block" : 97629484389408,
+			"basic_block_info" : "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484338224,
+					"edge_type" : "intra",
+					"source" : 97629484924336
+				}
+			],
+			"info" : "IntraICFGNode16 {fun: modify_and_free_string}\nLoadStmt: [Var27 <-- Var10]\t\nValVar ID: 27\n   %3 = load ptr, ptr %ptr.addr, align 8 ",
+			"node_id" : 97629484338224,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97629484485152,
+					"edge_type" : "intra",
+					"source" : 97629484338224
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 97629484597984,
+					"stmt_info" : "LoadStmt: [Var27 <-- Var10]\t\nValVar ID: 27\n   %3 = load ptr, ptr %ptr.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "if.end",
+			"basic_block" : 97629484389408,
+			"basic_block_info" : "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484485152,
+					"edge_type" : "intra",
+					"source" : 97629484338224
+				}
+			],
+			"info" : "CallICFGNode17 {fun: modify_and_free_string}\n   call void @free(ptr noundef %3) #3 CallICFGNode: ",
+			"node_id" : 97629484485152,
+			"node_kind" : 4,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97629484337264,
+					"edge_type" : "intra",
+					"source" : 97629484485152
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "if.end",
+			"basic_block" : 97629484389408,
+			"basic_block_info" : "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484337264,
+					"edge_type" : "intra",
+					"source" : 97629484485152
+				}
+			],
+			"info" : "RetICFGNode18 {fun: modify_and_free_string}\n   call void @free(ptr noundef %3) #3 RetICFGNode: ",
+			"node_id" : 97629484337264,
+			"node_kind" : 5,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97629484331840,
+					"edge_type" : "intra",
+					"source" : 97629484337264
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "if.end",
+			"basic_block" : 97629484389408,
+			"basic_block_info" : "BasicBlock: if.end { \"basic block\": if.end, \"location\":  }",
+			"function" : 97629484762000,
+			"function_name" : "modify_and_free_string",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 97629484331840,
+					"edge_type" : "intra",
+					"source" : 97629484337264
+				}
+			],
+			"info" : "IntraICFGNode19 {fun: modify_and_free_string}\nBranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode10   \nValVar ID: 31\n   br label %return ",
+			"node_id" : 97629484331840,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 97629484936912,
+					"edge_type" : "intra",
+					"source" : 97629484331840
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 97629484303376,
+					"stmt_info" : "BranchStmt: [ Unconditional branch]\nSuccessor 0 ICFGNode10   \nValVar ID: 31\n   br label %return "
+				}
+			]
+		}
+	]
+}

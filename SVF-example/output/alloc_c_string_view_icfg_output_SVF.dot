@@ -1,0 +1,88 @@
+digraph ICFG {
+  "5" [label="ID: 5\nType: 0\nKind: 0\nInfo: IntraICFGNode5 {fun: alloc_c_string}
+AddrStmt: [Var8 <-- Var9]	
+ValVar ID: 8
+   %msg.addr = alloca ptr, align 8 \nFunction: alloc_c_string\nBasic Block: entry\nStatements: [93999605511584, ]"];
+  "5" -> "6" [label="Intra"];
+  "6" [label="ID: 6\nType: 0\nKind: 0\nInfo: IntraICFGNode6 {fun: alloc_c_string}
+AddrStmt: [Var11 <-- Var12]	
+ValVar ID: 11
+   %buf = alloca ptr, align 8 \nFunction: alloc_c_string\nBasic Block: entry\nStatements: [93999605931456, ]"];
+  "6" -> "7" [label="Intra"];
+  "7" [label="ID: 7\nType: 0\nKind: 0\nInfo: IntraICFGNode7 {fun: alloc_c_string}
+StoreStmt: [Var8 <-- Var7]	
+ValVar ID: 13
+   store ptr %msg, ptr %msg.addr, align 8 \nFunction: alloc_c_string\nBasic Block: entry\nStatements: [93999605326768, ]"];
+  "7" -> "8" [label="Intra"];
+  "8" [label="ID: 8\nType: 0\nKind: 0\nInfo: IntraICFGNode8 {fun: alloc_c_string}
+LoadStmt: [Var14 <-- Var8]	
+ValVar ID: 14
+   %0 = load ptr, ptr %msg.addr, align 8 \nFunction: alloc_c_string\nBasic Block: entry\nStatements: [93999605937264, ]"];
+  "8" -> "9" [label="Intra"];
+  "9" [label="ID: 9\nType: 0x557dfd1f3780\nKind: 4\nInfo: CallICFGNode9 {fun: alloc_c_string}
+   %call = call i64 @strlen(ptr noundef %0) #3 CallICFGNode: \nFunction: alloc_c_string\nBasic Block: entry\nStatements: None"];
+  "9" -> "10" [label="Intra"];
+  "10" [label="ID: 10\nType: 0x557dfd1f3780\nKind: 5\nInfo: RetICFGNode10 {fun: alloc_c_string}
+   %call = call i64 @strlen(ptr noundef %0) #3 RetICFGNode: \nFunction: alloc_c_string\nBasic Block: entry\nStatements: None"];
+  "10" -> "11" [label="Intra"];
+  "11" [label="ID: 11\nType: 0\nKind: 0\nInfo: IntraICFGNode11 {fun: alloc_c_string}
+BinaryOPStmt: [Var18 <-- (Var15 opcode13 Var19)]	
+ValVar ID: 18
+   %add = add i64 %call, 1 \nFunction: alloc_c_string\nBasic Block: entry\nStatements: [93999605941440, ]"];
+  "11" -> "12" [label="Intra"];
+  "12" [label="ID: 12\nType: 0x557dfd169660\nKind: 4\nInfo: CallICFGNode12 {fun: alloc_c_string}
+AddrStmt: [Var20 <-- Var21]	
+ValVar ID: 20
+   %call1 = call noalias ptr @malloc(i64 noundef %add) #4 \nFunction: alloc_c_string\nBasic Block: entry\nStatements: [93999605941008, ]"];
+  "12" -> "13" [label="Intra"];
+  "13" [label="ID: 13\nType: 0x557dfd169660\nKind: 5\nInfo: RetICFGNode13 {fun: alloc_c_string}
+   %call1 = call noalias ptr @malloc(i64 noundef %add) #4 RetICFGNode: \nFunction: alloc_c_string\nBasic Block: entry\nStatements: None"];
+  "13" -> "14" [label="Intra"];
+  "14" [label="ID: 14\nType: 0\nKind: 0\nInfo: IntraICFGNode14 {fun: alloc_c_string}
+StoreStmt: [Var11 <-- Var20]	
+ValVar ID: 24
+   store ptr %call1, ptr %buf, align 8 \nFunction: alloc_c_string\nBasic Block: entry\nStatements: [93999605932944, ]"];
+  "14" -> "15" [label="Intra"];
+  "15" [label="ID: 15\nType: 0\nKind: 0\nInfo: IntraICFGNode15 {fun: alloc_c_string}
+LoadStmt: [Var25 <-- Var11]	
+ValVar ID: 25
+   %1 = load ptr, ptr %buf, align 8 \nFunction: alloc_c_string\nBasic Block: entry\nStatements: [93999605386144, ]"];
+  "15" -> "16" [label="Intra"];
+  "16" [label="ID: 16\nType: 0\nKind: 0\nInfo: IntraICFGNode16 {fun: alloc_c_string}
+LoadStmt: [Var26 <-- Var8]	
+ValVar ID: 26
+   %2 = load ptr, ptr %msg.addr, align 8 \nFunction: alloc_c_string\nBasic Block: entry\nStatements: [93999605932336, ]"];
+  "16" -> "17" [label="Intra"];
+  "17" [label="ID: 17\nType: 0x557dfd169660\nKind: 4\nInfo: CallICFGNode17 {fun: alloc_c_string}
+GepStmt: [Var54 <-- Var25]	
+ValVar ID: 27
+   %call2 = call ptr @strcpy(ptr noundef %1, ptr noundef %2) #4 
+GepStmt: [Var55 <-- Var26]	
+ValVar ID: 27
+   %call2 = call ptr @strcpy(ptr noundef %1, ptr noundef %2) #4 
+LoadStmt: [Var56 <-- Var55]	
+ValVar ID: 27
+   %call2 = call ptr @strcpy(ptr noundef %1, ptr noundef %2) #4 
+StoreStmt: [Var54 <-- Var56]	
+ValVar ID: 27
+   %call2 = call ptr @strcpy(ptr noundef %1, ptr noundef %2) #4 
+CopyStmt: [Var27 <-- Var25]	
+ValVar ID: 27
+   %call2 = call ptr @strcpy(ptr noundef %1, ptr noundef %2) #4 \nFunction: alloc_c_string\nBasic Block: entry\nStatements: [93999605948832, 93999605602928, 93999605938528, 93999605710736, 93999605723808, ]"];
+  "17" -> "18" [label="Intra"];
+  "18" [label="ID: 18\nType: 0x557dfd169660\nKind: 5\nInfo: RetICFGNode18 {fun: alloc_c_string}
+   %call2 = call ptr @strcpy(ptr noundef %1, ptr noundef %2) #4 RetICFGNode: \nFunction: alloc_c_string\nBasic Block: entry\nStatements: None"];
+  "18" -> "19" [label="Intra"];
+  "19" [label="ID: 19\nType: 0\nKind: 0\nInfo: IntraICFGNode19 {fun: alloc_c_string}
+LoadStmt: [Var30 <-- Var11]	
+ValVar ID: 30
+   %3 = load ptr, ptr %buf, align 8 \nFunction: alloc_c_string\nBasic Block: entry\nStatements: [93999605709600, ]"];
+  "19" -> "20" [label="Intra"];
+  "20" [label="ID: 20\nType: 0\nKind: 0\nInfo: IntraICFGNode20 {fun: alloc_c_string}
+   ret ptr %3 \nFunction: alloc_c_string\nBasic Block: entry\nStatements: None"];
+  "20" -> "2" [label="Intra"];
+  "2" [label="ID: 2\nType: 0\nKind: 3\nInfo: FunExitICFGNode2 {fun: alloc_c_string}
+PhiStmt: [Var6 <-- ([Var30, ICFGNode20],)]	
+ValVar ID: 31
+   ret ptr %3 \nFunction: alloc_c_string\nBasic Block: entry\nStatements: [93999605748976, ]"];
+}

@@ -1,0 +1,5 @@
+digraph ICFG {
+  "3" -> "4" [label="Intra"];
+  "4" -> "5" [label="Intra"];
+  "5" -> "2" [label="Intra"];
+}

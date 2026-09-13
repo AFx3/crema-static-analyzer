@@ -1,0 +1,46 @@
+digraph ICFG {
+  "5" [label="ID: 5\nType: 0\nKind: 0\nInfo: IntraICFGNode5 {fun: register_cb}
+AddrStmt: [Var15 <-- Var16]	
+ValVar ID: 15
+   %c.addr = alloca ptr, align 8 \nFunction: register_cb\nBasic Block: entry\nStatements: [99000513635296, ]"];
+  "5" -> "6" [label="Intra"];
+  "6" [label="ID: 6\nType: 0\nKind: 0\nInfo: IntraICFGNode6 {fun: register_cb}
+AddrStmt: [Var18 <-- Var19]	
+ValVar ID: 18
+   %a.addr = alloca ptr, align 8 \nFunction: register_cb\nBasic Block: entry\nStatements: [99000513302688, ]"];
+  "6" -> "7" [label="Intra"];
+  "7" [label="ID: 7\nType: 0\nKind: 0\nInfo: IntraICFGNode7 {fun: register_cb}
+StoreStmt: [Var15 <-- Var13]	
+ValVar ID: 20
+   store ptr %c, ptr %c.addr, align 8 \nFunction: register_cb\nBasic Block: entry\nStatements: [99000513121232, ]"];
+  "7" -> "8" [label="Intra"];
+  "8" [label="ID: 8\nType: 0\nKind: 0\nInfo: IntraICFGNode8 {fun: register_cb}
+StoreStmt: [Var18 <-- Var14]	
+ValVar ID: 21
+   store ptr %a, ptr %a.addr, align 8 \nFunction: register_cb\nBasic Block: entry\nStatements: [99000513146848, ]"];
+  "8" -> "9" [label="Intra"];
+  "9" [label="ID: 9\nType: 0\nKind: 0\nInfo: IntraICFGNode9 {fun: register_cb}
+LoadStmt: [Var22 <-- Var15]	
+ValVar ID: 22
+   %0 = load ptr, ptr %c.addr, align 8 \nFunction: register_cb\nBasic Block: entry\nStatements: [99000513280832, ]"];
+  "9" -> "10" [label="Intra"];
+  "10" [label="ID: 10\nType: 0\nKind: 0\nInfo: IntraICFGNode10 {fun: register_cb}
+StoreStmt: [Var4 <-- Var22]	
+ValVar ID: 23
+   store ptr %0, ptr @cb, align 8 \nFunction: register_cb\nBasic Block: entry\nStatements: [99000513233824, ]"];
+  "10" -> "11" [label="Intra"];
+  "11" [label="ID: 11\nType: 0\nKind: 0\nInfo: IntraICFGNode11 {fun: register_cb}
+LoadStmt: [Var24 <-- Var18]	
+ValVar ID: 24
+   %1 = load ptr, ptr %a.addr, align 8 \nFunction: register_cb\nBasic Block: entry\nStatements: [99000513181088, ]"];
+  "11" -> "12" [label="Intra"];
+  "12" [label="ID: 12\nType: 0\nKind: 0\nInfo: IntraICFGNode12 {fun: register_cb}
+StoreStmt: [Var6 <-- Var24]	
+ValVar ID: 25
+   store ptr %1, ptr @arg, align 8 \nFunction: register_cb\nBasic Block: entry\nStatements: [99000513281872, ]"];
+  "12" -> "13" [label="Intra"];
+  "13" [label="ID: 13\nType: 0\nKind: 0\nInfo: IntraICFGNode13 {fun: register_cb}
+   ret void \nFunction: register_cb\nBasic Block: entry\nStatements: None"];
+  "13" -> "2" [label="Intra"];
+  "2" [label="ID: 2\nType: 0\nKind: 3\nInfo: FunExitICFGNode2 {fun: register_cb}\nFunction: register_cb\nBasic Block: entry\nStatements: None"];
+}

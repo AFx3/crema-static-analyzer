@@ -1,0 +1,50 @@
+digraph ICFG {
+  "11" [label="ID: 11\nType: 0\nKind: 0\nInfo: IntraICFGNode11 {fun: free_bool}
+AddrStmt: [Var8 <-- Var9]	
+ValVar ID: 8
+   %ptr.addr = alloca ptr, align 8 \nFunction: free_bool\nBasic Block: entry\nStatements: [105243412324032, ]"];
+  "11" -> "12" [label="Intra"];
+  "12" [label="ID: 12\nType: 0\nKind: 0\nInfo: IntraICFGNode12 {fun: free_bool}
+StoreStmt: [Var8 <-- Var7]	
+ValVar ID: 11
+   store ptr %ptr, ptr %ptr.addr, align 8 \nFunction: free_bool\nBasic Block: entry\nStatements: [105243412105072, ]"];
+  "12" -> "13" [label="Intra"];
+  "13" [label="ID: 13\nType: 0\nKind: 0\nInfo: IntraICFGNode13 {fun: free_bool}
+LoadStmt: [Var12 <-- Var8]	
+ValVar ID: 12
+   %0 = load ptr, ptr %ptr.addr, align 8 \nFunction: free_bool\nBasic Block: entry\nStatements: [105243412102480, ]"];
+  "13" -> "14" [label="Intra"];
+  "14" [label="ID: 14\nType: 0\nKind: 0\nInfo: IntraICFGNode14 {fun: free_bool}
+CmpStmt: [Var13 <-- (Var12 predicate33 Var0)]	
+ValVar ID: 13
+   %cmp = icmp ne ptr %0, null \nFunction: free_bool\nBasic Block: entry\nStatements: [105243412422048, ]"];
+  "14" -> "15" [label="Intra"];
+  "15" [label="ID: 15\nType: 0\nKind: 0\nInfo: IntraICFGNode15 {fun: free_bool}
+BranchStmt: [Condition Var13]
+Successor 0 ICFGNode16   Successor 1 ICFGNode17   
+ValVar ID: 14
+   br i1 %cmp, label %if.then, label %if.end \nFunction: free_bool\nBasic Block: entry\nStatements: [105243412449296, ]"];
+  "15" -> "16" [label="Intra"];
+  "15" -> "17" [label="Intra"];
+  "16" [label="ID: 16\nType: 0\nKind: 0\nInfo: IntraICFGNode16 {fun: free_bool}
+LoadStmt: [Var15 <-- Var8]	
+ValVar ID: 15
+   %1 = load ptr, ptr %ptr.addr, align 8 \nFunction: free_bool\nBasic Block: if.then\nStatements: [105243412450144, ]"];
+  "16" -> "18" [label="Intra"];
+  "17" [label="ID: 17\nType: 0\nKind: 0\nInfo: IntraICFGNode17 {fun: free_bool}
+   ret void \nFunction: free_bool\nBasic Block: if.end\nStatements: None"];
+  "17" -> "2" [label="Intra"];
+  "18" [label="ID: 18\nType: 0x5fb7e4318520\nKind: 4\nInfo: CallICFGNode18 {fun: free_bool}
+   call void @free(ptr noundef %1) #2 CallICFGNode: \nFunction: free_bool\nBasic Block: if.then\nStatements: None"];
+  "18" -> "19" [label="Intra"];
+  "2" [label="ID: 2\nType: 0\nKind: 3\nInfo: FunExitICFGNode2 {fun: free_bool}\nFunction: free_bool\nBasic Block: if.end\nStatements: None"];
+  "19" [label="ID: 19\nType: 0x5fb7e4318520\nKind: 5\nInfo: RetICFGNode19 {fun: free_bool}
+   call void @free(ptr noundef %1) #2 RetICFGNode: \nFunction: free_bool\nBasic Block: if.then\nStatements: None"];
+  "19" -> "20" [label="Intra"];
+  "20" [label="ID: 20\nType: 0\nKind: 0\nInfo: IntraICFGNode20 {fun: free_bool}
+BranchStmt: [ Unconditional branch]
+Successor 0 ICFGNode17   
+ValVar ID: 19
+   br label %if.end \nFunction: free_bool\nBasic Block: if.then\nStatements: [105243412432320, ]"];
+  "20" -> "17" [label="Intra"];
+}

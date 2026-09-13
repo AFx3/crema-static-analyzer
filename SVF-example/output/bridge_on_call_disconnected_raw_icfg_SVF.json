@@ -1,0 +1,314 @@
+{
+	"edges" : 
+	[
+		{
+			"destination" : 95649433485104,
+			"edge_type" : "intra",
+			"source" : 95649433484176
+		},
+		{
+			"destination" : 95649433430480,
+			"edge_type" : "intra",
+			"source" : 95649433485104
+		},
+		{
+			"destination" : 95649433836832,
+			"edge_type" : "intra",
+			"source" : 95649433430480
+		},
+		{
+			"destination" : 95649433502048,
+			"edge_type" : "intra",
+			"source" : 95649433836832
+		},
+		{
+			"destination" : 95649433736496,
+			"edge_type" : "intra",
+			"source" : 95649433502048
+		},
+		{
+			"destination" : 95649433427936,
+			"edge_type" : "intra",
+			"source" : 95649433736496
+		},
+		{
+			"destination" : 95649433736960,
+			"edge_type" : "intra",
+			"source" : 95649433427936
+		},
+		{
+			"destination" : 95649434003840,
+			"edge_type" : "intra",
+			"source" : 95649433736960
+		},
+		{
+			"destination" : 95649433499728,
+			"edge_type" : "intra",
+			"source" : 95649434003840
+		},
+		{
+			"destination" : 95649433515968,
+			"edge_type" : "intra",
+			"source" : 95649433499728
+		},
+		{
+			"destination" : 95649433603248,
+			"edge_type" : "intra",
+			"source" : 95649433515968
+		},
+		{
+			"destination" : 95649433612032,
+			"edge_type" : "intra",
+			"source" : 95649433603248
+		},
+		{
+			"destination" : 95649433601200,
+			"edge_type" : "intra",
+			"source" : 95649433612032
+		},
+		{
+			"destination" : 95649433604016,
+			"edge_type" : "intra",
+			"source" : 95649433601200
+		},
+		{
+			"destination" : 95649433618512,
+			"edge_type" : "intra",
+			"source" : 95649433604016
+		}
+	],
+	"nodes" : 
+	[
+		{
+			"basic_block" : 95649433427632,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433956384,
+			"function_name" : "bridge_on_call_disconnected",
+			"info" : "IntraICFGNode40 {fun: bridge_on_call_disconnected}\nAddrStmt: [Var59 <-- Var60]\t\nValVar ID: 59\n   %f.addr = alloca ptr, align 8 ",
+			"node_id" : 95649433484176,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433938160
+			]
+		},
+		{
+			"basic_block" : 95649433427632,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433956384,
+			"function_name" : "bridge_on_call_disconnected",
+			"info" : "IntraICFGNode41 {fun: bridge_on_call_disconnected}\nAddrStmt: [Var61 <-- Var62]\t\nValVar ID: 61\n   %route_id.addr = alloca ptr, align 8 ",
+			"node_id" : 95649433485104,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433679360
+			]
+		},
+		{
+			"basic_block" : 95649433427632,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433956384,
+			"function_name" : "bridge_on_call_disconnected",
+			"info" : "IntraICFGNode42 {fun: bridge_on_call_disconnected}\nAddrStmt: [Var63 <-- Var64]\t\nValVar ID: 63\n   %channel_id.addr = alloca ptr, align 8 ",
+			"node_id" : 95649433430480,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433680624
+			]
+		},
+		{
+			"basic_block" : 95649433427632,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433956384,
+			"function_name" : "bridge_on_call_disconnected",
+			"info" : "IntraICFGNode43 {fun: bridge_on_call_disconnected}\nAddrStmt: [Var65 <-- Var66]\t\nValVar ID: 65\n   %userdata.addr = alloca ptr, align 8 ",
+			"node_id" : 95649433836832,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433681888
+			]
+		},
+		{
+			"basic_block" : 95649433427632,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433956384,
+			"function_name" : "bridge_on_call_disconnected",
+			"info" : "IntraICFGNode44 {fun: bridge_on_call_disconnected}\nStoreStmt: [Var59 <-- Var55]\t\nValVar ID: 67\n   store ptr %f, ptr %f.addr, align 8 ",
+			"node_id" : 95649433502048,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433682448
+			]
+		},
+		{
+			"basic_block" : 95649433427632,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433956384,
+			"function_name" : "bridge_on_call_disconnected",
+			"info" : "IntraICFGNode45 {fun: bridge_on_call_disconnected}\nStoreStmt: [Var61 <-- Var56]\t\nValVar ID: 68\n   store ptr %route_id, ptr %route_id.addr, align 8 ",
+			"node_id" : 95649433736496,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433565776
+			]
+		},
+		{
+			"basic_block" : 95649433427632,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433956384,
+			"function_name" : "bridge_on_call_disconnected",
+			"info" : "IntraICFGNode46 {fun: bridge_on_call_disconnected}\nStoreStmt: [Var63 <-- Var57]\t\nValVar ID: 69\n   store ptr %channel_id, ptr %channel_id.addr, align 8 ",
+			"node_id" : 95649433427936,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433566928
+			]
+		},
+		{
+			"basic_block" : 95649433427632,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433956384,
+			"function_name" : "bridge_on_call_disconnected",
+			"info" : "IntraICFGNode47 {fun: bridge_on_call_disconnected}\nStoreStmt: [Var65 <-- Var58]\t\nValVar ID: 70\n   store ptr %userdata, ptr %userdata.addr, align 8 ",
+			"node_id" : 95649433736960,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649434018960
+			]
+		},
+		{
+			"basic_block" : 95649433427632,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433956384,
+			"function_name" : "bridge_on_call_disconnected",
+			"info" : "IntraICFGNode48 {fun: bridge_on_call_disconnected}\nLoadStmt: [Var71 <-- Var59]\t\nValVar ID: 71\n   %0 = load ptr, ptr %f.addr, align 8 ",
+			"node_id" : 95649434003840,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649434020064
+			]
+		},
+		{
+			"basic_block" : 95649433427632,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433956384,
+			"function_name" : "bridge_on_call_disconnected",
+			"info" : "IntraICFGNode49 {fun: bridge_on_call_disconnected}\nLoadStmt: [Var72 <-- Var61]\t\nValVar ID: 72\n   %1 = load ptr, ptr %route_id.addr, align 8 ",
+			"node_id" : 95649433499728,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649434021280
+			]
+		},
+		{
+			"basic_block" : 95649433427632,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433956384,
+			"function_name" : "bridge_on_call_disconnected",
+			"info" : "IntraICFGNode50 {fun: bridge_on_call_disconnected}\nLoadStmt: [Var73 <-- Var63]\t\nValVar ID: 73\n   %2 = load ptr, ptr %channel_id.addr, align 8 ",
+			"node_id" : 95649433515968,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433648512
+			]
+		},
+		{
+			"basic_block" : 95649433427632,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433956384,
+			"function_name" : "bridge_on_call_disconnected",
+			"info" : "IntraICFGNode51 {fun: bridge_on_call_disconnected}\nLoadStmt: [Var74 <-- Var65]\t\nValVar ID: 74\n   %3 = load ptr, ptr %userdata.addr, align 8 ",
+			"node_id" : 95649433603248,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433649664
+			]
+		},
+		{
+			"basic_block" : 95649433427632,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433956384,
+			"function_name" : "bridge_on_call_disconnected",
+			"info" : "CallICFGNode52 {fun: bridge_on_call_disconnected}\n   %call = call ptr %0(ptr noundef %1, ptr noundef %2, ptr noundef %3) CallICFGNode: ",
+			"node_id" : 95649433612032,
+			"node_kind" : 4,
+			"node_type" : true,
+			"svf_statements" : []
+		},
+		{
+			"basic_block" : 95649433427632,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433956384,
+			"function_name" : "bridge_on_call_disconnected",
+			"info" : "RetICFGNode53 {fun: bridge_on_call_disconnected}\n   %call = call ptr %0(ptr noundef %1, ptr noundef %2, ptr noundef %3) RetICFGNode: ",
+			"node_id" : 95649433601200,
+			"node_kind" : 5,
+			"node_type" : true,
+			"svf_statements" : []
+		},
+		{
+			"basic_block" : 95649433427632,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433956384,
+			"function_name" : "bridge_on_call_disconnected",
+			"info" : "IntraICFGNode54 {fun: bridge_on_call_disconnected}\n   ret ptr %call ",
+			"node_id" : 95649433604016,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : []
+		},
+		{
+			"basic_block" : 95649433427632,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 95649433956384,
+			"function_name" : "bridge_on_call_disconnected",
+			"info" : "FunExitICFGNode4 {fun: bridge_on_call_disconnected}\nPhiStmt: [Var54 <-- ([Var75, ICFGNode54],)]\t\nValVar ID: 76\n   ret ptr %call ",
+			"node_id" : 95649433618512,
+			"node_kind" : 3,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				95649433651488
+			]
+		}
+	]
+}

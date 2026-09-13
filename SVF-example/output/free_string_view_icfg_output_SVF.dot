@@ -1,0 +1,50 @@
+digraph ICFG {
+  "53" [label="ID: 53\nType: 0\nKind: 0\nInfo: IntraICFGNode53 {fun: free_string}
+AddrStmt: [Var75 <-- Var76]	
+ValVar ID: 75
+   %str.addr = alloca ptr, align 8 \nFunction: free_string\nBasic Block: entry\nStatements: [105243412143456, ]"];
+  "53" -> "54" [label="Intra"];
+  "54" [label="ID: 54\nType: 0\nKind: 0\nInfo: IntraICFGNode54 {fun: free_string}
+StoreStmt: [Var75 <-- Var74]	
+ValVar ID: 77
+   store ptr %str, ptr %str.addr, align 8 \nFunction: free_string\nBasic Block: entry\nStatements: [105243412144768, ]"];
+  "54" -> "55" [label="Intra"];
+  "55" [label="ID: 55\nType: 0\nKind: 0\nInfo: IntraICFGNode55 {fun: free_string}
+LoadStmt: [Var78 <-- Var75]	
+ValVar ID: 78
+   %0 = load ptr, ptr %str.addr, align 8 \nFunction: free_string\nBasic Block: entry\nStatements: [105243412293008, ]"];
+  "55" -> "56" [label="Intra"];
+  "56" [label="ID: 56\nType: 0\nKind: 0\nInfo: IntraICFGNode56 {fun: free_string}
+CmpStmt: [Var79 <-- (Var78 predicate33 Var0)]	
+ValVar ID: 79
+   %cmp = icmp ne ptr %0, null \nFunction: free_string\nBasic Block: entry\nStatements: [105243412294304, ]"];
+  "56" -> "57" [label="Intra"];
+  "57" [label="ID: 57\nType: 0\nKind: 0\nInfo: IntraICFGNode57 {fun: free_string}
+BranchStmt: [Condition Var79]
+Successor 0 ICFGNode58   Successor 1 ICFGNode59   
+ValVar ID: 80
+   br i1 %cmp, label %if.then, label %if.end \nFunction: free_string\nBasic Block: entry\nStatements: [105243412291008, ]"];
+  "57" -> "58" [label="Intra"];
+  "57" -> "59" [label="Intra"];
+  "58" [label="ID: 58\nType: 0\nKind: 0\nInfo: IntraICFGNode58 {fun: free_string}
+LoadStmt: [Var81 <-- Var75]	
+ValVar ID: 81
+   %1 = load ptr, ptr %str.addr, align 8 \nFunction: free_string\nBasic Block: if.then\nStatements: [105243412292128, ]"];
+  "58" -> "60" [label="Intra"];
+  "59" [label="ID: 59\nType: 0\nKind: 0\nInfo: IntraICFGNode59 {fun: free_string}
+   ret void \nFunction: free_string\nBasic Block: if.end\nStatements: None"];
+  "59" -> "10" [label="Intra"];
+  "60" [label="ID: 60\nType: 0x5fb7e4318520\nKind: 4\nInfo: CallICFGNode60 {fun: free_string}
+   call void @free(ptr noundef %1) #2 CallICFGNode: \nFunction: free_string\nBasic Block: if.then\nStatements: None"];
+  "60" -> "61" [label="Intra"];
+  "10" [label="ID: 10\nType: 0\nKind: 3\nInfo: FunExitICFGNode10 {fun: free_string}\nFunction: free_string\nBasic Block: if.end\nStatements: None"];
+  "61" [label="ID: 61\nType: 0x5fb7e4318520\nKind: 5\nInfo: RetICFGNode61 {fun: free_string}
+   call void @free(ptr noundef %1) #2 RetICFGNode: \nFunction: free_string\nBasic Block: if.then\nStatements: None"];
+  "61" -> "62" [label="Intra"];
+  "62" [label="ID: 62\nType: 0\nKind: 0\nInfo: IntraICFGNode62 {fun: free_string}
+BranchStmt: [ Unconditional branch]
+Successor 0 ICFGNode59   
+ValVar ID: 83
+   br label %if.end \nFunction: free_string\nBasic Block: if.then\nStatements: [105243412483840, ]"];
+  "62" -> "59" [label="Intra"];
+}

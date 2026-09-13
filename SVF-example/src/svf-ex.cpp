@@ -22,6 +22,8 @@ The icfg outputs are located in the 'output' directory, in DOT and JSON formats.
 #include <fstream>
 #include <json/json.h> 
 #include <iterator>
+#include <cstdlib>
+#include <filesystem>
 
 
 using namespace llvm;
@@ -757,7 +759,7 @@ void outputFinalICFGJson(SVF::ICFG* icfg, const SVF::ICFGNode* startNode, const 
         if (iNode) {
 // NODE INFO
             Json::Value nodeJson;
-            nodeJson["node_id"] = (uintptr_t)iNode;
+            nodeJson["node_id"] = static_cast<Json::UInt64>(iNode->getId());
             nodeJson["node_type"] = iNode->getType();
             nodeJson["info"] = iNode->toString();
             nodeJson["node_kind"] = iNode->getNodeKind();
@@ -770,15 +772,13 @@ void outputFinalICFGJson(SVF::ICFG* icfg, const SVF::ICFGNode* startNode, const 
 // FUNCTION INFO
             const SVF::SVFFunction* func = iNode->getFun();
             if (func) {
-                nodeJson["function"] = (uintptr_t)func;
-                nodeJson["function_name"] = func->getName();
+                                nodeJson["function_name"] = func->getName();
                 
             }
 // BASIC BLOCK INFO
             const SVF::SVFBasicBlock* basicBlock = iNode->getBB();
             if (basicBlock) {
-                nodeJson["basic_block"] = (uintptr_t)basicBlock;
-                nodeJson["basicBlockName"] = basicBlock->getName();
+                                nodeJson["basicBlockName"] = basicBlock->getName();
                 nodeJson["basic_block_info"] = basicBlock->toString();
             }
 
@@ -790,7 +790,7 @@ void outputFinalICFGJson(SVF::ICFG* icfg, const SVF::ICFGNode* startNode, const 
             if (!stmt) continue;
 
             Json::Value stmtJson;
-            stmtJson["stmt_id"] = (uintptr_t)stmt;
+            stmtJson["stmt_id"] = static_cast<Json::UInt64>(stmt->getEdgeID());
             stmtJson["stmt_info"] = stmt->toString();
             stmtJson["edge_id"] = stmt->getEdgeID();
             stmtJson["pta_edge"] = stmt->isPTAEdge();
@@ -832,7 +832,7 @@ void outputFinalICFGJson(SVF::ICFG* icfg, const SVF::ICFGNode* startNode, const 
                     const auto opVar = phiStmt->getOpVarID(i);
                     Json::Value operandJson;
                     operandJson["op_var_id"] = opVar;
-                    operandJson["icfg_node"] = (uintptr_t)phiStmt->getOpICFGNode(i);
+                    operandJson["icfg_node"] = static_cast<Json::UInt64>(phiStmt->getOpICFGNode(i)->getId());
                     operandsJson.append(operandJson);
                     operandIdsJson.append(opVar);
                 }
@@ -895,13 +895,13 @@ void outputFinalICFGJson(SVF::ICFG* icfg, const SVF::ICFGNode* startNode, const 
                 stmtJson["stmt_type"] = "BranchStmt";
                 stmtJson["is_conditional"] = branchStmt->isConditional();
                 if (branchStmt->isConditional()) {
-                    stmtJson["condition_var_id"] = (uintptr_t)branchStmt->getCondition();
+                    stmtJson["condition_var_id"] = static_cast<Json::UInt64>(branchStmt->getCondition()->getId());
             }
 
             Json::Value successorsJson(Json::arrayValue);
             for (u32_t i = 0; i < branchStmt->getNumSuccessors(); ++i) {
                 Json::Value succJson;
-                succJson["successor_id"] = (uintptr_t)branchStmt->getSuccessor(i);
+                succJson["successor_id"] = static_cast<Json::UInt64>(branchStmt->getSuccessor(i)->getId());
                 succJson["condition_value"] = static_cast<Json::Value::Int64>(branchStmt->getSuccessorCondValue(i));
                 successorsJson.append(succJson);
             }
@@ -921,16 +921,16 @@ void outputFinalICFGJson(SVF::ICFG* icfg, const SVF::ICFGNode* startNode, const 
             
             for (auto it = iNode->InEdgeBegin(); it != iNode->InEdgeEnd(); ++it) {
                 Json::Value edgeJson;
-                edgeJson["source"] = (uintptr_t)(*it)->getSrcNode();
-                edgeJson["destination"] = (uintptr_t)(*it)->getDstNode();
+                edgeJson["source"] = static_cast<Json::UInt64>((*it)->getSrcNode()->getId());
+                edgeJson["destination"] = static_cast<Json::UInt64>((*it)->getDstNode()->getId());
                 edgeJson["edge_type"] = getEdgeKindAsString(*it);
 
                 incomingEdgesJson.append(edgeJson);
             }
             for (auto it = iNode->OutEdgeBegin(); it != iNode->OutEdgeEnd(); ++it) {
                 Json::Value edgeJson;
-                edgeJson["source"] = (uintptr_t)(*it)->getSrcNode();
-                edgeJson["destination"] = (uintptr_t)(*it)->getDstNode();
+                edgeJson["source"] = static_cast<Json::UInt64>((*it)->getSrcNode()->getId());
+                edgeJson["destination"] = static_cast<Json::UInt64>((*it)->getDstNode()->getId());
                 edgeJson["edge_type"] = getEdgeKindAsString(*it);
 
                 outgoingEdgesJson.append(edgeJson);
@@ -944,8 +944,8 @@ void outputFinalICFGJson(SVF::ICFG* icfg, const SVF::ICFGNode* startNode, const 
                 SVF::ICFGNode* succNode = (*it)->getDstNode();
                 
                 Json::Value edgeJson;
-                edgeJson["source"] = (uintptr_t)iNode;
-                edgeJson["destination"] = (uintptr_t)succNode;
+                edgeJson["source"] = static_cast<Json::UInt64>(iNode->getId());
+                edgeJson["destination"] = static_cast<Json::UInt64>(succNode->getId());
                 edgeJson["edge_type"] = getEdgeKindAsString(*it);
 
                 edgesJson.append(edgeJson);
@@ -1000,6 +1000,16 @@ int main(int argc, char **argv) {
     ICFG* icfg = pag->getICFG();
     // want see the icfg
 
+    // CREMA v6G isolates every analysis run.  The producer writes into the
+    // directory selected by the caller instead of a process-global ./output.
+    // Standalone SVF-example use keeps the historical ./output fallback.
+    const char* outputDirEnv = std::getenv("CREMA_SVF_OUTPUT_DIR");
+    std::string outputDir = (outputDirEnv && *outputDirEnv) ? outputDirEnv : "./output";
+    std::filesystem::create_directories(outputDir);
+    if (!outputDir.empty() && outputDir.back() != '/') {
+        outputDir.push_back('/');
+    }
+
     // iterate over all functions in the SVF module
     for (const SVF::SVFFunction* func : svfModule->getSVFModule()->getFunctionSet()) {
         const std::string& funcName = func->getName();
@@ -1019,7 +1029,7 @@ int main(int argc, char **argv) {
 
         if (firstInstNode) {
             // generate output files for the current function
-            std::string outputPrefix = "./output/" + funcName + "_";
+            std::string outputPrefix = outputDir + funcName + "_";
             traverseAndPrintICFG(icfg, firstInstNode);
             traverseAndExportICFGToJson(icfg, firstInstNode, outputPrefix + "raw_icfg_SVF.json");
             traverseAndDumpICFGemptlyEdge(icfg, firstInstNode, outputPrefix + "no_edge_list_icfg_SVF.json");

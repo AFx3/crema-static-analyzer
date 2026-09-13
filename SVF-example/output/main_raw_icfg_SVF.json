@@ -1,0 +1,80 @@
+{
+	"edges" : 
+	[
+		{
+			"destination" : 102034813944608,
+			"edge_type" : "intra",
+			"source" : 102034813982112
+		},
+		{
+			"destination" : 102034814064608,
+			"edge_type" : "intra",
+			"source" : 102034813944608
+		},
+		{
+			"destination" : 102034814086816,
+			"edge_type" : "intra",
+			"source" : 102034814064608
+		}
+	],
+	"nodes" : 
+	[
+		{
+			"basic_block" : 102034814414512,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 102034814356496,
+			"function_name" : "main",
+			"info" : "IntraICFGNode3 {fun: main}\nAddrStmt: [Var7 <-- Var8]\t\nValVar ID: 7\n   %retval = alloca i32, align 4 ",
+			"node_id" : 102034813982112,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				102034814512800
+			]
+		},
+		{
+			"basic_block" : 102034814414512,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 102034814356496,
+			"function_name" : "main",
+			"info" : "IntraICFGNode4 {fun: main}\nStoreStmt: [Var7 <-- Var11]\t\nValVar ID: 10\n   store i32 0, ptr %retval, align 4 ",
+			"node_id" : 102034813944608,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				102034813971568
+			]
+		},
+		{
+			"basic_block" : 102034814414512,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 102034814356496,
+			"function_name" : "main",
+			"info" : "IntraICFGNode5 {fun: main}\n   ret i32 0 ",
+			"node_id" : 102034814064608,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : []
+		},
+		{
+			"basic_block" : 102034814414512,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 102034814356496,
+			"function_name" : "main",
+			"info" : "FunExitICFGNode2 {fun: main}\nPhiStmt: [Var6 <-- ([Var11, ICFGNode5],)]\t\nValVar ID: 12\n   ret i32 0 ",
+			"node_id" : 102034814086816,
+			"node_kind" : 3,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				102034814351024
+			]
+		}
+	]
+}

@@ -1,0 +1,157 @@
+{
+	"edges" : [],
+	"nodes" : 
+	[
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 103806240286272,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 103806240783168,
+			"function_name" : "c_calloc_u64",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 103806240284592,
+					"edge_type" : "intra",
+					"source" : 103806240481568
+				}
+			],
+			"info" : "CallICFGNode3 {fun: c_calloc_u64}\nAddrStmt: [Var7 <-- Var8]\t\nValVar ID: 7\n   %call = call noalias ptr @calloc(i64 noundef 1, i64 noundef 8) #2 ",
+			"node_id" : 103806240284592,
+			"node_kind" : 4,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 103806240459296,
+					"edge_type" : "intra",
+					"source" : 103806240284592
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 103806240664384,
+					"stmt_info" : "AddrStmt: [Var7 <-- Var8]\t\nValVar ID: 7\n   %call = call noalias ptr @calloc(i64 noundef 1, i64 noundef 8) #2 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 103806240286272,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 103806240783168,
+			"function_name" : "c_calloc_u64",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 103806240459296,
+					"edge_type" : "intra",
+					"source" : 103806240284592
+				}
+			],
+			"info" : "RetICFGNode4 {fun: c_calloc_u64}\n   %call = call noalias ptr @calloc(i64 noundef 1, i64 noundef 8) #2 RetICFGNode: ",
+			"node_id" : 103806240459296,
+			"node_kind" : 5,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 103806240453328,
+					"edge_type" : "intra",
+					"source" : 103806240459296
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 103806240286272,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 103806240783168,
+			"function_name" : "c_calloc_u64",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 103806240453328,
+					"edge_type" : "intra",
+					"source" : 103806240459296
+				}
+			],
+			"info" : "IntraICFGNode5 {fun: c_calloc_u64}\nCopyStmt: [Var13 <-- Var7]\t\nValVar ID: 13\n   %0 = bitcast ptr %call to ptr ",
+			"node_id" : 103806240453328,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 103806240454320,
+					"edge_type" : "intra",
+					"source" : 103806240453328
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 103806240286752,
+					"stmt_info" : "CopyStmt: [Var13 <-- Var7]\t\nValVar ID: 13\n   %0 = bitcast ptr %call to ptr "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 103806240286272,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 103806240783168,
+			"function_name" : "c_calloc_u64",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 103806240454320,
+					"edge_type" : "intra",
+					"source" : 103806240453328
+				}
+			],
+			"info" : "IntraICFGNode6 {fun: c_calloc_u64}\n   ret ptr %0 ",
+			"node_id" : 103806240454320,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 103806240535584,
+					"edge_type" : "intra",
+					"source" : 103806240454320
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 103806240286272,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 103806240783168,
+			"function_name" : "c_calloc_u64",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 103806240535584,
+					"edge_type" : "intra",
+					"source" : 103806240454320
+				}
+			],
+			"info" : "FunExitICFGNode2 {fun: c_calloc_u64}\nPhiStmt: [Var6 <-- ([Var13, ICFGNode6],)]\t\nValVar ID: 14\n   ret ptr %0 ",
+			"node_id" : 103806240535584,
+			"node_kind" : 3,
+			"node_type" : false,
+			"outgoing_edges" : [],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 103806240271616,
+					"stmt_info" : "PhiStmt: [Var6 <-- ([Var13, ICFGNode6],)]\t\nValVar ID: 14\n   ret ptr %0 "
+				}
+			]
+		}
+	]
+}

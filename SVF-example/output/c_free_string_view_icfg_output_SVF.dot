@@ -1,0 +1,27 @@
+digraph ICFG {
+  "29" [label="ID: 29\nType: 0\nKind: 0\nInfo: IntraICFGNode29 {fun: c_free_string}
+AddrStmt: [Var51 <-- Var52]	
+ValVar ID: 51
+   %p.addr = alloca ptr, align 8 \nFunction: c_free_string\nBasic Block: entry\nStatements: [96180844799200, ]"];
+  "29" -> "30" [label="Intra"];
+  "30" [label="ID: 30\nType: 0\nKind: 0\nInfo: IntraICFGNode30 {fun: c_free_string}
+StoreStmt: [Var51 <-- Var50]	
+ValVar ID: 53
+   store ptr %p, ptr %p.addr, align 8 \nFunction: c_free_string\nBasic Block: entry\nStatements: [96180845040464, ]"];
+  "30" -> "31" [label="Intra"];
+  "31" [label="ID: 31\nType: 0\nKind: 0\nInfo: IntraICFGNode31 {fun: c_free_string}
+LoadStmt: [Var54 <-- Var51]	
+ValVar ID: 54
+   %0 = load ptr, ptr %p.addr, align 8 \nFunction: c_free_string\nBasic Block: entry\nStatements: [96180845036736, ]"];
+  "31" -> "32" [label="Intra"];
+  "32" [label="ID: 32\nType: 0x5779d915ff90\nKind: 4\nInfo: CallICFGNode32 {fun: c_free_string}
+   call void @free(ptr noundef %0) #4 CallICFGNode: \nFunction: c_free_string\nBasic Block: entry\nStatements: None"];
+  "32" -> "33" [label="Intra"];
+  "33" [label="ID: 33\nType: 0x5779d915ff90\nKind: 5\nInfo: RetICFGNode33 {fun: c_free_string}
+   call void @free(ptr noundef %0) #4 RetICFGNode: \nFunction: c_free_string\nBasic Block: entry\nStatements: None"];
+  "33" -> "34" [label="Intra"];
+  "34" [label="ID: 34\nType: 0\nKind: 0\nInfo: IntraICFGNode34 {fun: c_free_string}
+   ret void \nFunction: c_free_string\nBasic Block: entry\nStatements: None"];
+  "34" -> "4" [label="Intra"];
+  "4" [label="ID: 4\nType: 0\nKind: 3\nInfo: FunExitICFGNode4 {fun: c_free_string}\nFunction: c_free_string\nBasic Block: entry\nStatements: None"];
+}

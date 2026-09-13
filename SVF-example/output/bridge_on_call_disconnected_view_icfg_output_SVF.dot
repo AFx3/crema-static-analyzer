@@ -1,0 +1,75 @@
+digraph ICFG {
+  "40" [label="ID: 40\nType: 0\nKind: 0\nInfo: IntraICFGNode40 {fun: bridge_on_call_disconnected}
+AddrStmt: [Var59 <-- Var60]	
+ValVar ID: 59
+   %f.addr = alloca ptr, align 8 \nFunction: bridge_on_call_disconnected\nBasic Block: entry\nStatements: [95649433938160, ]"];
+  "40" -> "41" [label="Intra"];
+  "41" [label="ID: 41\nType: 0\nKind: 0\nInfo: IntraICFGNode41 {fun: bridge_on_call_disconnected}
+AddrStmt: [Var61 <-- Var62]	
+ValVar ID: 61
+   %route_id.addr = alloca ptr, align 8 \nFunction: bridge_on_call_disconnected\nBasic Block: entry\nStatements: [95649433679360, ]"];
+  "41" -> "42" [label="Intra"];
+  "42" [label="ID: 42\nType: 0\nKind: 0\nInfo: IntraICFGNode42 {fun: bridge_on_call_disconnected}
+AddrStmt: [Var63 <-- Var64]	
+ValVar ID: 63
+   %channel_id.addr = alloca ptr, align 8 \nFunction: bridge_on_call_disconnected\nBasic Block: entry\nStatements: [95649433680624, ]"];
+  "42" -> "43" [label="Intra"];
+  "43" [label="ID: 43\nType: 0\nKind: 0\nInfo: IntraICFGNode43 {fun: bridge_on_call_disconnected}
+AddrStmt: [Var65 <-- Var66]	
+ValVar ID: 65
+   %userdata.addr = alloca ptr, align 8 \nFunction: bridge_on_call_disconnected\nBasic Block: entry\nStatements: [95649433681888, ]"];
+  "43" -> "44" [label="Intra"];
+  "44" [label="ID: 44\nType: 0\nKind: 0\nInfo: IntraICFGNode44 {fun: bridge_on_call_disconnected}
+StoreStmt: [Var59 <-- Var55]	
+ValVar ID: 67
+   store ptr %f, ptr %f.addr, align 8 \nFunction: bridge_on_call_disconnected\nBasic Block: entry\nStatements: [95649433682448, ]"];
+  "44" -> "45" [label="Intra"];
+  "45" [label="ID: 45\nType: 0\nKind: 0\nInfo: IntraICFGNode45 {fun: bridge_on_call_disconnected}
+StoreStmt: [Var61 <-- Var56]	
+ValVar ID: 68
+   store ptr %route_id, ptr %route_id.addr, align 8 \nFunction: bridge_on_call_disconnected\nBasic Block: entry\nStatements: [95649433565776, ]"];
+  "45" -> "46" [label="Intra"];
+  "46" [label="ID: 46\nType: 0\nKind: 0\nInfo: IntraICFGNode46 {fun: bridge_on_call_disconnected}
+StoreStmt: [Var63 <-- Var57]	
+ValVar ID: 69
+   store ptr %channel_id, ptr %channel_id.addr, align 8 \nFunction: bridge_on_call_disconnected\nBasic Block: entry\nStatements: [95649433566928, ]"];
+  "46" -> "47" [label="Intra"];
+  "47" [label="ID: 47\nType: 0\nKind: 0\nInfo: IntraICFGNode47 {fun: bridge_on_call_disconnected}
+StoreStmt: [Var65 <-- Var58]	
+ValVar ID: 70
+   store ptr %userdata, ptr %userdata.addr, align 8 \nFunction: bridge_on_call_disconnected\nBasic Block: entry\nStatements: [95649434018960, ]"];
+  "47" -> "48" [label="Intra"];
+  "48" [label="ID: 48\nType: 0\nKind: 0\nInfo: IntraICFGNode48 {fun: bridge_on_call_disconnected}
+LoadStmt: [Var71 <-- Var59]	
+ValVar ID: 71
+   %0 = load ptr, ptr %f.addr, align 8 \nFunction: bridge_on_call_disconnected\nBasic Block: entry\nStatements: [95649434020064, ]"];
+  "48" -> "49" [label="Intra"];
+  "49" [label="ID: 49\nType: 0\nKind: 0\nInfo: IntraICFGNode49 {fun: bridge_on_call_disconnected}
+LoadStmt: [Var72 <-- Var61]	
+ValVar ID: 72
+   %1 = load ptr, ptr %route_id.addr, align 8 \nFunction: bridge_on_call_disconnected\nBasic Block: entry\nStatements: [95649434021280, ]"];
+  "49" -> "50" [label="Intra"];
+  "50" [label="ID: 50\nType: 0\nKind: 0\nInfo: IntraICFGNode50 {fun: bridge_on_call_disconnected}
+LoadStmt: [Var73 <-- Var63]	
+ValVar ID: 73
+   %2 = load ptr, ptr %channel_id.addr, align 8 \nFunction: bridge_on_call_disconnected\nBasic Block: entry\nStatements: [95649433648512, ]"];
+  "50" -> "51" [label="Intra"];
+  "51" [label="ID: 51\nType: 0\nKind: 0\nInfo: IntraICFGNode51 {fun: bridge_on_call_disconnected}
+LoadStmt: [Var74 <-- Var65]	
+ValVar ID: 74
+   %3 = load ptr, ptr %userdata.addr, align 8 \nFunction: bridge_on_call_disconnected\nBasic Block: entry\nStatements: [95649433649664, ]"];
+  "51" -> "52" [label="Intra"];
+  "52" [label="ID: 52\nType: 0x56fe1e818c60\nKind: 4\nInfo: CallICFGNode52 {fun: bridge_on_call_disconnected}
+   %call = call ptr %0(ptr noundef %1, ptr noundef %2, ptr noundef %3) CallICFGNode: \nFunction: bridge_on_call_disconnected\nBasic Block: entry\nStatements: None"];
+  "52" -> "53" [label="Intra"];
+  "53" [label="ID: 53\nType: 0x56fe1e818c60\nKind: 5\nInfo: RetICFGNode53 {fun: bridge_on_call_disconnected}
+   %call = call ptr %0(ptr noundef %1, ptr noundef %2, ptr noundef %3) RetICFGNode: \nFunction: bridge_on_call_disconnected\nBasic Block: entry\nStatements: None"];
+  "53" -> "54" [label="Intra"];
+  "54" [label="ID: 54\nType: 0\nKind: 0\nInfo: IntraICFGNode54 {fun: bridge_on_call_disconnected}
+   ret ptr %call \nFunction: bridge_on_call_disconnected\nBasic Block: entry\nStatements: None"];
+  "54" -> "4" [label="Intra"];
+  "4" [label="ID: 4\nType: 0\nKind: 3\nInfo: FunExitICFGNode4 {fun: bridge_on_call_disconnected}
+PhiStmt: [Var54 <-- ([Var75, ICFGNode54],)]	
+ValVar ID: 76
+   ret ptr %call \nFunction: bridge_on_call_disconnected\nBasic Block: entry\nStatements: [95649433651488, ]"];
+}

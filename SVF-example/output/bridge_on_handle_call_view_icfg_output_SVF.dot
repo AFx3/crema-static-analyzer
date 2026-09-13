@@ -1,0 +1,90 @@
+digraph ICFG {
+  "55" [label="ID: 55\nType: 0\nKind: 0\nInfo: IntraICFGNode55 {fun: bridge_on_handle_call}
+AddrStmt: [Var85 <-- Var86]	
+ValVar ID: 85
+   %f.addr = alloca ptr, align 8 \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: [95649434041840, ]"];
+  "55" -> "56" [label="Intra"];
+  "56" [label="ID: 56\nType: 0\nKind: 0\nInfo: IntraICFGNode56 {fun: bridge_on_handle_call}
+AddrStmt: [Var87 <-- Var88]	
+ValVar ID: 87
+   %route_id.addr = alloca ptr, align 8 \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: [95649434042912, ]"];
+  "56" -> "57" [label="Intra"];
+  "57" [label="ID: 57\nType: 0\nKind: 0\nInfo: IntraICFGNode57 {fun: bridge_on_handle_call}
+AddrStmt: [Var89 <-- Var90]	
+ValVar ID: 89
+   %channel_id.addr = alloca ptr, align 8 \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: [95649434044176, ]"];
+  "57" -> "58" [label="Intra"];
+  "58" [label="ID: 58\nType: 0\nKind: 0\nInfo: IntraICFGNode58 {fun: bridge_on_handle_call}
+AddrStmt: [Var91 <-- Var92]	
+ValVar ID: 91
+   %raddr.addr = alloca ptr, align 8 \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: [95649434032144, ]"];
+  "58" -> "59" [label="Intra"];
+  "59" [label="ID: 59\nType: 0\nKind: 0\nInfo: IntraICFGNode59 {fun: bridge_on_handle_call}
+AddrStmt: [Var93 <-- Var94]	
+ValVar ID: 93
+   %userdata.addr = alloca ptr, align 8 \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: [95649434033408, ]"];
+  "59" -> "60" [label="Intra"];
+  "60" [label="ID: 60\nType: 0\nKind: 0\nInfo: IntraICFGNode60 {fun: bridge_on_handle_call}
+StoreStmt: [Var85 <-- Var80]	
+ValVar ID: 95
+   store ptr %f, ptr %f.addr, align 8 \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: [95649434034720, ]"];
+  "60" -> "61" [label="Intra"];
+  "61" [label="ID: 61\nType: 0\nKind: 0\nInfo: IntraICFGNode61 {fun: bridge_on_handle_call}
+StoreStmt: [Var87 <-- Var81]	
+ValVar ID: 96
+   store ptr %route_id, ptr %route_id.addr, align 8 \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: [95649434035872, ]"];
+  "61" -> "62" [label="Intra"];
+  "62" [label="ID: 62\nType: 0\nKind: 0\nInfo: IntraICFGNode62 {fun: bridge_on_handle_call}
+StoreStmt: [Var89 <-- Var82]	
+ValVar ID: 97
+   store ptr %channel_id, ptr %channel_id.addr, align 8 \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: [95649433774416, ]"];
+  "62" -> "63" [label="Intra"];
+  "63" [label="ID: 63\nType: 0\nKind: 0\nInfo: IntraICFGNode63 {fun: bridge_on_handle_call}
+StoreStmt: [Var91 <-- Var83]	
+ValVar ID: 98
+   store ptr %raddr, ptr %raddr.addr, align 8 \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: [95649433775568, ]"];
+  "63" -> "64" [label="Intra"];
+  "64" [label="ID: 64\nType: 0\nKind: 0\nInfo: IntraICFGNode64 {fun: bridge_on_handle_call}
+StoreStmt: [Var93 <-- Var84]	
+ValVar ID: 99
+   store ptr %userdata, ptr %userdata.addr, align 8 \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: [95649433776720, ]"];
+  "64" -> "65" [label="Intra"];
+  "65" [label="ID: 65\nType: 0\nKind: 0\nInfo: IntraICFGNode65 {fun: bridge_on_handle_call}
+LoadStmt: [Var100 <-- Var85]	
+ValVar ID: 100
+   %0 = load ptr, ptr %f.addr, align 8 \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: [95649433777824, ]"];
+  "65" -> "66" [label="Intra"];
+  "66" [label="ID: 66\nType: 0\nKind: 0\nInfo: IntraICFGNode66 {fun: bridge_on_handle_call}
+LoadStmt: [Var101 <-- Var87]	
+ValVar ID: 101
+   %1 = load ptr, ptr %route_id.addr, align 8 \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: [95649433931488, ]"];
+  "66" -> "67" [label="Intra"];
+  "67" [label="ID: 67\nType: 0\nKind: 0\nInfo: IntraICFGNode67 {fun: bridge_on_handle_call}
+LoadStmt: [Var102 <-- Var89]	
+ValVar ID: 102
+   %2 = load ptr, ptr %channel_id.addr, align 8 \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: [95649433932704, ]"];
+  "67" -> "68" [label="Intra"];
+  "68" [label="ID: 68\nType: 0\nKind: 0\nInfo: IntraICFGNode68 {fun: bridge_on_handle_call}
+LoadStmt: [Var103 <-- Var91]	
+ValVar ID: 103
+   %3 = load ptr, ptr %raddr.addr, align 8 \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: [95649433933920, ]"];
+  "68" -> "69" [label="Intra"];
+  "69" [label="ID: 69\nType: 0\nKind: 0\nInfo: IntraICFGNode69 {fun: bridge_on_handle_call}
+LoadStmt: [Var104 <-- Var93]	
+ValVar ID: 104
+   %4 = load ptr, ptr %userdata.addr, align 8 \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: [95649433935136, ]"];
+  "69" -> "70" [label="Intra"];
+  "70" [label="ID: 70\nType: 0x56fe1e818c60\nKind: 4\nInfo: CallICFGNode70 {fun: bridge_on_handle_call}
+   %call = call ptr %0(ptr noundef %1, ptr noundef %2, ptr noundef %3, ptr noundef %4) CallICFGNode: \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: None"];
+  "70" -> "71" [label="Intra"];
+  "71" [label="ID: 71\nType: 0x56fe1e818c60\nKind: 5\nInfo: RetICFGNode71 {fun: bridge_on_handle_call}
+   %call = call ptr %0(ptr noundef %1, ptr noundef %2, ptr noundef %3, ptr noundef %4) RetICFGNode: \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: None"];
+  "71" -> "72" [label="Intra"];
+  "72" [label="ID: 72\nType: 0\nKind: 0\nInfo: IntraICFGNode72 {fun: bridge_on_handle_call}
+   ret ptr %call \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: None"];
+  "72" -> "6" [label="Intra"];
+  "6" [label="ID: 6\nType: 0\nKind: 3\nInfo: FunExitICFGNode6 {fun: bridge_on_handle_call}
+PhiStmt: [Var79 <-- ([Var105, ICFGNode72],)]	
+ValVar ID: 106
+   ret ptr %call \nFunction: bridge_on_handle_call\nBasic Block: entry\nStatements: [95649433668336, ]"];
+}

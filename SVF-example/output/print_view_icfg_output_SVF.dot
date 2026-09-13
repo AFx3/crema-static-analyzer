@@ -1,0 +1,27 @@
+digraph ICFG {
+  "14" [label="ID: 14\nType: 0\nKind: 0\nInfo: IntraICFGNode14 {fun: print}
+AddrStmt: [Var31 <-- Var32]	
+ValVar ID: 31
+   %ptr.addr = alloca ptr, align 8 \nFunction: print\nBasic Block: entry\nStatements: [108342933507888, ]"];
+  "14" -> "15" [label="Intra"];
+  "15" [label="ID: 15\nType: 0\nKind: 0\nInfo: IntraICFGNode15 {fun: print}
+StoreStmt: [Var31 <-- Var30]	
+ValVar ID: 33
+   store ptr %ptr, ptr %ptr.addr, align 8 \nFunction: print\nBasic Block: entry\nStatements: [108342933508256, ]"];
+  "15" -> "16" [label="Intra"];
+  "16" [label="ID: 16\nType: 0\nKind: 0\nInfo: IntraICFGNode16 {fun: print}
+LoadStmt: [Var34 <-- Var31]	
+ValVar ID: 34
+   %0 = load ptr, ptr %ptr.addr, align 8 \nFunction: print\nBasic Block: entry\nStatements: [108342933606704, ]"];
+  "16" -> "17" [label="Intra"];
+  "17" [label="ID: 17\nType: 0x62898e14bef0\nKind: 4\nInfo: CallICFGNode17 {fun: print}
+   %call = call i32 (ptr, ...) @printf(ptr noundef @.str, ptr noundef %0) CallICFGNode: \nFunction: print\nBasic Block: entry\nStatements: None"];
+  "17" -> "18" [label="Intra"];
+  "18" [label="ID: 18\nType: 0x62898e14bef0\nKind: 5\nInfo: RetICFGNode18 {fun: print}
+   %call = call i32 (ptr, ...) @printf(ptr noundef @.str, ptr noundef %0) RetICFGNode: \nFunction: print\nBasic Block: entry\nStatements: None"];
+  "18" -> "19" [label="Intra"];
+  "19" [label="ID: 19\nType: 0\nKind: 0\nInfo: IntraICFGNode19 {fun: print}
+   ret void \nFunction: print\nBasic Block: entry\nStatements: None"];
+  "19" -> "4" [label="Intra"];
+  "4" [label="ID: 4\nType: 0\nKind: 3\nInfo: FunExitICFGNode4 {fun: print}\nFunction: print\nBasic Block: entry\nStatements: None"];
+}

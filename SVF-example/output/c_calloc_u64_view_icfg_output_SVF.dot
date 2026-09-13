@@ -1,0 +1,22 @@
+digraph ICFG {
+  "3" [label="ID: 3\nType: 0x5e694613b160\nKind: 4\nInfo: CallICFGNode3 {fun: c_calloc_u64}
+AddrStmt: [Var7 <-- Var8]	
+ValVar ID: 7
+   %call = call noalias ptr @calloc(i64 noundef 1, i64 noundef 8) #2 \nFunction: c_calloc_u64\nBasic Block: entry\nStatements: [103806240664384, ]"];
+  "3" -> "4" [label="Intra"];
+  "4" [label="ID: 4\nType: 0x5e694613b160\nKind: 5\nInfo: RetICFGNode4 {fun: c_calloc_u64}
+   %call = call noalias ptr @calloc(i64 noundef 1, i64 noundef 8) #2 RetICFGNode: \nFunction: c_calloc_u64\nBasic Block: entry\nStatements: None"];
+  "4" -> "5" [label="Intra"];
+  "5" [label="ID: 5\nType: 0\nKind: 0\nInfo: IntraICFGNode5 {fun: c_calloc_u64}
+CopyStmt: [Var13 <-- Var7]	
+ValVar ID: 13
+   %0 = bitcast ptr %call to ptr \nFunction: c_calloc_u64\nBasic Block: entry\nStatements: [103806240286752, ]"];
+  "5" -> "6" [label="Intra"];
+  "6" [label="ID: 6\nType: 0\nKind: 0\nInfo: IntraICFGNode6 {fun: c_calloc_u64}
+   ret ptr %0 \nFunction: c_calloc_u64\nBasic Block: entry\nStatements: None"];
+  "6" -> "2" [label="Intra"];
+  "2" [label="ID: 2\nType: 0\nKind: 3\nInfo: FunExitICFGNode2 {fun: c_calloc_u64}
+PhiStmt: [Var6 <-- ([Var13, ICFGNode6],)]	
+ValVar ID: 14
+   ret ptr %0 \nFunction: c_calloc_u64\nBasic Block: entry\nStatements: [103806240271616, ]"];
+}
