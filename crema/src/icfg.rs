@@ -97,6 +97,11 @@ pub struct MirExtractor {
     pub llvm_output_dir: String,
     /// Explicit MIR argument count per local Rust function/closure.
     pub rust_function_arg_counts: HashMap<String, usize>,
+    /// Structural closure-object binding recovered from the MIR destination
+    /// place whose type is the corresponding local closure DefId.  Higher-order
+    /// library summaries use this only to bind the closure environment (`_1`)
+    /// when entering a callback body; iterator item arguments remain unknown.
+    pub closure_bindings: BTreeMap<String, MirCallArgument>,
     /// User-selected concrete entry used only to seed v6L rustc Instance
     /// propagation. It is not a heuristic target selector.
     pub instance_entry_hint: String,
@@ -115,6 +120,7 @@ impl MirExtractor {
             llvm_representation: None,
             llvm_output_dir,
             rust_function_arg_counts: HashMap::new(),
+            closure_bindings: BTreeMap::new(),
             instance_entry_hint,
             instance_dispatch_boundary: None,
         }
@@ -666,6 +672,95 @@ fn resolve_direct_closure_callee(
     if candidates.len() == 1 { candidates.pop() } else { None }
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HigherOrderCallSemantics {
+    /// Iterator adaptor construction is lazy: carrying a closure is not an
+    /// invocation.  The closure DefId remains visible in the adaptor type and
+    /// is recovered again at a later consuming call.
+    LazyCarrier,
+    /// A consuming iterator operation may invoke the callbacks carried by the
+    /// iterator zero or more times.  The ICFG therefore contains an exit edge
+    /// plus callback-return loops back to the consumer callsite.
+    RepeatedCallbacks,
+    /// `std::thread::spawn` may overlap callback execution with the caller.
+    /// CREMA does not claim a full concurrency/interleaving semantics; it
+    /// conservatively exposes both caller continuation and one callback branch.
+    SpawnMayOnce,
+    /// A callback-bearing external API without a proven summary stays closed.
+    Unknown,
+}
+
+/// Classify only canonical rustc DefPaths.  Never infer higher-order semantics
+/// from pretty-printed MIR strings or target names.
+fn higher_order_call_semantics(
+    callee_def_path: Option<&str>,
+    callback_def_paths: &[String],
+) -> Option<HigherOrderCallSemantics> {
+    if callback_def_paths.is_empty() {
+        return None;
+    }
+    let Some(path) = callee_def_path else {
+        return Some(HigherOrderCallSemantics::Unknown);
+    };
+
+    let lazy = [
+        "std::iter::Iterator::map",
+        "std::iter::Iterator::filter",
+        "core::iter::traits::iterator::Iterator::map",
+        "core::iter::traits::iterator::Iterator::filter",
+    ];
+    if lazy.contains(&path) {
+        return Some(HigherOrderCallSemantics::LazyCarrier);
+    }
+
+    let repeated = [
+        "std::iter::Iterator::for_each",
+        "std::iter::Iterator::collect",
+        "std::iter::Iterator::product",
+        "core::iter::traits::iterator::Iterator::for_each",
+        "core::iter::traits::iterator::Iterator::collect",
+        "core::iter::traits::iterator::Iterator::product",
+    ];
+    if repeated.contains(&path) {
+        return Some(HigherOrderCallSemantics::RepeatedCallbacks);
+    }
+
+    if path == "std::thread::spawn" {
+        return Some(HigherOrderCallSemantics::SpawnMayOnce);
+    }
+
+    Some(HigherOrderCallSemantics::Unknown)
+}
+
+fn local_higher_order_callbacks(
+    callback_def_paths: &[String],
+    functions: &BTreeMap<String, Vec<MirBasicBlock>>,
+) -> Vec<String> {
+    let mut out: Vec<String> = callback_def_paths
+        .iter()
+        .filter(|path| functions.contains_key(*path))
+        .cloned()
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+fn higher_order_callback_return_node(
+    semantics: HigherOrderCallSemantics,
+    call_site: &str,
+    caller_return: &str,
+) -> String {
+    match semantics {
+        HigherOrderCallSemantics::RepeatedCallbacks => call_site.to_string(),
+        HigherOrderCallSemantics::SpawnMayOnce => caller_return.to_string(),
+        HigherOrderCallSemantics::LazyCarrier | HigherOrderCallSemantics::Unknown => {
+            caller_return.to_string()
+        }
+    }
+}
+
 fn return_nodes_for(function: &str, functions: &BTreeMap<String, Vec<MirBasicBlock>>) -> Vec<String> {
     let mut out: Vec<String> = functions
         .get(function)
@@ -783,6 +878,26 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
             let body = tcx.optimized_mir(def_id.to_def_id());
             let mut function_blocks = Vec::new();
             for (bb, data) in body.basic_blocks.iter_enumerated() {
+                // Recover the local object that stores each closure environment
+                // from the destination place type, not from debug/source text.
+                // This binding survives lazy iterator adaptor construction in
+                // the MAY abstraction and lets a later consumer enter the
+                // callback with its captured environment.
+                for stmt in &data.statements {
+                    if let StatementKind::Assign(assign) = &stmt.kind {
+                        let (place, _) = &**assign;
+                        if !place.projection.is_empty() {
+                            continue;
+                        }
+                        let place_ty = body.local_decls[place.local].ty;
+                        if let TyKind::Closure(def_id, _) = place_ty.kind() {
+                            let (desc, is_mut) = self.describe_place(place, &body.local_decls);
+                            self.closure_bindings.entry(tcx.def_path_str(*def_id)).or_insert(
+                                MirCallArgument { arg: desc, is_mutable: Some(is_mut) }
+                            );
+                        }
+                    }
+                }
                 let mut terminator = self.convert_terminator(&data.terminator, &body.local_decls, tcx);
                 if let Some(MirTerminator::Call {
                     resolved_instance_callees,
@@ -1027,9 +1142,127 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                 });
                             }
 
-                            // Preserve external branches of different concrete
-                            // monomorphizations. Any unresolved concrete Instance
-                            // remains an explicit fail-closed edge.
+                            // Higher-order standard-library calls are modeled by
+                            // API semantics over canonical DefPaths, never by the
+                            // target name or pretty-printed MIR. Lazy iterator
+                            // adaptors carry callbacks but do not invoke them.
+                            // Consuming iterator operations overapproximate zero-or-
+                            // more callback invocations with callback-return loops.
+                            // thread::spawn exposes both caller continuation and a
+                            // callback branch; this is callback reachability, not a
+                            // claim of full concurrency/interleaving semantics.
+                            let higher_order = if resolved_targets.is_empty() {
+                                higher_order_call_semantics(
+                                    callee_def_path.as_deref(),
+                                    callback_def_paths,
+                                )
+                            } else {
+                                None
+                            };
+                            let callback_targets = match higher_order {
+                                Some(HigherOrderCallSemantics::RepeatedCallbacks)
+                                | Some(HigherOrderCallSemantics::SpawnMayOnce) => {
+                                    local_higher_order_callbacks(
+                                        callback_def_paths,
+                                        &self.mir_representation.functions,
+                                    )
+                                }
+                                _ => Vec::new(),
+                            };
+                            let callback_bodies_complete = callback_targets.len()
+                                == callback_def_paths.iter().collect::<BTreeSet<_>>().len();
+
+                            if matches!(
+                                higher_order,
+                                Some(HigherOrderCallSemantics::RepeatedCallbacks)
+                                    | Some(HigherOrderCallSemantics::SpawnMayOnce)
+                            ) && callback_bodies_complete
+                            {
+                                let semantics = higher_order.unwrap();
+                                for (ordinal, callee) in callback_targets.iter().enumerate() {
+                                    let base_call = get_dummy_call_id(
+                                        rust_func,
+                                        block.block_id,
+                                        &call_site,
+                                        true,
+                                    );
+                                    let base_ret = get_dummy_ret_id(
+                                        rust_func,
+                                        &block.block_id.to_string(),
+                                        &call_site,
+                                        true,
+                                    );
+                                    let dummy_call_id = format!("{}::callback{}", base_call, ordinal);
+                                    let dummy_ret_id = format!("{}::callback{}", base_ret, ordinal);
+                                    let callback_return = higher_order_callback_return_node(
+                                        semantics,
+                                        &call_site,
+                                        &caller_return,
+                                    );
+                                    let callback_arguments = self
+                                        .closure_bindings
+                                        .get(callee)
+                                        .cloned()
+                                        .into_iter()
+                                        .collect();
+
+                                    rust_calls.push(RustCallMetadata {
+                                        caller_function: rust_func.clone(),
+                                        call_node: call_site.clone(),
+                                        callee_function: callee.clone(),
+                                        dummy_call_node: dummy_call_id.clone(),
+                                        dummy_ret_node: dummy_ret_id.clone(),
+                                        arguments: callback_arguments,
+                                        // A callback return value is not the return
+                                        // value of spawn/collect/product/for_each.
+                                        return_place: String::new(),
+                                        return_node: callback_return.clone(),
+                                        is_closure: true,
+                                    });
+
+                                    icfg_edges.push(IcfgEdge {
+                                        source: call_site.clone(),
+                                        destination: dummy_call_id.clone(),
+                                        label: Some("Higher-order callback -> dummyCall".to_string()),
+                                        source_label: Some(format!("Mir bb{}", block.block_id)),
+                                        destination_label: None,
+                                    });
+                                    icfg_edges.push(IcfgEdge {
+                                        source: dummy_call_id.clone(),
+                                        destination: format!("rust::{}::bb0", callee),
+                                        label: Some("dummyCall -> Rust Entry".to_string()),
+                                        source_label: None,
+                                        destination_label: None,
+                                    });
+                                    for ret in return_nodes_for(callee, &self.mir_representation.functions) {
+                                        icfg_edges.push(IcfgEdge {
+                                            source: ret,
+                                            destination: dummy_ret_id.clone(),
+                                            label: Some("Rust Return -> dummyRet".to_string()),
+                                            source_label: None,
+                                            destination_label: None,
+                                        });
+                                    }
+                                    icfg_edges.push(IcfgEdge {
+                                        source: dummy_ret_id,
+                                        destination: callback_return,
+                                        label: Some(match semantics {
+                                            HigherOrderCallSemantics::RepeatedCallbacks =>
+                                                "Higher-order callback loop",
+                                            HigherOrderCallSemantics::SpawnMayOnce =>
+                                                "Spawn callback -> caller continuation",
+                                            _ => unreachable!(),
+                                        }.to_string()),
+                                        source_label: None,
+                                        destination_label: None,
+                                    });
+                                }
+                            }
+
+                            // Preserve the external/library return branch.  For a
+                            // repeated consumer this is the zero/additional-exit
+                            // branch; for spawn it represents caller continuation
+                            // before the spawned callback's effects.
                             let need_summary = resolved_targets.is_empty()
                                 || *instance_dispatch_external
                                 || *instance_dispatch_unresolved;
@@ -1039,22 +1272,29 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                     let dst = format!("rust::{}::{}", rust_func, rt);
                                     let label = if *instance_dispatch_unresolved {
                                         "UNRESOLVED_LOCAL_CALL: concrete rustc Instance resolution incomplete"
-                                    } else if !callback_def_paths.is_empty()
-                                        && resolved_targets.is_empty()
-                                    {
-                                        // Resolving the *external callee* Instance does not prove
-                                        // that callbacks passed to it are never invoked.  Until
-                                        // the higher-order semantics itself is represented, retain
-                                        // the existing fail-closed boundary (e.g. shared-register).
-                                        "UNRESOLVED_HIGHER_ORDER: callback semantics not modeled"
-                                    } else if *instance_dispatch_observed && *instance_dispatch_external {
-                                        "Resolved external Instance summary return"
-                                    } else if *instance_dispatch_observed {
-                                        "External/summary call return"
-                                    } else if *callee_is_local {
-                                        "UNRESOLVED_LOCAL_CALL: local FnDef has no canonical MIR body"
                                     } else {
-                                        "External/summary call return"
+                                        match higher_order {
+                                            Some(HigherOrderCallSemantics::LazyCarrier) =>
+                                                "Higher-order lazy adaptor summary return",
+                                            Some(HigherOrderCallSemantics::RepeatedCallbacks)
+                                                if callback_bodies_complete =>
+                                                    "Higher-order consumer exit",
+                                            Some(HigherOrderCallSemantics::SpawnMayOnce)
+                                                if callback_bodies_complete =>
+                                                    "Spawn caller continuation",
+                                            Some(HigherOrderCallSemantics::RepeatedCallbacks)
+                                            | Some(HigherOrderCallSemantics::SpawnMayOnce) =>
+                                                "UNRESOLVED_HIGHER_ORDER: local callback MIR body missing",
+                                            Some(HigherOrderCallSemantics::Unknown) =>
+                                                "UNRESOLVED_HIGHER_ORDER: callback API semantics not modeled",
+                                            None if *instance_dispatch_observed && *instance_dispatch_external =>
+                                                "Resolved external Instance summary return",
+                                            None if *instance_dispatch_observed =>
+                                                "External/summary call return",
+                                            None if *callee_is_local =>
+                                                "UNRESOLVED_LOCAL_CALL: local FnDef has no canonical MIR body",
+                                            None => "External/summary call return",
+                                        }
                                     };
                                     icfg_edges.push(IcfgEdge {
                                         source: src,
@@ -1352,6 +1592,82 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                     }),
                                 ));
                             }
+
+                            let higher_order = if resolved_targets.is_empty() {
+                                higher_order_call_semantics(
+                                    callee_def_path.as_deref(),
+                                    callback_def_paths,
+                                )
+                            } else {
+                                None
+                            };
+                            if matches!(
+                                higher_order,
+                                Some(HigherOrderCallSemantics::RepeatedCallbacks)
+                                    | Some(HigherOrderCallSemantics::SpawnMayOnce)
+                            ) {
+                                let semantics = higher_order.unwrap();
+                                let callback_targets = local_higher_order_callbacks(
+                                    callback_def_paths,
+                                    &self.mir_representation.functions,
+                                );
+                                if callback_targets.len()
+                                    == callback_def_paths.iter().collect::<BTreeSet<_>>().len()
+                                {
+                                    for (ordinal, callee) in callback_targets.iter().enumerate() {
+                                        let base_call = get_dummy_call_id(
+                                            rust_func,
+                                            block.block_id,
+                                            &call_site,
+                                            true,
+                                        );
+                                        let base_ret = get_dummy_ret_id(
+                                            rust_func,
+                                            &block.block_id.to_string(),
+                                            &call_site,
+                                            true,
+                                        );
+                                        let dummy_call_id = format!("{}::callback{}", base_call, ordinal);
+                                        let dummy_ret_id = format!("{}::callback{}", base_ret, ordinal);
+                                        let callee_entry = format!("rust::{}::bb0", callee);
+                                        let callback_return = higher_order_callback_return_node(
+                                            semantics,
+                                            &call_site,
+                                            &caller_return,
+                                        );
+
+                                        ordered_icfg_nodes.push((
+                                            dummy_call_id.clone(),
+                                            GlobalICFGNode::DummyCall(DummyNode {
+                                                dummy_node_name: "dummyCall".to_string(),
+                                                incoming_edge: mir_node_id.clone(),
+                                                outgoing_edge: callee_entry,
+                                                id: compute_hash(&(mir_node_id.clone(), dummy_call_id.clone())),
+                                                mir_var: self
+                                                    .closure_bindings
+                                                    .get(callee)
+                                                    .map(|arg| arg.arg.clone()),
+                                                llvm_var: None,
+                                                is_internal: Some(true),
+                                            }),
+                                        ));
+                                        ordered_icfg_nodes.push((
+                                            dummy_ret_id.clone(),
+                                            GlobalICFGNode::DummyRet(DummyNode {
+                                                dummy_node_name: "dummyRet".to_string(),
+                                                incoming_edge: callee.clone(),
+                                                outgoing_edge: callback_return.clone(),
+                                                id: compute_hash(&(callback_return, dummy_ret_id.clone())),
+                                                // Callback result is not the external
+                                                // higher-order API's return value.
+                                                mir_var: None,
+                                                llvm_var: None,
+                                                is_internal: Some(true),
+                                            }),
+                                        ));
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1608,6 +1924,82 @@ mod phase6k_callee_resolution_tests {
                 &functions,
             ),
             None
+        );
+    }
+
+    #[test]
+    fn higher_order_standard_library_semantics_are_classified_structurally() {
+        let callbacks = vec!["main::{closure#0}".to_string()];
+        for path in [
+            "std::iter::Iterator::map",
+            "std::iter::Iterator::filter",
+        ] {
+            assert_eq!(
+                higher_order_call_semantics(Some(path), &callbacks),
+                Some(HigherOrderCallSemantics::LazyCarrier)
+            );
+        }
+        for path in [
+            "std::iter::Iterator::collect",
+            "std::iter::Iterator::product",
+            "std::iter::Iterator::for_each",
+        ] {
+            assert_eq!(
+                higher_order_call_semantics(Some(path), &callbacks),
+                Some(HigherOrderCallSemantics::RepeatedCallbacks)
+            );
+        }
+        assert_eq!(
+            higher_order_call_semantics(Some("std::thread::spawn"), &callbacks),
+            Some(HigherOrderCallSemantics::SpawnMayOnce)
+        );
+        assert_eq!(
+            higher_order_call_semantics(Some("third_party::register_callback"), &callbacks),
+            Some(HigherOrderCallSemantics::Unknown)
+        );
+    }
+
+    #[test]
+    fn higher_order_repeated_callbacks_loop_but_spawn_returns_to_continuation() {
+        assert_eq!(
+            higher_order_callback_return_node(
+                HigherOrderCallSemantics::RepeatedCallbacks,
+                "rust::main::bb7",
+                "rust::main::bb8",
+            ),
+            "rust::main::bb7"
+        );
+        assert_eq!(
+            higher_order_callback_return_node(
+                HigherOrderCallSemantics::SpawnMayOnce,
+                "rust::main::bb7",
+                "rust::main::bb8",
+            ),
+            "rust::main::bb8"
+        );
+    }
+
+    #[test]
+    fn higher_order_callback_targets_are_local_sorted_and_deduplicated() {
+        let functions = empty_functions(&[
+            "main::{closure#0}",
+            "main::{closure#1}",
+        ]);
+        let got = local_higher_order_callbacks(
+            &[
+                "main::{closure#1}".into(),
+                "missing::{closure#0}".into(),
+                "main::{closure#0}".into(),
+                "main::{closure#1}".into(),
+            ],
+            &functions,
+        );
+        assert_eq!(
+            got,
+            vec![
+                "main::{closure#0}".to_string(),
+                "main::{closure#1}".to_string(),
+            ]
         );
     }
 

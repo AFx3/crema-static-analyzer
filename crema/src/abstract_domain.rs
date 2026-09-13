@@ -1459,37 +1459,36 @@ fn build_closure_capture_bindings(
         }
     }
 
-    // Pass 3: map each call to the concrete closure body selected by ICFG.
+    // Pass 3: map every canonical closure call relation to the closure body.
+    //
+    // Older code rediscovered direct Fn/FnMut/FnOnce calls from MIR debug text.
+    // v6L higher-order summaries create the same canonical `rust_calls` relation
+    // for callbacks invoked by external library semantics.  Consuming this
+    // relation here makes capture recovery independent of whether the call edge
+    // came directly from a MIR Fn-call terminator or from a sound library
+    // summary.
     let mut by_closure_scope: BTreeMap<
         String,
         Vec<ClosureCaptureBinding>,
     > = BTreeMap::new();
 
-    for (node_id, node) in &icfg.ordered_nodes {
-        let GlobalICFGNode::Mir(bb) = node else {
-            continue;
-        };
-        let Some(scope) = mir_function_scope_from_node_id(node_id) else {
-            continue;
-        };
-
-        let Some(MirTerminator::Call {
-            function_called,
-            arguments,
-            ..
-        }) = &bb.terminator
-        else {
-            continue;
-        };
-
-        if !function_called.contains("{closure@") {
+    for call in &icfg.rust_calls {
+        if !call.is_closure {
             continue;
         }
-
-        let Some(first_arg) = arguments.first() else {
+        let Some(first_arg) = call.arguments.first() else {
+            // Zero-capture closures need no environment binding.
             continue;
         };
 
+        // RustCallMetadata::caller_function stores the rustc DefPath without
+        // the GlobalICFG `rust::` node-id prefix.  Capture environments above
+        // are indexed by the canonical MIR node scope (e.g. `rust::main`).
+        // Derive the lookup scope from the canonical call node itself rather
+        // than mixing these two namespaces.
+        let Some(scope) = mir_function_scope_from_node_id(&call.call_node) else {
+            continue;
+        };
         let arg = canonical_mir_local(&first_arg.arg);
         let mut env_candidates =
             resolve_scoped_stack_ref_leaves(&scope, &arg, &scoped_refs);
@@ -1498,12 +1497,7 @@ fn build_closure_capture_bindings(
             env_candidates.insert(arg);
         }
 
-        let Some(closure_scope) =
-            closure_entry_scope_for_call(icfg, node_id)
-        else {
-            continue;
-        };
-
+        let closure_scope = call.callee_function.clone();
         for env_local in env_candidates {
             if let Some(captures) =
                 envs.get(&(scope.clone(), canonical_mir_local(&env_local)))
@@ -3650,6 +3644,69 @@ mod phase6b_interprocedural_protocol_tests {
                 .get_cell_value(&"Local(_1)".to_string()),
             CellValue::TOP
         );
+    }
+
+    #[test]
+    fn higher_order_rust_call_metadata_drives_closure_capture_binding() {
+        use crate::structs::{
+            GlobalICFGNode, MirBasicBlock, MirStatement, SourceInfoData,
+        };
+
+        let closure_env_stmt = MirStatement {
+            source_info: SourceInfoData {
+                span: "test.rs:1:1:1:1 (#0)".to_string(),
+                scope: "scope[0]".to_string(),
+            },
+            kind: "Assign".to_string(),
+            details: "Assign((Local(_3), {closure@test.rs:1:1: 1:3} { ptr: move _4 }))".to_string(),
+            place: Some("Local(_3)".to_string()),
+            is_mutable: Some(false),
+            rvalue: Some(
+                "{closure@test.rs:1:1: 1:3} { ptr: move _4 }".to_string(),
+            ),
+        };
+
+        // The MIR terminator does not call the closure directly.  This models a
+        // higher-order library summary (spawn/consumer) whose canonical callback
+        // relation is carried solely by `rust_calls`.
+        let icfg = GlobalICFGOrdered {
+            ordered_nodes: vec![(
+                "rust::main::bb0".to_string(),
+                GlobalICFGNode::Mir(MirBasicBlock {
+                    block_id: 0,
+                    statements: vec![closure_env_stmt],
+                    terminator: None,
+                }),
+            )],
+            icfg_edges: Vec::new(),
+            rust_functions: BTreeMap::new(),
+            rust_calls: vec![RustCallMetadata {
+                caller_function: "main".to_string(),
+                call_node: "rust::main::bb1".to_string(),
+                callee_function: "main::{closure#0}".to_string(),
+                dummy_call_node: "dummyCall::main::bb1::callback0".to_string(),
+                dummy_ret_node: "dummyRet::main::bb1::callback0".to_string(),
+                arguments: vec![MirCallArgument {
+                    arg: "Local(_3)".to_string(),
+                    is_mutable: Some(false),
+                }],
+                return_place: String::new(),
+                return_node: "rust::main::bb2".to_string(),
+                is_closure: true,
+            }],
+        };
+
+        let bindings = build_closure_capture_bindings(&icfg);
+        let captures = bindings
+            .get("main::{closure#0}")
+            .expect("canonical higher-order rust_call must bind the closure environment");
+
+        assert_eq!(captures.len(), 1);
+        assert_eq!(
+            captures[0].by_value_sources,
+            BTreeSet::from(["Local(_4)".to_string()])
+        );
+        assert!(captures[0].stack_ref_targets.is_empty());
     }
 }
 

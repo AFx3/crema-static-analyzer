@@ -1107,6 +1107,44 @@ fn copy_binding(
     memory.assign_stack_refs(destination, refs);
 }
 
+/// Rebase projected fields of a closure environment object onto the closure
+/// formal local.  Higher-order library summaries may activate a local closure
+/// directly from its environment object rather than through the explicit
+/// `&closure` temporary seen at a language-level Fn/FnMut/FnOnce callsite.
+/// Copying only already-proved projected MAY relations preserves capture
+/// identity without manufacturing aliases.
+fn copy_projected_fields(
+    memory: &mut AllocationIdentityMemory,
+    source: &ProgramVarId,
+    destination: &ProgramVarId,
+) {
+    let points: Vec<_> = memory
+        .place_points_to
+        .iter()
+        .filter(|(place, _)| &place.base == source)
+        .map(|(place, allocs)| (place.projection.clone(), allocs.clone()))
+        .collect();
+    let refs: Vec<_> = memory
+        .place_stack_refs
+        .iter()
+        .filter(|(place, _)| &place.base == source)
+        .map(|(place, refs)| (place.projection.clone(), refs.clone()))
+        .collect();
+
+    for (projection, allocs) in points {
+        memory.assign_place_points_to(
+            PlaceId { base: destination.clone(), projection },
+            allocs,
+        );
+    }
+    for (projection, refs) in refs {
+        memory.assign_place_stack_refs(
+            PlaceId { base: destination.clone(), projection },
+            refs,
+        );
+    }
+}
+
 fn bind_actuals_to_formals(
     icfg: &GlobalICFGOrdered,
     call: &RustCallMetadata,
@@ -1126,7 +1164,10 @@ fn bind_actuals_to_formals(
             function: call.callee_function.clone(),
             local: (formal_index + 1) as u32,
         };
-        copy_binding(&mut callee_memory, &actual, formal);
+        copy_binding(&mut callee_memory, &actual, formal.clone());
+        if call.is_closure && formal_index == 0 {
+            copy_projected_fields(&mut callee_memory, &actual, &formal);
+        }
     }
 
     callee_memory
@@ -2698,6 +2739,48 @@ mod tests {
             }
         );
         assert!(at_return.points_to(&c_var("c_alloc_i32", 6, callsite)).contains(id));
+    }
+
+    #[test]
+    fn v6l_higher_order_closure_binding_rebases_capture_fields() {
+        let source = rust("main", 3);
+        let destination = rust("main::{closure#0}", 1);
+        let a = alloc("captured");
+        let captured_owner = rust("main", 4);
+
+        let source_field = PlaceId {
+            base: source.clone(),
+            projection: vec![PlaceProjection::Field { index: 0 }],
+        };
+        let destination_field = PlaceId {
+            base: destination.clone(),
+            projection: vec![PlaceProjection::Field { index: 0 }],
+        };
+        let captured_place = PlaceId {
+            base: captured_owner,
+            projection: Vec::new(),
+        };
+
+        let mut mem = AllocationIdentityMemory::default();
+        mem.assign_place_points_to(
+            source_field.clone(),
+            BTreeSet::from([a.clone()]),
+        );
+        mem.assign_place_stack_refs(
+            source_field,
+            BTreeSet::from([captured_place.clone()]),
+        );
+
+        copy_projected_fields(&mut mem, &source, &destination);
+
+        assert_eq!(
+            mem.points_to_place(&destination_field),
+            BTreeSet::from([a])
+        );
+        assert_eq!(
+            mem.stack_refs_place(&destination_field),
+            BTreeSet::from([captured_place])
+        );
     }
 
     #[test]
