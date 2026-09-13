@@ -1,0 +1,4 @@
+# Allocation-identity leak pattern (schema v2).
+# Event-centric: allocation lifecycle state predicates are intentionally not
+# lifted to AbstractAllocId in v6F.
+exists_alloc a. EF (alloc_l(a) && EX EG !drop_l(a))

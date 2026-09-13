@@ -1,0 +1,118 @@
+% CREMA/CQPL v6I: theorem fragment for the three official schema-v2 queries.
+% This file is intended to be included after the existing atomic CQPL soundness
+% theorem and the definitions of the three-valued CTL semantics.
+
+\paragraph{Allocation-event no-refutation.}
+For $v\in\B$, write $\mathsf{NR}(v)$ iff $v\neq\fff$.
+For $A\in Alloc^\#$ and $p\in\{\texttt{alloc},\texttt{drop},\texttt{read},
+\texttt{write},\texttt{use}\}$, schema~v2 exports only
+\texttt{may\_abstract} allocation-event labels. Hence
+\[
+  \llbracket p_\ell(A)\rrbracket^\#\in\{\fff,\unk\}
+  \qquad\text{and}\qquad
+  \llbracket \neg p_\ell(A)\rrbracket^\#\in\{\unk,\ttt\}.
+\tag{V2-Polarity}
+\]
+
+We use the following obligations of the CREMA-to-CQPL boundary.
+\begin{enumerate}
+\item[\textbf{A1}] Every modeled concrete witness trace is embedded, preserving
+block order, in a path of the combined Rust/C ICFG.  Event pairs separated by
+strong $X$ in the official queries occur at distinct represented nodes.
+\item[\textbf{A2}] If a modeled concrete event $p$ on concrete allocation $a$
+occurs in block $b$ and $A$ represents $a$, then
+$\llbracket p_\ell(A)\rrbracket^\#_{K^\#,b}=\unk$.
+\item[\textbf{A3}] The allocation, drop and use occurrences belonging to one
+concrete bug witness admit one common representing $A\in Alloc^\#$.
+\item[\textbf{A4}] Such $A$ belongs to the schema-v2 allocation quantifier domain.
+\item[\textbf{A5}] A modeled leak witness has a normal post-allocation successor
+and a maximal represented suffix on which the concrete allocation is not
+freed.
+\end{enumerate}
+
+\begin{lemma}[Existential temporal no-refutation lifting]
+\label{lemma:v2-existential-temporal-nr}
+Under the CQPL three-valued order $\fff<\unk<\ttt$:
+(i) a non-$\fff$ successor makes $EX\phi$ non-$\fff$;
+(ii) a reachable non-$\fff$ witness makes $EF\phi$ non-$\fff$;
+(iii) if the right operand of $E[\phi\ U\ \psi]$ is non-$\fff$ at the endpoint
+of a finite path and $\phi$ is non-$\fff$ at every earlier position, then the
+until formula is non-$\fff$ at the path start; and
+(iv) if $\phi$ is non-$\fff$ at every position of a maximal path, then
+$EG\phi$ is non-$\fff$ at the path start.
+\end{lemma}
+\begin{proof}
+Immediate from the implemented fixpoint equations: $EF$ and $EU$ are least
+fixpoints using $\sqcup_{\B}$ over existential successors, while $EG$ is a
+greatest fixpoint using $\sqcap_{\B}$ and weak continuation $\ttt$ at terminal
+nodes.  Since the meet of two elements in $\{\unk,\ttt\}$ is again in that set,
+a single existential witness path suffices.
+\end{proof}
+
+\begin{theorem}[No-refutation of the complete schema-v2 double-free query]
+\label{theorem:v2-double-free-query-nr}
+Assume \textbf{A1--A4}. If a modeled concrete execution contains an allocation
+of $a$ followed, on the same execution, by two later deallocation events of
+that same $a$, then the official schema-v2 double-free query evaluates at the
+program entry to $\unk$.
+\end{theorem}
+\begin{proof}
+Let $A$ be the common abstract allocation given by \textbf{A3}. By \textbf{A2},
+the allocation event and both drop events evaluate to $\unk$. By
+(V2-Polarity), $\neg\texttt{alloc}_\ell(A)$ is never $\fff$. Lemma
+\ref{lemma:v2-existential-temporal-nr} therefore lifts the second drop through
+$E[(\neg\texttt{alloc}_\ell(A))\ U\ \texttt{drop}_\ell(A)]$, the strong next,
+the first-drop conjunction, the surrounding $EF$, and the strong next after
+the allocation event. Meeting this suffix with
+$\texttt{alloc}_\ell(A)=\unk$ remains non-$\fff$, and the outer $EF$ lifts the
+witness to the entry. By \textbf{A4}, $\exists_{alloc}$ ranges over $A$.
+Finally, every quantified candidate contains a positive
+$\texttt{alloc}_\ell$ conjunct, which is never $\ttt$ under (V2-Polarity), so
+the complete query cannot be $\ttt$. Hence it is exactly $\unk$.
+\end{proof}
+
+\begin{theorem}[No-refutation of the complete schema-v2 use-after-free query]
+\label{theorem:v2-uaf-query-nr}
+Assume \textbf{A1--A4}. If a modeled concrete execution allocates $a$, later
+deallocates the same $a$, and later performs a modeled use (read or write) of
+$a$, then the official schema-v2 use-after-free query evaluates at entry to
+$\unk$.
+\end{theorem}
+\begin{proof}
+As in Theorem~\ref{theorem:v2-double-free-query-nr}, with the final drop witness
+replaced by the use witness.  Assumption \textbf{A2} gives
+$\texttt{use}_\ell(A)=\unk$, while (V2-Polarity) keeps every intermediate
+$\neg\texttt{alloc}_\ell(A)$ guard non-$\fff$.  The existential temporal
+operators preserve the witness by
+Lemma~\ref{lemma:v2-existential-temporal-nr}; the positive allocation conjunct
+again rules out $\ttt$.
+\end{proof}
+
+\begin{theorem}[No-refutation of the complete schema-v2 leak query]
+\label{theorem:v2-leak-query-nr}
+Assume \textbf{A1--A5}. If a modeled concrete execution allocates $a$ and has a
+maximal post-allocation suffix on which $a$ is never deallocated, then the
+official schema-v2 leak query evaluates at entry to $\unk$.
+\end{theorem}
+\begin{proof}
+Let $A$ represent $a$.  By \textbf{A2}, the allocation event evaluates to
+$\unk$. By (V2-Polarity), $\neg\texttt{drop}_\ell(A)$ is always in
+$\{\unk,\ttt\}$, hence is non-$\fff$ along the maximal suffix supplied by
+\textbf{A5}.  Lemma~\ref{lemma:v2-existential-temporal-nr} gives
+$EG\neg\texttt{drop}_\ell(A)$ at the post-allocation successor; strong $EX$,
+conjunction with the allocation atom, outer $EF$, and \textbf{A4} then lift the
+witness to the entry.  The positive allocation conjunct rules out $\ttt$, so
+the result is exactly $\unk$.
+\end{proof}
+
+\begin{corollary}[Official-query no-false-negative property]
+\label{corollary:v2-official-query-no-fn}
+On the modeled, block-observable fragment satisfying \textbf{A1--A5}, each
+concrete DF/UAF/leak witness implies that its corresponding official schema-v2
+CQPL query is not refuted (indeed, evaluates to $\unk$).
+\end{corollary}
+
+\noindent
+The corollary is one-sided: $\unk$ is a potential bug and need not correspond
+to a concrete faulty execution.  It does not establish soundness of arbitrary
+CQPL formulas or of unmodeled UB classes.

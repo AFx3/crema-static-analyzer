@@ -1,0 +1,32 @@
+digraph ICFG {
+  "5" [label="ID: 5\nType: 0\nKind: 0\nInfo: IntraICFGNode5 {fun: crema_v6i_alloc}
+AddrStmt: [Var8 <-- Var9]	
+ValVar ID: 8
+   %n.addr = alloca i64, align 8 \nFunction: crema_v6i_alloc\nBasic Block: entry\nStatements: [110044155401488, ]"];
+  "5" -> "6" [label="Intra"];
+  "6" [label="ID: 6\nType: 0\nKind: 0\nInfo: IntraICFGNode6 {fun: crema_v6i_alloc}
+StoreStmt: [Var8 <-- Var7]	
+ValVar ID: 11
+   store i64 %n, ptr %n.addr, align 8 \nFunction: crema_v6i_alloc\nBasic Block: entry\nStatements: [110044154949728, ]"];
+  "6" -> "7" [label="Intra"];
+  "7" [label="ID: 7\nType: 0\nKind: 0\nInfo: IntraICFGNode7 {fun: crema_v6i_alloc}
+LoadStmt: [Var12 <-- Var8]	
+ValVar ID: 12
+   %0 = load i64, ptr %n.addr, align 8 \nFunction: crema_v6i_alloc\nBasic Block: entry\nStatements: [110044155127152, ]"];
+  "7" -> "8" [label="Intra"];
+  "8" [label="ID: 8\nType: 0x6415a6c6ecd0\nKind: 4\nInfo: CallICFGNode8 {fun: crema_v6i_alloc}
+AddrStmt: [Var13 <-- Var14]	
+ValVar ID: 13
+   %call = call noalias ptr @malloc(i64 noundef %0) #2 \nFunction: crema_v6i_alloc\nBasic Block: entry\nStatements: [110044155395808, ]"];
+  "8" -> "9" [label="Intra"];
+  "9" [label="ID: 9\nType: 0x6415a6c6ecd0\nKind: 5\nInfo: RetICFGNode9 {fun: crema_v6i_alloc}
+   %call = call noalias ptr @malloc(i64 noundef %0) #2 RetICFGNode: \nFunction: crema_v6i_alloc\nBasic Block: entry\nStatements: None"];
+  "9" -> "10" [label="Intra"];
+  "10" [label="ID: 10\nType: 0\nKind: 0\nInfo: IntraICFGNode10 {fun: crema_v6i_alloc}
+   ret ptr %call \nFunction: crema_v6i_alloc\nBasic Block: entry\nStatements: None"];
+  "10" -> "2" [label="Intra"];
+  "2" [label="ID: 2\nType: 0\nKind: 3\nInfo: FunExitICFGNode2 {fun: crema_v6i_alloc}
+PhiStmt: [Var6 <-- ([Var13, ICFGNode10],)]	
+ValVar ID: 17
+   ret ptr %call \nFunction: crema_v6i_alloc\nBasic Block: entry\nStatements: [110044155245312, ]"];
+}

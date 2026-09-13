@@ -1,0 +1,137 @@
+{
+	"edges" : 
+	[
+		{
+			"destination" : 110044155514016,
+			"edge_type" : "intra",
+			"source" : 110044155517024
+		},
+		{
+			"destination" : 110044155036896,
+			"edge_type" : "intra",
+			"source" : 110044155514016
+		},
+		{
+			"destination" : 110044155129696,
+			"edge_type" : "intra",
+			"source" : 110044155036896
+		},
+		{
+			"destination" : 110044154943792,
+			"edge_type" : "intra",
+			"source" : 110044155129696
+		},
+		{
+			"destination" : 110044155028592,
+			"edge_type" : "intra",
+			"source" : 110044154943792
+		},
+		{
+			"destination" : 110044155234240,
+			"edge_type" : "intra",
+			"source" : 110044155028592
+		}
+	],
+	"nodes" : 
+	[
+		{
+			"basic_block" : 110044155218320,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 110044155408032,
+			"function_name" : "crema_v6i_alloc",
+			"info" : "IntraICFGNode5 {fun: crema_v6i_alloc}\nAddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %n.addr = alloca i64, align 8 ",
+			"node_id" : 110044155517024,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				110044155401488
+			]
+		},
+		{
+			"basic_block" : 110044155218320,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 110044155408032,
+			"function_name" : "crema_v6i_alloc",
+			"info" : "IntraICFGNode6 {fun: crema_v6i_alloc}\nStoreStmt: [Var8 <-- Var7]\t\nValVar ID: 11\n   store i64 %n, ptr %n.addr, align 8 ",
+			"node_id" : 110044155514016,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				110044154949728
+			]
+		},
+		{
+			"basic_block" : 110044155218320,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 110044155408032,
+			"function_name" : "crema_v6i_alloc",
+			"info" : "IntraICFGNode7 {fun: crema_v6i_alloc}\nLoadStmt: [Var12 <-- Var8]\t\nValVar ID: 12\n   %0 = load i64, ptr %n.addr, align 8 ",
+			"node_id" : 110044155036896,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				110044155127152
+			]
+		},
+		{
+			"basic_block" : 110044155218320,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 110044155408032,
+			"function_name" : "crema_v6i_alloc",
+			"info" : "CallICFGNode8 {fun: crema_v6i_alloc}\nAddrStmt: [Var13 <-- Var14]\t\nValVar ID: 13\n   %call = call noalias ptr @malloc(i64 noundef %0) #2 ",
+			"node_id" : 110044155129696,
+			"node_kind" : 4,
+			"node_type" : true,
+			"svf_statements" : 
+			[
+				110044155395808
+			]
+		},
+		{
+			"basic_block" : 110044155218320,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 110044155408032,
+			"function_name" : "crema_v6i_alloc",
+			"info" : "RetICFGNode9 {fun: crema_v6i_alloc}\n   %call = call noalias ptr @malloc(i64 noundef %0) #2 RetICFGNode: ",
+			"node_id" : 110044154943792,
+			"node_kind" : 5,
+			"node_type" : true,
+			"svf_statements" : []
+		},
+		{
+			"basic_block" : 110044155218320,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 110044155408032,
+			"function_name" : "crema_v6i_alloc",
+			"info" : "IntraICFGNode10 {fun: crema_v6i_alloc}\n   ret ptr %call ",
+			"node_id" : 110044155028592,
+			"node_kind" : 0,
+			"node_type" : false,
+			"svf_statements" : []
+		},
+		{
+			"basic_block" : 110044155218320,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"basic_block_name" : "entry",
+			"function" : 110044155408032,
+			"function_name" : "crema_v6i_alloc",
+			"info" : "FunExitICFGNode2 {fun: crema_v6i_alloc}\nPhiStmt: [Var6 <-- ([Var13, ICFGNode10],)]\t\nValVar ID: 17\n   ret ptr %call ",
+			"node_id" : 110044155234240,
+			"node_kind" : 3,
+			"node_type" : false,
+			"svf_statements" : 
+			[
+				110044155245312
+			]
+		}
+	]
+}

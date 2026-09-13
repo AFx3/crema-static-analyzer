@@ -66,6 +66,61 @@ pub struct EventLabel {
     pub variable: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AllocationEventCertainty {
+    /// Schema-v2 allocation-event facts are derived only from MAY identity
+    /// information.  A singleton abstract target is not a concrete MUST fact.
+    MayAbstract,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AllocationContract {
+    pub family: String,
+    pub operation: String,
+    pub language: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AllocationEventLabel {
+    pub predicate: EventKind,
+    pub allocation: String,
+    pub certainty: AllocationEventCertainty,
+    #[serde(default)]
+    pub deallocator_contract: Option<AllocationContract>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AbstractAllocation {
+    pub id: String,
+    #[serde(default)]
+    pub display: Option<String>,
+    #[serde(default)]
+    pub site: Option<serde_json::Value>,
+    #[serde(default)]
+    pub context: Vec<String>,
+    /// Present when `allocation_contracts_v1` is declared by the artifact.
+    #[serde(default)]
+    pub allocator_contract: Option<AllocationContract>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IdentityPointsToRecord {
+    pub variable: String,
+    #[serde(default)]
+    pub allocations: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeIdentityAnnotation {
+    #[serde(default)]
+    pub points_to: Vec<IdentityPointsToRecord>,
+    // Stack-reference records are exported for auditability by CREMA v2 but
+    // are not needed by the checker after allocation_labels are materialized.
+    #[serde(default)]
+    pub stack_refs: Vec<serde_json::Value>,
+}
+
 /// One implementation-level AbstractMemory component. All variables in
 /// `aliases` denote the same abstract allocation at this program point and
 /// therefore share one CellValue.
@@ -107,6 +162,12 @@ pub struct AnnotatedNode {
     #[serde(default)]
     pub labels: Vec<EventLabel>,
     #[serde(default)]
+    pub allocation_labels: Vec<AllocationEventLabel>,
+    #[serde(default)]
+    pub identity: Option<NodeIdentityAnnotation>,
+    #[serde(default)]
+    pub event_identity: Option<NodeIdentityAnnotation>,
+    #[serde(default)]
     pub pre: AbstractMemoryAnnotation,
     #[serde(default)]
     pub post: AbstractMemoryAnnotation,
@@ -116,22 +177,55 @@ pub struct AnnotatedNode {
 pub struct AnnotatedIcfg {
     pub schema_version: u32,
     pub entry: String,
-    /// Quantifier domain. It intentionally includes Rust and C variables.
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+    /// Legacy/program-variable quantifier domain. It intentionally includes Rust and C variables.
     pub variables: Vec<ProgramVariable>,
+    /// Canonical abstract-allocation quantifier domain introduced by schema v2.
+    #[serde(default)]
+    pub allocations: Vec<AbstractAllocation>,
     pub nodes: Vec<AnnotatedNode>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Kripke {
+    pub schema_version: u32,
     pub entry: String,
+    pub capabilities: BTreeSet<String>,
     pub variables: BTreeMap<String, ProgramVariable>,
+    pub allocations: BTreeMap<String, AbstractAllocation>,
     pub nodes: BTreeMap<String, AnnotatedNode>,
+}
+
+fn rust_function_scope(node_id: &str) -> Option<&str> {
+    if let Some((scope, bb)) = node_id.rsplit_once("::bb") {
+        if scope.starts_with("rust::") && !bb.is_empty() && bb.chars().all(|c| c.is_ascii_digit()) {
+            return Some(scope);
+        }
+    }
+    // v6K.4 explicit unwind-terminal nodes are part of the same Rust
+    // function's intra projection and represent a maximal path endpoint.
+    if let Some(scope) = node_id.strip_suffix("::terminate") {
+        if scope.starts_with("rust::") {
+            return Some(scope);
+        }
+    }
+    None
 }
 
 impl Kripke {
     pub fn from_annotated_icfg(input: AnnotatedIcfg) -> Result<Self, String> {
-        if input.schema_version != 1 {
-            return Err(format!("unsupported annotated ICFG schema_version {}; expected 1", input.schema_version));
+        if !matches!(input.schema_version, 1 | 2) {
+            return Err(format!(
+                "unsupported annotated ICFG schema_version {}; expected 1 or 2",
+                input.schema_version
+            ));
+        }
+        let schema_version = input.schema_version;
+        let capabilities: BTreeSet<String> = input.capabilities.iter().cloned().collect();
+        let has_allocation_contracts = capabilities.contains("allocation_contracts_v1");
+        if has_allocation_contracts && schema_version != 2 {
+            return Err("allocation_contracts_v1 requires annotated ICFG schema v2".into());
         }
 
         let mut variables = BTreeMap::new();
@@ -144,6 +238,24 @@ impl Kripke {
             return Err("annotated ICFG contains no program variables".into());
         }
 
+        let mut allocations = BTreeMap::new();
+        for allocation in input.allocations {
+            if has_allocation_contracts && allocation.allocator_contract.is_none() {
+                return Err(format!(
+                    "artifact declares allocation_contracts_v1 but allocation '{}' is missing allocator_contract",
+                    allocation.id
+                ));
+            }
+            if let Some(contract) = allocation.allocator_contract.as_ref() {
+                validate_contract(contract, "allocator_contract")?;
+            }
+            if allocation.id.is_empty() {
+                return Err("empty abstract-allocation id in annotated ICFG".into());
+            }
+            if allocations.insert(allocation.id.clone(), allocation).is_some() {
+                return Err("duplicate abstract-allocation id in annotated ICFG".into());
+            }
+        }
         let mut nodes = BTreeMap::new();
         for n in input.nodes {
             validate_memory(&n.id, "pre", &n.pre, &variables)?;
@@ -167,12 +279,180 @@ impl Kripke {
                     return Err(format!("node '{}' label references undeclared variable '{}'", node.id, label.variable));
                 }
             }
+            for label in &node.allocation_labels {
+                if !allocations.contains_key(&label.allocation) {
+                    return Err(format!(
+                        "node '{}' allocation label references undeclared allocation '{}'",
+                        node.id, label.allocation
+                    ));
+                }
+                if has_allocation_contracts && label.predicate == EventKind::Drop
+                    && label.deallocator_contract.is_none()
+                {
+                    return Err(format!(
+                        "artifact declares allocation_contracts_v1 but node '{}' drop label for '{}' is missing deallocator_contract",
+                        node.id, label.allocation
+                    ));
+                }
+                if let Some(contract) = label.deallocator_contract.as_ref() {
+                    validate_contract(contract, "deallocator_contract")?;
+                }
+            }
+            for (kind, identity) in [
+                ("identity", node.identity.as_ref()),
+                ("event_identity", node.event_identity.as_ref()),
+            ] {
+                if let Some(identity) = identity {
+                    for relation in &identity.points_to {
+                        if !variables.contains_key(&relation.variable) {
+                            return Err(format!(
+                                "node '{}' {kind} relation references undeclared variable '{}'",
+                                node.id, relation.variable
+                            ));
+                        }
+                        for allocation in &relation.allocations {
+                            if !allocations.contains_key(allocation) {
+                                return Err(format!(
+                                    "node '{}' {kind} relation references undeclared allocation '{}'",
+                                    node.id, allocation
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
         }
 
-        Ok(Self { entry: input.entry, variables, nodes })
+        Ok(Self { schema_version, entry: input.entry, capabilities, variables, allocations, nodes })
+    }
+
+    /// Resolve a node id or Rust function name to exactly one Kripke entry.
+    /// Ambiguous suffixes are rejected rather than resolved by map order.
+    pub fn resolve_entry(&self, requested: &str) -> Result<String, String> {
+        if self.nodes.contains_key(requested) {
+            return Ok(requested.to_string());
+        }
+
+        let normalized = requested
+            .strip_prefix("rust::")
+            .unwrap_or(requested)
+            .trim_end_matches("::bb0");
+        let mut candidates = BTreeSet::new();
+        for id in self.nodes.keys() {
+            let Some(scope) = rust_function_scope(id) else { continue; };
+            if !id.ends_with("::bb0") {
+                continue;
+            }
+            let bare_scope = scope.strip_prefix("rust::").unwrap_or(scope);
+            if bare_scope == normalized || bare_scope.ends_with(&format!("::{normalized}")) {
+                candidates.insert(id.clone());
+            }
+        }
+
+        match candidates.len() {
+            0 => Err(format!("no Kripke node/function matches entry '{requested}'")),
+            1 => Ok(candidates.into_iter().next().unwrap()),
+            _ => Err(format!(
+                "ambiguous Kripke entry '{requested}'; candidates: {}",
+                candidates.into_iter().collect::<Vec<_>>().join(", ")
+            )),
+        }
+    }
+
+    /// Return a deterministic entry-scoped Kripke projection.
+    ///
+    /// Whole-program mode retains every node reachable from the requested
+    /// entry.  `intra=true` additionally restricts traversal to MIR basic
+    /// blocks of the entry's Rust function; an interprocedural edge is a hard
+    /// boundary and no synthetic call bypass is introduced.  This is an
+    /// explicit *scoped* model-checking mode, not a replacement for the v6I
+    /// whole-program no-refutation theorem.
+    pub fn project_from_entry(&self, requested: &str, intra: bool) -> Result<Self, String> {
+        let entry = self.resolve_entry(requested)?;
+        let intra_scope = if intra {
+            Some(
+                rust_function_scope(&entry)
+                    .ok_or_else(|| format!("--intra requires a Rust MIR entry, got '{entry}'"))?
+                    .to_string(),
+            )
+        } else {
+            None
+        };
+
+        let mut retained = BTreeSet::new();
+        let mut worklist = std::collections::VecDeque::new();
+        retained.insert(entry.clone());
+        worklist.push_back(entry.clone());
+
+        while let Some(id) = worklist.pop_front() {
+            let Some(node) = self.nodes.get(&id) else { continue; };
+            let mut successors = node.successors.clone();
+            successors.sort();
+            successors.dedup();
+            for succ in successors {
+                if let Some(scope) = intra_scope.as_deref() {
+                    if rust_function_scope(&succ) != Some(scope) {
+                        continue;
+                    }
+                }
+                if retained.insert(succ.clone()) {
+                    worklist.push_back(succ);
+                }
+            }
+        }
+
+        let mut nodes = BTreeMap::new();
+        for id in &retained {
+            let mut node = self.nodes.get(id).unwrap().clone();
+            node.successors.retain(|succ| retained.contains(succ));
+            node.successors.sort();
+            node.successors.dedup();
+            nodes.insert(id.clone(), node);
+        }
+
+        let mut used_variables = BTreeSet::new();
+        let mut used_allocations = BTreeSet::new();
+        for node in nodes.values() {
+            used_variables.extend(node.labels.iter().map(|l| l.variable.clone()));
+            used_allocations.extend(node.allocation_labels.iter().map(|l| l.allocation.clone()));
+            for memory in [&node.pre, &node.post] {
+                for cell in &memory.cells {
+                    used_variables.extend(cell.aliases.iter().cloned());
+                }
+            }
+            for identity in [node.identity.as_ref(), node.event_identity.as_ref()].into_iter().flatten() {
+                for relation in &identity.points_to {
+                    used_variables.insert(relation.variable.clone());
+                    used_allocations.extend(relation.allocations.iter().cloned());
+                }
+            }
+        }
+
+        let variables = self
+            .variables
+            .iter()
+            .filter(|(id, _)| used_variables.contains(*id))
+            .map(|(id, value)| (id.clone(), value.clone()))
+            .collect();
+        let allocations = self
+            .allocations
+            .iter()
+            .filter(|(id, _)| used_allocations.contains(*id))
+            .map(|(id, value)| (id.clone(), value.clone()))
+            .collect();
+
+        Ok(Self {
+            schema_version: self.schema_version,
+            entry,
+            capabilities: self.capabilities.clone(),
+            variables,
+            allocations,
+            nodes,
+        })
     }
 
     pub fn variable_ids(&self) -> impl Iterator<Item = &String> { self.variables.keys() }
+    pub fn allocation_ids(&self) -> impl Iterator<Item = &String> { self.allocations.keys() }
 
     /// Alias component at this concrete program point in the abstract Kripke.
     /// Labels are associated with execution of the block, so both pre and post
@@ -212,10 +492,70 @@ impl Kripke {
                 LabelPredicate::Read => label.predicate == EventKind::Read,
                 LabelPredicate::Write => label.predicate == EventKind::Write,
                 LabelPredicate::Use => matches!(label.predicate, EventKind::Use | EventKind::Read | EventKind::Write),
+                LabelPredicate::AllocatorMismatch => false,
             }
         });
         if holds { Truth::True } else { Truth::False }
     }
+
+    /// Allocation-centric event predicate introduced by schema v2.
+    ///
+    /// Schema v2 contains only `may_abstract` labels.  Matching a positive
+    /// allocation-event atom therefore yields `unk`; absence yields `ff`.
+    /// `tt` is intentionally unavailable until an explicit MUST relation and
+    /// its concretization theorem are implemented in a later schema version.
+    pub fn allocation_label_hold(&self, node_id: &str, allocation: &str, p: LabelPredicate) -> Truth {
+        let Some(node) = self.nodes.get(node_id) else { return Truth::False; };
+        let mut acc = Truth::False;
+        for label in &node.allocation_labels {
+            if label.allocation != allocation {
+                continue;
+            }
+            let matches = match p {
+                LabelPredicate::Alloc => label.predicate == EventKind::Alloc,
+                LabelPredicate::Drop => label.predicate == EventKind::Drop,
+                LabelPredicate::Read => label.predicate == EventKind::Read,
+                LabelPredicate::Write => label.predicate == EventKind::Write,
+                LabelPredicate::Use => matches!(label.predicate, EventKind::Use | EventKind::Read | EventKind::Write),
+                LabelPredicate::AllocatorMismatch => {
+                    if label.predicate != EventKind::Drop {
+                        false
+                    } else {
+                        let allocator = self.allocations
+                            .get(allocation)
+                            .and_then(|a| a.allocator_contract.as_ref())
+                            .map(|c| c.family.as_str())
+                            .unwrap_or("unknown");
+                        let deallocator = label.deallocator_contract.as_ref()
+                            .map(|c| c.family.as_str())
+                            .unwrap_or("unknown");
+                        allocator == "unknown" || deallocator == "unknown" || allocator != deallocator
+                    }
+                },
+            };
+            if !matches {
+                continue;
+            }
+            let value = match label.certainty {
+                AllocationEventCertainty::MayAbstract => Truth::Unknown,
+            };
+            acc = acc.join(value);
+        }
+        acc
+    }
+}
+
+fn validate_contract(contract: &AllocationContract, field: &str) -> Result<(), String> {
+    if !matches!(contract.family.as_str(), "rust_global" | "c_malloc" | "unknown") {
+        return Err(format!("{field} has unsupported family '{}'", contract.family));
+    }
+    if contract.operation.is_empty() {
+        return Err(format!("{field} has empty operation"));
+    }
+    if !matches!(contract.language.as_str(), "rust" | "c" | "unknown") {
+        return Err(format!("{field} has unsupported language '{}'", contract.language));
+    }
+    Ok(())
 }
 
 fn validate_memory(
@@ -254,14 +594,19 @@ mod tests {
     fn base() -> AnnotatedIcfg {
         AnnotatedIcfg {
             schema_version: 1,
+            capabilities: vec![],
             entry: "b0".into(),
             variables: vec![
                 ProgramVariable { id: "rust::x".into(), language: ProgramLanguage::Rust, display: None, function: None },
                 ProgramVariable { id: "c::p".into(), language: ProgramLanguage::C, display: None, function: None },
             ],
+            allocations: vec![],
             nodes: vec![AnnotatedNode {
                 id: "b0".into(), successors: vec![],
                 labels: vec![EventLabel { predicate: EventKind::Drop, variable: "c::p".into() }],
+                allocation_labels: vec![],
+                identity: None,
+                event_identity: None,
                 pre: mem(&["rust::x", "c::p"], CellValue::Alloc),
                 post: mem(&["rust::x", "c::p"], CellValue::Top),
             }],
@@ -282,4 +627,208 @@ mod tests {
         input.nodes[0].post.cells.push(AbstractCell { aliases: vec!["rust::x".into()], value: CellValue::Freed });
         assert!(Kripke::from_annotated_icfg(input).is_err());
     }
+
+    #[test]
+    fn schema_v2_rejects_reserved_exact_abstract_certainty() {
+        let raw = r#"{"predicate":"drop","allocation":"A","certainty":"exact_abstract"}"#;
+        assert!(serde_json::from_str::<AllocationEventLabel>(raw).is_err());
+    }
+
+    #[test]
+    fn entry_projection_is_deterministic_and_reachable_only() {
+        let mut input = base();
+        input.entry = "rust::main::bb0".into();
+        input.nodes = vec![
+            AnnotatedNode {
+                id: "rust::main::bb0".into(),
+                successors: vec!["rust::main::bb1".into()],
+                labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+            },
+            AnnotatedNode {
+                id: "rust::main::bb1".into(),
+                successors: vec![],
+                labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+            },
+            AnnotatedNode {
+                id: "rust::dead::bb0".into(),
+                successors: vec![],
+                labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+            },
+        ];
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        let projected = k.project_from_entry("main", false).unwrap();
+        assert_eq!(projected.entry, "rust::main::bb0");
+        assert_eq!(projected.nodes.keys().cloned().collect::<Vec<_>>(), vec![
+            "rust::main::bb0".to_string(),
+            "rust::main::bb1".to_string(),
+        ]);
+    }
+
+    #[test]
+    fn intra_projection_stops_at_interprocedural_boundary() {
+        let mut input = base();
+        input.entry = "rust::main::bb0".into();
+        input.nodes = vec![
+            AnnotatedNode {
+                id: "rust::main::bb0".into(),
+                successors: vec!["dummyCall::rust::main::bb0".into()],
+                labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+            },
+            AnnotatedNode {
+                id: "dummyCall::rust::main::bb0".into(),
+                successors: vec!["rust::callee::bb0".into()],
+                labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+            },
+            AnnotatedNode {
+                id: "rust::callee::bb0".into(),
+                successors: vec![],
+                labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+            },
+        ];
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        let projected = k.project_from_entry("main", true).unwrap();
+        assert_eq!(projected.nodes.len(), 1);
+        assert!(projected.nodes.contains_key("rust::main::bb0"));
+        assert!(projected.nodes["rust::main::bb0"].successors.is_empty());
+    }
+
+    #[test]
+    fn schema_v2_allocation_label_uses_three_valued_abstract_certainty() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.allocations = vec![AbstractAllocation {
+            id: "A".into(),
+            display: None,
+            site: None,
+            context: vec![],
+            allocator_contract: None,
+        }];
+        input.nodes[0].allocation_labels = vec![AllocationEventLabel {
+            predicate: EventKind::Drop,
+            allocation: "A".into(),
+            certainty: AllocationEventCertainty::MayAbstract,
+            deallocator_contract: None,
+        }];
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        assert_eq!(k.allocation_label_hold("b0", "A", LabelPredicate::Drop), Truth::Unknown);
+        assert_eq!(k.allocation_label_hold("b0", "A", LabelPredicate::Read), Truth::False);
+    }
+
+
+    #[test]
+    fn entry_projection_prunes_unreachable_nodes_and_quantifier_domains() {
+        let input = AnnotatedIcfg {
+            schema_version: 2,
+            capabilities: vec![],
+            entry: "rust::main::bb0".into(),
+            variables: vec![
+                ProgramVariable { id: "rust::main::Local(_1)".into(), language: ProgramLanguage::Rust, display: None, function: Some("main".into()) },
+                ProgramVariable { id: "rust::dead::Local(_1)".into(), language: ProgramLanguage::Rust, display: None, function: Some("dead".into()) },
+            ],
+            allocations: vec![
+                AbstractAllocation { id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None },
+                AbstractAllocation { id: "DEAD".into(), display: None, site: None, context: vec![], allocator_contract: None },
+            ],
+            nodes: vec![
+                AnnotatedNode {
+                    id: "rust::main::bb0".into(), successors: vec!["rust::main::bb1".into()],
+                    labels: vec![EventLabel { predicate: EventKind::Read, variable: "rust::main::Local(_1)".into() }],
+                    allocation_labels: vec![AllocationEventLabel { predicate: EventKind::Alloc, allocation: "A".into(), certainty: AllocationEventCertainty::MayAbstract, deallocator_contract: None }],
+                    identity: None, event_identity: None, pre: Default::default(), post: Default::default(),
+                },
+                AnnotatedNode {
+                    id: "rust::main::bb1".into(), successors: vec![], labels: vec![], allocation_labels: vec![],
+                    identity: None, event_identity: None, pre: Default::default(), post: Default::default(),
+                },
+                AnnotatedNode {
+                    id: "rust::dead::bb0".into(), successors: vec![],
+                    labels: vec![EventLabel { predicate: EventKind::Read, variable: "rust::dead::Local(_1)".into() }],
+                    allocation_labels: vec![AllocationEventLabel { predicate: EventKind::Alloc, allocation: "DEAD".into(), certainty: AllocationEventCertainty::MayAbstract, deallocator_contract: None }],
+                    identity: None, event_identity: None, pre: Default::default(), post: Default::default(),
+                },
+            ],
+        };
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        let projected = k.project_from_entry("main", false).unwrap();
+        assert_eq!(projected.entry, "rust::main::bb0");
+        assert_eq!(projected.nodes.len(), 2);
+        assert!(projected.nodes.contains_key("rust::main::bb1"));
+        assert!(!projected.nodes.contains_key("rust::dead::bb0"));
+        assert!(projected.variables.contains_key("rust::main::Local(_1)"));
+        assert!(!projected.variables.contains_key("rust::dead::Local(_1)"));
+        assert!(projected.allocations.contains_key("A"));
+        assert!(!projected.allocations.contains_key("DEAD"));
+    }
+
+    #[test]
+    fn intra_projection_preserves_same_function_unwind_terminal() {
+        let input = AnnotatedIcfg {
+            schema_version: 1,
+            capabilities: vec![],
+            entry: "rust::main::bb0".into(),
+            variables: vec![ProgramVariable { id: "rust::x".into(), language: ProgramLanguage::Rust, display: None, function: Some("main".into()) }],
+            allocations: vec![],
+            nodes: vec![
+                AnnotatedNode { id: "rust::main::bb0".into(), successors: vec!["rust::main::terminate".into()], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, pre: Default::default(), post: Default::default() },
+                AnnotatedNode { id: "rust::main::terminate".into(), successors: vec![], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, pre: Default::default(), post: Default::default() },
+            ],
+        };
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        let projected = k.project_from_entry("main", true).unwrap();
+        assert!(projected.nodes.contains_key("rust::main::bb0"));
+        assert!(projected.nodes.contains_key("rust::main::terminate"));
+        assert_eq!(projected.nodes["rust::main::bb0"].successors, vec!["rust::main::terminate".to_string()]);
+        assert!(projected.nodes["rust::main::terminate"].successors.is_empty());
+    }
+
+    #[test]
+    fn intra_projection_is_same_function_induced_subgraph_and_stops_at_call_boundary() {
+        let input = AnnotatedIcfg {
+            schema_version: 1,
+            capabilities: vec![],
+            entry: "rust::main::bb0".into(),
+            variables: vec![ProgramVariable { id: "v".into(), language: ProgramLanguage::Rust, display: None, function: None }],
+            allocations: vec![],
+            nodes: vec![
+                AnnotatedNode { id: "rust::main::bb0".into(), successors: vec!["dummyCall::x".into()], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, pre: Default::default(), post: Default::default() },
+                AnnotatedNode { id: "dummyCall::x".into(), successors: vec!["rust::callee::bb0".into()], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, pre: Default::default(), post: Default::default() },
+                AnnotatedNode { id: "rust::callee::bb0".into(), successors: vec!["rust::callee::bb1".into()], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, pre: Default::default(), post: Default::default() },
+                AnnotatedNode { id: "rust::callee::bb1".into(), successors: vec![], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, pre: Default::default(), post: Default::default() },
+            ],
+        };
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        let caller = k.project_from_entry("main", true).unwrap();
+        assert_eq!(caller.nodes.keys().cloned().collect::<Vec<_>>(), vec!["rust::main::bb0".to_string()]);
+        assert!(caller.nodes["rust::main::bb0"].successors.is_empty());
+
+        let callee = k.project_from_entry("callee", true).unwrap();
+        assert_eq!(callee.nodes.len(), 2);
+        assert!(callee.nodes.contains_key("rust::callee::bb1"));
+    }
+
+    #[test]
+    fn allocation_contract_capability_mismatch_label_is_unknown_and_distinct_from_drop() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec!["allocation_contracts_v1".into()];
+        input.allocations = vec![AbstractAllocation {
+            id: "A".into(), display: None, site: None, context: vec![],
+            allocator_contract: Some(AllocationContract { family: "rust_global".into(), operation: "box_allocation".into(), language: "rust".into() }),
+        }];
+        input.nodes[0].allocation_labels = vec![AllocationEventLabel {
+            predicate: EventKind::Drop, allocation: "A".into(),
+            certainty: AllocationEventCertainty::MayAbstract,
+            deallocator_contract: Some(AllocationContract { family: "c_malloc".into(), operation: "free".into(), language: "c".into() }),
+        }];
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        assert_eq!(k.allocation_label_hold("b0", "A", LabelPredicate::AllocatorMismatch), Truth::Unknown);
+        assert_eq!(k.allocation_label_hold("b0", "A", LabelPredicate::Drop), Truth::Unknown);
+    }
+
 }

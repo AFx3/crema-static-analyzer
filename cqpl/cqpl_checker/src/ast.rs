@@ -14,6 +14,9 @@ pub enum LabelPredicate {
     Read,
     Write,
     Use,
+    /// Allocation-contract UB: the deallocator family at this event is not
+    /// compatible with the allocator family recorded for the bound allocation.
+    AllocatorMismatch,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,10 +55,30 @@ pub enum StateFormula {
         logic_var: String,
         body: Box<StateFormula>,
     },
+    ExistsAlloc {
+        logic_var: String,
+        body: Box<StateFormula>,
+    },
+    ForAllAlloc {
+        logic_var: String,
+        body: Box<StateFormula>,
+    },
     Path {
         quantifier: PathQuantifier,
         formula: PathFormula,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueryDocument {
+    pub required_capabilities: BTreeSet<String>,
+    pub formula: StateFormula,
+}
+
+impl QueryDocument {
+    pub fn new(required_capabilities: BTreeSet<String>, formula: StateFormula) -> Self {
+        Self { required_capabilities, formula }
+    }
 }
 
 impl StateFormula {
@@ -75,7 +98,9 @@ impl StateFormula {
                     visit(b, bound, out);
                 }
                 StateFormula::Exists { logic_var, body }
-                | StateFormula::ForAll { logic_var, body } => {
+                | StateFormula::ForAll { logic_var, body }
+                | StateFormula::ExistsAlloc { logic_var, body }
+                | StateFormula::ForAllAlloc { logic_var, body } => {
                     bound.push(logic_var.clone());
                     visit(body, bound, out);
                     bound.pop();

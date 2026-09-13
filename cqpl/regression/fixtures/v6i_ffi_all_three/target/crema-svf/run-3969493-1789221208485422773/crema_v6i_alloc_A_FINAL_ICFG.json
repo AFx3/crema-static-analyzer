@@ -1,0 +1,307 @@
+{
+	"edges" : 
+	[
+		{
+			"destination" : 101734811806880,
+			"edge_type" : "intra",
+			"source" : 101734811809888
+		},
+		{
+			"destination" : 101734811329760,
+			"edge_type" : "intra",
+			"source" : 101734811806880
+		},
+		{
+			"destination" : 101734811422560,
+			"edge_type" : "intra",
+			"source" : 101734811329760
+		},
+		{
+			"destination" : 101734811236656,
+			"edge_type" : "intra",
+			"source" : 101734811422560
+		},
+		{
+			"destination" : 101734811321456,
+			"edge_type" : "intra",
+			"source" : 101734811236656
+		},
+		{
+			"destination" : 101734811527104,
+			"edge_type" : "intra",
+			"source" : 101734811321456
+		}
+	],
+	"nodes" : 
+	[
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 101734811511184,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 101734811700896,
+			"function_name" : "crema_v6i_alloc",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 101734811809888,
+					"edge_type" : "intra",
+					"source" : 101734811458416
+				}
+			],
+			"info" : "IntraICFGNode5 {fun: crema_v6i_alloc}\nAddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %n.addr = alloca i64, align 8 ",
+			"node_id" : 101734811809888,
+			"node_kind" : 0,
+			"node_kind_string" : "IntraBlock",
+			"node_source_loc" : "",
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 101734811806880,
+					"edge_type" : "intra",
+					"source" : 101734811809888
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"edge_id" : 6,
+					"lhs_var_id" : 8,
+					"pta_edge" : true,
+					"rhs_var_id" : 9,
+					"stmt_id" : 101734811693584,
+					"stmt_info" : "AddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %n.addr = alloca i64, align 8 ",
+					"stmt_type" : "AddrStmt"
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 101734811511184,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 101734811700896,
+			"function_name" : "crema_v6i_alloc",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 101734811806880,
+					"edge_type" : "intra",
+					"source" : 101734811809888
+				}
+			],
+			"info" : "IntraICFGNode6 {fun: crema_v6i_alloc}\nStoreStmt: [Var8 <-- Var7]\t\nValVar ID: 11\n   store i64 %n, ptr %n.addr, align 8 ",
+			"node_id" : 101734811806880,
+			"node_kind" : 0,
+			"node_kind_string" : "IntraBlock",
+			"node_source_loc" : "",
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 101734811329760,
+					"edge_type" : "intra",
+					"source" : 101734811806880
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"edge_id" : 7,
+					"lhs_var_id" : 8,
+					"pta_edge" : false,
+					"rhs_var_id" : 7,
+					"stmt_id" : 101734811242704,
+					"stmt_info" : "StoreStmt: [Var8 <-- Var7]\t\nValVar ID: 11\n   store i64 %n, ptr %n.addr, align 8 ",
+					"stmt_type" : "StoreStmt"
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 101734811511184,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 101734811700896,
+			"function_name" : "crema_v6i_alloc",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 101734811329760,
+					"edge_type" : "intra",
+					"source" : 101734811806880
+				}
+			],
+			"info" : "IntraICFGNode7 {fun: crema_v6i_alloc}\nLoadStmt: [Var12 <-- Var8]\t\nValVar ID: 12\n   %0 = load i64, ptr %n.addr, align 8 ",
+			"node_id" : 101734811329760,
+			"node_kind" : 0,
+			"node_kind_string" : "IntraBlock",
+			"node_source_loc" : "",
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 101734811422560,
+					"edge_type" : "intra",
+					"source" : 101734811329760
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"edge_id" : 8,
+					"lhs_var_id" : 12,
+					"pta_edge" : false,
+					"rhs_var_id" : 8,
+					"stmt_id" : 101734811420192,
+					"stmt_info" : "LoadStmt: [Var12 <-- Var8]\t\nValVar ID: 12\n   %0 = load i64, ptr %n.addr, align 8 ",
+					"stmt_type" : "LoadStmt"
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 101734811511184,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 101734811700896,
+			"function_name" : "crema_v6i_alloc",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 101734811422560,
+					"edge_type" : "intra",
+					"source" : 101734811329760
+				}
+			],
+			"info" : "CallICFGNode8 {fun: crema_v6i_alloc}\nAddrStmt: [Var13 <-- Var14]\t\nValVar ID: 13\n   %call = call noalias ptr @malloc(i64 noundef %0) #2 ",
+			"node_id" : 101734811422560,
+			"node_kind" : 4,
+			"node_kind_string" : "FunCallBlock",
+			"node_source_loc" : "CallICFGNode: ",
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 101734811236656,
+					"edge_type" : "intra",
+					"source" : 101734811422560
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"edge_id" : 9,
+					"lhs_var_id" : 13,
+					"pta_edge" : true,
+					"rhs_var_id" : 14,
+					"stmt_id" : 101734811688784,
+					"stmt_info" : "AddrStmt: [Var13 <-- Var14]\t\nValVar ID: 13\n   %call = call noalias ptr @malloc(i64 noundef %0) #2 ",
+					"stmt_type" : "AddrStmt"
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 101734811511184,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 101734811700896,
+			"function_name" : "crema_v6i_alloc",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 101734811236656,
+					"edge_type" : "intra",
+					"source" : 101734811422560
+				}
+			],
+			"info" : "RetICFGNode9 {fun: crema_v6i_alloc}\n   %call = call noalias ptr @malloc(i64 noundef %0) #2 RetICFGNode: ",
+			"node_id" : 101734811236656,
+			"node_kind" : 5,
+			"node_kind_string" : "FunRetBlock",
+			"node_source_loc" : "RetICFGNode: ",
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 101734811321456,
+					"edge_type" : "intra",
+					"source" : 101734811236656
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 101734811511184,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 101734811700896,
+			"function_name" : "crema_v6i_alloc",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 101734811321456,
+					"edge_type" : "intra",
+					"source" : 101734811236656
+				}
+			],
+			"info" : "IntraICFGNode10 {fun: crema_v6i_alloc}\n   ret ptr %call ",
+			"node_id" : 101734811321456,
+			"node_kind" : 0,
+			"node_kind_string" : "IntraBlock",
+			"node_source_loc" : "",
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 101734811527104,
+					"edge_type" : "intra",
+					"source" : 101734811321456
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 101734811511184,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 101734811700896,
+			"function_name" : "crema_v6i_alloc",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 101734811527104,
+					"edge_type" : "intra",
+					"source" : 101734811321456
+				}
+			],
+			"info" : "FunExitICFGNode2 {fun: crema_v6i_alloc}\nPhiStmt: [Var6 <-- ([Var13, ICFGNode10],)]\t\nValVar ID: 17\n   ret ptr %call ",
+			"node_id" : 101734811527104,
+			"node_kind" : 3,
+			"node_kind_string" : "FunExitBlock",
+			"node_source_loc" : "function ret: ",
+			"node_type" : false,
+			"outgoing_edges" : [],
+			"svf_statements" : 
+			[
+				{
+					"edge_id" : 10,
+					"lhs_var_id" : 6,
+					"operand_var_ids" : 
+					[
+						13
+					],
+					"operand_vars" : 
+					[
+						{
+							"icfg_node" : 101734811321456,
+							"op_var_id" : 13
+						}
+					],
+					"pta_edge" : true,
+					"res_var_id" : 6,
+					"stmt_id" : 101734811538176,
+					"stmt_info" : "PhiStmt: [Var6 <-- ([Var13, ICFGNode10],)]\t\nValVar ID: 17\n   ret ptr %call ",
+					"stmt_type" : "PhiStmt"
+				}
+			]
+		}
+	]
+}

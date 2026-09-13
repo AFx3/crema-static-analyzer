@@ -1,0 +1,605 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://crema.local/schemas/cqpl-annotated-icfg-v2.json",
+  "title": "CREMA CQPL Annotated ICFG v2 (allocation identity + optional allocation_contracts_v1 capability)",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "entry",
+    "variables",
+    "allocations",
+    "nodes"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "entry": {
+      "type": "string",
+      "minLength": 1
+    },
+    "variables": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/programVariable"
+      },
+      "minItems": 1
+    },
+    "allocations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/abstractAllocation"
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/node"
+      },
+      "minItems": 1
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "programVariable": {
+      "type": "object",
+      "required": [
+        "id",
+        "language"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "language": {
+          "enum": [
+            "rust",
+            "c",
+            "other"
+          ]
+        }
+      }
+    },
+    "allocationSite": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "node_id",
+            "callee"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "rust_call"
+            },
+            "node_id": {
+              "type": "string"
+            },
+            "callee": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "node_id",
+            "allocator"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "c_call"
+            },
+            "node_id": {
+              "type": "string"
+            },
+            "allocator": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "scope",
+            "label"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "synthetic"
+            },
+            "scope": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "abstractAllocation": {
+      "type": "object",
+      "required": [
+        "id",
+        "display",
+        "site",
+        "context"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "display": {
+          "type": "string"
+        },
+        "site": {
+          "$ref": "#/$defs/allocationSite"
+        },
+        "context": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "allocator_contract": {
+          "$ref": "#/$defs/allocationContract"
+        }
+      }
+    },
+    "eventLabel": {
+      "type": "object",
+      "required": [
+        "predicate",
+        "variable"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "predicate": {
+          "enum": [
+            "alloc",
+            "drop",
+            "read",
+            "write",
+            "use"
+          ]
+        },
+        "variable": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "allocationEventLabel": {
+      "type": "object",
+      "required": [
+        "predicate",
+        "allocation",
+        "certainty"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "predicate": {
+          "enum": [
+            "alloc",
+            "drop",
+            "read",
+            "write",
+            "use"
+          ]
+        },
+        "allocation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "certainty": {
+          "const": "may_abstract"
+        },
+        "deallocator_contract": {
+          "$ref": "#/$defs/allocationContract"
+        }
+      }
+    },
+    "programVarId": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "function",
+            "local"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "rust"
+            },
+            "function": {
+              "type": "string"
+            },
+            "local": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "function",
+            "var_id",
+            "callsite"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "c"
+            },
+            "function": {
+              "type": "string"
+            },
+            "var_id": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "callsite": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "scope",
+            "name"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "synthetic"
+            },
+            "scope": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "projection": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "deref"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "index"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "field"
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "local"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "index"
+            },
+            "local": {
+              "$ref": "#/$defs/programVarId"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "text"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "opaque"
+            },
+            "text": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "placeId": {
+      "type": "object",
+      "required": [
+        "base",
+        "projection"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "base": {
+          "$ref": "#/$defs/programVarId"
+        },
+        "projection": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/projection"
+          }
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "required": [
+        "points_to",
+        "stack_refs",
+        "place_points_to",
+        "place_stack_refs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "points_to": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "variable",
+              "allocations"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "variable": {
+                "type": "string",
+                "minLength": 1
+              },
+              "allocations": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        },
+        "stack_refs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "variable",
+              "places"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "variable": {
+                "type": "string",
+                "minLength": 1
+              },
+              "places": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/placeId"
+                }
+              }
+            }
+          }
+        },
+        "place_points_to": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "place",
+              "allocations"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "place": {
+                "$ref": "#/$defs/placeId"
+              },
+              "allocations": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        },
+        "place_stack_refs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "place",
+              "targets"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "place": {
+                "$ref": "#/$defs/placeId"
+              },
+              "targets": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/placeId"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "required": [
+        "cells"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "cells": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "aliases",
+              "value"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "aliases": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "value": {
+                "enum": [
+                  "BOTTOM",
+                  "BOXTIMES",
+                  "ALLOC",
+                  "FREED",
+                  "MB",
+                  "IMMB",
+                  "MV",
+                  "TOP"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "required": [
+        "id",
+        "successors",
+        "labels",
+        "allocation_labels",
+        "identity",
+        "event_identity",
+        "pre",
+        "post"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "successors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/eventLabel"
+          }
+        },
+        "allocation_labels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/allocationEventLabel"
+          }
+        },
+        "identity": {
+          "$ref": "#/$defs/identity"
+        },
+        "event_identity": {
+          "$ref": "#/$defs/identity"
+        },
+        "pre": {
+          "$ref": "#/$defs/memory"
+        },
+        "post": {
+          "$ref": "#/$defs/memory"
+        }
+      }
+    },
+    "allocationContract": {
+      "type": "object",
+      "required": [
+        "family",
+        "operation",
+        "language"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "family": {
+          "enum": [
+            "rust_global",
+            "c_malloc",
+            "unknown"
+          ]
+        },
+        "operation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "language": {
+          "enum": [
+            "rust",
+            "c",
+            "unknown"
+          ]
+        }
+      }
+    }
+  }
+}

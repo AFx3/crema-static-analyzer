@@ -1,0 +1,293 @@
+{
+	"edges" : 
+	[
+		{
+			"destination" : 6,
+			"edge_type" : "intra",
+			"source" : 5
+		},
+		{
+			"destination" : 7,
+			"edge_type" : "intra",
+			"source" : 6
+		},
+		{
+			"destination" : 8,
+			"edge_type" : "intra",
+			"source" : 7
+		},
+		{
+			"destination" : 9,
+			"edge_type" : "intra",
+			"source" : 8
+		},
+		{
+			"destination" : 10,
+			"edge_type" : "intra",
+			"source" : 9
+		},
+		{
+			"destination" : 2,
+			"edge_type" : "intra",
+			"source" : 10
+		}
+	],
+	"nodes" : 
+	[
+		{
+			"basicBlockName" : "entry",
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function_name" : "crema_v6i_alloc",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 5,
+					"edge_type" : "intra",
+					"source" : 1
+				}
+			],
+			"info" : "IntraICFGNode5 {fun: crema_v6i_alloc}\nAddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %n.addr = alloca i64, align 8 ",
+			"node_id" : 5,
+			"node_kind" : 0,
+			"node_kind_string" : "IntraBlock",
+			"node_source_loc" : "",
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 6,
+					"edge_type" : "intra",
+					"source" : 5
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"edge_id" : 6,
+					"lhs_var_id" : 8,
+					"pta_edge" : true,
+					"rhs_var_id" : 9,
+					"stmt_id" : 6,
+					"stmt_info" : "AddrStmt: [Var8 <-- Var9]\t\nValVar ID: 8\n   %n.addr = alloca i64, align 8 ",
+					"stmt_type" : "AddrStmt"
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function_name" : "crema_v6i_alloc",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 6,
+					"edge_type" : "intra",
+					"source" : 5
+				}
+			],
+			"info" : "IntraICFGNode6 {fun: crema_v6i_alloc}\nStoreStmt: [Var8 <-- Var7]\t\nValVar ID: 11\n   store i64 %n, ptr %n.addr, align 8 ",
+			"node_id" : 6,
+			"node_kind" : 0,
+			"node_kind_string" : "IntraBlock",
+			"node_source_loc" : "",
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 7,
+					"edge_type" : "intra",
+					"source" : 6
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"edge_id" : 7,
+					"lhs_var_id" : 8,
+					"pta_edge" : false,
+					"rhs_var_id" : 7,
+					"stmt_id" : 7,
+					"stmt_info" : "StoreStmt: [Var8 <-- Var7]\t\nValVar ID: 11\n   store i64 %n, ptr %n.addr, align 8 ",
+					"stmt_type" : "StoreStmt"
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function_name" : "crema_v6i_alloc",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 7,
+					"edge_type" : "intra",
+					"source" : 6
+				}
+			],
+			"info" : "IntraICFGNode7 {fun: crema_v6i_alloc}\nLoadStmt: [Var12 <-- Var8]\t\nValVar ID: 12\n   %0 = load i64, ptr %n.addr, align 8 ",
+			"node_id" : 7,
+			"node_kind" : 0,
+			"node_kind_string" : "IntraBlock",
+			"node_source_loc" : "",
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 8,
+					"edge_type" : "intra",
+					"source" : 7
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"edge_id" : 8,
+					"lhs_var_id" : 12,
+					"pta_edge" : false,
+					"rhs_var_id" : 8,
+					"stmt_id" : 8,
+					"stmt_info" : "LoadStmt: [Var12 <-- Var8]\t\nValVar ID: 12\n   %0 = load i64, ptr %n.addr, align 8 ",
+					"stmt_type" : "LoadStmt"
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function_name" : "crema_v6i_alloc",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 8,
+					"edge_type" : "intra",
+					"source" : 7
+				}
+			],
+			"info" : "CallICFGNode8 {fun: crema_v6i_alloc}\nAddrStmt: [Var13 <-- Var14]\t\nValVar ID: 13\n   %call = call noalias ptr @malloc(i64 noundef %0) #2 ",
+			"node_id" : 8,
+			"node_kind" : 4,
+			"node_kind_string" : "FunCallBlock",
+			"node_source_loc" : "CallICFGNode: ",
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 9,
+					"edge_type" : "intra",
+					"source" : 8
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"edge_id" : 9,
+					"lhs_var_id" : 13,
+					"pta_edge" : true,
+					"rhs_var_id" : 14,
+					"stmt_id" : 9,
+					"stmt_info" : "AddrStmt: [Var13 <-- Var14]\t\nValVar ID: 13\n   %call = call noalias ptr @malloc(i64 noundef %0) #2 ",
+					"stmt_type" : "AddrStmt"
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function_name" : "crema_v6i_alloc",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 9,
+					"edge_type" : "intra",
+					"source" : 8
+				}
+			],
+			"info" : "RetICFGNode9 {fun: crema_v6i_alloc}\n   %call = call noalias ptr @malloc(i64 noundef %0) #2 RetICFGNode: ",
+			"node_id" : 9,
+			"node_kind" : 5,
+			"node_kind_string" : "FunRetBlock",
+			"node_source_loc" : "RetICFGNode: ",
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 10,
+					"edge_type" : "intra",
+					"source" : 9
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function_name" : "crema_v6i_alloc",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 10,
+					"edge_type" : "intra",
+					"source" : 9
+				}
+			],
+			"info" : "IntraICFGNode10 {fun: crema_v6i_alloc}\n   ret ptr %call ",
+			"node_id" : 10,
+			"node_kind" : 0,
+			"node_kind_string" : "IntraBlock",
+			"node_source_loc" : "",
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 2,
+					"edge_type" : "intra",
+					"source" : 10
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function_name" : "crema_v6i_alloc",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 2,
+					"edge_type" : "intra",
+					"source" : 10
+				}
+			],
+			"info" : "FunExitICFGNode2 {fun: crema_v6i_alloc}\nPhiStmt: [Var6 <-- ([Var13, ICFGNode10],)]\t\nValVar ID: 17\n   ret ptr %call ",
+			"node_id" : 2,
+			"node_kind" : 3,
+			"node_kind_string" : "FunExitBlock",
+			"node_source_loc" : "function ret: ",
+			"node_type" : false,
+			"outgoing_edges" : [],
+			"svf_statements" : 
+			[
+				{
+					"edge_id" : 10,
+					"lhs_var_id" : 6,
+					"operand_var_ids" : 
+					[
+						13
+					],
+					"operand_vars" : 
+					[
+						{
+							"icfg_node" : 10,
+							"op_var_id" : 13
+						}
+					],
+					"pta_edge" : true,
+					"res_var_id" : 6,
+					"stmt_id" : 10,
+					"stmt_info" : "PhiStmt: [Var6 <-- ([Var13, ICFGNode10],)]\t\nValVar ID: 17\n   ret ptr %call ",
+					"stmt_type" : "PhiStmt"
+				}
+			]
+		}
+	]
+}

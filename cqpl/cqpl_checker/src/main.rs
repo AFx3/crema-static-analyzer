@@ -1,16 +1,18 @@
-use cqpl_checker::{parse_query, AnnotatedIcfg, Env, Kripke, ModelChecker};
+use cqpl_checker::{parse_query_document, AnnotatedIcfg, Binding, Env, Kripke, ModelChecker};
 use serde::Serialize;
+use serde_json::Value;
 use std::{env, fs, process};
 
 #[derive(Serialize)]
 struct JsonOutput<'a> {
     result: &'a str,
     entry: &'a str,
+    scope: &'a str,
     query_file: &'a str,
 }
 
 fn usage() -> ! {
-    eprintln!("Usage: cqpl_checker <annotated-icfg.json> <query.cqpl> [--bind x=PROGRAM_VAR_ID]... [--json]");
+    eprintln!("Usage: cqpl_checker <annotated-icfg.json> <query.cqpl> [--entry NODE_OR_FUNCTION] [--intra] [--bind x=PROGRAM_VAR_ID]... [--bind-alloc a=ABSTRACT_ALLOC_ID]... [--json]");
     process::exit(2);
 }
 
@@ -21,6 +23,114 @@ fn main() {
     }
 }
 
+
+fn validate_contract_object(value: &Value, where_: &str) -> Result<(), String> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| format!("{where_} must be an object"))?;
+    for required in ["family", "operation", "language"] {
+        if !object.get(required).is_some_and(Value::is_string) {
+            return Err(format!("{where_} requires string field '{required}'"));
+        }
+    }
+    let family = object["family"].as_str().unwrap();
+    if !matches!(family, "rust_global" | "c_malloc" | "unknown") {
+        return Err(format!("{where_} has unsupported allocator family '{family}'"));
+    }
+    let language = object["language"].as_str().unwrap();
+    if !matches!(language, "rust" | "c" | "unknown") {
+        return Err(format!("{where_} has unsupported language '{language}'"));
+    }
+    if object["operation"].as_str().unwrap().is_empty() {
+        return Err(format!("{where_}.operation must be non-empty"));
+    }
+    Ok(())
+}
+
+fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
+    let Some(schema_version) = root.get("schema_version").and_then(Value::as_u64) else {
+        return Err("annotated ICFG is missing integer schema_version".into());
+    };
+    if schema_version != 2 {
+        return Ok(());
+    }
+
+    let allocations = root
+        .get("allocations")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "schema-v2 annotated ICFG requires an allocations array".to_string())?;
+
+    let capabilities = root
+        .get("capabilities")
+        .and_then(Value::as_array)
+        .map(|caps| {
+            caps.iter()
+                .filter_map(Value::as_str)
+                .collect::<std::collections::BTreeSet<_>>()
+        })
+        .unwrap_or_default();
+    let has_allocation_contracts = capabilities.contains("allocation_contracts_v1");
+
+    if has_allocation_contracts {
+        for (index, allocation) in allocations.iter().enumerate() {
+            let contract = allocation.get("allocator_contract").ok_or_else(|| {
+                format!("artifact declares allocation_contracts_v1 but allocations[{index}] is missing allocator_contract")
+            })?;
+            validate_contract_object(contract, &format!("allocations[{index}].allocator_contract"))?;
+        }
+    }
+
+    let nodes = root
+        .get("nodes")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "schema-v2 annotated ICFG requires a nodes array".to_string())?;
+    for (index, node) in nodes.iter().enumerate() {
+        let object = node
+            .as_object()
+            .ok_or_else(|| format!("schema-v2 nodes[{index}] must be an object"))?;
+        for required in ["allocation_labels", "identity", "event_identity"] {
+            if !object.contains_key(required) {
+                return Err(format!(
+                    "schema-v2 nodes[{index}] is missing required field '{required}'; validate the allocation-identity boundary before model checking"
+                ));
+            }
+        }
+        if !object.get("identity").is_some_and(Value::is_object) {
+            return Err(format!("schema-v2 nodes[{index}].identity must be an object"));
+        }
+        if !object.get("event_identity").is_some_and(Value::is_object) {
+            return Err(format!("schema-v2 nodes[{index}].event_identity must be an object"));
+        }
+        let labels = object
+            .get("allocation_labels")
+            .and_then(Value::as_array)
+            .ok_or_else(|| format!("schema-v2 nodes[{index}].allocation_labels must be an array"))?;
+        for (label_index, label) in labels.iter().enumerate() {
+            let certainty = label
+                .get("certainty")
+                .and_then(Value::as_str)
+                .ok_or_else(|| format!(
+                    "schema-v2 nodes[{index}].allocation_labels[{label_index}] is missing string certainty"
+                ))?;
+            if certainty != "may_abstract" {
+                return Err(format!(
+                    "schema-v2 allocation-event certainty must be 'may_abstract', got '{certainty}'"
+                ));
+            }
+            if has_allocation_contracts && label.get("predicate").and_then(Value::as_str) == Some("drop") {
+                let contract = label.get("deallocator_contract").ok_or_else(|| {
+                    format!("artifact declares allocation_contracts_v1 but nodes[{index}].allocation_labels[{label_index}] drop is missing deallocator_contract")
+                })?;
+                validate_contract_object(
+                    contract,
+                    &format!("nodes[{index}].allocation_labels[{label_index}].deallocator_contract"),
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
     if args.len() < 2 { usage(); }
@@ -28,16 +138,31 @@ fn run() -> Result<(), String> {
     let query_path = &args[1];
     let mut env0 = Env::new();
     let mut json = false;
+    let mut entry_override: Option<String> = None;
+    let mut intra = false;
 
     let mut i = 2;
     while i < args.len() {
         match args[i].as_str() {
             "--json" => { json = true; i += 1; }
+            "--entry" => {
+                let Some(entry) = args.get(i + 1) else { return Err("--entry requires NODE_OR_FUNCTION".into()); };
+                entry_override = Some(entry.clone());
+                i += 2;
+            }
+            "--intra" => { intra = true; i += 1; }
             "--bind" => {
                 let Some(binding) = args.get(i + 1) else { return Err("--bind requires name=PROGRAM_VAR_ID".into()); };
                 let Some((logic, program)) = binding.split_once('=') else { return Err("--bind requires name=PROGRAM_VAR_ID".into()); };
                 if logic.is_empty() || program.is_empty() { return Err("empty side in --bind name=PROGRAM_VAR_ID".into()); }
-                env0.insert(logic.to_string(), program.to_string());
+                env0.insert(logic.to_string(), Binding::ProgramVar(program.to_string()));
+                i += 2;
+            }
+            "--bind-alloc" => {
+                let Some(binding) = args.get(i + 1) else { return Err("--bind-alloc requires name=ABSTRACT_ALLOC_ID".into()); };
+                let Some((logic, allocation)) = binding.split_once('=') else { return Err("--bind-alloc requires name=ABSTRACT_ALLOC_ID".into()); };
+                if logic.is_empty() || allocation.is_empty() { return Err("empty side in --bind-alloc name=ABSTRACT_ALLOC_ID".into()); }
+                env0.insert(logic.to_string(), Binding::Allocation(allocation.to_string()));
                 i += 2;
             }
             other => return Err(format!("unknown argument '{other}'")),
@@ -45,23 +170,133 @@ fn run() -> Result<(), String> {
     }
 
     let raw_icfg = fs::read_to_string(icfg_path).map_err(|e| format!("cannot read annotated ICFG '{icfg_path}': {e}"))?;
-    let annotated: AnnotatedIcfg = serde_json::from_str(&raw_icfg).map_err(|e| format!("invalid annotated ICFG JSON: {e}"))?;
-    let k = Kripke::from_annotated_icfg(annotated)?;
+    let raw_value: Value = serde_json::from_str(&raw_icfg)
+        .map_err(|e| format!("invalid annotated ICFG JSON: {e}"))?;
+    validate_boundary_requirements(&raw_value)?;
+    let annotated: AnnotatedIcfg = serde_json::from_value(raw_value)
+        .map_err(|e| format!("invalid annotated ICFG JSON: {e}"))?;
+    let base_k = Kripke::from_annotated_icfg(annotated)?;
+    let requested_entry = entry_override.as_deref().unwrap_or(&base_k.entry);
+    let k = base_k.project_from_entry(requested_entry, intra)?;
 
     let raw_query = fs::read_to_string(query_path).map_err(|e| format!("cannot read CQPL query '{query_path}': {e}"))?;
-    let query = parse_query(&raw_query)?;
-    let result = ModelChecker::new(&k).evaluate(&query, &env0)?;
+    let query = parse_query_document(&raw_query)?;
+    let result = ModelChecker::new(&k).evaluate_document(&query, &env0)?;
 
     if json {
-        println!("{}", serde_json::to_string_pretty(&JsonOutput { result: result.as_str(), entry: &k.entry, query_file: query_path }).unwrap());
+        println!("{}", serde_json::to_string_pretty(&JsonOutput {
+            result: result.as_str(),
+            entry: &k.entry,
+            scope: if intra { "intra" } else { "reachable" },
+            query_file: query_path,
+        }).unwrap());
     } else {
+        println!("CQPL entry: {}", k.entry);
+        println!("CQPL scope: {}", if intra { "intra" } else { "reachable" });
         println!("CQPL result: {}", result.as_str());
         match result.as_str() {
-            "ff" => println!("Interpretation: the annotated abstraction refutes the queried pattern."),
-            "unk" => println!("Interpretation: potential match; the sound may abstraction does not refute the queried pattern."),
-            "tt" => println!("Interpretation: the formula is established by exact/three-valued composition at the entry state."),
+            "ff" => println!("Interpretation: the current annotated abstraction refutes the queried pattern within the modeled predicates."),
+            "unk" => println!("Interpretation: the current abstraction cannot refute or establish the queried pattern."),
+            "tt" => println!("Interpretation: the formula is established in the annotated abstract Kripke model; this is not by itself a proof of a concrete execution."),
             _ => unreachable!(),
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn minimal_v2_node() -> Value {
+        json!({
+            "schema_version": 2,
+            "entry": "b0",
+            "variables": [{"id": "rust::main::_1", "language": "rust"}],
+            "allocations": [],
+            "nodes": [{
+                "id": "b0",
+                "successors": [],
+                "labels": [],
+                "allocation_labels": [],
+                "identity": {},
+                "event_identity": {},
+                "pre": {"cells": []},
+                "post": {"cells": []}
+            }]
+        })
+    }
+
+    #[test]
+    fn schema_v1_cli_guard_preserves_legacy_boundary() {
+        let mut value = minimal_v2_node();
+        value["schema_version"] = json!(1);
+        value.as_object_mut().unwrap().remove("allocations");
+        for key in ["allocation_labels", "identity", "event_identity"] {
+            value["nodes"][0].as_object_mut().unwrap().remove(key);
+        }
+        assert!(validate_boundary_requirements(&value).is_ok());
+    }
+
+    #[test]
+    fn schema_v2_cli_guard_requires_allocations_domain() {
+        let mut value = minimal_v2_node();
+        value.as_object_mut().unwrap().remove("allocations");
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("allocations"));
+    }
+
+    #[test]
+    fn schema_v2_cli_guard_requires_event_identity() {
+        let mut value = minimal_v2_node();
+        value["nodes"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("event_identity");
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("event_identity"));
+    }
+
+    #[test]
+    fn schema_v2_cli_guard_rejects_non_may_allocation_certainty() {
+        let mut value = minimal_v2_node();
+        value["nodes"][0]["allocation_labels"] = json!([{
+            "predicate": "drop",
+            "allocation": "A",
+            "certainty": "exact_abstract"
+        }]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("may_abstract"));
+    }
+    #[test]
+    fn capability_cli_guard_requires_allocator_contract_metadata() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["allocation_contracts_v1"]);
+        value["allocations"] = json!([{
+            "id":"A", "display":"A", "site":{"kind":"synthetic","scope":"t","label":"A"}, "context":[]
+        }]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("allocator_contract"));
+        value["allocations"][0]["allocator_contract"] = json!({
+            "family":"rust_global", "operation":"box_allocation", "language":"rust"
+        });
+        assert!(validate_boundary_requirements(&value).is_ok());
+    }
+
+    #[test]
+    fn capability_cli_guard_requires_drop_deallocator_contract() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["allocation_contracts_v1"]);
+        value["allocations"] = json!([{
+            "id":"A", "display":"A", "site":{"kind":"synthetic","scope":"t","label":"A"}, "context":[],
+            "allocator_contract":{"family":"rust_global","operation":"box_allocation","language":"rust"}
+        }]);
+        value["nodes"][0]["allocation_labels"] = json!([{
+            "predicate":"drop", "allocation":"A", "certainty":"may_abstract"
+        }]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("deallocator_contract"));
+    }
+
 }

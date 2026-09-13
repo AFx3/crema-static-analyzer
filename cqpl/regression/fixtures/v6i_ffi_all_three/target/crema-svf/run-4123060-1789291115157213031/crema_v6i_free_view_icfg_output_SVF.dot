@@ -1,0 +1,27 @@
+digraph ICFG {
+  "11" [label="ID: 11\nType: 0\nKind: 0\nInfo: IntraICFGNode11 {fun: crema_v6i_free}
+AddrStmt: [Var24 <-- Var25]	
+ValVar ID: 24
+   %p.addr = alloca ptr, align 8 \nFunction: crema_v6i_free\nBasic Block: entry\nStatements: [110554365733968, ]"];
+  "11" -> "12" [label="Intra"];
+  "12" [label="ID: 12\nType: 0\nKind: 0\nInfo: IntraICFGNode12 {fun: crema_v6i_free}
+StoreStmt: [Var24 <-- Var23]	
+ValVar ID: 26
+   store ptr %p, ptr %p.addr, align 8 \nFunction: crema_v6i_free\nBasic Block: entry\nStatements: [110554365814192, ]"];
+  "12" -> "13" [label="Intra"];
+  "13" [label="ID: 13\nType: 0\nKind: 0\nInfo: IntraICFGNode13 {fun: crema_v6i_free}
+LoadStmt: [Var27 <-- Var24]	
+ValVar ID: 27
+   %0 = load ptr, ptr %p.addr, align 8 \nFunction: crema_v6i_free\nBasic Block: entry\nStatements: [110554365732848, ]"];
+  "13" -> "14" [label="Intra"];
+  "14" [label="ID: 14\nType: 0x648c71b53a80\nKind: 4\nInfo: CallICFGNode14 {fun: crema_v6i_free}
+   call void @free(ptr noundef %0) #2 CallICFGNode: \nFunction: crema_v6i_free\nBasic Block: entry\nStatements: None"];
+  "14" -> "15" [label="Intra"];
+  "15" [label="ID: 15\nType: 0x648c71b53a80\nKind: 5\nInfo: RetICFGNode15 {fun: crema_v6i_free}
+   call void @free(ptr noundef %0) #2 RetICFGNode: \nFunction: crema_v6i_free\nBasic Block: entry\nStatements: None"];
+  "15" -> "16" [label="Intra"];
+  "16" [label="ID: 16\nType: 0\nKind: 0\nInfo: IntraICFGNode16 {fun: crema_v6i_free}
+   ret void \nFunction: crema_v6i_free\nBasic Block: entry\nStatements: None"];
+  "16" -> "4" [label="Intra"];
+  "4" [label="ID: 4\nType: 0\nKind: 3\nInfo: FunExitICFGNode4 {fun: crema_v6i_free}\nFunction: crema_v6i_free\nBasic Block: entry\nStatements: None"];
+}

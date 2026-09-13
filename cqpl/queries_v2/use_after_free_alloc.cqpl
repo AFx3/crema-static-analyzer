@@ -1,0 +1,8 @@
+# Allocation-identity use-after-free pattern (schema v2).
+exists_alloc a. EF (
+  alloc_l(a) &&
+  EX EF (
+    drop_l(a) &&
+    EX E[(!alloc_l(a)) U use_l(a)]
+  )
+)

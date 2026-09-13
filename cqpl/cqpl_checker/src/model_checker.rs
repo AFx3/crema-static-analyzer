@@ -1,10 +1,22 @@
-use crate::ast::{MayPredicate, PathFormula, PathQuantifier, StateFormula};
+use crate::ast::{LabelPredicate, MayPredicate, PathFormula, PathQuantifier, QueryDocument, StateFormula};
 use crate::kripke::{CellValue, Kripke};
 use crate::truth::Truth;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub type Env = BTreeMap<String, String>; // logic variable -> cross-language ProgramVar id
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Binding {
+    ProgramVar(String),
+    Allocation(String),
+}
+
+pub type Env = BTreeMap<String, Binding>;
 pub type Valuation = BTreeMap<String, Truth>; // node id -> truth value
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LogicSort {
+    ProgramVar,
+    Allocation,
+}
 
 pub struct ModelChecker<'a> {
     k: &'a Kripke,
@@ -13,7 +25,35 @@ pub struct ModelChecker<'a> {
 impl<'a> ModelChecker<'a> {
     pub fn new(k: &'a Kripke) -> Self { Self { k } }
 
+    /// Evaluate a legacy/formula-only query. Capability-gated predicates are
+    /// deliberately rejected here so a missing `requires` declaration can
+    /// never be interpreted as logical refutation.
     pub fn evaluate(&self, formula: &StateFormula, initial_env: &Env) -> Result<Truth, String> {
+        if formula_uses_allocator_mismatch(formula) {
+            return Err("allocator_mismatch_l requires a query document declaring `requires allocation_contracts_v1;`".into());
+        }
+        self.evaluate_formula(formula, initial_env)
+    }
+
+    /// Evaluate a capability-aware CQPL document. Unsupported is a hard error,
+    /// never `ff`: this is part of the no-refutation theorem boundary.
+    pub fn evaluate_document(&self, document: &QueryDocument, initial_env: &Env) -> Result<Truth, String> {
+        if formula_uses_allocator_mismatch(&document.formula)
+            && !document.required_capabilities.contains("allocation_contracts_v1")
+        {
+            return Err("allocator_mismatch_l requires explicit `requires allocation_contracts_v1;`".into());
+        }
+        for capability in &document.required_capabilities {
+            if !self.k.capabilities.contains(capability) {
+                return Err(format!(
+                    "CQPL query requires capability '{capability}', but the annotated ICFG does not declare it"
+                ));
+            }
+        }
+        self.evaluate_formula(&document.formula, initial_env)
+    }
+
+    fn evaluate_formula(&self, formula: &StateFormula, initial_env: &Env) -> Result<Truth, String> {
         let unbound: Vec<_> = formula
             .free_vars()
             .into_iter()
@@ -21,32 +61,150 @@ impl<'a> ModelChecker<'a> {
             .collect();
         if !unbound.is_empty() {
             return Err(format!(
-                "CQPL query has unbound logical variable(s): {}. Official queries should be closed; alternatively pass --bind name=PROGRAM_VAR_ID.",
+                "CQPL query has unbound logical variable(s): {}. Official queries should be closed; alternatively pass --bind name=PROGRAM_VAR_ID or --bind-alloc name=ABSTRACT_ALLOC_ID.",
                 unbound.join(", ")
             ));
         }
-        for (logic, program) in initial_env {
-            if !self.k.variables.contains_key(program) {
-                return Err(format!("binding {logic}={program} refers to an unknown Rust/C program variable"));
+        for (logic, binding) in initial_env {
+            match binding {
+                Binding::ProgramVar(program) => {
+                    if !self.k.variables.contains_key(program) {
+                        return Err(format!(
+                            "binding {logic}={program} refers to an unknown Rust/C program variable"
+                        ));
+                    }
+                }
+                Binding::Allocation(allocation) => {
+                    if self.k.schema_version < 2 {
+                        return Err(format!(
+                            "allocation binding '{logic}' requires CQPL annotated-ICFG schema v2+"
+                        ));
+                    }
+                    if !self.k.allocations.contains_key(allocation) {
+                        return Err(format!(
+                            "allocation binding {logic}={allocation} refers to an unknown abstract allocation"
+                        ));
+                    }
+                }
             }
         }
+        self.validate_formula_sorts(formula, initial_env)?;
         Ok(self.eval_all(formula, initial_env)?[&self.k.entry])
+    }
+
+    /// Static CQPL sort checking.  This runs before model-checking and therefore
+    /// cannot be bypassed by the evaluator's semantics-preserving short cuts.
+    /// Program-variable quantifiers bind ProgramVar; allocation quantifiers bind
+    /// AbstractAllocId.  Lifecycle may-predicates remain ProgramVar-only in v2.
+    fn validate_formula_sorts(&self, formula: &StateFormula, initial_env: &Env) -> Result<(), String> {
+        let mut sorts = BTreeMap::new();
+        for (logic, binding) in initial_env {
+            let sort = match binding {
+                Binding::ProgramVar(_) => LogicSort::ProgramVar,
+                Binding::Allocation(_) => LogicSort::Allocation,
+            };
+            sorts.insert(logic.clone(), sort);
+        }
+        self.validate_state_sorts(formula, &mut sorts)
+    }
+
+    fn validate_state_sorts(
+        &self,
+        formula: &StateFormula,
+        sorts: &mut BTreeMap<String, LogicSort>,
+    ) -> Result<(), String> {
+        use StateFormula::*;
+        match formula {
+            May { logic_var, .. } => match sorts.get(logic_var) {
+                Some(LogicSort::ProgramVar) => Ok(()),
+                Some(LogicSort::Allocation) => Err(format!(
+                    "state may-predicate on allocation variable '{logic_var}' is undefined in CQPL schema v2; use allocation event predicates (*_l) until an allocation-lifecycle lattice is exported"
+                )),
+                None => Err(format!("logical variable '{logic_var}' is unbound")),
+            },
+            Label { predicate, logic_var } => match sorts.get(logic_var) {
+                Some(LogicSort::ProgramVar) if *predicate == LabelPredicate::AllocatorMismatch => Err(format!(
+                    "allocator_mismatch_l requires an allocation variable bound by exists_alloc/forall_alloc ('{logic_var}')"
+                )),
+                Some(LogicSort::ProgramVar) => Ok(()),
+                Some(LogicSort::Allocation) if *predicate == LabelPredicate::AllocatorMismatch
+                    && self.k.capabilities.contains("allocation_contracts_v1") => Ok(()),
+                Some(LogicSort::Allocation) if *predicate == LabelPredicate::AllocatorMismatch => Err(format!(
+                    "allocator_mismatch_l requires annotated-ICFG capability allocation_contracts_v1 (variable '{logic_var}')"
+                )),
+                Some(LogicSort::Allocation) if self.k.schema_version >= 2 => Ok(()),
+                Some(LogicSort::Allocation) => Err(format!(
+                    "allocation event predicates require CQPL annotated-ICFG schema v2+ (variable '{logic_var}')"
+                )),
+                None => Err(format!("logical variable '{logic_var}' is unbound")),
+            },
+            Not(inner) => self.validate_state_sorts(inner, sorts),
+            And(a, b) | Or(a, b) => {
+                self.validate_state_sorts(a, sorts)?;
+                self.validate_state_sorts(b, sorts)
+            }
+            Exists { logic_var, body } | ForAll { logic_var, body } => {
+                let previous = sorts.insert(logic_var.clone(), LogicSort::ProgramVar);
+                let result = self.validate_state_sorts(body, sorts);
+                match previous {
+                    Some(sort) => { sorts.insert(logic_var.clone(), sort); }
+                    None => { sorts.remove(logic_var); }
+                }
+                result
+            }
+            ExistsAlloc { logic_var, body } | ForAllAlloc { logic_var, body } => {
+                if self.k.schema_version < 2 {
+                    return Err(format!(
+                        "allocation quantifier for '{logic_var}' requires CQPL annotated-ICFG schema v2+"
+                    ));
+                }
+                let previous = sorts.insert(logic_var.clone(), LogicSort::Allocation);
+                let result = self.validate_state_sorts(body, sorts);
+                match previous {
+                    Some(sort) => { sorts.insert(logic_var.clone(), sort); }
+                    None => { sorts.remove(logic_var); }
+                }
+                result
+            }
+            Path { formula, .. } => match formula {
+                PathFormula::State(s)
+                | PathFormula::Next(s)
+                | PathFormula::Eventually(s)
+                | PathFormula::Globally(s) => self.validate_state_sorts(s, sorts),
+                PathFormula::Until(a, b) => {
+                    self.validate_state_sorts(a, sorts)?;
+                    self.validate_state_sorts(b, sorts)
+                }
+            },
+        }
     }
 
     fn eval_all(&self, formula: &StateFormula, env: &Env) -> Result<Valuation, String> {
         use StateFormula::*;
         match formula {
             May { predicate, logic_var } => {
-                let Some(program_var) = env.get(logic_var) else {
+                let Some(binding) = env.get(logic_var) else {
                     return Err(format!("logical variable '{logic_var}' is unbound"));
+                };
+                let Binding::ProgramVar(program_var) = binding else {
+                    return Err(format!(
+                        "state may-predicate on allocation variable '{logic_var}' is undefined in CQPL schema v2; use allocation event predicates (*_l) until an allocation-lifecycle lattice is exported"
+                    ));
                 };
                 Ok(self.k.nodes.keys().map(|n| (n.clone(), self.k.may_hold(n, program_var, *predicate))).collect())
             }
             Label { predicate, logic_var } => {
-                let Some(program_var) = env.get(logic_var) else {
+                let Some(binding) = env.get(logic_var) else {
                     return Err(format!("logical variable '{logic_var}' is unbound"));
                 };
-                Ok(self.k.nodes.keys().map(|n| (n.clone(), self.k.label_hold(n, program_var, *predicate))).collect())
+                Ok(match binding {
+                    Binding::ProgramVar(program_var) => self.k.nodes.keys()
+                        .map(|n| (n.clone(), self.k.label_hold(n, program_var, *predicate)))
+                        .collect(),
+                    Binding::Allocation(allocation) => self.k.nodes.keys()
+                        .map(|n| (n.clone(), self.k.allocation_label_hold(n, allocation, *predicate)))
+                        .collect(),
+                })
             }
             Not(inner) => Ok(map_unary(self.eval_all(inner, env)?, Truth::not)),
             And(a, b) => {
@@ -92,7 +250,7 @@ impl<'a> ModelChecker<'a> {
 
                 for program_var in program_vars {
                     let mut next_env = env.clone();
-                    next_env.insert(logic_var.clone(), program_var);
+                    next_env.insert(logic_var.clone(), Binding::ProgramVar(program_var));
                     acc = map_binary(acc, self.eval_all(body, &next_env)?, Truth::join);
                     if valuation_is_constant(&acc, Truth::True) {
                         break;
@@ -104,7 +262,31 @@ impl<'a> ModelChecker<'a> {
                 let mut acc = self.constant(Truth::True);
                 for program_var in self.k.variable_ids() {
                     let mut next_env = env.clone();
-                    next_env.insert(logic_var.clone(), program_var.clone());
+                    next_env.insert(logic_var.clone(), Binding::ProgramVar(program_var.clone()));
+                    acc = map_binary(acc, self.eval_all(body, &next_env)?, Truth::meet);
+                    if valuation_is_constant(&acc, Truth::False) {
+                        break;
+                    }
+                }
+                Ok(acc)
+            }
+            ExistsAlloc { logic_var, body } => {
+                let mut acc = self.constant(Truth::False);
+                for allocation in self.k.allocation_ids() {
+                    let mut next_env = env.clone();
+                    next_env.insert(logic_var.clone(), Binding::Allocation(allocation.clone()));
+                    acc = map_binary(acc, self.eval_all(body, &next_env)?, Truth::join);
+                    if valuation_is_constant(&acc, Truth::True) {
+                        break;
+                    }
+                }
+                Ok(acc)
+            }
+            ForAllAlloc { logic_var, body } => {
+                let mut acc = self.constant(Truth::True);
+                for allocation in self.k.allocation_ids() {
+                    let mut next_env = env.clone();
+                    next_env.insert(logic_var.clone(), Binding::Allocation(allocation.clone()));
                     acc = map_binary(acc, self.eval_all(body, &next_env)?, Truth::meet);
                     if valuation_is_constant(&acc, Truth::False) {
                         break;
@@ -220,6 +402,31 @@ impl<'a> ModelChecker<'a> {
     }
 }
 
+fn formula_uses_allocator_mismatch(formula: &StateFormula) -> bool {
+    use StateFormula::*;
+    match formula {
+        Label { predicate: LabelPredicate::AllocatorMismatch, .. } => true,
+        May { .. } | Label { .. } => false,
+        Not(inner) => formula_uses_allocator_mismatch(inner),
+        And(a, b) | Or(a, b) => {
+            formula_uses_allocator_mismatch(a) || formula_uses_allocator_mismatch(b)
+        }
+        Exists { body, .. }
+        | ForAll { body, .. }
+        | ExistsAlloc { body, .. }
+        | ForAllAlloc { body, .. } => formula_uses_allocator_mismatch(body),
+        Path { formula, .. } => match formula {
+            PathFormula::State(s)
+            | PathFormula::Next(s)
+            | PathFormula::Eventually(s)
+            | PathFormula::Globally(s) => formula_uses_allocator_mismatch(s),
+            PathFormula::Until(a, b) => {
+                formula_uses_allocator_mismatch(a) || formula_uses_allocator_mismatch(b)
+            }
+        },
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 enum NextMode { Strong, WeakForGlobal }
 
@@ -268,13 +475,19 @@ fn necessary_positive_may_mask(formula: &StateFormula, logic_var: &str) -> u8 {
             necessary_positive_may_mask(a, logic_var)
                 & necessary_positive_may_mask(b, logic_var)
         }
-        Exists { logic_var: bound, .. } | ForAll { logic_var: bound, .. }
+        Exists { logic_var: bound, .. }
+        | ForAll { logic_var: bound, .. }
+        | ExistsAlloc { logic_var: bound, .. }
+        | ForAllAlloc { logic_var: bound, .. }
             if bound == logic_var =>
         {
             // The nested binder shadows the outer variable.
             0
         }
-        Exists { body, .. } | ForAll { body, .. } => {
+        Exists { body, .. }
+        | ForAll { body, .. }
+        | ExistsAlloc { body, .. }
+        | ForAllAlloc { body, .. } => {
             necessary_positive_may_mask(body, logic_var)
         }
         Path { formula: path, .. } => match path {
@@ -297,7 +510,7 @@ fn valuation_is_constant(v: &Valuation, expected: Truth) -> bool {
 mod tests {
     use super::*;
     use crate::kripke::*;
-    use crate::parser::parse_query;
+    use crate::parser::{parse_query, parse_query_document};
     use std::collections::BTreeMap;
 
     fn var(id: &str, language: ProgramLanguage) -> ProgramVariable {
@@ -321,7 +534,12 @@ mod tests {
         AnnotatedNode {
             id: id.into(),
             successors: succ.iter().map(|s| s.to_string()).collect(),
-            labels, pre, post,
+            labels,
+            allocation_labels: vec![],
+            identity: None,
+            event_identity: None,
+            pre,
+            post,
         }
     }
 
@@ -329,8 +547,10 @@ mod tests {
     fn quantifier_domain_includes_c_variables() {
         let input = AnnotatedIcfg {
             schema_version: 1,
+            capabilities: vec![],
             entry: "c0".into(),
             variables: vec![var("c::malloc::ret", ProgramLanguage::C)],
+            allocations: vec![],
             nodes: vec![node(
                 "c0", &[], vec![],
                 AbstractMemoryAnnotation::default(),
@@ -346,8 +566,10 @@ mod tests {
     fn explicit_binding_can_bind_a_logic_variable_to_c_program_variable() {
         let input = AnnotatedIcfg {
             schema_version: 1,
+            capabilities: vec![],
             entry: "c0".into(),
             variables: vec![var("c::p", ProgramLanguage::C)],
+            allocations: vec![],
             nodes: vec![node(
                 "c0", &[],
                 vec![EventLabel { predicate: EventKind::Read, variable: "c::p".into() }],
@@ -356,7 +578,7 @@ mod tests {
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();
         let q = parse_query("use_l(x)").unwrap();
-        let env = BTreeMap::from([("x".into(), "c::p".into())]);
+        let env = BTreeMap::from([("x".into(), Binding::ProgramVar("c::p".into()))]);
         assert_eq!(ModelChecker::new(&k).evaluate(&q, &env).unwrap(), Truth::True);
     }
 
@@ -364,8 +586,10 @@ mod tests {
     fn top_makes_all_supported_may_atoms_unknown_not_true() {
         let input = AnnotatedIcfg {
             schema_version: 1,
+            capabilities: vec![],
             entry: "b0".into(),
             variables: vec![var("rust::x", ProgramLanguage::Rust)],
+            allocations: vec![],
             nodes: vec![node(
                 "b0", &[], vec![], AbstractMemoryAnnotation::default(),
                 mem(&[(&["rust::x"], CellValue::Top)]),
@@ -375,7 +599,7 @@ mod tests {
         let mc = ModelChecker::new(&k);
         for text in ["alloc(x)", "drop(x)", "own_forg(x)"] {
             let q = parse_query(text).unwrap();
-            let env = BTreeMap::from([("x".into(), "rust::x".into())]);
+            let env = BTreeMap::from([("x".into(), Binding::ProgramVar("rust::x".into()))]);
             assert_eq!(mc.evaluate(&q, &env).unwrap(), Truth::Unknown, "{text}");
         }
     }
@@ -384,14 +608,16 @@ mod tests {
     fn strong_next_is_false_at_terminal_nodes() {
         let input = AnnotatedIcfg {
             schema_version: 1,
+            capabilities: vec![],
             entry: "b0".into(), variables: vec![var("rust::x", ProgramLanguage::Rust)],
+            allocations: vec![],
             nodes: vec![node(
                 "b0", &[], vec![EventLabel { predicate: EventKind::Read, variable: "rust::x".into() }],
                 AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default(),
             )],
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();
-        let env = BTreeMap::from([("x".into(), "rust::x".into())]);
+        let env = BTreeMap::from([("x".into(), Binding::ProgramVar("rust::x".into()))]);
         for text in ["EX use_l(x)", "AX use_l(x)"] {
             let q = parse_query(text).unwrap();
             assert_eq!(ModelChecker::new(&k).evaluate(&q, &env).unwrap(), Truth::False);
@@ -402,14 +628,16 @@ mod tests {
     fn global_at_terminal_checks_current_position_only() {
         let input = AnnotatedIcfg {
             schema_version: 1,
+            capabilities: vec![],
             entry: "b0".into(), variables: vec![var("rust::x", ProgramLanguage::Rust)],
+            allocations: vec![],
             nodes: vec![node(
                 "b0", &[], vec![EventLabel { predicate: EventKind::Read, variable: "rust::x".into() }],
                 AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default(),
             )],
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();
-        let env = BTreeMap::from([("x".into(), "rust::x".into())]);
+        let env = BTreeMap::from([("x".into(), Binding::ProgramVar("rust::x".into()))]);
         for text in ["EG use_l(x)", "AG use_l(x)"] {
             let q = parse_query(text).unwrap();
             assert_eq!(ModelChecker::new(&k).evaluate(&q, &env).unwrap(), Truth::True);
@@ -425,8 +653,10 @@ mod tests {
         // truth value is a semantic property, not a performance assumption.
         let input = AnnotatedIcfg {
             schema_version: 1,
+            capabilities: vec![],
             entry: "b0".into(),
             variables: vec![var("rust::x", ProgramLanguage::Rust)],
+            allocations: vec![],
             nodes: vec![
                 node(
                     "b0", &["b1"],
@@ -453,8 +683,10 @@ mod tests {
     fn theoretical_uaf_query_is_unknown_on_cross_language_may_witness() {
         let input = AnnotatedIcfg {
             schema_version: 1,
+            capabilities: vec![],
             entry: "b0".into(),
             variables: vec![var("rust::p", ProgramLanguage::Rust), var("c::arg0", ProgramLanguage::C)],
+            allocations: vec![],
             nodes: vec![
                 node(
                     "b0", &["c0"],
@@ -491,8 +723,10 @@ mod tests {
         // AF is refuted by the maximal path ending in b2.
         let input = AnnotatedIcfg {
             schema_version: 1,
+            capabilities: vec![],
             entry: "b0".into(),
             variables: vec![var("rust::x", ProgramLanguage::Rust)],
+            allocations: vec![],
             nodes: vec![
                 node("b0", &["b1", "b2"], vec![], AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default()),
                 node("b1", &[], vec![EventLabel { predicate: EventKind::Read, variable: "rust::x".into() }], AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default()),
@@ -500,7 +734,7 @@ mod tests {
             ],
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();
-        let env = BTreeMap::from([("x".into(), "rust::x".into())]);
+        let env = BTreeMap::from([("x".into(), Binding::ProgramVar("rust::x".into()))]);
         let mc = ModelChecker::new(&k);
         assert_eq!(mc.evaluate(&parse_query("EF use_l(x)").unwrap(), &env).unwrap(), Truth::True);
         assert_eq!(mc.evaluate(&parse_query("AF use_l(x)").unwrap(), &env).unwrap(), Truth::False);
@@ -513,8 +747,10 @@ mod tests {
         let use_x = || EventLabel { predicate: EventKind::Read, variable: "rust::x".into() };
         let input = AnnotatedIcfg {
             schema_version: 1,
+            capabilities: vec![],
             entry: "b0".into(),
             variables: vec![var("rust::x", ProgramLanguage::Rust)],
+            allocations: vec![],
             nodes: vec![
                 node("b0", &["b1", "b2"], vec![use_x()], AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default()),
                 node("b1", &[], vec![use_x()], AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default()),
@@ -522,7 +758,7 @@ mod tests {
             ],
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();
-        let env = BTreeMap::from([("x".into(), "rust::x".into())]);
+        let env = BTreeMap::from([("x".into(), Binding::ProgramVar("rust::x".into()))]);
         let mc = ModelChecker::new(&k);
         assert_eq!(mc.evaluate(&parse_query("EG use_l(x)").unwrap(), &env).unwrap(), Truth::True);
         assert_eq!(mc.evaluate(&parse_query("AG use_l(x)").unwrap(), &env).unwrap(), Truth::False);
@@ -534,8 +770,10 @@ mod tests {
         // without a drop. E[alloc_l U drop_l] has a witness; A[...] is refuted.
         let input = AnnotatedIcfg {
             schema_version: 1,
+            capabilities: vec![],
             entry: "b0".into(),
             variables: vec![var("rust::x", ProgramLanguage::Rust)],
+            allocations: vec![],
             nodes: vec![
                 node("b0", &["b1", "b2"], vec![EventLabel { predicate: EventKind::Alloc, variable: "rust::x".into() }], AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default()),
                 node("b1", &[], vec![EventLabel { predicate: EventKind::Drop, variable: "rust::x".into() }], AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default()),
@@ -543,7 +781,7 @@ mod tests {
             ],
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();
-        let env = BTreeMap::from([("x".into(), "rust::x".into())]);
+        let env = BTreeMap::from([("x".into(), Binding::ProgramVar("rust::x".into()))]);
         let mc = ModelChecker::new(&k);
         assert_eq!(mc.evaluate(&parse_query("E[alloc_l(x) U drop_l(x)]").unwrap(), &env).unwrap(), Truth::True);
         assert_eq!(mc.evaluate(&parse_query("A[alloc_l(x) U drop_l(x)]").unwrap(), &env).unwrap(), Truth::False);
@@ -555,15 +793,17 @@ mod tests {
         // must remain unk rather than being promoted to tt or refuted to ff.
         let input = AnnotatedIcfg {
             schema_version: 1,
+            capabilities: vec![],
             entry: "b0".into(),
             variables: vec![var("rust::x", ProgramLanguage::Rust)],
+            allocations: vec![],
             nodes: vec![
                 node("b0", &["b1"], vec![], AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default()),
                 node("b1", &[], vec![], AbstractMemoryAnnotation::default(), mem(&[(&["rust::x"], CellValue::Top)])),
             ],
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();
-        let env = BTreeMap::from([("x".into(), "rust::x".into())]);
+        let env = BTreeMap::from([("x".into(), Binding::ProgramVar("rust::x".into()))]);
         assert_eq!(ModelChecker::new(&k).evaluate(&parse_query("EF alloc(x)").unwrap(), &env).unwrap(), Truth::Unknown);
     }
 
@@ -573,8 +813,10 @@ mod tests {
         // contains both Rust and C variables, so exists is tt and forall is ff.
         let input = AnnotatedIcfg {
             schema_version: 1,
+            capabilities: vec![],
             entry: "b0".into(),
             variables: vec![var("rust::x", ProgramLanguage::Rust), var("c::p", ProgramLanguage::C)],
+            allocations: vec![],
             nodes: vec![node(
                 "b0", &[],
                 vec![EventLabel { predicate: EventKind::Read, variable: "rust::x".into() }],
@@ -590,8 +832,10 @@ mod tests {
     fn c_free_label_satisfies_rust_alias_drop_label_at_same_program_point() {
         let input = AnnotatedIcfg {
             schema_version: 1,
+            capabilities: vec![],
             entry: "b0".into(),
             variables: vec![var("rust::p", ProgramLanguage::Rust), var("c::arg0", ProgramLanguage::C)],
+            allocations: vec![],
             nodes: vec![node(
                 "b0", &[], vec![EventLabel { predicate: EventKind::Drop, variable: "c::arg0".into() }],
                 mem(&[(&["rust::p", "c::arg0"], CellValue::Alloc)]),
@@ -599,7 +843,7 @@ mod tests {
             )],
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();
-        let env = BTreeMap::from([("x".into(), "rust::p".into())]);
+        let env = BTreeMap::from([("x".into(), Binding::ProgramVar("rust::p".into()))]);
         let q = parse_query("drop_l(x)").unwrap();
         assert_eq!(ModelChecker::new(&k).evaluate(&q, &env).unwrap(), Truth::True);
     }
@@ -608,11 +852,13 @@ mod tests {
     fn existential_candidate_pruning_preserves_refutation_when_required_alloc_is_absent() {
         let input = AnnotatedIcfg {
             schema_version: 1,
+            capabilities: vec![],
             entry: "b0".into(),
             variables: vec![
                 var("rust::x", ProgramLanguage::Rust),
                 var("c::p", ProgramLanguage::C),
             ],
+            allocations: vec![],
             nodes: vec![
                 node(
                     "b0", &[],
@@ -633,8 +879,10 @@ mod tests {
     fn existential_candidate_pruning_is_not_applied_through_negation_or_disjunction() {
         let input = AnnotatedIcfg {
             schema_version: 1,
+            capabilities: vec![],
             entry: "b0".into(),
             variables: vec![var("rust::x", ProgramLanguage::Rust)],
+            allocations: vec![],
             nodes: vec![node(
                 "b0", &[],
                 vec![EventLabel { predicate: EventKind::Use, variable: "rust::x".into() }],
@@ -650,6 +898,200 @@ mod tests {
 
         let disjunctive = parse_query("exists x. (alloc(x) || use_l(x))").unwrap();
         assert_eq!(checker.evaluate(&disjunctive, &Env::new()).unwrap(), Truth::True);
+    }
+
+
+    #[test]
+    fn allocation_quantifier_correlates_may_events_by_abstract_allocation_id() {
+        use crate::kripke::{
+            AbstractAllocation, AllocationEventCertainty, AllocationEventLabel, AnnotatedIcfg,
+            AnnotatedNode, EventKind, ProgramLanguage, ProgramVariable,
+        };
+
+        let input = AnnotatedIcfg {
+            schema_version: 2,
+            capabilities: vec![],
+            entry: "b0".into(),
+            variables: vec![ProgramVariable {
+                id: "Local(_1)".into(),
+                language: ProgramLanguage::Rust,
+                display: None,
+                function: None,
+            }],
+            allocations: vec![AbstractAllocation { id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None }],
+            nodes: vec![
+                AnnotatedNode {
+                    id: "b0".into(), successors: vec!["b1".into()], labels: vec![],
+                    allocation_labels: vec![AllocationEventLabel {
+                        predicate: EventKind::Alloc, allocation: "A".into(),
+                        certainty: AllocationEventCertainty::MayAbstract,
+                        deallocator_contract: None,
+                    }],
+                    identity: None, event_identity: None, pre: Default::default(), post: Default::default(),
+                },
+                AnnotatedNode {
+                    id: "b1".into(), successors: vec![], labels: vec![],
+                    allocation_labels: vec![AllocationEventLabel {
+                        predicate: EventKind::Drop, allocation: "A".into(),
+                        certainty: AllocationEventCertainty::MayAbstract,
+                        deallocator_contract: None,
+                    }],
+                    identity: None, event_identity: None, pre: Default::default(), post: Default::default(),
+                },
+            ],
+        };
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        let q = parse_query("exists_alloc a. EF (alloc_l(a) && EX EF drop_l(a))").unwrap();
+        assert_eq!(ModelChecker::new(&k).evaluate(&q, &Env::new()).unwrap(), Truth::Unknown);
+    }
+
+    #[test]
+    fn state_may_predicate_rejects_allocation_binding_until_lifecycle_domain_exists() {
+        use crate::kripke::{AbstractAllocation, AnnotatedIcfg, AnnotatedNode, ProgramLanguage, ProgramVariable};
+        let input = AnnotatedIcfg {
+            schema_version: 2,
+            capabilities: vec![], entry: "b0".into(),
+            variables: vec![ProgramVariable { id: "Local(_1)".into(), language: ProgramLanguage::Rust, display: None, function: None }],
+            allocations: vec![AbstractAllocation { id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None }],
+            nodes: vec![AnnotatedNode { id: "b0".into(), successors: vec![], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, pre: Default::default(), post: Default::default() }],
+        };
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        let q = parse_query("exists_alloc a. alloc(a)").unwrap();
+        let err = ModelChecker::new(&k).evaluate(&q, &Env::new()).unwrap_err();
+        assert!(err.contains("allocation-lifecycle lattice"));
+    }
+
+    #[test]
+    fn sort_error_is_not_hidden_by_boolean_short_circuit() {
+        use crate::kripke::{AbstractAllocation, AnnotatedIcfg, AnnotatedNode, ProgramLanguage, ProgramVariable};
+        let input = AnnotatedIcfg {
+            schema_version: 2,
+            capabilities: vec![], entry: "b0".into(),
+            variables: vec![ProgramVariable { id: "Local(_1)".into(), language: ProgramLanguage::Rust, display: None, function: None }],
+            allocations: vec![AbstractAllocation { id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None }],
+            nodes: vec![AnnotatedNode { id: "b0".into(), successors: vec![], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, pre: Default::default(), post: Default::default() }],
+        };
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        // alloc_l(a) is ff at every node.  Before v6G the evaluator could
+        // short-circuit the conjunction and never discover that alloc(a) is
+        // ill-sorted for an allocation-bound variable.
+        let q = parse_query("exists_alloc a. (alloc_l(a) && alloc(a))").unwrap();
+        let err = ModelChecker::new(&k).evaluate(&q, &Env::new()).unwrap_err();
+        assert!(err.contains("allocation-lifecycle lattice"));
+    }
+
+    #[test]
+    fn allocation_quantifier_requires_schema_v2() {
+        use crate::kripke::{AnnotatedIcfg, AnnotatedNode, ProgramLanguage, ProgramVariable};
+        let input = AnnotatedIcfg {
+            schema_version: 1,
+            capabilities: vec![], entry: "b0".into(),
+            variables: vec![ProgramVariable { id: "Local(_1)".into(), language: ProgramLanguage::Rust, display: None, function: None }],
+            allocations: vec![],
+            nodes: vec![AnnotatedNode { id: "b0".into(), successors: vec![], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, pre: Default::default(), post: Default::default() }],
+        };
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        let q = parse_query("exists_alloc a. drop_l(a)").unwrap();
+        let err = ModelChecker::new(&k).evaluate(&q, &Env::new()).unwrap_err();
+        assert!(err.contains("requires CQPL annotated-ICFG schema v2+"));
+    }
+
+    fn contract(family: &str, operation: &str, language: &str) -> AllocationContract {
+        AllocationContract { family: family.into(), operation: operation.into(), language: language.into() }
+    }
+
+    fn mismatch_fixture(allocator_family: &str, deallocator_family: &str) -> Kripke {
+        let input = AnnotatedIcfg {
+            schema_version: 2,
+            capabilities: vec!["allocation_contracts_v1".into()],
+            entry: "b0".into(),
+            variables: vec![var("rust::main::Local(_1)", ProgramLanguage::Rust)],
+            allocations: vec![AbstractAllocation {
+                id: "A".into(), display: None, site: None, context: vec![],
+                allocator_contract: Some(contract(
+                    allocator_family,
+                    if allocator_family == "c_malloc" { "malloc" } else if allocator_family == "rust_global" { "box_allocation" } else { "unknown" },
+                    if allocator_family == "c_malloc" { "c" } else if allocator_family == "rust_global" { "rust" } else { "unknown" },
+                )),
+            }],
+            nodes: vec![AnnotatedNode {
+                id: "b0".into(), successors: vec![], labels: vec![],
+                allocation_labels: vec![AllocationEventLabel {
+                    predicate: EventKind::Drop, allocation: "A".into(),
+                    certainty: AllocationEventCertainty::MayAbstract,
+                    deallocator_contract: Some(contract(
+                        deallocator_family,
+                        if deallocator_family == "c_malloc" { "free" } else if deallocator_family == "rust_global" { "dealloc" } else { "drop" },
+                        if deallocator_family == "c_malloc" { "c" } else if deallocator_family == "rust_global" { "rust" } else { "unknown" },
+                    )),
+                }],
+                identity: None, event_identity: None, pre: Default::default(), post: Default::default(),
+            }],
+        };
+        Kripke::from_annotated_icfg(input).unwrap()
+    }
+
+    #[test]
+    fn allocator_mismatch_query_requires_explicit_query_capability() {
+        let k = mismatch_fixture("rust_global", "c_malloc");
+        let q = parse_query("exists_alloc a. EF allocator_mismatch_l(a)").unwrap();
+        let err = ModelChecker::new(&k).evaluate(&q, &Env::new()).unwrap_err();
+        assert!(err.contains("requires a query document"));
+
+        let doc = parse_query_document("exists_alloc a. EF allocator_mismatch_l(a)").unwrap();
+        let err = ModelChecker::new(&k).evaluate_document(&doc, &Env::new()).unwrap_err();
+        assert!(err.contains("requires explicit"));
+    }
+
+    #[test]
+    fn allocator_mismatch_query_requires_artifact_capability() {
+        let mut input = AnnotatedIcfg {
+            schema_version: 2, capabilities: vec![], entry: "b0".into(),
+            variables: vec![var("v", ProgramLanguage::Rust)], allocations: vec![],
+            nodes: vec![node("b0", &[], vec![], Default::default(), Default::default())],
+        };
+        let k = Kripke::from_annotated_icfg(input.clone()).unwrap();
+        let doc = parse_query_document(
+            "requires allocation_contracts_v1; exists_alloc a. EF allocator_mismatch_l(a)"
+        ).unwrap();
+        let err = ModelChecker::new(&k).evaluate_document(&doc, &Env::new()).unwrap_err();
+        assert!(err.contains("does not declare"));
+
+        // The fixture remains valid without the capability even though contracts
+        // are absent: unsupported is rejected by the query boundary, not refuted.
+        input.capabilities.clear();
+        assert!(Kripke::from_annotated_icfg(input).is_ok());
+    }
+
+    #[test]
+    fn allocator_mismatch_semantics_are_narrow_and_may_only() {
+        let doc = parse_query_document(
+            "requires allocation_contracts_v1; exists_alloc a. EF allocator_mismatch_l(a)"
+        ).unwrap();
+        for (alloc, dealloc, expected) in [
+            ("rust_global", "c_malloc", Truth::Unknown),
+            ("c_malloc", "c_malloc", Truth::False),
+            ("c_malloc", "rust_global", Truth::Unknown),
+            ("unknown", "c_malloc", Truth::Unknown),
+            ("rust_global", "unknown", Truth::Unknown),
+        ] {
+            let k = mismatch_fixture(alloc, dealloc);
+            assert_eq!(
+                ModelChecker::new(&k).evaluate_document(&doc, &Env::new()).unwrap(),
+                expected,
+                "allocator={alloc} deallocator={dealloc}"
+            );
+        }
+    }
+
+    #[test]
+    fn allocator_mismatch_absence_is_refuted() {
+        let mut k = mismatch_fixture("rust_global", "c_malloc");
+        k.nodes.get_mut("b0").unwrap().allocation_labels.clear();
+        let doc = parse_query_document(
+            "requires allocation_contracts_v1; exists_alloc a. EF allocator_mismatch_l(a)"
+        ).unwrap();
+        assert_eq!(ModelChecker::new(&k).evaluate_document(&doc, &Env::new()).unwrap(), Truth::False);
     }
 
 }

@@ -1,0 +1,8 @@
+# AllocatorMismatch-UB (v6L): family mismatch only; not a generic UB query.
+# MAY-only AbstractAllocId identity means a positive witness evaluates to unk, never tt.
+requires allocation_contracts_v1;
+
+exists_alloc a. EF (
+  alloc_l(a) &&
+  EX EF allocator_mismatch_l(a)
+)

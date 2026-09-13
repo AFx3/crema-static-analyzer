@@ -1,6 +1,7 @@
 use crate::ast::{
-    LabelPredicate, MayPredicate, PathFormula, PathQuantifier, StateFormula,
+    LabelPredicate, MayPredicate, PathFormula, PathQuantifier, QueryDocument, StateFormula,
 };
+use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum TokenKind {
@@ -36,6 +37,48 @@ pub fn parse_query(input: &str) -> Result<StateFormula, String> {
         ));
     }
     Ok(formula)
+}
+
+/// Parse a CQPL query document with zero or more leading capability declarations:
+/// `requires allocation_contracts_v1;`
+///
+/// Formula-only `parse_query` is retained for legacy/unit use. Capability-gated
+/// predicates must be evaluated through `QueryDocument`, so omission cannot be
+/// silently interpreted as refutation.
+pub fn parse_query_document(input: &str) -> Result<QueryDocument, String> {
+    let cleaned = strip_comments(input);
+    let mut rest = cleaned.as_str();
+    let mut required_capabilities = BTreeSet::new();
+
+    loop {
+        rest = rest.trim_start();
+        if !rest.starts_with("requires") {
+            break;
+        }
+        let after = &rest["requires".len()..];
+        if after.chars().next().is_some_and(|c| !c.is_whitespace()) {
+            break;
+        }
+        let semi = after.find(';').ok_or_else(||
+            "capability declaration must end with ';' (e.g. requires allocation_contracts_v1;)".to_string()
+        )?;
+        let capability = after[..semi].trim();
+        if capability.is_empty()
+            || !capability.chars().enumerate().all(|(i,c)| c == '_' || c.is_ascii_alphanumeric() && (i > 0 || c.is_ascii_alphabetic()))
+        {
+            return Err(format!("invalid CQPL capability name '{capability}'"));
+        }
+        if !required_capabilities.insert(capability.to_string()) {
+            return Err(format!("duplicate CQPL capability requirement '{capability}'"));
+        }
+        rest = &after[semi + 1..];
+    }
+
+    if rest.trim().is_empty() {
+        return Err("CQPL query document contains no formula".into());
+    }
+    let formula = parse_query(rest)?;
+    Ok(QueryDocument::new(required_capabilities, formula))
 }
 
 fn strip_comments(input: &str) -> String {
@@ -170,6 +213,18 @@ impl Parser {
             return Ok(StateFormula::Not(Box::new(self.parse_unary()?)));
         }
 
+        if self.consume_ident("exists_alloc") {
+            let logic_var = self.expect_ident_any("logical allocation variable after 'exists_alloc'")?;
+            self.expect_simple(TokenKind::Dot, "'.' after quantified variable")?;
+            let body = self.parse_state()?;
+            return Ok(StateFormula::ExistsAlloc { logic_var, body: Box::new(body) });
+        }
+        if self.consume_ident("forall_alloc") {
+            let logic_var = self.expect_ident_any("logical allocation variable after 'forall_alloc'")?;
+            self.expect_simple(TokenKind::Dot, "'.' after quantified variable")?;
+            let body = self.parse_state()?;
+            return Ok(StateFormula::ForAllAlloc { logic_var, body: Box::new(body) });
+        }
         if self.consume_ident("exists") {
             let logic_var = self.expect_ident_any("logical variable after 'exists'")?;
             self.expect_simple(TokenKind::Dot, "'.' after quantified variable")?;
@@ -265,6 +320,7 @@ impl Parser {
             "read_l" => Ok(StateFormula::Label { predicate: LabelPredicate::Read, logic_var }),
             "write_l" => Ok(StateFormula::Label { predicate: LabelPredicate::Write, logic_var }),
             "use_l" => Ok(StateFormula::Label { predicate: LabelPredicate::Use, logic_var }),
+            "allocator_mismatch_l" | "dealloc_mismatch_l" => Ok(StateFormula::Label { predicate: LabelPredicate::AllocatorMismatch, logic_var }),
             _ => Err(format!("unknown CQPL predicate '{pred}'")),
         }
     }
@@ -293,4 +349,32 @@ mod tests {
         let q = parse_query("EF use_l(x)").unwrap();
         assert!(q.free_vars().contains("x"));
     }
+
+    #[test]
+    fn parses_allocation_quantifier() {
+        let q = parse_query("exists_alloc a. EF (alloc_l(a) && EX EF drop_l(a))").unwrap();
+        assert!(q.free_vars().is_empty());
+        assert!(matches!(q, StateFormula::ExistsAlloc { .. }));
+    }
+
+    #[test]
+    fn parses_allocator_mismatch_ub_predicate_and_alias() {
+        let q = parse_query("exists_alloc a. EF (alloc_l(a) && EX EF allocator_mismatch_l(a))").unwrap();
+        assert!(q.free_vars().is_empty());
+    }
+
+
+    #[test]
+    fn parses_query_document_capability_requirement() {
+        let doc = parse_query_document(
+            "requires allocation_contracts_v1;\nexists_alloc a. EF allocator_mismatch_l(a)"
+        ).unwrap();
+        assert!(doc.required_capabilities.contains("allocation_contracts_v1"));
+    }
+
+    #[test]
+    fn dealloc_mismatch_alias_remains_parse_compatible() {
+        parse_query("exists_alloc a. EF dealloc_mismatch_l(a)").unwrap();
+    }
+
 }

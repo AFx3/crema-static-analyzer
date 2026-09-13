@@ -1,0 +1,213 @@
+{
+	"edges" : [],
+	"nodes" : 
+	[
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 103894216332336,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 103894216653120,
+			"function_name" : "crema_v6i_free",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 103894216750400,
+					"edge_type" : "intra",
+					"source" : 103894216405216
+				}
+			],
+			"info" : "IntraICFGNode11 {fun: crema_v6i_free}\nAddrStmt: [Var24 <-- Var25]\t\nValVar ID: 24\n   %p.addr = alloca ptr, align 8 ",
+			"node_id" : 103894216750400,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 103894216716976,
+					"edge_type" : "intra",
+					"source" : 103894216750400
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 103894216756192,
+					"stmt_info" : "AddrStmt: [Var24 <-- Var25]\t\nValVar ID: 24\n   %p.addr = alloca ptr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 103894216332336,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 103894216653120,
+			"function_name" : "crema_v6i_free",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 103894216716976,
+					"edge_type" : "intra",
+					"source" : 103894216750400
+				}
+			],
+			"info" : "IntraICFGNode12 {fun: crema_v6i_free}\nStoreStmt: [Var24 <-- Var23]\t\nValVar ID: 26\n   store ptr %p, ptr %p.addr, align 8 ",
+			"node_id" : 103894216716976,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 103894216551216,
+					"edge_type" : "intra",
+					"source" : 103894216716976
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 103894216496592,
+					"stmt_info" : "StoreStmt: [Var24 <-- Var23]\t\nValVar ID: 26\n   store ptr %p, ptr %p.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 103894216332336,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 103894216653120,
+			"function_name" : "crema_v6i_free",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 103894216551216,
+					"edge_type" : "intra",
+					"source" : 103894216716976
+				}
+			],
+			"info" : "IntraICFGNode13 {fun: crema_v6i_free}\nLoadStmt: [Var27 <-- Var24]\t\nValVar ID: 27\n   %0 = load ptr, ptr %p.addr, align 8 ",
+			"node_id" : 103894216551216,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 103894216176352,
+					"edge_type" : "intra",
+					"source" : 103894216551216
+				}
+			],
+			"svf_statements" : 
+			[
+				{
+					"stmt_id" : 103894216329504,
+					"stmt_info" : "LoadStmt: [Var27 <-- Var24]\t\nValVar ID: 27\n   %0 = load ptr, ptr %p.addr, align 8 "
+				}
+			]
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 103894216332336,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 103894216653120,
+			"function_name" : "crema_v6i_free",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 103894216176352,
+					"edge_type" : "intra",
+					"source" : 103894216551216
+				}
+			],
+			"info" : "CallICFGNode14 {fun: crema_v6i_free}\n   call void @free(ptr noundef %0) #2 CallICFGNode: ",
+			"node_id" : 103894216176352,
+			"node_kind" : 4,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 103894216711648,
+					"edge_type" : "intra",
+					"source" : 103894216176352
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 103894216332336,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 103894216653120,
+			"function_name" : "crema_v6i_free",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 103894216711648,
+					"edge_type" : "intra",
+					"source" : 103894216176352
+				}
+			],
+			"info" : "RetICFGNode15 {fun: crema_v6i_free}\n   call void @free(ptr noundef %0) #2 RetICFGNode: ",
+			"node_id" : 103894216711648,
+			"node_kind" : 5,
+			"node_type" : true,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 103894216320080,
+					"edge_type" : "intra",
+					"source" : 103894216711648
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 103894216332336,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 103894216653120,
+			"function_name" : "crema_v6i_free",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 103894216320080,
+					"edge_type" : "intra",
+					"source" : 103894216711648
+				}
+			],
+			"info" : "IntraICFGNode16 {fun: crema_v6i_free}\n   ret void ",
+			"node_id" : 103894216320080,
+			"node_kind" : 0,
+			"node_type" : false,
+			"outgoing_edges" : 
+			[
+				{
+					"destination" : 103894216223200,
+					"edge_type" : "intra",
+					"source" : 103894216320080
+				}
+			],
+			"svf_statements" : []
+		},
+		{
+			"basicBlockName" : "entry",
+			"basic_block" : 103894216332336,
+			"basic_block_info" : "BasicBlock: entry { \"basic block\": entry, \"location\":  }",
+			"function" : 103894216653120,
+			"function_name" : "crema_v6i_free",
+			"incoming_edges" : 
+			[
+				{
+					"destination" : 103894216223200,
+					"edge_type" : "intra",
+					"source" : 103894216320080
+				}
+			],
+			"info" : "FunExitICFGNode4 {fun: crema_v6i_free}",
+			"node_id" : 103894216223200,
+			"node_kind" : 3,
+			"node_type" : false,
+			"outgoing_edges" : [],
+			"svf_statements" : []
+		}
+	]
+}
