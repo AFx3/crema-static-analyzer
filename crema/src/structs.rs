@@ -1,6 +1,208 @@
 #[warn(non_snake_case)]
 use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+
+
+// -----------------------
+// CANONICAL PROGRAM / ALLOCATION IDENTITY
+// -----------------------
+
+/// Globally scoped program-variable identity used by the interprocedural
+/// allocation-identity analysis.  This is deliberately distinct from the
+/// historical `Name = String` representation used by the legacy detector.
+///
+/// Scientific invariant:
+/// two MIR locals with the same `_N` index but different function scopes are
+/// different `ProgramVarId`s.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ProgramVarId {
+    Rust {
+        function: String,
+        local: u32,
+    },
+    C {
+        function: String,
+        var_id: usize,
+        callsite: Option<String>,
+    },
+    Synthetic {
+        scope: String,
+        name: String,
+    },
+}
+
+impl ProgramVarId {
+    /// Parse `_3`, `Local(_3)` or `Local(_3) [mutable]` in the supplied
+    /// function scope.  Returns None for non-MIR names.
+    pub fn rust(function: impl Into<String>, raw: &str) -> Option<Self> {
+        let local = parse_mir_local_index(raw)?;
+        Some(Self::Rust {
+            function: function.into(),
+            local,
+        })
+    }
+
+    pub fn c(
+        function: impl Into<String>,
+        var_id: usize,
+        callsite: Option<String>,
+    ) -> Self {
+        Self::C {
+            function: function.into(),
+            var_id,
+            callsite,
+        }
+    }
+
+    /// Stable human-readable spelling for diagnostics / JSON boundaries.
+    pub fn canonical_string(&self) -> String {
+        match self {
+            Self::Rust { function, local } => {
+                format!("rust::{function}::Local(_{local})")
+            }
+            Self::C {
+                function,
+                var_id,
+                callsite,
+            } => match callsite {
+                Some(callsite) => {
+                    format!("c::{function}::svf({var_id})@{callsite}")
+                }
+                None => format!("c::{function}::svf({var_id})"),
+            },
+            Self::Synthetic { scope, name } => {
+                format!("synthetic::{scope}::{name}")
+            }
+        }
+    }
+}
+
+/// Extract the numeric MIR local index without assigning any function scope.
+pub fn parse_mir_local_index(raw: &str) -> Option<u32> {
+    let raw = raw.trim();
+
+    let start = if let Some(pos) = raw.find("Local(_") {
+        pos + "Local(_".len()
+    } else if let Some(pos) = raw.find('_') {
+        pos + 1
+    } else {
+        return None;
+    };
+
+    let digits: String = raw[start..]
+        .chars()
+        .take_while(|ch| ch.is_ascii_digit())
+        .collect();
+
+    if digits.is_empty() {
+        None
+    } else {
+        digits.parse().ok()
+    }
+}
+
+/// Finite abstract allocation-site identity.
+///
+/// This is an identity in the chosen abstraction, not a claim that one static
+/// allocation site corresponds to exactly one concrete runtime object.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct AbstractAllocId {
+    pub site: AllocationSiteId,
+    /// Bounded abstract context.  Phase 6A stores the representation and
+    /// validates its semantics; subsequent phases populate it from matched
+    /// callsites (initially a 1-callsite string).
+    pub context: Vec<String>,
+}
+
+impl AbstractAllocId {
+    pub fn new(site: AllocationSiteId, context: Vec<String>) -> Self {
+        Self { site, context }
+    }
+
+    pub fn canonical_string(&self) -> String {
+        let site = match &self.site {
+            AllocationSiteId::RustCall {
+                node_id,
+                callee,
+            } => format!("rust-call:{node_id}:{callee}"),
+            AllocationSiteId::CCall {
+                node_id,
+                allocator,
+            } => format!("c-call:{node_id}:{allocator}"),
+            AllocationSiteId::Synthetic { scope, label } => {
+                format!("synthetic:{scope}:{label}")
+            }
+        };
+
+        if self.context.is_empty() {
+            site
+        } else {
+            format!("{site}::ctx[{}]", self.context.join("->"))
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AllocationSiteId {
+    RustCall {
+        node_id: String,
+        callee: String,
+    },
+    CCall {
+        node_id: String,
+        allocator: String,
+    },
+    Synthetic {
+        scope: String,
+        label: String,
+    },
+}
+
+/// Canonical MIR place identity.  `base` is globally scoped and projections
+/// are explicit rather than encoded into ad-hoc strings.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct PlaceId {
+    pub base: ProgramVarId,
+    pub projection: Vec<PlaceProjection>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PlaceProjection {
+    Deref,
+    Field { index: u32 },
+    Index { local: ProgramVarId },
+    Opaque { text: String },
+}
+
+/// Function metadata needed for callsite-matched interprocedural analysis.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RustFunctionMetadata {
+    pub name: String,
+    pub arg_count: usize,
+    pub entry_node: String,
+    pub return_nodes: Vec<String>,
+}
+
+/// Explicit Rust->Rust callsite metadata.
+///
+/// Phase 6A records this information in the ICFG without changing legacy
+/// fixed-point semantics.  Phase 6B consumes it to replace the global
+/// `call_stack.pop()` protocol with matched actual/formal and return bindings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RustCallMetadata {
+    pub caller_function: String,
+    pub call_node: String,
+    pub callee_function: String,
+    pub dummy_call_node: String,
+    pub dummy_ret_node: String,
+    pub arguments: Vec<MirCallArgument>,
+    pub return_place: String,
+    pub return_node: String,
+    pub is_closure: bool,
+}
 
 // -----------------------
 // RUST MIR
@@ -41,7 +243,50 @@ pub enum MirTerminator {
     Drop { details: String, source_info: String, return_target: String, unwind_target: String, dropped_value: String, is_mutable: bool }, //7
     //Call { details: String, source_info: String, function_called: String, arguments: Vec<String>, return_place: String, return_target: Option<String>, unwind_target: String }, //8
     // --- modified Call variant: note that arguments is now a Vec<MirCallArgument> ---
-    Call { details: String, source_info: String, function_called: String, arguments: Vec<MirCallArgument>, return_place: String, return_target: Option<String>, unwind_target: String },
+    Call {
+        details: String,
+        source_info: String,
+        /// Human-readable rustc MIR spelling.  This remains diagnostic-only;
+        /// control-flow resolution uses `callee_def_path` below.
+        function_called: String,
+        /// Canonical rustc DefPath for a constant FnDef call target, when one
+        /// exists.  Unlike `function_called`, this excludes monomorphization
+        /// pretty-print noise and is therefore suitable for matching local MIR
+        /// bodies deterministically.
+        #[serde(default)]
+        callee_def_path: Option<String>,
+        /// Whether rustc reports the FnDef itself as local to the analyzed
+        /// crate.  A local target without a resolved MIR body is a fail-closed
+        /// ICFG construction error in schema-v2 mode.
+        #[serde(default)]
+        callee_is_local: bool,
+        /// Canonical local closure DefPaths occurring anywhere in the types of
+        /// the call operands.  This is extracted structurally from rustc types,
+        /// not from `{closure@...}` text embedded in Debug output.
+        #[serde(default)]
+        callback_def_paths: Vec<String>,
+        /// v6L concrete monomorphized local targets observed by propagating
+        /// rustc `Instance`s from the selected concrete entry. Sorted and
+        /// deduplicated; multiple entries intentionally denote MAY fanout.
+        #[serde(default)]
+        resolved_instance_callees: Vec<String>,
+        /// True when this generic callsite was visited in at least one reachable
+        /// concrete caller Instance.
+        #[serde(default)]
+        instance_dispatch_observed: bool,
+        /// At least one reachable concrete instantiation resolves to external
+        /// code. Its summary/continuation branch must be retained.
+        #[serde(default)]
+        instance_dispatch_external: bool,
+        /// At least one reachable concrete instantiation could not be resolved.
+        /// Schema-v2 CQPL export must remain fail-closed in this case.
+        #[serde(default)]
+        instance_dispatch_unresolved: bool,
+        arguments: Vec<MirCallArgument>,
+        return_place: String,
+        return_target: Option<String>,
+        unwind_target: String,
+    },
     Assert { details: String, source_info: String, return_target: String, unwind_target: String, cond: String, expected: bool, msg: String }, //9
     InlineAsm { details: String, source_info: String, template: Vec<String>, operands: Vec<String>, options: String, line_spans: Vec<String>, unwind_target: Option<String> }, //10
     Unhandled { details: String, source_info: String },        
@@ -56,7 +301,7 @@ pub struct MirBasicBlock {
     
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MirRepresentation {
-    pub functions: HashMap<String, Vec<MirBasicBlock>>, // Function name -> Basic blocks
+    pub functions: BTreeMap<String, Vec<MirBasicBlock>>, // deterministic function name -> basic blocks
 }
 //whole mir as a mapping from function names to their corresponding basic blocks.
 
@@ -202,6 +447,14 @@ pub enum GlobalICFGNode {
     Mir(MirBasicBlock),
     DummyCall(DummyNode),
     DummyRet(DummyNode),
+    /// Explicit maximal terminal state (e.g. rustc UnwindAction::Terminate).
+    /// v6K requires every ICFG edge endpoint to be present in the node domain.
+    Terminal(TerminalNode),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TerminalNode {
+    pub reason: String,
 }
 
 // a dummy node with extra fields
@@ -227,5 +480,11 @@ pub struct GlobalICFG {
 pub struct GlobalICFGOrdered {
     pub ordered_nodes: Vec<(String, GlobalICFGNode)>,
     pub icfg_edges: Vec<IcfgEdge>,
+    /// Phase-6 interprocedural identity metadata.  `serde(default)` keeps
+    /// historical frozen ICFG JSON files readable.
+    #[serde(default)]
+    pub rust_functions: BTreeMap<String, RustFunctionMetadata>,
+    #[serde(default)]
+    pub rust_calls: Vec<RustCallMetadata>,
 }
 

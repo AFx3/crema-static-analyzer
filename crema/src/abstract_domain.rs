@@ -3,6 +3,7 @@ use std::collections::{BTreeSet, HashMap};  // store sets of variable names (for
 use std::fmt::{self};
 use log::debug;
 use crate::utils::load_ffi_functions; // load_ffi_functions in utils.rs
+use crate::memory_events;
 use std::collections::HashSet;
 use crate::structs::GlobalICFGNode;
 use crate::structs::{MirStatement, MirTerminator, MirBasicBlock};
@@ -11,7 +12,7 @@ use crate::structs::SvfStatement;
 use std::collections::VecDeque;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use crate::structs::{GlobalICFGOrdered,DummyNode};
+use crate::structs::{GlobalICFGOrdered,DummyNode,RustCallMetadata};
 use std::cell::RefCell;
 pub type MultiSet = HashMap<Name, usize>;
 use std::collections::BTreeMap;
@@ -694,6 +695,7 @@ pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNod
             //format!("dummyRet::{}", dummy_ret.id)
             dummy_ret.id.clone()
         },
+        GlobalICFGNode::Terminal(terminal) => format!("terminal::{}", terminal.reason),
     };
 
     taint_state.get(&key).cloned().unwrap_or_default()
@@ -720,6 +722,7 @@ pub fn transfer_function(
         GlobalICFGNode::Llvm(llvm_node) => {
             transfer_llvm_node(node_id, llvm_node, in_mem, in_taint)
         }
+        GlobalICFGNode::Terminal(_) => (in_mem.clone(), in_taint.clone()),
     }
 }
 
@@ -2046,6 +2049,39 @@ pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place
             CellValue::TOP
         }
 
+    } else if memory_events::is_into_vec_transfer_call(func_call_details) {
+        // Box<[T]>::into_vec / slice into_vec transfers ownership of the same
+        // backing allocation.  It is NOT a fresh allocation site.  Preserve
+        // the allocation component while replacing the consumed owner local by
+        // the returned Vec owner.
+        let full_ret = full_local_name(return_place);
+        if let Some(source) = first_call_local_from_details(func_call_details) {
+            let value = new_mem.get_cell_value(&source);
+            if new_mem.get_allocation(&source).is_some() {
+                replace_consumed_local_with(
+                    &mut new_mem,
+                    &source,
+                    full_ret,
+                    if value == CellValue::BOTTOM { CellValue::TOP } else { value },
+                );
+                if value == CellValue::BOTTOM { CellValue::TOP } else { value }
+            } else {
+                new_mem.assign_local_value(&full_ret, CellValue::TOP);
+                CellValue::TOP
+            }
+        } else {
+            new_mem.assign_local_value(&full_ret, CellValue::TOP);
+            CellValue::TOP
+        }
+
+    } else if memory_events::is_exchange_malloc_call(func_call_details) {
+        // exchange_malloc is the infallible allocation primitive used by Box/
+        // Vec lowering on the pinned toolchain: on its normal return the
+        // allocation exists (allocation failure does not return normally).
+        let full_ret = full_local_name(return_place);
+        new_mem.assign_local_value(&full_ret, CellValue::ALLOC);
+        CellValue::ALLOC
+
     } else if is_raw_alloc_call(func_call_details)
         || is_raw_alloc_zeroed_call(func_call_details)
     {
@@ -2127,8 +2163,6 @@ pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place
     || func_call_details.contains("std::boxed::Box::<char>::new")
     || func_call_details.contains("std::boxed::Box::<usize>::new") || func_call_details.contains("std::boxed::Box::<isize>::new")
     // --
-    || func_call_details.contains("std::slice::<impl [i32]>::into_vec::<std::alloc::Global>")
-    || func_call_details.contains("std::slice::<impl [&str]>::into_vec::<std::alloc::Global>")
     || func_call_details.contains("std::boxed::Box::<std::vec::Vec<char>>::new")
     // --
     || func_call_details.contains("std::boxed::Box::<std::string::String>::new") 
@@ -2659,6 +2693,24 @@ pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term:
                     }
 
                     taint.entry(full_ret).or_default().extend(tags);
+
+                } else if memory_events::is_into_vec_transfer_call(function_called) {
+                    let full_ret = full_local_name(return_place);
+                    let mut tags = HashSet::new();
+                    tags.insert(TAINT_ASSIGN.to_string());
+                    if let Some(source) = first_call_local_from_details(details) {
+                        if let Some(source_tags) = taint.remove(&source) {
+                            tags.extend(source_tags);
+                        }
+                    }
+                    taint.insert(full_ret, tags);
+
+                } else if memory_events::is_exchange_malloc_call(function_called) {
+                    let full_ret = full_local_name(return_place);
+                    taint
+                        .entry(full_ret)
+                        .or_default()
+                        .insert(TAINT_ASSIGN.to_string());
 
                 } else if is_raw_alloc_call(function_called)
                     || is_raw_alloc_zeroed_call(function_called)
@@ -3196,21 +3248,137 @@ fn get_entrypoint() -> String {
 
 
 
+#[derive(Clone, Default)]
+struct InternalCallContinuation {
+    caller_mem: AbstractMemory,
+    caller_taint: TaintStateMap,
+    initialized: bool,
+}
+
+impl InternalCallContinuation {
+    /// Join a newly observed caller snapshot into this callsite summary.
+    ///
+    /// A worklist analysis may revisit the same callsite many times.  The
+    /// continuation therefore stores a monotone summary rather than a LIFO
+    /// frame belonging to one particular traversal order.
+    fn join_caller_snapshot(
+        &mut self,
+        mem: &AbstractMemory,
+        taint: &TaintStateMap,
+    ) -> bool {
+        if !self.initialized {
+            self.caller_mem = mem.clone();
+            self.caller_taint = taint.clone();
+            self.initialized = true;
+            return true;
+        }
+
+        let joined_mem = self.caller_mem.union(mem);
+        let joined_taint =
+            join_taint_maps(&self.caller_taint, taint, &joined_mem);
+        let changed =
+            joined_mem != self.caller_mem || joined_taint != self.caller_taint;
+
+        if changed {
+            self.caller_mem = joined_mem;
+            self.caller_taint = joined_taint;
+        }
+
+        changed
+    }
+}
+
+/// Recover the Rust function owning a MIR node id.
+///
+/// `rsplit_once` is required because closure names themselves contain `::`,
+/// e.g. `rust::main::{closure#0}::bb4`.
+fn rust_function_from_mir_node_id(node_id: &str) -> Option<&str> {
+    let rest = node_id.strip_prefix("rust::")?;
+    let (function, block) = rest.rsplit_once("::bb")?;
+    if function.is_empty() || block.parse::<usize>().is_err() {
+        return None;
+    }
+    Some(function)
+}
+
+fn internal_call_for_dummy_call<'a>(
+    icfg: &'a GlobalICFGOrdered,
+    node_id: &str,
+) -> Option<&'a RustCallMetadata> {
+    icfg.rust_calls
+        .iter()
+        .find(|call| call.dummy_call_node == node_id)
+}
+
+fn internal_calls_for_callee<'a>(
+    icfg: &'a GlobalICFGOrdered,
+    callee: &str,
+) -> Vec<&'a RustCallMetadata> {
+    icfg.rust_calls
+        .iter()
+        .filter(|call| call.callee_function == callee)
+        .collect()
+}
+
+fn mir_argument_local(argument: &crate::structs::MirCallArgument) -> Option<Name> {
+    first_call_local_from_details(&argument.arg).or_else(|| {
+        LOCAL_TOKEN_RE
+            .find(&argument.arg)
+            .map(|m| full_local_name(m.as_str()))
+    })
+}
+
+/// Apply a conservative actual->formal binding on the canonical activation
+/// edge.  AbstractMemory is still legacy/unscoped, so the caller state is kept
+/// as MAY context and formal locals receive the corresponding actual value.
+/// This can lose precision but cannot hide an actual heap identity.
+fn bind_internal_actuals(
+    call: &RustCallMetadata,
+    function: &crate::structs::RustFunctionMetadata,
+    memory: &AbstractMemory,
+    taint: &TaintStateMap,
+) -> (AbstractMemory, TaintStateMap) {
+    let mut out_mem = memory.clone();
+    let mut out_taint = taint.clone();
+    for (index, argument) in call.arguments.iter().take(function.arg_count).enumerate() {
+        let Some(actual) = mir_argument_local(argument) else { continue; };
+        let formal = format!("Local(_{})", index + 1);
+        let value = out_mem.get_cell_value(&actual);
+        if value != CellValue::BOTTOM && out_mem.get_allocation(&actual).is_some() {
+            out_mem.propagate_cell_value(&actual, &formal);
+        }
+        if let Some(tags) = out_taint.get(&actual).cloned() {
+            out_taint.entry(formal).or_default().extend(tags);
+        }
+    }
+    (out_mem, out_taint)
+}
+
 pub fn fixed_point_analysis(icfg: &GlobalICFGOrdered) -> (AbstractState, TaintState) {
 
     let mut succs_map: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut edge_transfer_only: BTreeSet<(String, String)> = BTreeSet::new();
     for edge in &icfg.icfg_edges {
         succs_map
             .entry(edge.source.clone())
             .or_default()
             .insert(edge.destination.clone());
+        if matches!(
+            edge.label.as_deref(),
+            Some("dummyCall -> Rust Entry") | Some("Rust Return -> dummyRet")
+        ) {
+            edge_transfer_only.insert((edge.source.clone(), edge.destination.clone()));
+        }
     }
 
     // 1) init worklist
     let mut abs_state   = AbstractState::default();
     let mut taint_state = TaintState::default();
     let mut worklist: BTreeSet<String> = BTreeSet::new();
-    let mut call_stack: Vec<(String, AbstractMemory, TaintStateMap)> = Vec::new();
+    // One monotone caller snapshot per ordinary internal Rust callsite.
+    // This replaces the traversal-order-dependent global LIFO call stack.
+    let mut internal_continuations: BTreeMap<String, InternalCallContinuation> =
+        BTreeMap::new();
     let mut visit_order: Vec<String> = Vec::new();
 
     // entrypoint
@@ -3245,6 +3413,12 @@ pub fn fixed_point_analysis(icfg: &GlobalICFGOrdered) -> (AbstractState, TaintSt
         // 2.a) intraprocedural
         if let Some(succs) = succs_map.get(&current) {
             for succ in succs {
+                // Canonical interprocedural edges are real graph edges, but
+                // require edge-specific actual/formal or return transfer.  Do
+                // not also apply the generic node transfer on those edges.
+                if edge_transfer_only.contains(&(current.clone(), succ.clone())) {
+                    continue;
+                }
                 let node = get_node_by_id(icfg, succ);
                 let (new_mem, new_taint) = transfer_function(succ, &node, &curr_mem, &curr_taint);
 
@@ -3264,43 +3438,108 @@ pub fn fixed_point_analysis(icfg: &GlobalICFGOrdered) -> (AbstractState, TaintSt
             }
         }
 
-        // 2.b) interprocedural
-        if let GlobalICFGNode::Mir(ref bb) = get_node_by_id(icfg, &current) {
-            // call
-            if let Some(MirTerminator::Call { function_called, .. }) = &bb.terminator {
-                if !function_called.contains("closure#") {
-                    if let Some(dest) = succs_map
-                        .get(&current)
-                        .and_then(|s| s.iter().find(|dst| dst.starts_with("dummyCall")))
-                    {
-                        if let GlobalICFGNode::DummyCall(d) = get_node_by_id(icfg, dest) {
-                            if d.is_internal.unwrap_or(false) {
-                                call_stack.push((
-                                    d.outgoing_edge.clone(),
-                                    curr_mem.clone(),
-                                    curr_taint.clone(),
-                                ));
-                                worklist.insert(dest.clone());
-                                worklist.insert(format!("rust::{}::bb0", function_called));
-                                continue;
-                            }
-                        }
+        // 2.b) edge-specific transfer on the *canonical* Rust call/return edges.
+        // Metadata carries bindings only; it must never create a transition
+        // absent from `icfg_edges`.
+        if let Some(call) = internal_call_for_dummy_call(icfg, &current) {
+            let Some(function) = icfg.rust_functions.get(&call.callee_function) else {
+                continue;
+            };
+            if !succs_map
+                .get(&current)
+                .is_some_and(|succs| succs.contains(&function.entry_node))
+            {
+                panic!(
+                    "v6K canonical ICFG invariant violated: metadata activation {} -> {} has no edge",
+                    current, function.entry_node
+                );
+            }
+
+            let continuation_changed = internal_continuations
+                .entry(call.call_node.clone())
+                .or_default()
+                .join_caller_snapshot(&curr_mem, &curr_taint);
+
+            let (bound_mem, bound_taint) =
+                bind_internal_actuals(call, function, &curr_mem, &curr_taint);
+            let entry_node = get_node_by_id(icfg, &function.entry_node);
+            let (candidate_mem, candidate_taint) = transfer_function(
+                &function.entry_node,
+                &entry_node,
+                &bound_mem,
+                &bound_taint,
+            );
+            let old_mem = abs_state.get(&function.entry_node).unwrap_or_default();
+            let old_taint = taint_state
+                .get(&function.entry_node)
+                .cloned()
+                .unwrap_or_default();
+            let joined_mem = old_mem.union(&candidate_mem);
+            let joined_taint = join_taint_maps(&old_taint, &candidate_taint, &joined_mem);
+            let first = !abs_state.state_map.contains_key(&function.entry_node)
+                && !taint_state.contains_key(&function.entry_node);
+            if first || joined_mem != old_mem || joined_taint != old_taint {
+                abs_state.insert(function.entry_node.clone(), joined_mem);
+                taint_state.insert(function.entry_node.clone(), joined_taint);
+                worklist.insert(function.entry_node.clone());
+            }
+
+            if continuation_changed {
+                for ret in &function.return_nodes {
+                    if abs_state.state_map.contains_key(ret) {
+                        worklist.insert(ret.clone());
                     }
                 }
             }
-            // return
-            if let Some(MirTerminator::Return { .. }) = &bb.terminator {
-                if let Some((ret_node, call_mem, call_taint)) = call_stack.pop() {
-                    let callee_mem   = abs_state.get(&current).unwrap_or_default();
+        }
+
+        if let GlobalICFGNode::Mir(ref bb) = get_node_by_id(icfg, &current) {
+            if matches!(&bb.terminator, Some(MirTerminator::Return { .. })) {
+                if let Some(callee) = rust_function_from_mir_node_id(&current) {
+                    let callee_mem = abs_state.get(&current).unwrap_or_default();
                     let callee_taint = taint_state.get(&current).cloned().unwrap_or_default();
 
-                    let joined_mem = call_mem.union(&callee_mem);
-                    let joined_taint =
-                        join_taint_maps(&call_taint, &callee_taint, &joined_mem);
+                    for call in internal_calls_for_callee(icfg, callee) {
+                        let Some(continuation) = internal_continuations.get(&call.call_node) else {
+                            continue;
+                        };
+                        if !succs_map
+                            .get(&current)
+                            .is_some_and(|succs| succs.contains(&call.dummy_ret_node))
+                        {
+                            panic!(
+                                "v6K canonical ICFG invariant violated: metadata return {} -> {} has no edge",
+                                current, call.dummy_ret_node
+                            );
+                        }
 
-                    abs_state.insert(ret_node.clone(), joined_mem);
-                    taint_state.insert(ret_node.clone(), joined_taint);
-                    worklist.insert(ret_node);
+                        let candidate_mem = continuation.caller_mem.union(&callee_mem);
+                        let candidate_taint = join_taint_maps(
+                            &continuation.caller_taint,
+                            &callee_taint,
+                            &candidate_mem,
+                        );
+                        let ret_node = call.dummy_ret_node.clone();
+                        let dummy = get_node_by_id(icfg, &ret_node);
+                        let (mapped_mem, mapped_taint) = transfer_function(
+                            &ret_node,
+                            &dummy,
+                            &candidate_mem,
+                            &candidate_taint,
+                        );
+
+                        let old_mem = abs_state.get(&ret_node).unwrap_or_default();
+                        let old_taint = taint_state.get(&ret_node).cloned().unwrap_or_default();
+                        let joined_mem = old_mem.union(&mapped_mem);
+                        let joined_taint = join_taint_maps(&old_taint, &mapped_taint, &joined_mem);
+                        let first = !abs_state.state_map.contains_key(&ret_node)
+                            && !taint_state.contains_key(&ret_node);
+                        if first || joined_mem != old_mem || joined_taint != old_taint {
+                            abs_state.insert(ret_node.clone(), joined_mem);
+                            taint_state.insert(ret_node.clone(), joined_taint);
+                            worklist.insert(ret_node);
+                        }
+                    }
                 }
             }
         }
@@ -3313,6 +3552,106 @@ pub fn fixed_point_analysis(icfg: &GlobalICFGOrdered) -> (AbstractState, TaintSt
 }
 
 
+
+#[cfg(test)]
+mod phase6b_interprocedural_protocol_tests {
+    use super::*;
+    use crate::structs::{GlobalICFGOrdered, MirCallArgument, RustCallMetadata};
+
+    fn call(call_node: &str, callee: &str, dummy_ret: &str) -> RustCallMetadata {
+        RustCallMetadata {
+            caller_function: "main".to_string(),
+            call_node: call_node.to_string(),
+            callee_function: callee.to_string(),
+            dummy_call_node: format!("dummyCall::{call_node}"),
+            dummy_ret_node: dummy_ret.to_string(),
+            arguments: vec![MirCallArgument {
+                arg: "Local(_1)".to_string(),
+                is_mutable: Some(false),
+            }],
+            return_place: "_0".to_string(),
+            return_node: "rust::main::bb9".to_string(),
+            is_closure: false,
+        }
+    }
+
+    #[test]
+    fn rust_function_parser_is_scope_aware_for_closures() {
+        assert_eq!(
+            rust_function_from_mir_node_id("rust::main::{closure#0}::bb4"),
+            Some("main::{closure#0}")
+        );
+        assert_eq!(
+            rust_function_from_mir_node_id("rust::foo::bb12"),
+            Some("foo")
+        );
+        assert_eq!(rust_function_from_mir_node_id("dummyRet::x"), None);
+    }
+
+    #[test]
+    fn return_matching_is_by_callee_not_lifo_order() {
+        let icfg = GlobalICFGOrdered {
+            ordered_nodes: Vec::new(),
+            icfg_edges: Vec::new(),
+            rust_functions: BTreeMap::new(),
+            rust_calls: vec![
+                call("rust::main::bb1", "foo", "dummyRet::foo1"),
+                call("rust::main::bb2", "bar", "dummyRet::bar"),
+                call("rust::main::bb3", "foo", "dummyRet::foo2"),
+            ],
+        };
+
+        let matched = internal_calls_for_callee(&icfg, "foo");
+        let ids: Vec<_> = matched.iter().map(|c| c.call_node.as_str()).collect();
+        assert_eq!(ids, vec!["rust::main::bb1", "rust::main::bb3"]);
+    }
+
+    #[test]
+    fn v6l_same_callsite_fanout_is_matched_by_unique_dummy_nodes() {
+        let mut a = call("rust::main::bb5", "impl_a::new", "dummyRet::main::bb5::instance0");
+        a.dummy_call_node = "dummyCall::main::bb5::instance0".into();
+        let mut b = call("rust::main::bb5", "impl_b::new", "dummyRet::main::bb5::instance1");
+        b.dummy_call_node = "dummyCall::main::bb5::instance1".into();
+        let icfg = GlobalICFGOrdered {
+            ordered_nodes: Vec::new(),
+            icfg_edges: Vec::new(),
+            rust_functions: BTreeMap::new(),
+            rust_calls: vec![a, b],
+        };
+
+        assert_eq!(
+            internal_call_for_dummy_call(&icfg, "dummyCall::main::bb5::instance0")
+                .unwrap().callee_function,
+            "impl_a::new"
+        );
+        assert_eq!(
+            internal_call_for_dummy_call(&icfg, "dummyCall::main::bb5::instance1")
+                .unwrap().callee_function,
+            "impl_b::new"
+        );
+    }
+
+    #[test]
+    fn continuation_snapshot_join_is_monotone() {
+        let mut continuation = InternalCallContinuation::default();
+        let mut allocated = AbstractMemory::default();
+        allocated.set_cell_value(&"Local(_1)".to_string(), CellValue::ALLOC);
+        let empty_taint = TaintStateMap::new();
+
+        assert!(continuation.join_caller_snapshot(&allocated, &empty_taint));
+        assert!(!continuation.join_caller_snapshot(&allocated, &empty_taint));
+
+        let mut freed = AbstractMemory::default();
+        freed.set_cell_value(&"Local(_1)".to_string(), CellValue::FREED);
+        assert!(continuation.join_caller_snapshot(&freed, &empty_taint));
+        assert_eq!(
+            continuation
+                .caller_mem
+                .get_cell_value(&"Local(_1)".to_string()),
+            CellValue::TOP
+        );
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -3512,7 +3851,33 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
         .unwrap_or_default();
     //////////////////////////////////////////////////////////////////////////////
 
+    // v6K legacy-detector boundary: analyze exactly the subgraph reachable
+    // from the selected entry.  The historical detector seeded its worklist
+    // with *every* ICFG node and merely moved main to the front, which allowed
+    // unreachable helper/test functions to create false positives.
+    let selected_entry = get_entrypoint();
+    let mut reachable: BTreeSet<String> = BTreeSet::new();
+    let mut reach_worklist: VecDeque<String> = VecDeque::new();
+    reachable.insert(selected_entry.clone());
+    reach_worklist.push_back(selected_entry.clone());
+    while let Some(src) = reach_worklist.pop_front() {
+        let mut succs: Vec<String> = icfg.icfg_edges.iter()
+            .filter(|edge| edge.source == src)
+            .map(|edge| edge.destination.clone())
+            .collect();
+        succs.sort();
+        succs.dedup();
+        for dst in succs {
+            if reachable.insert(dst.clone()) {
+                reach_worklist.push_back(dst);
+            }
+        }
+    }
+
     for (block, vars) in taint_states.iter() {
+        if !reachable.contains(block) {
+            continue;
+        }
         for (var, markers) in vars.iter() {
             if markers.contains(TAINT_ASSIGN) {
                 let norm = normalize_name(var);
@@ -3528,18 +3893,14 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
         }
     }
 
-    // worklist with deterministic order
+    // Deterministic reachable-only worklist.  `selected_entry` is the same
+    // canonical entry used by fixed_point_analysis and CQPL export.
     let mut visited: BTreeSet<String> = BTreeSet::new();
-    let mut worklist: VecDeque<String> = icfg.ordered_nodes.iter()
-        .map(|(id, _)| id.clone())
-        .collect();
-
-    // get "rust::main::bb0" 
-    if let Some(pos) = worklist.iter().position(|id| id == "rust::main::bb0") {
-        let main_node = worklist.remove(pos).unwrap();
-        worklist.push_front(main_node);
+    let mut worklist: VecDeque<String> = VecDeque::new();
+    if reachable.contains(&selected_entry) {
+        worklist.push_back(selected_entry.clone());
     } else {
-        println!("Main node not found (i.e.:'rust::main::bb0'); use first node as entry point");
+        println!("Selected entry '{}' is not present in the reachable ICFG", selected_entry);
     }
 
     // free-flow e union-find
@@ -4230,6 +4591,9 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                         }
                     }
                 }
+            },
+            GlobalICFGNode::Terminal(_) => {
+                // Explicit maximal control-flow state; no memory event is executed here.
             },
         }
 
@@ -5780,6 +6144,8 @@ mod phase5_c_origin_ffi_tests {
                 edge("c_free", "dummy_ret"),
                 edge("dummy_ret", "rust_use"),
             ],
+            rust_functions: Default::default(),
+            rust_calls: Vec::new(),
         };
         let frees = BTreeSet::from(["c_free".to_string()]);
         let uses = BTreeSet::from(["rust_use".to_string()]);
@@ -5799,6 +6165,8 @@ mod phase5_c_origin_ffi_tests {
                 edge("rust_use", "c_free"),
                 edge("c_free", "exit"),
             ],
+            rust_functions: Default::default(),
+            rust_calls: Vec::new(),
         };
         let frees = BTreeSet::from(["c_free".to_string()]);
         let uses = BTreeSet::from(["rust_use".to_string()]);
@@ -5818,6 +6186,8 @@ mod phase5_c_origin_ffi_tests {
                 edge("entry", "rust_use"),
                 edge("rust_use", "exit"),
             ],
+            rust_functions: Default::default(),
+            rust_calls: Vec::new(),
         };
         let frees = BTreeSet::from(["c_free".to_string()]);
         let uses = BTreeSet::from(["rust_use".to_string()]);
@@ -6147,6 +6517,13 @@ mod phase4_std_memory_tests {
             details: "_11 = std::ptr::mut_ptr::<impl *mut i32>::cast::<std::ffi::c_void>(copy _1)".to_string(),
             source_info: "<phase5-real-shape>".to_string(),
             function_called: "std::ptr::mut_ptr::<impl *mut i32>::cast::<std::ffi::c_void>".to_string(),
+            callee_def_path: None,
+            callee_is_local: false,
+            callback_def_paths: Vec::new(),
+            resolved_instance_callees: Vec::new(),
+            instance_dispatch_observed: false,
+            instance_dispatch_external: false,
+            instance_dispatch_unresolved: false,
             arguments: vec![MirCallArgument {
                 arg: "Local(_1)".to_string(),
                 is_mutable: Some(false),
@@ -6559,6 +6936,13 @@ mod phase4_std_memory_tests {
             details: "_2 = std::ffi::CStr::from_ptr::<'_>(copy _1)".to_string(),
             source_info: "<phase4-test>".to_string(),
             function_called: "std::ffi::CStr::from_ptr::<'_>".to_string(),
+            callee_def_path: None,
+            callee_is_local: false,
+            callback_def_paths: Vec::new(),
+            resolved_instance_callees: Vec::new(),
+            instance_dispatch_observed: false,
+            instance_dispatch_external: false,
+            instance_dispatch_unresolved: false,
             arguments: vec![MirCallArgument {
                 arg: "Local(_1) [mutable]".to_string(),
                 is_mutable: Some(true),

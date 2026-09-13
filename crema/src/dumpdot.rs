@@ -43,6 +43,9 @@ fn get_node_label(node: &GlobalICFGNode) -> String {
                 dummy.is_internal.map(|b| if b { "true" } else { "false" }).unwrap_or("None")
             )
         }
+        GlobalICFGNode::Terminal(terminal) => {
+            format!("Terminal: {}", terminal.reason)
+        }
     }
 }
 
@@ -128,6 +131,7 @@ pub fn dump_global_icfg_nodes_and_edges_to_dot(global_icfg: &GlobalICFGOrdered, 
             match node {
                 GlobalICFGNode::Llvm(_) => r#", style="filled", fillcolor="turquoise""#,
                 GlobalICFGNode::DummyCall(_) | GlobalICFGNode::DummyRet(_) => r#", style="filled", fillcolor="white""#,
+                GlobalICFGNode::Terminal(_) => r#", style="filled", fillcolor="gray70""#,
                 _ => "",
             }
         }

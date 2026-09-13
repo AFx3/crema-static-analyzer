@@ -1,7 +1,7 @@
 use rustc_driver::Callbacks;
 use rustc_interface::Queries;
 use rustc_middle::mir::{Place, PlaceElem, Statement, StatementKind, Terminator, TerminatorKind, Operand};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::{Write, Read};
 use serde_json;
@@ -10,12 +10,14 @@ use rustc_middle::mir::{Local, LocalDecl, Mutability};
 use rustc_index::IndexVec;
 use std::fs::read_dir;
 use rustc_hir::def::DefKind;
+use rustc_middle::ty::{self, TyCtxt, TyKind};
 
 use crate::structs::{MirStatement, MirTerminator, MirBasicBlock, MirRepresentation, SourceInfoData,
-    LlvmRepresentation, LlvmFunction, LlvmJson, LlvmJsonNode, SvfStatement, LlvmEdge, IcfgEdge, DummyNode, GlobalICFGNode, GlobalICFGOrdered, MirCallArgument };
+    LlvmRepresentation, LlvmFunction, LlvmJson, LlvmJsonNode, SvfStatement, LlvmEdge, IcfgEdge, DummyNode, GlobalICFGNode, GlobalICFGOrdered, MirCallArgument,
+    RustFunctionMetadata, RustCallMetadata, TerminalNode };
 use crate::utils::{unwind_action_to_string,compute_hash, load_ffi_functions};
 
-// NOTE: i'm treating an unwind target terminate as a mir node, from 1.86, the unwind actions are:
+// NOTE: rustc unwind Terminate is materialized as an explicit terminal ICFG node; from 1.86, unwind actions are:
 /* 
 Continue
 No action is to be taken. Continue unwinding.
@@ -89,14 +91,25 @@ fn svf_function_return_var_id(exit_node: &LlvmJsonNode) -> Option<usize> {
 pub struct MirExtractor {
     pub mir_representation: MirRepresentation,
     pub llvm_representation: Option<LlvmRepresentation>, // store parsed LLVM IR
+    /// Per-CREMA-run SVF output directory.  This is explicit so pure-Rust
+    /// targets cannot accidentally ingest JSON artifacts from earlier runs.
+    pub llvm_output_dir: String,
+    /// Explicit MIR argument count per local Rust function/closure.
+    pub rust_function_arg_counts: HashMap<String, usize>,
+    /// User-selected concrete entry used only to seed v6L rustc Instance
+    /// propagation. It is not a heuristic target selector.
+    pub instance_entry_hint: String,
 }
 
 impl MirExtractor {
     
-    pub fn new() -> Self {
+    pub fn new(llvm_output_dir: String, instance_entry_hint: String) -> Self {
         MirExtractor {
-            mir_representation: MirRepresentation { functions: HashMap::new() },
+            mir_representation: MirRepresentation { functions: BTreeMap::new() },
             llvm_representation: None,
+            llvm_output_dir,
+            rust_function_arg_counts: HashMap::new(),
+            instance_entry_hint,
         }
     }
     
@@ -196,7 +209,12 @@ impl MirExtractor {
     }
 
     // pass the local declarations here as well so that any place conversions can include mutability
-    pub fn convert_terminator(&self, terminator: &Option<Terminator<'_>>,local_decls: &IndexVec<Local, LocalDecl>) -> Option<MirTerminator> {
+    pub fn convert_terminator<'tcx>(
+        &self,
+        terminator: &Option<Terminator<'tcx>>,
+        local_decls: &IndexVec<Local, LocalDecl<'tcx>>,
+        tcx: TyCtxt<'tcx>,
+    ) -> Option<MirTerminator> {
         terminator.as_ref().map(|t| match &t.kind {
             TerminatorKind::Goto { target } => MirTerminator::Goto {
                 details: format!("{:?}", t),
@@ -258,10 +276,45 @@ impl MirExtractor {
                     }
                 }).collect();
                 
+                // The textual MIR spelling is useful for diagnostics and for
+                // library summaries, but it is not a stable semantic identity.
+                // Constant function items carry an exact rustc DefId; record its
+                // canonical DefPath separately and resolve local calls from it.
+                let func_ty = func.ty(local_decls, tcx);
+                let (callee_def_path, callee_is_local) = match func_ty.kind() {
+                    TyKind::FnDef(def_id, _) => {
+                        (Some(tcx.def_path_str(*def_id)), def_id.is_local())
+                    }
+                    _ => (None, false),
+                };
+
+                // Recover closure identities structurally from the operand type
+                // tree.  This sees closures nested inside iterator/adaptor types
+                // as well as direct closure operands, and is independent of
+                // HashMap order and Debug-format source-location strings.
+                let mut callback_paths = BTreeSet::new();
+                for spanned_arg in args {
+                    let operand = &spanned_arg.node;
+                    let arg_ty = operand.ty(local_decls, tcx);
+                    for generic_arg in arg_ty.walk() {
+                        let Some(nested_ty) = generic_arg.as_type() else { continue; };
+                        if let TyKind::Closure(def_id, _) = nested_ty.kind() {
+                            callback_paths.insert(tcx.def_path_str(*def_id));
+                        }
+                    }
+                }
+
                 MirTerminator::Call {
                     details: format!("{:?}", t),
                     source_info: format!("{:?}", t.source_info.span),
                     function_called: format!("{:?}", func),
+                    callee_def_path,
+                    callee_is_local,
+                    callback_def_paths: callback_paths.into_iter().collect(),
+                    resolved_instance_callees: Vec::new(),
+                    instance_dispatch_observed: false,
+                    instance_dispatch_external: false,
+                    instance_dispatch_unresolved: false,
                     arguments: call_arguments,
                     return_place: format!("{:?}", destination),
                     return_target: target.map(|t| format!("{:?}", t)),
@@ -305,6 +358,287 @@ impl MirExtractor {
 
 
 
+
+
+#[derive(Debug, Clone, Default)]
+struct ConcreteCallDispatch {
+    local_callees: BTreeSet<String>,
+    observed: bool,
+    has_external: bool,
+    unresolved: bool,
+}
+
+/// Resolve reachable generic/trait calls in a monomorphic rustc context.
+///
+/// This deliberately mirrors codegen's Instance discipline: start from one
+/// concrete entry, instantiate MIR generic arguments in each caller Instance,
+/// and ask rustc to resolve the precise function Instance.  Results are keyed
+/// by the *generic MIR body + bb*, so two concrete instantiations of the same
+/// body contribute a deterministic union rather than overwriting each other.
+fn resolve_reachable_instance_dispatch<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    requested_entry: &str,
+) -> BTreeMap<(String, usize), ConcreteCallDispatch> {
+    let normalized = requested_entry
+        .strip_prefix("rust::")
+        .unwrap_or(requested_entry)
+        .trim_end_matches("::bb0");
+
+    let body_owners: Vec<_> = tcx
+        .hir()
+        .body_owners()
+        .filter(|local| matches!(tcx.def_kind(*local), DefKind::Fn | DefKind::AssocFn | DefKind::Closure))
+        .collect();
+    let local_body_paths: BTreeSet<String> = body_owners
+        .iter()
+        .map(|local| tcx.def_path_str(local.to_def_id()))
+        .collect();
+
+    let mut candidates: Vec<_> = body_owners
+        .iter()
+        .copied()
+        .filter(|local| {
+            let path = tcx.def_path_str(local.to_def_id());
+            path == normalized || path.ends_with(&format!("::{normalized}"))
+        })
+        .collect();
+    candidates.sort_by_key(|local| tcx.def_path_str(local.to_def_id()));
+    candidates.dedup();
+
+    if candidates.len() != 1 {
+        eprintln!(
+            "v6L Instance dispatch: entry '{}' resolved to {} local MIR bodies; concrete dispatch propagation disabled (CQPL remains fail-closed on unresolved local calls)",
+            requested_entry,
+            candidates.len()
+        );
+        return BTreeMap::new();
+    }
+
+    let entry_def = candidates[0].to_def_id();
+    // The public CLI does not carry generic arguments.  Therefore an entry that
+    // cannot be represented by Instance::mono is outside this v6L feature's
+    // contract; the supported/default `main` entry is monomorphic.
+    let entry = ty::Instance::mono(tcx, entry_def);
+    // Every caller carried by this worklist is a concrete rustc Instance.
+    // Resolution therefore belongs to rustc's fully-monomorphized, post-typeck
+    // environment rather than a bare ParamEnv.  This is the same environment
+    // used by rustc's public/stable-MIR bridge when resolving a concrete
+    // Instance and is required by the pinned 3fee0f12e rustc-private API.
+    let typing_env = ty::TypingEnv::fully_monomorphized();
+    let mut worklist = std::collections::VecDeque::from([entry]);
+    // Preserve full rustc Instance identity (including instance kind and args).
+    // A debug-string key is not a semantic identity and could conflate distinct
+    // concrete codegen instances.  The reachable set is expected to be small,
+    // so a Vec membership check is deliberately preferred over inventing a
+    // hash/ordering surrogate for rustc's unstable internal type.
+    let mut seen: Vec<ty::Instance<'tcx>> = Vec::new();
+    let mut out: BTreeMap<(String, usize), ConcreteCallDispatch> = BTreeMap::new();
+
+    while let Some(caller) = worklist.pop_front() {
+        if seen.contains(&caller) {
+            continue;
+        }
+        seen.push(caller);
+        if !caller.def_id().is_local() {
+            continue;
+        }
+        let caller_path = tcx.def_path_str(caller.def_id());
+        if !local_body_paths.contains(&caller_path) {
+            continue;
+        }
+        let body = tcx.optimized_mir(caller.def_id());
+        for (bb, data) in body.basic_blocks.iter_enumerated() {
+            let Some(term) = data.terminator.as_ref() else { continue; };
+            let TerminatorKind::Call { func, .. } = &term.kind else { continue; };
+            let func_ty = func.ty(&body.local_decls, tcx);
+            let (def_id, args) = match func_ty.kind() {
+                TyKind::FnDef(def_id, args) => (*def_id, *args),
+                _ => continue,
+            };
+
+            let dispatch = out.entry((caller_path.clone(), bb.index())).or_default();
+            dispatch.observed = true;
+            let concrete_args = match caller.try_instantiate_mir_and_normalize_erasing_regions(
+                tcx,
+                typing_env,
+                ty::EarlyBinder::bind(args),
+            ) {
+                Ok(args) => args,
+                Err(_) => {
+                    // Normalization failure means that this concrete callsite is
+                    // outside the proven Instance-dispatch fragment.  Do not
+                    // panic or silently fall back to a generic DefId: retain an
+                    // explicit unresolved marker so CQPL export fails closed.
+                    dispatch.unresolved = true;
+                    continue;
+                }
+            };
+            match ty::Instance::try_resolve(tcx, typing_env, def_id, concrete_args) {
+                Ok(Some(callee)) => {
+                    if callee.def_id().is_local() {
+                        let callee_path = tcx.def_path_str(callee.def_id());
+                        if local_body_paths.contains(&callee_path) {
+                            dispatch.local_callees.insert(callee_path);
+                            worklist.push_back(callee);
+                        } else {
+                            // A local shim/item without a canonical extracted MIR
+                            // body cannot be silently summarized as if complete.
+                            dispatch.unresolved = true;
+                        }
+                    } else {
+                        dispatch.has_external = true;
+                    }
+                }
+                Ok(None) | Err(_) => dispatch.unresolved = true,
+            }
+        }
+    }
+    out
+}
+
+fn resolved_local_targets(
+    function_called: &str,
+    callee_def_path: &Option<String>,
+    callback_def_paths: &[String],
+    resolved_instance_callees: &[String],
+    instance_dispatch_observed: bool,
+    functions: &BTreeMap<String, Vec<MirBasicBlock>>,
+) -> Vec<(String, bool)> {
+    if instance_dispatch_observed {
+        let mut targets = resolved_instance_callees.to_vec();
+        targets.sort();
+        targets.dedup();
+        return targets.into_iter().map(|callee| (callee, false)).collect();
+    }
+    let direct_local = resolve_local_callee(function_called, callee_def_path, functions);
+    let direct_closure = if direct_local.is_none() {
+        resolve_direct_closure_callee(function_called, callee_def_path, callback_def_paths, functions)
+    } else {
+        None
+    };
+    if let Some(callee) = direct_local {
+        vec![(callee, false)]
+    } else if let Some(callee) = direct_closure {
+        vec![(callee, true)]
+    } else {
+        Vec::new()
+    }
+}
+
+/// Resolve a local Rust callee from rustc's canonical DefPath.  The textual
+/// MIR spelling is retained only as a backwards-compatible fallback for unit
+/// fixtures created before v6K; production extraction always supplies
+/// `callee_def_path` for constant FnDef operands.
+fn resolve_local_callee(
+    function_called: &str,
+    callee_def_path: &Option<String>,
+    functions: &BTreeMap<String, Vec<MirBasicBlock>>,
+) -> Option<String> {
+    if let Some(path) = callee_def_path {
+        if functions.contains_key(path) {
+            return Some(path.clone());
+        }
+    }
+    if functions.contains_key(function_called) {
+        return Some(function_called.to_string());
+    }
+    None
+}
+
+/// A closure body is entered directly only for the language-level Fn/FnMut/
+/// FnOnce call traits.  Seeing a closure type inside another generic call
+/// (Iterator::map/filter/product, callback registration, etc.) is *not* enough
+/// to claim that the callback executes at that callsite.
+fn is_direct_closure_invoke(callee_def_path: Option<&str>, function_called: &str) -> bool {
+    let name = callee_def_path.unwrap_or(function_called);
+    name.ends_with("::Fn::call")
+        || name.ends_with("::FnMut::call_mut")
+        || name.ends_with("::FnOnce::call_once")
+        || name.contains(" as std::ops::Fn<") && name.ends_with(">::call")
+        || name.contains(" as std::ops::FnMut<") && name.ends_with(">::call_mut")
+        || name.contains(" as std::ops::FnOnce<") && name.ends_with(">::call_once")
+}
+
+fn resolve_direct_closure_callee(
+    function_called: &str,
+    callee_def_path: &Option<String>,
+    callback_def_paths: &[String],
+    functions: &BTreeMap<String, Vec<MirBasicBlock>>,
+) -> Option<String> {
+    if !is_direct_closure_invoke(callee_def_path.as_deref(), function_called) {
+        return None;
+    }
+    let mut candidates: Vec<String> = callback_def_paths
+        .iter()
+        .filter(|path| functions.contains_key(*path))
+        .cloned()
+        .collect();
+    candidates.sort();
+    candidates.dedup();
+    if candidates.len() == 1 { candidates.pop() } else { None }
+}
+
+fn return_nodes_for(function: &str, functions: &BTreeMap<String, Vec<MirBasicBlock>>) -> Vec<String> {
+    let mut out: Vec<String> = functions
+        .get(function)
+        .into_iter()
+        .flat_map(|blocks| blocks.iter())
+        .filter(|block| matches!(block.terminator, Some(MirTerminator::Return { .. })))
+        .map(|block| format!("rust::{function}::bb{}", block.block_id))
+        .collect();
+    out.sort();
+    out
+}
+
+/// Materialize rustc unwind-terminate destinations as explicit maximal states.
+/// A dangling edge is not a transition relation over the serialized node domain;
+/// dropping it at CQPL export time would also erase a concrete maximal path.
+fn materialize_terminal_nodes(
+    nodes: &mut Vec<(String, GlobalICFGNode)>,
+    edges: &[IcfgEdge],
+) {
+    let existing: BTreeSet<String> = nodes.iter().map(|(id, _)| id.clone()).collect();
+    let terminals: BTreeSet<String> = edges
+        .iter()
+        .filter(|edge| edge.destination.ends_with("::terminate"))
+        .map(|edge| edge.destination.clone())
+        .filter(|id| !existing.contains(id))
+        .collect();
+
+    for id in terminals {
+        nodes.push((
+            id,
+            GlobalICFGNode::Terminal(TerminalNode {
+                reason: "unwind_terminate".to_string(),
+            }),
+        ));
+    }
+}
+
+fn validate_closed_edge_domain(
+    nodes: &[(String, GlobalICFGNode)],
+    edges: &[IcfgEdge],
+) -> Result<(), String> {
+    let ids: BTreeSet<&str> = nodes.iter().map(|(id, _)| id.as_str()).collect();
+    let mut dangling = BTreeSet::new();
+    for edge in edges {
+        if !ids.contains(edge.source.as_str()) {
+            dangling.insert(format!("missing source '{}' for edge '{} -> {}'", edge.source, edge.source, edge.destination));
+        }
+        if !ids.contains(edge.destination.as_str()) {
+            dangling.insert(format!("missing destination '{}' for edge '{} -> {}'", edge.destination, edge.source, edge.destination));
+        }
+    }
+    if dangling.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "v6K canonical ICFG is not closed over its edge relation: {}",
+            dangling.into_iter().collect::<Vec<_>>().join("; ")
+        ))
+    }
+}
+
 impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &rustc_interface::interface::Compiler, queries: &'tcx Queries<'tcx>) -> rustc_driver::Compilation {
     // helpers fn per costruire ID univoci
     fn get_dummy_call_id(rust_func: &str, bb: usize, call_suffix: &str, internal: bool) -> String {
@@ -324,7 +658,10 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
     // hashmap per memorizzare, per ciascuna  FFI, tutti i call suffix (cioè le chiamate)
     let mut ffi_call_sites: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
     queries.global_ctxt().unwrap().enter(|tcx| {
-        // --- 1. costruisco la MIR per ogni funzione ---
+        // --- 1. build concrete rustc Instance dispatch from the selected entry ---
+        let concrete_dispatch = resolve_reachable_instance_dispatch(tcx, &self.instance_entry_hint);
+
+        // --- 2. costruisco la MIR per ogni funzione ---
         for def_id in tcx.hir().body_owners() {
             let _function_name = tcx.def_path_str(def_id.to_def_id());
 
@@ -352,20 +689,39 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
             let body = tcx.optimized_mir(def_id.to_def_id());
             let mut function_blocks = Vec::new();
             for (bb, data) in body.basic_blocks.iter_enumerated() {
+                let mut terminator = self.convert_terminator(&data.terminator, &body.local_decls, tcx);
+                if let Some(MirTerminator::Call {
+                    resolved_instance_callees,
+                    instance_dispatch_observed,
+                    instance_dispatch_external,
+                    instance_dispatch_unresolved,
+                    ..
+                }) = terminator.as_mut() {
+                    if let Some(dispatch) = concrete_dispatch.get(&(function_name.clone(), bb.index())) {
+                        *resolved_instance_callees = dispatch.local_callees.iter().cloned().collect();
+                        *instance_dispatch_observed = dispatch.observed;
+                        *instance_dispatch_external = dispatch.has_external;
+                        *instance_dispatch_unresolved = dispatch.unresolved;
+                    }
+                }
                 let mir_basic_block = MirBasicBlock {
                     block_id: bb.index(),
                     statements: data.statements.iter().map(|stmt| self.convert_statement(stmt, &body.local_decls)).collect(),
-                    terminator: self.convert_terminator(&data.terminator, &body.local_decls),
+                    terminator,
                 };
                 function_blocks.push(mir_basic_block);
             }
+            self.rust_function_arg_counts
+                .insert(function_name.clone(), body.arg_count);
             self.mir_representation.functions.insert(function_name, function_blocks);
         }
-        // --- 2. LOAD LLVM IR (svf) da JSON ---
-        let llvm_dir = "../SVF-example/output/";
-        match load_all_llvm_json(llvm_dir) {
+        // --- 2. LOAD LLVM IR (SVF) from this CREMA invocation only ---
+        match load_all_llvm_json(&self.llvm_output_dir) {
             Ok(parsed) => self.llvm_representation = Some(parsed),
-            Err(e) => eprintln!("Failed to parse LLVM JSON files: {:?}", e),
+            Err(e) => eprintln!(
+                "Failed to parse LLVM JSON files from {}: {:?}",
+                self.llvm_output_dir, e
+            ),
         }
         // --- 3. LOAD FFI functions da JSON ---
         let ffi_functions = match load_ffi_functions("./ffi_functions.json") {
@@ -381,10 +737,18 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
         }
         // --- 5. BUILD ICFG EDGES  ---
         let mut icfg_edges = Vec::new();
+        let mut rust_calls: Vec<RustCallMetadata> = Vec::new();
         for (rust_func, blocks) in &self.mir_representation.functions {
             for block in blocks {
                 if let Some(MirTerminator::Call {
                     function_called,
+                    callee_def_path,
+                    callee_is_local,
+                    callback_def_paths,
+                    resolved_instance_callees,
+                    instance_dispatch_observed,
+                    instance_dispatch_external,
+                    instance_dispatch_unresolved,
                     return_target,
                     unwind_target,
                     arguments,
@@ -499,158 +863,115 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                             });
                         }
 
-                        } else if function_called.contains("{closure") {
-                            // --- 1) find closure key  in mir_representation.functions ---
-                            let closure_key = self
-                                .mir_representation
-                                .functions
-                                .keys()
-                                .find(|k| k.starts_with(&format!("{}::{{closure", rust_func)))
-                                .expect(&format!("No found closure `{}` in mir_representation.functions", rust_func))
-                                .clone(); // es. "main::{closure#0}"
-                        
-                            // --- 2) build entry/exit IDs of the closure ---
-                            let entry_id = format!("rust::{}::bb0", closure_key);
-                            let exit_bb = self.mir_representation.functions[&closure_key]
-                                .iter()
-                                .find(|b| matches!(b.terminator, Some(MirTerminator::Return { .. })))
-                                .unwrap()
-                                .block_id;
-                            let exit_id = format!("rust::{}::bb{}", closure_key, exit_bb);
-                        
-                            // --- 3) prepare dummyCall / dummyRet / mir_return ---
-                            let call_site     = format!("rust::{}::bb{}", rust_func, block.block_id);
-                            let csuffix       = call_site.clone();
-                            let dummy_call_id = get_dummy_call_id(rust_func, block.block_id, &csuffix, true);
-                            let dummy_ret_id  = get_dummy_ret_id(rust_func, &return_place, &csuffix, true);
-                            let mir_return    = return_target
+                        } else {
+                            // v6L: if this callsite was reached under concrete rustc
+                            // Instances, use the deterministic union of concrete local
+                            // targets. Otherwise preserve the v6K direct resolver.
+                            let resolved_targets = resolved_local_targets(
+                                function_called,
+                                callee_def_path,
+                                callback_def_paths,
+                                resolved_instance_callees,
+                                *instance_dispatch_observed,
+                                &self.mir_representation.functions,
+                            );
+                            let multi_target = resolved_targets.len() > 1;
+                            let call_site = format!("rust::{}::bb{}", rust_func, block.block_id);
+                            let caller_return = return_target
                                 .as_ref()
                                 .map(|rt| format!("rust::{}::{}", rust_func, rt))
                                 .unwrap_or_else(|| format!("rust::{}::end", rust_func));
-                            let mir_arg       = arguments.first().map(|arg| arg.arg.clone()).unwrap_or_default();
-                            let llvm_arg      = return_place.clone();
-                        
-                            // 3.1) call-site -> dummyCall
-                            icfg_edges.push(IcfgEdge {
-                                source: call_site.clone(),
-                                destination: dummy_call_id.clone(),
-                                label: Some("Closure Call (dummy inserted)".to_string()),
-                                source_label: Some(format!("Mir bb{}", block.block_id)),
-                                destination_label: Some(mir_arg.clone()),
-                            });
-                            // 3.2) dummyCall -> entry della closure
-                            icfg_edges.push(IcfgEdge {
-                                source: dummy_call_id.clone(),
-                                destination: entry_id.clone(),
-                                label: Some("dummyCall->ClosureEntry".to_string()),
-                                source_label: None,
-                                destination_label: None,
-                            });
-                            // 3.3) fallback intenral: bb0 -> bb1
-                            icfg_edges.push(IcfgEdge {
-                                source: entry_id.clone(),
-                                destination: format!("rust::{}::bb1", closure_key),
-                                label: Some("Call return (fallback)".to_string()),
-                                source_label: Some("Mir bb0".to_string()),
-                                destination_label: Some("Mir bb1".to_string()),
-                            });
-                                                
-                            // 3.4) closure exit -> dummyRet
-                            icfg_edges.push(IcfgEdge {
-                                source: exit_id.clone(),
-                                destination: dummy_ret_id.clone(),
-                                label: Some("ClosureExit->dummyRet".to_string()),
-                                source_label: None,
-                                destination_label: None,
-                            });
-                        
-                            // 3.5) dummyRet -> caller return
-                            icfg_edges.push(IcfgEdge {
-                                source: dummy_ret_id.clone(),
-                                destination: mir_return.clone(),
-                                label: Some("dummyRet->Closure Return".to_string()),
-                                source_label: Some(llvm_arg.clone()),
-                                destination_label: None,
-                            });
-                        
-                            // 3.6) unwind
-                            let eff_unwind = extract_target(unwind_target);
-                            if eff_unwind != "unreachable" && eff_unwind != "continue" {
+
+                            for (ordinal, (callee, is_closure_call)) in resolved_targets.iter().enumerate() {
+                                let branch = if multi_target { Some(ordinal) } else { None };
+                                let base_call = get_dummy_call_id(rust_func, block.block_id, &call_site, true);
+                                let base_ret = get_dummy_ret_id(rust_func, &block.block_id.to_string(), &call_site, true);
+                                let dummy_call_id = branch.map(|n| format!("{}::instance{}", base_call, n)).unwrap_or(base_call);
+                                let dummy_ret_id = branch.map(|n| format!("{}::instance{}", base_ret, n)).unwrap_or(base_ret);
+
+                                rust_calls.push(RustCallMetadata {
+                                    caller_function: rust_func.clone(),
+                                    call_node: call_site.clone(),
+                                    callee_function: callee.clone(),
+                                    dummy_call_node: dummy_call_id.clone(),
+                                    dummy_ret_node: dummy_ret_id.clone(),
+                                    arguments: arguments.clone(),
+                                    return_place: return_place.clone(),
+                                    return_node: caller_return.clone(),
+                                    is_closure: *is_closure_call,
+                                });
+
                                 icfg_edges.push(IcfgEdge {
-                                    source: call_site,
-                                    destination: format!("rust::{}::{}", rust_func, eff_unwind),
-                                    label: Some("Call unwind".to_string()),
+                                    source: call_site.clone(),
+                                    destination: dummy_call_id.clone(),
+                                    label: Some("Rust Call -> dummyCall".to_string()),
                                     source_label: Some(format!("Mir bb{}", block.block_id)),
                                     destination_label: None,
-                             
+                                });
+                                icfg_edges.push(IcfgEdge {
+                                    source: dummy_call_id.clone(),
+                                    destination: format!("rust::{}::bb0", callee),
+                                    label: Some("dummyCall -> Rust Entry".to_string()),
+                                    source_label: None,
+                                    destination_label: None,
+                                });
+                                for ret in return_nodes_for(callee, &self.mir_representation.functions) {
+                                    icfg_edges.push(IcfgEdge {
+                                        source: ret,
+                                        destination: dummy_ret_id.clone(),
+                                        label: Some("Rust Return -> dummyRet".to_string()),
+                                        source_label: None,
+                                        destination_label: None,
+                                    });
+                                }
+                                icfg_edges.push(IcfgEdge {
+                                    source: dummy_ret_id,
+                                    destination: caller_return.clone(),
+                                    label: Some("dummyRet -> Rust Continuation".to_string()),
+                                    source_label: None,
+                                    destination_label: None,
                                 });
                             }
 
-                    } else {
-                        // --- rust internal calls (non FFI) – MOD:
-                        // in this branch, handle rust internal calls, having is_internal=true,
-                        // don't add edges to user defined function, but only edges:
-                        // from call site -> dummy call,
-                        // from dummy call -> dummy ret,
-                        // finally, egde:
-                        // from dummy ret -> next block
-                        
-                        if let Some(_callee_blocks) = self.mir_representation.functions.get(function_called) {
-                            let caller_call_site = format!("rust::{}::bb{}", rust_func, block.block_id);
-                            let caller_return = if let Some(rt) = return_target {
-                                format!("rust::{}::{}", rust_func, rt)
-                            } else {
-                                format!("rust::{}::end", rust_func)
-                            };
-                            let dummy_call_id = get_dummy_call_id(rust_func, block.block_id, &format!("rust::{}::bb{}", rust_func, block.block_id), true);
-                            icfg_edges.push(IcfgEdge {
-                                source: caller_call_site.clone(),
-                                destination: dummy_call_id.clone(),
-                                label: Some("Internal Call (dummy inserted)".to_string()),
-                                source_label: Some(format!("Mir bb{}", block.block_id)),
-                                destination_label: None,
-                            });
-                            let dummy_ret_id = get_dummy_ret_id(rust_func, &block.block_id.to_string(), &format!("rust::{}::bb{}", rust_func, block.block_id), true);
-                            // add edge between dummy call and dummy ret
-                            icfg_edges.push(IcfgEdge {
-                                source: dummy_call_id.clone(),
-                                destination: dummy_ret_id.clone(),
-                                label: Some("dummyCall->dummyRet".to_string()),
-                                source_label: None,
-                                destination_label: None,
-                            });
-                            icfg_edges.push(IcfgEdge {
-                                source: dummy_ret_id.clone(),
-                                destination: caller_return.clone(),
-                                label: Some("dummyRet->Internal Return".to_string()),
-                                source_label: None,
-                                destination_label: Some(format!("Mir bb{}", return_target.clone().unwrap_or_else(|| "end".to_string()))),
-                            });
-                            let effective_unwind = extract_target(unwind_target);
-                            if effective_unwind != "unreachable" && effective_unwind != "continue" {
-                                let src = format!("rust::{}::bb{}", rust_func, block.block_id);
-                                let dst = format!("rust::{}::{}", rust_func, effective_unwind);
-                                icfg_edges.push(IcfgEdge {
-                                    source: src,
-                                    destination: dst,
-                                    label: Some("Call unwind".to_string()),
-                                    source_label: Some(format!("Mir bb{}", block.block_id)),
-                                    destination_label: None,
-                                });
+                            // Preserve external branches of different concrete
+                            // monomorphizations. Any unresolved concrete Instance
+                            // remains an explicit fail-closed edge.
+                            let need_summary = resolved_targets.is_empty()
+                                || *instance_dispatch_external
+                                || *instance_dispatch_unresolved;
+                            if need_summary {
+                                if let Some(rt) = return_target {
+                                    let src = call_site.clone();
+                                    let dst = format!("rust::{}::{}", rust_func, rt);
+                                    let label = if *instance_dispatch_unresolved {
+                                        "UNRESOLVED_LOCAL_CALL: concrete rustc Instance resolution incomplete"
+                                    } else if !callback_def_paths.is_empty()
+                                        && resolved_targets.is_empty()
+                                    {
+                                        // Resolving the *external callee* Instance does not prove
+                                        // that callbacks passed to it are never invoked.  Until
+                                        // the higher-order semantics itself is represented, retain
+                                        // the existing fail-closed boundary (e.g. shared-register).
+                                        "UNRESOLVED_HIGHER_ORDER: callback semantics not modeled"
+                                    } else if *instance_dispatch_observed && *instance_dispatch_external {
+                                        "Resolved external Instance summary return"
+                                    } else if *instance_dispatch_observed {
+                                        "External/summary call return"
+                                    } else if *callee_is_local {
+                                        "UNRESOLVED_LOCAL_CALL: local FnDef has no canonical MIR body"
+                                    } else {
+                                        "External/summary call return"
+                                    };
+                                    icfg_edges.push(IcfgEdge {
+                                        source: src,
+                                        destination: dst,
+                                        label: Some(label.to_string()),
+                                        source_label: Some(format!("Mir bb{}", block.block_id)),
+                                        destination_label: None,
+                                    });
+                                }
                             }
-                        } else {
-                            if let Some(rt) = return_target {
-                                let src = format!("rust::{}::bb{}", rust_func, block.block_id);
-                                let dst = format!("rust::{}::{}", rust_func, rt);
-                                icfg_edges.push(IcfgEdge {
-                                    source: src,
-                                    destination: dst,
-                                    label: Some("Call return (fallback)".to_string()),
-                                    source_label: Some(format!("Mir bb{}", block.block_id)),
-                                    destination_label: None,
-                                });
-                            }
-                            
+
                             let effective_unwind = extract_target(unwind_target);
                             if effective_unwind != "unreachable" && effective_unwind != "continue" {
                                 let src = format!("rust::{}::bb{}", rust_func, block.block_id);
@@ -665,7 +986,6 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                             }
                         }
                     }
-                }
                 //////////////////////////////////////////////////////////////////////////////////////////////////////
                 // GOTO terminator
                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
@@ -766,6 +1086,13 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                 ordered_icfg_nodes.push((mir_node_id.clone(), GlobalICFGNode::Mir(block.clone())));
                 if let Some(MirTerminator::Call {
                     function_called,
+                    callee_def_path,
+                    callee_is_local,
+                    callback_def_paths,
+                    resolved_instance_callees,
+                    instance_dispatch_observed,
+                    instance_dispatch_external: _,
+                    instance_dispatch_unresolved: _,
                     return_target,
                     arguments,
                     return_place,
@@ -883,95 +1210,58 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                 }
                             }
                         }
-///////////////////////////////////////////////////////////////////////////// CLOSURES
-// sort of inlining like llvm ffi calls with dummy call and return
-// this because ech time an arg is passed to a closure I get a closure with and id
-                     } else if function_called.contains("{closure") {
-                            // --- CLOSURE: add DummyCall e DummyRet nodes ---
-                            let csuffix = format!("rust::{}::bb{}", rust_func, block.block_id);
-                            let mir_arg = arguments.first().map(|arg| arg.arg.clone()).unwrap_or_default();
-                            let llvm_arg = return_place.clone();
-                            let dummy_call_id = get_dummy_call_id(rust_func, block.block_id, &csuffix, true);
-                            let dummy_ret_id = get_dummy_ret_id(rust_func, &llvm_arg, &csuffix, true);
-                            let mir_ret = return_target.as_ref()
+                        } else {
+                            let resolved_targets = resolved_local_targets(
+                                function_called,
+                                callee_def_path,
+                                callback_def_paths,
+                                resolved_instance_callees,
+                                *instance_dispatch_observed,
+                                &self.mir_representation.functions,
+                            );
+                            let multi_target = resolved_targets.len() > 1;
+                            let call_site = format!("rust::{}::bb{}", rust_func, block.block_id);
+                            let caller_return = return_target
+                                .as_ref()
                                 .map(|rt| format!("rust::{}::{}", rust_func, rt))
                                 .unwrap_or_else(|| format!("rust::{}::end", rust_func));
-                            // DummyCall node
-                            ordered_icfg_nodes.push((
-                                dummy_call_id.clone(),
-                                GlobalICFGNode::DummyCall(DummyNode {
-                                    dummy_node_name: "dummyCall".to_string(),
-                                    incoming_edge: mir_node_id.clone(),
-                                    outgoing_edge: dummy_ret_id.clone(),
-                                    id: compute_hash(&(mir_node_id.clone(), dummy_ret_id.clone())),
-                                    mir_var: Some(mir_arg.clone()),
-                                    llvm_var: Some(llvm_arg.clone()),
-                                    is_internal: Some(true),
-                                }),
-                            ));
-                            // DummyRet node
-                            ordered_icfg_nodes.push((
-                                dummy_ret_id.clone(),
-                                GlobalICFGNode::DummyRet(DummyNode {
-                                    dummy_node_name: "dummyRet".to_string(),
-                                    incoming_edge: dummy_call_id.clone(),
-                                    outgoing_edge: mir_ret.clone(),
-                                    id: compute_hash(&(mir_ret.clone(), dummy_call_id.clone())),
-                                    //mir_var: Some(return_place.clone()),
-                                    mir_var: None,
-                                    //llvm_var: Some(llvm_arg.clone()),
-                                    llvm_var: None,
-                                    is_internal: Some(true),
-                                }), // in tanto metto none 
-                            ));
+                            for (ordinal, (callee, _)) in resolved_targets.iter().enumerate() {
+                                let branch = if multi_target { Some(ordinal) } else { None };
+                                let base_call = get_dummy_call_id(rust_func, block.block_id, &call_site, true);
+                                let base_ret = get_dummy_ret_id(rust_func, &block.block_id.to_string(), &call_site, true);
+                                let dummy_call_id = branch.map(|n| format!("{}::instance{}", base_call, n)).unwrap_or(base_call);
+                                let dummy_ret_id = branch.map(|n| format!("{}::instance{}", base_ret, n)).unwrap_or(base_ret);
+                                let callee_entry = format!("rust::{}::bb0", callee);
 
-
-                    } else {
-                        // --- INTERNAL CALL DUMMY NODES – MOD:
-                        // for intranal function calls, create only dummy call and dummy ret
-                        // an edge between them (interprocedural handled in the fixedpoint )
-                        if let Some(_callee_blocks) = self.mir_representation.functions.get(function_called) {
-                            let caller_call_site = mir_node_id.clone();
-                            let dummy_call_mir_var = arguments.first().map(|arg| arg.arg.clone()).unwrap_or_else(|| "".to_string());
-                            let dummy_call_id = get_dummy_call_id(rust_func, block.block_id, &format!("rust::{}::bb{}", rust_func, block.block_id), true);
-                            let dummy_ret_id = get_dummy_ret_id(rust_func, &block.block_id.to_string(), &format!("rust::{}::bb{}", rust_func, block.block_id), true);
-                            ordered_icfg_nodes.push((
-                                dummy_call_id.clone(),
-                                GlobalICFGNode::DummyCall(DummyNode {
-                                    dummy_node_name: "dummyCall".to_string(),
-                                    incoming_edge: caller_call_site.clone(),
-                                    // the exit is the dummy ret
-                                    outgoing_edge: dummy_ret_id.clone(),
-                                    id: compute_hash(&(caller_call_site.clone(), dummy_ret_id.clone())),
-                                    mir_var: Some(dummy_call_mir_var),
-                                    llvm_var: None,
-                                    is_internal: Some(true),
-                                }),
-                            ));
-                            let dummy_ret_mir_var = return_place.clone();
-                            let caller_return = if let Some(rt) = return_target {
-                                format!("rust::{}::{}", rust_func, rt)
-                            } else {
-                                format!("rust::{}::end", rust_func)
-                            };
-                            ordered_icfg_nodes.push((
-                                dummy_ret_id.clone(),
-                                GlobalICFGNode::DummyRet(DummyNode {
-                                    dummy_node_name: "dummyRet".to_string(),
-                                    // the entry is the dummy_call_id
-                                    incoming_edge: dummy_call_id.clone(),
-                                    outgoing_edge: caller_return.clone(),
-                                    id: compute_hash(&(caller_return.clone(), dummy_ret_id.clone())),
-                                    mir_var: Some(dummy_ret_mir_var),
-                                    llvm_var: Some("Local _0".to_string()),
-                                    is_internal: Some(true),
-                                }),
-                            ));
+                                ordered_icfg_nodes.push((
+                                    dummy_call_id.clone(),
+                                    GlobalICFGNode::DummyCall(DummyNode {
+                                        dummy_node_name: "dummyCall".to_string(),
+                                        incoming_edge: mir_node_id.clone(),
+                                        outgoing_edge: callee_entry,
+                                        id: compute_hash(&(mir_node_id.clone(), dummy_call_id.clone())),
+                                        mir_var: arguments.first().map(|arg| arg.arg.clone()),
+                                        llvm_var: None,
+                                        is_internal: Some(true),
+                                    }),
+                                ));
+                                ordered_icfg_nodes.push((
+                                    dummy_ret_id.clone(),
+                                    GlobalICFGNode::DummyRet(DummyNode {
+                                        dummy_node_name: "dummyRet".to_string(),
+                                        incoming_edge: callee.clone(),
+                                        outgoing_edge: caller_return.clone(),
+                                        id: compute_hash(&(caller_return.clone(), dummy_ret_id.clone())),
+                                        mir_var: Some(return_place.clone()),
+                                        llvm_var: Some("Local _0".to_string()),
+                                        is_internal: Some(true),
+                                    }),
+                                ));
+                            }
                         }
                     }
                 }
             }
-        }
         // --- 7. REPLICATE global LLVM edges for ech FFI call ---
         let mut final_edges = icfg_edges.clone();
         let ordered_ids: std::collections::HashSet<String> =
@@ -1000,6 +1290,11 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                 }
             }
         }
+        materialize_terminal_nodes(&mut ordered_icfg_nodes, &final_edges);
+        if let Err(err) = validate_closed_edge_domain(&ordered_icfg_nodes, &final_edges) {
+            panic!("{err}");
+        }
+
         let mut node_label_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
         for (node_id, node) in &ordered_icfg_nodes {
             let label = match node {
@@ -1007,10 +1302,11 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                 GlobalICFGNode::Llvm(llvm) => llvm.info.clone(),
                 GlobalICFGNode::DummyCall(dummy) => format!("{} (id: {})", dummy.dummy_node_name, dummy.id),
                 GlobalICFGNode::DummyRet(dummy) => format!("{} (id: {})", dummy.dummy_node_name, dummy.id),
+                GlobalICFGNode::Terminal(terminal) => format!("Terminal ({})", terminal.reason),
             };
             node_label_map.insert(node_id.clone(), label);
         }
-        let updated_edges: Vec<IcfgEdge> = final_edges.iter().map(|edge| {
+        let mut updated_edges: Vec<IcfgEdge> = final_edges.iter().map(|edge| {
             let source_label = node_label_map.get(&edge.source).cloned();
             let destination_label = node_label_map.get(&edge.destination).cloned();
             IcfgEdge {
@@ -1021,9 +1317,73 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                 destination_label,
             }
         }).collect();
+        updated_edges.sort_by(|a, b| {
+            (&a.source, &a.destination, &a.label).cmp(&(&b.source, &b.destination, &b.label))
+        });
+        updated_edges.dedup_by(|a, b| {
+            a.source == b.source && a.destination == b.destination && a.label == b.label
+        });
+        ordered_icfg_nodes.sort_by(|a, b| a.0.cmp(&b.0));
+        let rust_functions = self
+            .mir_representation
+            .functions
+            .iter()
+            .map(|(name, blocks)| {
+                let mut return_nodes: Vec<String> = blocks
+                    .iter()
+                    .filter(|block| {
+                        matches!(
+                            block.terminator,
+                            Some(MirTerminator::Return { .. })
+                        )
+                    })
+                    .map(|block| format!("rust::{}::bb{}", name, block.block_id))
+                    .collect();
+                return_nodes.sort();
+                return_nodes.dedup();
+
+                (
+                    name.clone(),
+                    RustFunctionMetadata {
+                        name: name.clone(),
+                        arg_count: self
+                            .rust_function_arg_counts
+                            .get(name)
+                            .copied()
+                            .unwrap_or(0),
+                        entry_node: format!("rust::{}::bb0", name),
+                        return_nodes,
+                    },
+                )
+            })
+            .collect();
+
+        rust_calls.sort_by(|a, b| {
+            (
+                &a.call_node,
+                &a.callee_function,
+                &a.dummy_call_node,
+                &a.dummy_ret_node,
+            )
+                .cmp(&(
+                    &b.call_node,
+                    &b.callee_function,
+                    &b.dummy_call_node,
+                    &b.dummy_ret_node,
+                ))
+        });
+        rust_calls.dedup_by(|a, b| {
+            a.call_node == b.call_node
+                && a.callee_function == b.callee_function
+                && a.dummy_call_node == b.dummy_call_node
+                && a.dummy_ret_node == b.dummy_ret_node
+        });
+
         let global_icfg_ordered = GlobalICFGOrdered {
             ordered_nodes: ordered_icfg_nodes,
             icfg_edges: updated_edges,
+            rust_functions,
+            rust_calls,
         };
         let output_filename = "global_icfg.json";
         let mut file = File::create(output_filename)
@@ -1056,8 +1416,9 @@ pub fn load_all_llvm_json(dir: &str) -> Result<LlvmRepresentation, Box<dyn Error
     let mut combined_functions: HashMap<String, LlvmFunction> = HashMap::new();
     let mut combined_global_edges: Vec<LlvmEdge> = Vec::new();
     
-    for entry in read_dir(dir)? {
-        let entry = entry?;
+    let mut entries = read_dir(dir)?.collect::<Result<Vec<_>, _>>()?;
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
         let path = entry.path();
         if path.is_file() {
             if let Some(fname) = path.file_name().and_then(|f| f.to_str()) {
@@ -1119,6 +1480,133 @@ pub fn parse_llvm_json(file_path: &str) -> Result<LlvmRepresentation, Box<dyn Er
     global_edges.dedup();
     
     Ok(LlvmRepresentation { functions, global_edges })
+}
+
+#[cfg(test)]
+mod phase6k_callee_resolution_tests {
+    use super::*;
+
+    fn empty_functions(names: &[&str]) -> BTreeMap<String, Vec<MirBasicBlock>> {
+        names.iter().map(|name| ((*name).to_string(), Vec::new())).collect()
+    }
+
+    #[test]
+    fn generic_pretty_print_resolves_by_canonical_def_path() {
+        let functions = empty_functions(&["MyStruct::new"]);
+        assert_eq!(
+            resolve_local_callee(
+                "MyStruct::new::<[u8; 3]>",
+                &Some("MyStruct::new".into()),
+                &functions,
+            ),
+            Some("MyStruct::new".into())
+        );
+    }
+
+    #[test]
+    fn higher_order_carrier_does_not_execute_callback_at_constructor_callsite() {
+        let functions = empty_functions(&["main::{closure#0}"]);
+        assert_eq!(
+            resolve_direct_closure_callee(
+                "Iterator::map::<_, {closure@x}>",
+                &Some("core::iter::traits::iterator::Iterator::map".into()),
+                &["main::{closure#0}".into()],
+                &functions,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn concrete_instance_targets_form_sorted_deduplicated_union() {
+        let functions = empty_functions(&["impl_a::new", "impl_b::new", "Trait::new"]);
+        let got = resolved_local_targets(
+            "<T as Trait>::new",
+            &Some("Trait::new".into()),
+            &[],
+            &["impl_b::new".into(), "impl_a::new".into(), "impl_b::new".into()],
+            true,
+            &functions,
+        );
+        assert_eq!(
+            got,
+            vec![("impl_a::new".into(), false), ("impl_b::new".into(), false)]
+        );
+    }
+
+    #[test]
+    fn observed_instance_dispatch_does_not_fallback_to_generic_trait_item() {
+        let functions = empty_functions(&["Trait::new"]);
+        let got = resolved_local_targets(
+            "<T as Trait>::new",
+            &Some("Trait::new".into()),
+            &[],
+            &[],
+            true,
+            &functions,
+        );
+        assert!(got.is_empty());
+    }
+
+    #[test]
+    fn direct_fn_once_call_resolves_exact_single_callback() {
+        let functions = empty_functions(&["main::{closure#0}", "main::{closure#1}"]);
+        assert_eq!(
+            resolve_direct_closure_callee(
+                "<main::{closure#1} as std::ops::FnOnce<()>>::call_once",
+                &Some("core::ops::function::FnOnce::call_once".into()),
+                &["main::{closure#1}".into()],
+                &functions,
+            ),
+            Some("main::{closure#1}".into())
+        );
+    }
+
+    #[test]
+    fn unwind_terminate_destination_is_materialized_as_terminal_node() {
+        let mut nodes = vec![(
+            "rust::main::bb0".to_string(),
+            GlobalICFGNode::Mir(MirBasicBlock {
+                block_id: 0,
+                statements: vec![],
+                terminator: None,
+            }),
+        )];
+        let edges = vec![IcfgEdge {
+            source: "rust::main::bb0".into(),
+            destination: "rust::main::terminate".into(),
+            label: Some("Call unwind".into()),
+            source_label: None,
+            destination_label: None,
+        }];
+
+        materialize_terminal_nodes(&mut nodes, &edges);
+        assert!(matches!(
+            nodes.iter().find(|(id, _)| id == "rust::main::terminate").map(|(_, n)| n),
+            Some(GlobalICFGNode::Terminal(TerminalNode { reason })) if reason == "unwind_terminate"
+        ));
+        assert!(validate_closed_edge_domain(&nodes, &edges).is_ok());
+    }
+
+    #[test]
+    fn canonical_edge_domain_rejects_nonterminal_dangling_destination() {
+        let nodes = vec![(
+            "rust::main::bb0".to_string(),
+            GlobalICFGNode::Mir(MirBasicBlock {
+                block_id: 0,
+                statements: vec![],
+                terminator: None,
+            }),
+        )];
+        let edges = vec![IcfgEdge {
+            source: "rust::main::bb0".into(),
+            destination: "rust::main::missing".into(),
+            label: None,
+            source_label: None,
+            destination_label: None,
+        }];
+        assert!(validate_closed_edge_domain(&nodes, &edges).is_err());
+    }
 }
 
 #[cfg(test)]

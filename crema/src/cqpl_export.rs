@@ -1,5 +1,10 @@
 use crate::abstract_domain::{AbstractMemory, AbstractState, CellValue, Name};
-use crate::structs::{GlobalICFGNode, GlobalICFGOrdered, MirTerminator, SvfStatement};
+use crate::identity::{AllocationIdentityMemory, AllocationIdentityState};
+use crate::memory_events;
+use crate::structs::{
+    AbstractAllocId, AllocationSiteId, GlobalICFGNode, GlobalICFGOrdered, MirTerminator,
+    PlaceId, PlaceProjection, ProgramVarId, SvfStatement,
+};
 use crate::utils::load_ffi_functions;
 use regex::Regex;
 use serde::Serialize;
@@ -16,13 +21,32 @@ use once_cell::sync::Lazy;
 /// information already produced by CREMA plus syntactic labels obtained by
 /// inspecting the existing ICFG nodes.
 pub const CQPL_ANNOTATED_ICFG_SCHEMA_VERSION: u32 = 1;
+pub const CQPL_ANNOTATED_ICFG_IDENTITY_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize)]
 struct AnnotatedIcfg {
     schema_version: u32,
     entry: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    capabilities: Option<Vec<&'static str>>,
     variables: Vec<ProgramVariable>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allocations: Option<Vec<AbstractAllocationRecord>>,
     nodes: Vec<AnnotatedNode>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct AbstractAllocationRecord {
+    /// Opaque, injective serialization of AbstractAllocId used by CQPL bindings.
+    id: String,
+    /// Human-readable diagnostic only; not used as logical identity.
+    display: String,
+    site: AllocationSiteId,
+    context: Vec<String>,
+    /// Capability allocation_contracts_v1: semantic allocator contract.
+    /// This is exporter-produced structure; the checker never infers it from IDs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allocator_contract: Option<AllocationContract>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -31,16 +55,76 @@ struct ProgramVariable {
     language: &'static str,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct AllocationContract {
+    family: &'static str,
+    operation: &'static str,
+    language: &'static str,
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct AnnotatedNode {
     id: String,
     successors: Vec<String>,
     labels: Vec<EventLabel>,
+    /// Allocation-centric event labels derived from the canonical identity
+    /// fixed point.  Present only in schema v2.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allocation_labels: Option<Vec<AllocationEventLabel>>,
+    /// Auditable scoped post-state identity relation at this node. Present only in v2.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    identity: Option<NodeIdentityAnnotation>,
+    /// Auditable intra-node MAY summary used to resolve allocation-centric
+    /// event labels. Present only in v2.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    event_identity: Option<NodeIdentityAnnotation>,
     /// CREMA Phase 5 stores one converged per-node state after applying the
     /// node transformer. It does not retain a separate stable Pi#_pre map.
-    /// Do not fabricate one: v1 exports an explicit empty pre-memory.
+    /// Do not fabricate one: v1/v2 export an explicit empty pre-memory.
     pre: AbstractMemoryAnnotation,
     post: AbstractMemoryAnnotation,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct AllocationEventLabel {
+    predicate: &'static str,
+    allocation: String,
+    certainty: &'static str,
+    /// Capability allocation_contracts_v1: semantic deallocator contract.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    deallocator_contract: Option<AllocationContract>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+struct NodeIdentityAnnotation {
+    points_to: Vec<IdentityPointsToRecord>,
+    stack_refs: Vec<IdentityStackRefsRecord>,
+    place_points_to: Vec<IdentityPlacePointsToRecord>,
+    place_stack_refs: Vec<IdentityPlaceStackRefsRecord>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct IdentityPointsToRecord {
+    variable: String,
+    allocations: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct IdentityStackRefsRecord {
+    variable: String,
+    places: Vec<PlaceId>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct IdentityPlacePointsToRecord {
+    place: PlaceId,
+    allocations: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct IdentityPlaceStackRefsRecord {
+    place: PlaceId,
+    targets: Vec<PlaceId>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -83,6 +167,41 @@ pub fn export_cqpl_annotated_icfg(
     entry: &str,
     output_path: &Path,
 ) -> Result<(), Box<dyn Error>> {
+    export_cqpl_annotated_icfg_versioned(icfg, abs_state, None, entry, 1, output_path)
+}
+
+pub fn export_cqpl_annotated_icfg_with_identity(
+    icfg: &GlobalICFGOrdered,
+    abs_state: &AbstractState,
+    identity_state: &AllocationIdentityState,
+    entry: &str,
+    schema_version: u32,
+    output_path: &Path,
+) -> Result<(), Box<dyn Error>> {
+    export_cqpl_annotated_icfg_versioned(
+        icfg,
+        abs_state,
+        Some(identity_state),
+        entry,
+        schema_version,
+        output_path,
+    )
+}
+
+fn export_cqpl_annotated_icfg_versioned(
+    icfg: &GlobalICFGOrdered,
+    abs_state: &AbstractState,
+    identity_state: Option<&AllocationIdentityState>,
+    entry: &str,
+    schema_version: u32,
+    output_path: &Path,
+) -> Result<(), Box<dyn Error>> {
+    if !matches!(schema_version, 1 | 2) {
+        return Err(format!("unsupported CQPL annotated ICFG schema version {schema_version}; expected 1 or 2").into());
+    }
+    if schema_version == 2 && identity_state.is_none() {
+        return Err("CQPL annotated ICFG schema v2 requires AllocationIdentityState".into());
+    }
     let node_ids: BTreeSet<String> = icfg
         .ordered_nodes
         .iter()
@@ -95,22 +214,44 @@ pub fn export_cqpl_annotated_icfg(
 
     let mut successors: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for edge in &icfg.icfg_edges {
-        if node_ids.contains(&edge.source) && node_ids.contains(&edge.destination) {
-            successors
-                .entry(edge.source.clone())
-                .or_default()
-                .insert(edge.destination.clone());
+        if !node_ids.contains(&edge.source) || !node_ids.contains(&edge.destination) {
+            return Err(format!(
+                "canonical ICFG edge relation is not closed over the node domain: '{}' -> '{}'",
+                edge.source, edge.destination
+            )
+            .into());
         }
+        successors
+            .entry(edge.source.clone())
+            .or_default()
+            .insert(edge.destination.clone());
     }
 
-    // CREMA intentionally keeps ordinary Rust->Rust calls out of icfg_edges:
-    // fixed_point_analysis follows those calls implicitly by pushing the callee
-    // bb0 into its worklist and propagating Return states to the internal
-    // dummyRet.  CQPL, however, reasons only over the exported transition
-    // relation R.  Materialize those already-existing analysis transitions here
-    // so K# has the same interprocedural reachability as the abstract analysis.
-    // This is read-only: the CREMA ICFG itself is not mutated.
-    materialize_internal_rust_call_edges(icfg, &node_ids, &mut successors);
+    // v6K invariant: CREMA and CQPL consume exactly the same canonical ICFG
+    // edge relation.  Internal Rust call/return edges must already be explicit
+    // in `icfg_edges`; the exporter is no longer allowed to synthesize a second
+    // relation.  Validate the metadata/edge agreement instead.
+    validate_canonical_internal_rust_edges(icfg, &successors)?;
+
+    let reachable = reachable_from(entry, &successors);
+    if schema_version == 2 {
+        for edge in &icfg.icfg_edges {
+            if reachable.contains(&edge.source)
+                && edge
+                    .label
+                    .as_deref()
+                    .is_some_and(|label| label.starts_with("UNRESOLVED_"))
+            {
+                return Err(format!(
+                    "schema-v2 fail-closed: reachable unresolved control-flow summary at '{}' -> '{}': {}",
+                    edge.source,
+                    edge.destination,
+                    edge.label.as_deref().unwrap_or("UNRESOLVED")
+                )
+                .into());
+            }
+        }
+    }
 
     // Read-only cross-node maps used only to attach C free/load/store labels to
     // the same scoped SVF identifiers already used by CREMA's abstract state.
@@ -140,7 +281,58 @@ pub fn export_cqpl_annotated_icfg(
         // memory: include syntactically occurring Rust/C program variables too.
         variable_ids.extend(collect_program_variables(node_id, node));
 
-        let mut labels = labels_for_node(node_id, node, &llvm_names, &ffi_functions);
+        // Preserve the raw syntactic events for schema-v2 allocation binding.
+        // The historical closure-event expansion remains v1 compatibility only;
+        // allocation-centric labels are resolved through AllocationIdentityState
+        // and therefore do not depend on that workaround.
+        let raw_labels = labels_for_node(node_id, node, &llvm_names, &ffi_functions);
+        let allocation_labels = if schema_version == 2 {
+            let event_mem = identity_state
+                .and_then(|state| state.event_by_node.get(node_id))
+                .cloned()
+                .unwrap_or_default();
+            Some(allocation_labels_for_node(node_id, node, &raw_labels, &event_mem, &ffi_functions, schema_version))
+        } else {
+            None
+        };
+        if schema_version == 2
+            && reachable.contains(node_id)
+            && raw_labels.iter().any(|label| label.predicate == "alloc")
+            && allocation_labels
+                .as_ref()
+                .is_some_and(|labels| labels.iter().all(|label| label.predicate != "alloc"))
+        {
+            return Err(format!(
+                "schema-v2 fail-closed: reachable modeled alloc event at '{node_id}' has no AbstractAllocId/event_identity"
+            )
+            .into());
+        }
+        let (identity, event_identity) = if schema_version == 2 {
+            let post_identity = identity_state
+                .and_then(|state| state.by_node.get(node_id))
+                .cloned()
+                .unwrap_or_default();
+            let event_identity = identity_state
+                .and_then(|state| state.event_by_node.get(node_id))
+                .cloned()
+                .unwrap_or_default();
+
+            // Schema-v2 closure invariant: every ProgramVarId serialized by the
+            // identity relation belongs to the declared program-variable domain.
+            // Identity uses globally scoped canonical IDs, so keep those IDs
+            // distinct from the legacy unscoped Name strings used by Pi#_post.
+            variable_ids.extend(collect_identity_program_variables(&post_identity));
+            variable_ids.extend(collect_identity_program_variables(&event_identity));
+
+            (
+                Some(identity_annotation(&post_identity)),
+                Some(identity_annotation(&event_identity)),
+            )
+        } else {
+            (None, None)
+        };
+
+        let mut labels = raw_labels;
         expand_closure_event_labels(node_id, &mut labels, &closure_event_aliases);
         for label in &labels {
             variable_ids.insert(label.variable.clone());
@@ -155,6 +347,9 @@ pub fn export_cqpl_annotated_icfg(
                 .into_iter()
                 .collect(),
             labels,
+            allocation_labels,
+            identity,
+            event_identity,
             pre: AbstractMemoryAnnotation::default(),
             post,
         });
@@ -172,10 +367,18 @@ pub fn export_cqpl_annotated_icfg(
         })
         .collect();
 
+    let allocations = if schema_version == 2 {
+        Some(allocation_catalog(identity_state.expect("checked schema-v2 identity state"), schema_version))
+    } else {
+        None
+    };
+
     let output = AnnotatedIcfg {
-        schema_version: CQPL_ANNOTATED_ICFG_SCHEMA_VERSION,
+        schema_version,
         entry: entry.to_string(),
+        capabilities: if schema_version == 2 { Some(vec!["allocation_contracts_v1"]) } else { None },
         variables,
+        allocations,
         nodes,
     };
 
@@ -184,115 +387,326 @@ pub fn export_cqpl_annotated_icfg(
     Ok(())
 }
 
-/// Materialize ordinary Rust-to-Rust call/return transitions that CREMA's
-/// fixed-point engine follows implicitly rather than storing in `icfg_edges`.
-///
-/// For an internal call, the stored graph currently contains
-///
-/// caller -> dummyCall -> dummyRet -> caller-return
-///
-/// while `fixed_point_analysis` additionally evaluates the callee from bb0 and
-/// propagates each callee Return to that dummyRet.  For CQPL we replace only the
-/// synthetic dummyCall->dummyRet bypass in the *exported* relation with
-///
-/// caller -> dummyCall -> callee-bb0 -> ... -> callee-Return -> dummyRet
-///        -> caller-return.
-///
-/// If several call sites invoke the same callee, a callee Return has one edge to
-/// each corresponding dummyRet.  This is the usual finite, context-insensitive
-/// ICFG over-approximation; it can introduce spurious return paths but does not
-/// hide a real Rust call.  CREMA's analysis state and legacy detector are not
-/// modified.
-fn materialize_internal_rust_call_edges(
-    icfg: &GlobalICFGOrdered,
-    node_ids: &BTreeSet<String>,
-    successors: &mut BTreeMap<String, BTreeSet<String>>,
-) {
-    let node_by_id: BTreeMap<&str, &GlobalICFGNode> = icfg
-        .ordered_nodes
-        .iter()
-        .map(|(id, node)| (id.as_str(), node))
-        .collect();
+fn stable_allocation_id(allocation: &AbstractAllocId) -> String {
+    // Struct/enum field order is fixed by serde derivation; JSON escaping keeps
+    // arbitrary node/function text unambiguous.  CQPL treats this as an opaque ID.
+    serde_json::to_string(allocation).expect("AbstractAllocId must serialize")
+}
 
-    let mut calls: Vec<(String, String, String, Vec<String>)> = Vec::new();
-
-    for (caller_id, node) in &icfg.ordered_nodes {
-        let GlobalICFGNode::Mir(bb) = node else { continue; };
-        let Some(MirTerminator::Call { function_called, .. }) = &bb.terminator else {
-            continue;
-        };
-
-        // Closure calls already have explicit call/return edges in CREMA's ICFG.
-        if function_called.contains("{closure") || function_called.contains("closure#") {
-            continue;
+fn allocation_catalog(state: &AllocationIdentityState, schema_version: u32) -> Vec<AbstractAllocationRecord> {
+    let mut ids: BTreeMap<String, AbstractAllocId> = BTreeMap::new();
+    for mem in state.by_node.values().chain(state.event_by_node.values()) {
+        for allocations in mem.points_to.values().chain(mem.place_points_to.values()) {
+            for allocation in allocations {
+                ids.entry(stable_allocation_id(allocation))
+                    .or_insert_with(|| allocation.clone());
+            }
         }
+    }
+    ids.into_iter()
+        .map(|(id, allocation)| AbstractAllocationRecord {
+            id,
+            display: allocation.canonical_string(),
+            allocator_contract: if schema_version == 2 { Some(allocation_contract(&allocation)) } else { None },
+            site: allocation.site,
+            context: allocation.context,
+        })
+        .collect()
+}
 
-        let callee_entry = format!("rust::{function_called}::bb0");
-        if !node_ids.contains(&callee_entry) {
-            continue;
+fn collect_identity_program_variables(mem: &AllocationIdentityMemory) -> BTreeSet<Name> {
+    fn collect_place(place: &PlaceId, out: &mut BTreeSet<Name>) {
+        out.insert(place.base.canonical_string());
+        for projection in &place.projection {
+            if let PlaceProjection::Index { local } = projection {
+                out.insert(local.canonical_string());
+            }
         }
+    }
 
-        // An ordinary local Rust call is identified exactly as in the current
-        // ICFG/fixed-point implementation: the call-site has an internal
-        // DummyCall successor whose outgoing edge names the paired DummyRet.
-        let Some((dummy_call_id, dummy_ret_id)) = successors
-            .get(caller_id)
-            .and_then(|succs| {
-                succs.iter().find_map(|sid| match node_by_id.get(sid.as_str()) {
-                    Some(GlobalICFGNode::DummyCall(dummy))
-                        if dummy.is_internal.unwrap_or(false) =>
-                    {
-                        Some((sid.clone(), dummy.outgoing_edge.clone()))
-                    }
-                    _ => None,
-                })
-            })
-        else {
-            continue;
-        };
+    let mut out = BTreeSet::new();
+    out.extend(mem.points_to.keys().map(ProgramVarId::canonical_string));
+    out.extend(mem.stack_refs.keys().map(ProgramVarId::canonical_string));
 
-        if !node_ids.contains(&dummy_ret_id) {
-            continue;
+    for place in mem.place_points_to.keys() {
+        collect_place(place, &mut out);
+    }
+    for (place, targets) in &mem.place_stack_refs {
+        collect_place(place, &mut out);
+        for target in targets {
+            collect_place(target, &mut out);
         }
+    }
+    for places in mem.stack_refs.values() {
+        for place in places {
+            collect_place(place, &mut out);
+        }
+    }
 
-        let callee_prefix = format!("rust::{function_called}::bb");
-        let return_nodes: Vec<String> = icfg
-            .ordered_nodes
+    out
+}
+
+fn identity_annotation(mem: &AllocationIdentityMemory) -> NodeIdentityAnnotation {
+    NodeIdentityAnnotation {
+        points_to: mem
+            .points_to
             .iter()
-            .filter_map(|(id, candidate)| {
-                if !id.starts_with(&callee_prefix) {
-                    return None;
-                }
-                match candidate {
-                    GlobalICFGNode::Mir(callee_bb)
-                        if matches!(&callee_bb.terminator, Some(MirTerminator::Return { .. })) =>
-                    {
-                        Some(id.clone())
-                    }
-                    _ => None,
-                }
+            .map(|(variable, allocations)| IdentityPointsToRecord {
+                variable: variable.canonical_string(),
+                allocations: allocations.iter().map(stable_allocation_id).collect(),
             })
-            .collect();
+            .collect(),
+        stack_refs: mem
+            .stack_refs
+            .iter()
+            .map(|(variable, places)| IdentityStackRefsRecord {
+                variable: variable.canonical_string(),
+                places: places.iter().cloned().collect(),
+            })
+            .collect(),
+        place_points_to: mem
+            .place_points_to
+            .iter()
+            .map(|(place, allocations)| IdentityPlacePointsToRecord {
+                place: place.clone(),
+                allocations: allocations.iter().map(stable_allocation_id).collect(),
+            })
+            .collect(),
+        place_stack_refs: mem
+            .place_stack_refs
+            .iter()
+            .map(|(place, targets)| IdentityPlaceStackRefsRecord {
+                place: place.clone(),
+                targets: targets.iter().cloned().collect(),
+            })
+            .collect(),
+    }
+}
 
-        // Keep the original bypass if the callee has no representable Return;
-        // never make the exported graph less connected based on a failed match.
-        if !return_nodes.is_empty() {
-            calls.push((dummy_call_id, dummy_ret_id, callee_entry, return_nodes));
+fn identity_var_for_event(
+    node_id: &str,
+    node: &GlobalICFGNode,
+    variable: &str,
+) -> Option<ProgramVarId> {
+    match node {
+        GlobalICFGNode::Mir(_) => {
+            let scope = mir_function_scope_from_node_id(node_id)?;
+            let function = scope.strip_prefix("rust::").unwrap_or(&scope);
+            ProgramVarId::rust(function.to_string(), variable)
+        }
+        GlobalICFGNode::Llvm(llvm) => {
+            let function = llvm
+                .function_name
+                .clone()
+                .or_else(|| {
+                    node_id
+                        .strip_prefix("llvm::")
+                        .and_then(|rest| rest.split_once("::node"))
+                        .map(|(f, _)| f.to_string())
+                })?;
+            let callsite = llvm_call_suffix_from_global_node_id(node_id)?.to_string();
+            let id_text = variable
+                .split_once('@')
+                .map(|(id, _)| id)
+                .unwrap_or(variable)
+                .trim()
+                .trim_start_matches('%');
+            let var_id = id_text.parse::<usize>().ok()?;
+            Some(ProgramVarId::c(function, var_id, Some(callsite)))
+        }
+        GlobalICFGNode::DummyCall(_) | GlobalICFGNode::DummyRet(_) | GlobalICFGNode::Terminal(_) => None,
+    }
+}
+
+fn allocation_labels_for_node(
+    node_id: &str,
+    node: &GlobalICFGNode,
+    labels: &[EventLabel],
+    identity: &AllocationIdentityMemory,
+    ffi_functions: &HashSet<String>,
+    schema_version: u32,
+) -> Vec<AllocationEventLabel> {
+    let mut out = BTreeSet::new();
+    for label in labels {
+        let Some(variable) = identity_var_for_event(node_id, node, &label.variable) else {
+            continue;
+        };
+        let allocations = identity.event_allocations(&variable);
+        // AllocationIdentityMemory is a MAY points-to/place-flow domain.
+        // Even a singleton set means "the only represented MAY target", not
+        // a MUST-target fact for every concrete state. Schema v2 therefore has
+        // one allocation-event certainty only: may_abstract -> unk.
+        let certainty = "may_abstract";
+        for allocation in allocations {
+            let deallocator_contract = if schema_version == 2 && label.predicate == "drop" {
+                Some(deallocator_contract(node, ffi_functions))
+            } else {
+                None
+            };
+            out.insert(AllocationEventLabel {
+                predicate: label.predicate,
+                allocation: stable_allocation_id(&allocation),
+                certainty,
+                deallocator_contract,
+            });
+        }
+    }
+    out.into_iter().collect()
+}
+
+fn allocation_contract(allocation: &AbstractAllocId) -> AllocationContract {
+    match &allocation.site {
+        AllocationSiteId::CCall { allocator, .. } if allocator == "malloc" => AllocationContract {
+            family: "c_malloc", operation: "malloc", language: "c",
+        },
+        AllocationSiteId::CCall { allocator, .. } if allocator == "calloc" => AllocationContract {
+            family: "c_malloc", operation: "calloc", language: "c",
+        },
+        AllocationSiteId::RustCall { callee, .. } if memory_events::is_modeled_fresh_allocation(callee) => {
+            let operation = if (callee.contains("std::boxed::Box::<") || callee.contains("alloc::boxed::Box::<"))
+                && (callee.ends_with("::new") || callee.contains("::new::<"))
+            {
+                "box_allocation"
+            } else if memory_events::is_exchange_malloc_call(callee) {
+                "exchange_malloc"
+            } else if callee.contains("alloc_zeroed") {
+                "alloc_zeroed"
+            } else if callee.contains("::alloc") {
+                "alloc"
+            } else if callee.contains("CString") {
+                "cstring_allocation"
+            } else {
+                "rust_allocation"
+            };
+            AllocationContract { family: "rust_global", operation, language: "rust" }
+        }
+        _ => AllocationContract { family: "unknown", operation: "unknown", language: "unknown" },
+    }
+}
+
+fn deallocator_contract(
+    node: &GlobalICFGNode,
+    ffi_functions: &HashSet<String>,
+) -> AllocationContract {
+    match node {
+        GlobalICFGNode::Llvm(llvm)
+            if llvm.node_kind_string == "FunCallBlock" && llvm.info.contains("@free(") =>
+                AllocationContract { family: "c_malloc", operation: "free", language: "c" },
+        GlobalICFGNode::Mir(bb) => match &bb.terminator {
+            // A generic MIR Drop is not proof of the concrete allocator family.
+            // Its destructor may delegate to foreign code; remain conservative for
+            // the no-refutation theorem by serializing an explicit unknown family.
+            Some(MirTerminator::Drop { .. }) =>
+                AllocationContract { family: "unknown", operation: "drop", language: "rust" },
+            Some(MirTerminator::Call { function_called, details, .. }) => {
+                let call_text = if details.is_empty() { function_called } else { details };
+                if is_c_free_function(function_called, ffi_functions)
+                    || is_c_free_call_text(call_text, ffi_functions)
+                {
+                    AllocationContract { family: "c_malloc", operation: "free", language: "c" }
+                } else if is_raw_dealloc_call(function_called) || is_raw_dealloc_call(call_text) {
+                    AllocationContract { family: "rust_global", operation: "dealloc", language: "rust" }
+                } else if is_explicit_mem_drop(function_called) || is_explicit_mem_drop(call_text) {
+                    // `drop`/`drop_in_place` is an ownership/destructor action,
+                    // not sufficient structural evidence for RustGlobal deallocation.
+                    AllocationContract { family: "unknown", operation: "drop", language: "rust" }
+                } else {
+                    AllocationContract { family: "unknown", operation: "unknown", language: "unknown" }
+                }
+            }
+            _ => AllocationContract { family: "unknown", operation: "unknown", language: "unknown" },
+        },
+        _ => AllocationContract { family: "unknown", operation: "unknown", language: "unknown" },
+    }
+}
+
+/// Compute the node set reachable from one explicit ICFG entry.
+///
+/// v6K intentionally uses the serialized canonical edge relation here.  No
+/// exporter-only call/return edges are synthesized: if CREMA cannot represent
+/// a transition in `icfg_edges`, CQPL must not silently gain it later.
+fn reachable_from(
+    entry: &str,
+    successors: &BTreeMap<String, BTreeSet<String>>,
+) -> BTreeSet<String> {
+    let mut reachable = BTreeSet::new();
+    let mut worklist = std::collections::VecDeque::new();
+    reachable.insert(entry.to_string());
+    worklist.push_back(entry.to_string());
+
+    while let Some(node) = worklist.pop_front() {
+        if let Some(succs) = successors.get(&node) {
+            for succ in succs {
+                if reachable.insert(succ.clone()) {
+                    worklist.push_back(succ.clone());
+                }
+            }
+        }
+    }
+    reachable
+}
+
+/// Check that Rust call metadata and the serialized ICFG relation describe the
+/// *same* interprocedural topology.
+///
+/// Historically CREMA kept ordinary Rust call edges hidden in `rust_calls` and
+/// `cqpl_export` reconstructed a different transition system.  That made the
+/// abstract interpreter and model checker reason over distinct Kripke graphs.
+/// v6K forbids this: metadata may carry bindings, but every control-flow
+/// activation/return must already be an explicit edge in `icfg_edges`.
+fn validate_canonical_internal_rust_edges(
+    icfg: &GlobalICFGOrdered,
+    successors: &BTreeMap<String, BTreeSet<String>>,
+) -> Result<(), Box<dyn Error>> {
+    let has_edge = |src: &str, dst: &str| {
+        successors
+            .get(src)
+            .is_some_and(|succs| succs.contains(dst))
+    };
+
+    for call in &icfg.rust_calls {
+        let Some(function) = icfg.rust_functions.get(&call.callee_function) else {
+            return Err(format!(
+                "canonical ICFG invariant violated: call '{}' names missing local callee '{}'",
+                call.call_node, call.callee_function
+            )
+            .into());
+        };
+
+        if !has_edge(&call.call_node, &call.dummy_call_node) {
+            return Err(format!(
+                "canonical ICFG invariant violated: missing call edge '{}' -> '{}'",
+                call.call_node, call.dummy_call_node
+            )
+            .into());
+        }
+        if !has_edge(&call.dummy_call_node, &function.entry_node) {
+            return Err(format!(
+                "canonical ICFG invariant violated: missing activation edge '{}' -> '{}' for callee '{}'",
+                call.dummy_call_node, function.entry_node, call.callee_function
+            )
+            .into());
+        }
+        if !has_edge(&call.dummy_ret_node, &call.return_node) {
+            return Err(format!(
+                "canonical ICFG invariant violated: missing continuation edge '{}' -> '{}'",
+                call.dummy_ret_node, call.return_node
+            )
+            .into());
+        }
+
+        for ret in &function.return_nodes {
+            if !has_edge(ret, &call.dummy_ret_node) {
+                return Err(format!(
+                    "canonical ICFG invariant violated: missing return edge '{}' -> '{}' for callee '{}'",
+                    ret, call.dummy_ret_node, call.callee_function
+                )
+                .into());
+            }
         }
     }
 
-    for (dummy_call_id, dummy_ret_id, callee_entry, return_nodes) in calls {
-        let call_succs = successors.entry(dummy_call_id).or_default();
-        call_succs.remove(&dummy_ret_id);
-        call_succs.insert(callee_entry);
-
-        for return_node in return_nodes {
-            successors
-                .entry(return_node)
-                .or_default()
-                .insert(dummy_ret_id.clone());
-        }
-    }
+    Ok(())
 }
 
 /// Return the MIR function/closure scope encoded in a GlobalICFG node id.
@@ -483,9 +897,13 @@ fn cell_value_name(value: CellValue) -> &'static str {
 }
 
 fn language_of(id: &str) -> &'static str {
-    if id.starts_with("Local(") || id.starts_with("Leak(Local(") {
+    if id.starts_with("rust::")
+        || id.starts_with("Local(")
+        || id.starts_with("Leak(Local(")
+    {
         "rust"
-    } else if id.starts_with('%')
+    } else if id.starts_with("c::")
+        || id.starts_with('%')
         || id.chars().next().is_some_and(|c| c.is_ascii_digit())
         || id.contains("@rust::")
     {
@@ -597,6 +1015,7 @@ fn collect_program_variables(node_id: &str, node: &GlobalICFGNode) -> BTreeSet<N
                 vars.insert(v.clone());
             }
         }
+        GlobalICFGNode::Terminal(_) => {}
     }
     vars
 }
@@ -750,7 +1169,7 @@ fn labels_for_node(
                 }
             }
         }
-        GlobalICFGNode::DummyCall(_) | GlobalICFGNode::DummyRet(_) => {}
+        GlobalICFGNode::DummyCall(_) | GlobalICFGNode::DummyRet(_) | GlobalICFGNode::Terminal(_) => {}
     }
     labels.into_iter().collect()
 }
@@ -760,18 +1179,10 @@ fn is_fresh_allocation_call(
     call_text: &str,
     ffi_functions: &HashSet<String>,
 ) -> bool {
-    is_box_new_call(function_called)
-        || is_box_new_call(call_text)
-        || is_raw_alloc_call(function_called)
-        || is_raw_alloc_call(call_text)
-        || is_raw_alloc_zeroed_call(function_called)
-        || is_raw_alloc_zeroed_call(call_text)
+    memory_events::is_modeled_fresh_allocation(function_called)
+        || memory_events::is_modeled_fresh_allocation(call_text)
         || is_c_malloc_call(function_called, ffi_functions)
         || is_c_malloc_call(call_text, ffi_functions)
-        // Legacy Phase-5 allocation cases retained by the current transfer.
-        || call_text.contains("std::ffi::CString::new")
-        || call_text.contains("<std::ffi::CString as std::convert::From<&std::ffi::CStr>>::from")
-        || call_text.contains("std::slice::<impl [") && call_text.contains(">::into_vec::<std::alloc::Global>")
 }
 
 fn is_deallocation_call(
@@ -980,7 +1391,7 @@ impl LlvmNameResolver {
 mod tests {
     use super::*;
     use crate::abstract_domain::{Allocation, CellValue};
-    use crate::structs::{DummyNode, IcfgEdge, MirBasicBlock, MirCallArgument, SourceInfoData, MirStatement};
+    use crate::structs::{DummyNode, IcfgEdge, MirBasicBlock, MirCallArgument, SourceInfoData, MirStatement, RustCallMetadata, RustFunctionMetadata, TerminalNode};
 
     fn edge(a: &str, b: &str) -> IcfgEdge {
         IcfgEdge {
@@ -1038,6 +1449,8 @@ mod tests {
         let g = GlobalICFGOrdered {
             ordered_nodes: vec![("rust::main::bb0".into(), n0), ("rust::main::bb1".into(), n1)],
             icfg_edges: vec![edge("rust::main::bb0", "rust::main::bb1")],
+            rust_functions: Default::default(),
+            rust_calls: Vec::new(),
         };
         let mut s = AbstractState::default();
         let mut mem = AbstractMemory::default();
@@ -1057,7 +1470,55 @@ mod tests {
     }
 
     #[test]
-    fn exporter_materializes_internal_rust_call_and_return_edges_for_cqpl() {
+    fn exporter_rejects_dangling_canonical_edge() {
+        let n0 = GlobalICFGNode::Mir(MirBasicBlock { block_id: 0, statements: vec![], terminator: None });
+        let g = GlobalICFGOrdered {
+            ordered_nodes: vec![("rust::main::bb0".into(), n0)],
+            icfg_edges: vec![edge("rust::main::bb0", "rust::main::terminate")],
+            rust_functions: Default::default(),
+            rust_calls: Vec::new(),
+        };
+        let s = AbstractState::default();
+        let path = std::env::temp_dir().join(format!("crema-cqpl-dangling-export-{}.json", std::process::id()));
+        let err = export_cqpl_annotated_icfg(&g, &s, "rust::main::bb0", &path).unwrap_err();
+        let _ = std::fs::remove_file(path);
+        assert!(err.to_string().contains("not closed over the node domain"));
+    }
+
+    #[test]
+    fn exporter_preserves_explicit_terminal_successor() {
+        let n0 = GlobalICFGNode::Mir(MirBasicBlock { block_id: 0, statements: vec![], terminator: None });
+        let terminal = GlobalICFGNode::Terminal(TerminalNode { reason: "unwind_terminate".into() });
+        let g = GlobalICFGOrdered {
+            ordered_nodes: vec![
+                ("rust::main::bb0".into(), n0),
+                ("rust::main::terminate".into(), terminal),
+            ],
+            icfg_edges: vec![edge("rust::main::bb0", "rust::main::terminate")],
+            rust_functions: Default::default(),
+            rust_calls: Vec::new(),
+        };
+        // The exporter intentionally requires a non-empty program-variable
+        // domain.  Seed one unrelated tracked variable so this regression test
+        // exercises only the canonical terminal-edge property instead of
+        // violating the exporter's quantifier-domain precondition.
+        let mut s = AbstractState::default();
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&"Local(_1)".to_string(), CellValue::TOP);
+        s.insert("rust::main::bb0".into(), mem);
+
+        let path = std::env::temp_dir().join(format!("crema-cqpl-terminal-export-{}.json", std::process::id()));
+        export_cqpl_annotated_icfg(&g, &s, "rust::main::bb0", &path).unwrap();
+        let value: serde_json::Value = serde_json::from_reader(File::open(&path).unwrap()).unwrap();
+        let _ = std::fs::remove_file(path);
+        let main = value["nodes"].as_array().unwrap().iter().find(|n| n["id"] == "rust::main::bb0").unwrap();
+        let terminal = value["nodes"].as_array().unwrap().iter().find(|n| n["id"] == "rust::main::terminate").unwrap();
+        assert_eq!(main["successors"][0], "rust::main::terminate");
+        assert_eq!(terminal["successors"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn exporter_validates_and_preserves_canonical_internal_rust_edges() {
         let call_site = "rust::main::bb0";
         let dummy_call_id = "dummyCall::rust::main::bb0::rust::main::bb0_internal";
         let dummy_ret_id = "dummyRet::rust::main::0::rust::main::bb0_internal";
@@ -1072,6 +1533,13 @@ mod tests {
                 details: "call callee".into(),
                 source_info: "x".into(),
                 function_called: "callee".into(),
+                callee_def_path: Some("callee".into()),
+                callee_is_local: true,
+                callback_def_paths: Vec::new(),
+                resolved_instance_callees: Vec::new(),
+                instance_dispatch_observed: false,
+                instance_dispatch_external: false,
+                instance_dispatch_unresolved: false,
                 arguments: Vec::<MirCallArgument>::new(),
                 return_place: "_0".into(),
                 return_target: Some("bb1".into()),
@@ -1089,7 +1557,7 @@ mod tests {
         let dummy_call = GlobalICFGNode::DummyCall(DummyNode {
             dummy_node_name: "dummyCall".into(),
             incoming_edge: call_site.into(),
-            outgoing_edge: dummy_ret_id.into(),
+            outgoing_edge: callee_entry.into(),
             id: "dc".into(),
             mir_var: None,
             llvm_var: None,
@@ -1097,11 +1565,11 @@ mod tests {
         });
         let dummy_ret = GlobalICFGNode::DummyRet(DummyNode {
             dummy_node_name: "dummyRet".into(),
-            incoming_edge: dummy_call_id.into(),
+            incoming_edge: callee_return.into(),
             outgoing_edge: caller_return.into(),
             id: "dr".into(),
-            mir_var: None,
-            llvm_var: None,
+            mir_var: Some("_0".into()),
+            llvm_var: Some("Local _0".into()),
             is_internal: Some(true),
         });
         let callee_0 = GlobalICFGNode::Mir(MirBasicBlock {
@@ -1122,6 +1590,28 @@ mod tests {
             }),
         });
 
+        let mut rust_functions = BTreeMap::new();
+        rust_functions.insert(
+            "callee".into(),
+            RustFunctionMetadata {
+                name: "callee".into(),
+                arg_count: 0,
+                entry_node: callee_entry.into(),
+                return_nodes: vec![callee_return.into()],
+            },
+        );
+        let rust_calls = vec![RustCallMetadata {
+            caller_function: "main".into(),
+            call_node: call_site.into(),
+            callee_function: "callee".into(),
+            dummy_call_node: dummy_call_id.into(),
+            dummy_ret_node: dummy_ret_id.into(),
+            arguments: vec![],
+            return_place: "_0".into(),
+            return_node: caller_return.into(),
+            is_closure: false,
+        }];
+
         let g = GlobalICFGOrdered {
             ordered_nodes: vec![
                 (call_site.into(), main_call),
@@ -1133,19 +1623,18 @@ mod tests {
             ],
             icfg_edges: vec![
                 edge(call_site, dummy_call_id),
-                edge(dummy_call_id, dummy_ret_id),
-                edge(dummy_ret_id, caller_return),
+                edge(dummy_call_id, callee_entry),
                 edge(callee_entry, callee_return),
+                edge(callee_return, dummy_ret_id),
+                edge(dummy_ret_id, caller_return),
             ],
+            rust_functions,
+            rust_calls,
         };
 
-        let mut state = AbstractState::default();
-        let mut mem = AbstractMemory::default();
-        mem.set_cell_value(&"Local(_1)".to_string(), CellValue::ALLOC);
-        state.insert(callee_entry.into(), mem);
-
+        let state = AbstractState::default();
         let path = std::env::temp_dir().join(format!(
-            "crema-cqpl-internal-call-export-{}.json",
+            "crema-cqpl-canonical-call-export-{}.json",
             std::process::id()
         ));
         export_cqpl_annotated_icfg(&g, &state, call_site, &path).unwrap();
@@ -1164,10 +1653,48 @@ mod tests {
                 .map(|x| x.as_str().unwrap().to_string())
                 .collect()
         };
-
+        assert_eq!(successors_of(call_site), vec![dummy_call_id.to_string()]);
         assert_eq!(successors_of(dummy_call_id), vec![callee_entry.to_string()]);
         assert_eq!(successors_of(callee_return), vec![dummy_ret_id.to_string()]);
         assert_eq!(successors_of(dummy_ret_id), vec![caller_return.to_string()]);
+    }
+
+    #[test]
+    fn exporter_rejects_hidden_internal_call_relation() {
+        let mut g = GlobalICFGOrdered {
+            ordered_nodes: vec![
+                ("rust::main::bb0".into(), GlobalICFGNode::Mir(MirBasicBlock { block_id: 0, statements: vec![], terminator: None })),
+                ("dummyCall::x".into(), GlobalICFGNode::DummyCall(DummyNode {
+                    dummy_node_name: "dummyCall".into(), incoming_edge: "rust::main::bb0".into(),
+                    outgoing_edge: "rust::callee::bb0".into(), id: "dc".into(), mir_var: None, llvm_var: None,
+                    is_internal: Some(true),
+                })),
+                ("dummyRet::x".into(), GlobalICFGNode::DummyRet(DummyNode {
+                    dummy_node_name: "dummyRet".into(), incoming_edge: "rust::callee::bb1".into(),
+                    outgoing_edge: "rust::main::bb1".into(), id: "dr".into(), mir_var: None, llvm_var: None,
+                    is_internal: Some(true),
+                })),
+                ("rust::main::bb1".into(), GlobalICFGNode::Mir(MirBasicBlock { block_id: 1, statements: vec![], terminator: None })),
+                ("rust::callee::bb0".into(), GlobalICFGNode::Mir(MirBasicBlock { block_id: 0, statements: vec![], terminator: None })),
+                ("rust::callee::bb1".into(), GlobalICFGNode::Mir(MirBasicBlock { block_id: 1, statements: vec![], terminator: Some(MirTerminator::Return { details: "return".into(), source_info: "x".into() }) })),
+            ],
+            icfg_edges: vec![edge("rust::main::bb0", "dummyCall::x")],
+            rust_functions: BTreeMap::new(),
+            rust_calls: vec![],
+        };
+        g.rust_functions.insert("callee".into(), RustFunctionMetadata {
+            name: "callee".into(), arg_count: 0, entry_node: "rust::callee::bb0".into(),
+            return_nodes: vec!["rust::callee::bb1".into()],
+        });
+        g.rust_calls.push(RustCallMetadata {
+            caller_function: "main".into(), call_node: "rust::main::bb0".into(), callee_function: "callee".into(),
+            dummy_call_node: "dummyCall::x".into(), dummy_ret_node: "dummyRet::x".into(), arguments: vec![],
+            return_place: "_0".into(), return_node: "rust::main::bb1".into(), is_closure: false,
+        });
+        let path = std::env::temp_dir().join(format!("crema-cqpl-hidden-edge-{}.json", std::process::id()));
+        let err = export_cqpl_annotated_icfg(&g, &AbstractState::default(), "rust::main::bb0", &path).unwrap_err();
+        let _ = std::fs::remove_file(path);
+        assert!(err.to_string().contains("missing activation edge"));
     }
 
     #[test]
@@ -1235,6 +1762,8 @@ mod tests {
                 (n3.clone(), c3.clone()),
             ],
             icfg_edges: vec![edge(&n0, &n1), edge(&n1, &n2), edge(&n2, &n3)],
+            rust_functions: Default::default(),
+            rust_calls: Vec::new(),
         };
 
         let mut state = AbstractState::default();
@@ -1302,6 +1831,13 @@ mod tests {
                 details: "_16 = std::ffi::CString::from_raw(copy _4)".into(),
                 source_info: "<cqpl-test>".into(),
                 function_called: "std::ffi::CString::from_raw".into(),
+                callee_def_path: None,
+                callee_is_local: false,
+                callback_def_paths: Vec::new(),
+                resolved_instance_callees: Vec::new(),
+                instance_dispatch_observed: false,
+                instance_dispatch_external: false,
+                instance_dispatch_unresolved: false,
                 arguments: vec![MirCallArgument {
                     arg: "Local(_4)".into(),
                     is_mutable: Some(false),
@@ -1334,6 +1870,13 @@ mod tests {
                 details: "_2 = std::boxed::Box::<i32>::from_raw(copy _1)".into(),
                 source_info: "<cqpl-test>".into(),
                 function_called: "std::boxed::Box::<i32>::from_raw".into(),
+                callee_def_path: None,
+                callee_is_local: false,
+                callback_def_paths: Vec::new(),
+                resolved_instance_callees: Vec::new(),
+                instance_dispatch_observed: false,
+                instance_dispatch_external: false,
+                instance_dispatch_unresolved: false,
                 arguments: vec![MirCallArgument {
                     arg: "Local(_1)".into(),
                     is_mutable: Some(false),
@@ -1380,6 +1923,8 @@ mod tests {
         let g = GlobalICFGOrdered {
             ordered_nodes: vec![(n0, node)],
             icfg_edges: vec![],
+            rust_functions: Default::default(),
+            rust_calls: Vec::new(),
         };
         let state = AbstractState::default();
         let aliases = build_closure_event_aliases(&g, &state);
@@ -1389,6 +1934,275 @@ mod tests {
         assert!(aliases
             .get(&(scope.to_string(), "Local(_7)".to_string()))
             .is_none());
+    }
+
+    #[test]
+    fn schema_v2_variable_catalog_is_closed_over_identity_program_vars() {
+        let node_id = "rust::main::bb0".to_string();
+        let icfg = GlobalICFGOrdered {
+            ordered_nodes: vec![(
+                node_id.clone(),
+                GlobalICFGNode::Mir(MirBasicBlock {
+                    block_id: 0,
+                    statements: vec![],
+                    terminator: None,
+                }),
+            )],
+            icfg_edges: vec![],
+            rust_functions: Default::default(),
+            rust_calls: vec![],
+        };
+
+        let alloc = AbstractAllocId::new(
+            AllocationSiteId::Synthetic { scope: "test".into(), label: "A".into() },
+            Vec::new(),
+        );
+        let rust_p = ProgramVarId::rust("main", "_1").unwrap();
+        let rust_ref = ProgramVarId::rust("main", "_5").unwrap();
+        let rust_place_base = ProgramVarId::rust("main", "_6").unwrap();
+        let c_p = ProgramVarId::c("ffi_alloc", 7, Some("rust::main::bb0".into()));
+
+        let mut mem = AllocationIdentityMemory::default();
+        mem.points_to
+            .insert(rust_p.clone(), BTreeSet::from([alloc.clone()]));
+        mem.points_to
+            .insert(c_p.clone(), BTreeSet::from([alloc.clone()]));
+        mem.stack_refs.insert(
+            rust_ref.clone(),
+            BTreeSet::from([PlaceId {
+                base: rust_place_base.clone(),
+                projection: vec![],
+            }]),
+        );
+
+        let mut identity_state = AllocationIdentityState::default();
+        identity_state.by_node.insert(node_id.clone(), mem.clone());
+        identity_state.event_by_node.insert(node_id.clone(), mem);
+
+        let path = std::env::temp_dir().join(format!(
+            "crema-v6k5-variable-domain-{}.json",
+            std::process::id()
+        ));
+        export_cqpl_annotated_icfg_with_identity(
+            &icfg,
+            &AbstractState::default(),
+            &identity_state,
+            &node_id,
+            2,
+            &path,
+        )
+        .unwrap();
+
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let vars = json["variables"].as_array().unwrap();
+        let catalog: BTreeMap<String, String> = vars
+            .iter()
+            .map(|v| {
+                (
+                    v["id"].as_str().unwrap().to_string(),
+                    v["language"].as_str().unwrap().to_string(),
+                )
+            })
+            .collect();
+
+        assert_eq!(catalog.get(&rust_p.canonical_string()).map(String::as_str), Some("rust"));
+        assert_eq!(catalog.get(&rust_ref.canonical_string()).map(String::as_str), Some("rust"));
+        assert_eq!(
+            catalog.get(&rust_place_base.canonical_string()).map(String::as_str),
+            Some("rust")
+        );
+        assert_eq!(catalog.get(&c_p.canonical_string()).map(String::as_str), Some("c"));
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn schema_v2_export_resolves_events_from_intra_node_summary_not_only_post_state() {
+        let node_id = "rust::main::bb0".to_string();
+        let node = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 0,
+            statements: vec![
+                MirStatement {
+                    source_info: SourceInfoData { span: "x".into(), scope: "0".into() },
+                    kind: "Assign".into(),
+                    details: "Assign((_2, copy (*_1)))".into(),
+                    place: Some("Local(_2) [mutable]".into()),
+                    is_mutable: Some(true),
+                    rvalue: Some("copy (*_1)".into()),
+                },
+                MirStatement {
+                    source_info: SourceInfoData { span: "x".into(), scope: "0".into() },
+                    kind: "Assign".into(),
+                    details: "Assign((_1, copy _4))".into(),
+                    place: Some("Local(_1) [mutable]".into()),
+                    is_mutable: Some(true),
+                    rvalue: Some("copy _4".into()),
+                },
+            ],
+            terminator: None,
+        });
+        let icfg = GlobalICFGOrdered {
+            ordered_nodes: vec![(node_id.clone(), node)],
+            icfg_edges: vec![],
+            rust_functions: Default::default(),
+            rust_calls: vec![],
+        };
+
+        let a = AbstractAllocId::new(
+            AllocationSiteId::Synthetic { scope: "test".into(), label: "A".into() },
+            Vec::new(),
+        );
+        let b = AbstractAllocId::new(
+            AllocationSiteId::Synthetic { scope: "test".into(), label: "B".into() },
+            Vec::new(),
+        );
+        let p = ProgramVarId::rust("main", "_1").unwrap();
+
+        let mut post = AllocationIdentityMemory::default();
+        post.assign_fresh(p.clone(), b.clone());
+        let mut event = AllocationIdentityMemory::default();
+        event.assign_points_to(p, BTreeSet::from([a.clone(), b.clone()]));
+
+        let mut identity_state = AllocationIdentityState::default();
+        identity_state.by_node.insert(node_id.clone(), post);
+        identity_state.event_by_node.insert(node_id.clone(), event);
+
+        let path = std::env::temp_dir().join(format!(
+            "crema-v6g-event-summary-{}.json",
+            std::process::id()
+        ));
+        export_cqpl_annotated_icfg_with_identity(
+            &icfg,
+            &AbstractState::default(),
+            &identity_state,
+            &node_id,
+            2,
+            &path,
+        )
+        .unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let labels = json["nodes"][0]["allocation_labels"].as_array().unwrap();
+        let read_allocs: BTreeSet<String> = labels
+            .iter()
+            .filter(|label| label["predicate"].as_str() == Some("read"))
+            .map(|label| label["allocation"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(
+            read_allocs,
+            BTreeSet::from([stable_allocation_id(&a), stable_allocation_id(&b)])
+        );
+        assert!(json["nodes"][0]["event_identity"].is_object());
+
+        let vars = json["variables"].as_array().unwrap();
+        assert!(vars.iter().any(|v| {
+            v["id"].as_str() == Some("rust::main::Local(_1)")
+                && v["language"].as_str() == Some("rust")
+        }));
+        assert_eq!(language_of("c::malloc::svf(7)@rust::main::bb0"), "c");
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn schema_v2_allocation_labels_preserve_may_certainty_without_closure_label_expansion() {
+        let scope = "main::{closure#0}";
+        let node_id = format!("rust::{scope}::bb3");
+        let node = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 3,
+            statements: vec![],
+            terminator: Some(MirTerminator::Drop {
+                details: "drop(_6)".into(),
+                source_info: "x".into(),
+                return_target: "bb4".into(),
+                unwind_target: "unreachable".into(),
+                dropped_value: "_6".into(),
+                is_mutable: false,
+            }),
+        });
+
+        let a = AbstractAllocId::new(
+            AllocationSiteId::Synthetic { scope: "test".into(), label: "A".into() },
+            Vec::new(),
+        );
+        let mut identity = AllocationIdentityMemory::default();
+        identity.assign_fresh(
+            ProgramVarId::rust(scope, "_6").expect("scoped MIR local"),
+            a.clone(),
+        );
+
+        let raw = vec![EventLabel { predicate: "drop", variable: "Local(_6)".into() }];
+        let labels = allocation_labels_for_node(&node_id, &node, &raw, &identity, &HashSet::new(), 2);
+        assert_eq!(labels.len(), 1);
+        assert_eq!(labels[0].predicate, "drop");
+        assert_eq!(labels[0].allocation, stable_allocation_id(&a));
+        assert_eq!(labels[0].certainty, "may_abstract");
+    }
+
+
+    #[test]
+    fn c_malloc_allocation_contract_is_structural_c_malloc_family() {
+        let allocation = AbstractAllocId::new(
+            AllocationSiteId::CCall {
+                node_id: "llvm::alloc::node1::rust::main::bb0".into(),
+                allocator: "malloc".into(),
+            },
+            Vec::new(),
+        );
+        let contract = allocation_contract(&allocation);
+        assert_eq!(contract.family, "c_malloc");
+        assert_eq!(contract.operation, "malloc");
+        assert_eq!(contract.language, "c");
+    }
+
+    #[test]
+    fn generic_mir_drop_contract_is_unknown_not_rust_global() {
+        let node = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 4,
+            statements: vec![],
+            terminator: Some(MirTerminator::Drop {
+                details: "drop(_6)".into(),
+                source_info: "<cqpl-test>".into(),
+                return_target: "bb5".into(),
+                unwind_target: "continue".into(),
+                dropped_value: "_6".into(),
+                is_mutable: false,
+            }),
+        });
+        let contract = deallocator_contract(&node, &HashSet::new());
+        assert_eq!(contract.family, "unknown");
+        assert_eq!(contract.operation, "drop");
+        assert_eq!(contract.language, "rust");
+    }
+
+    #[test]
+    fn schema_v2_attaches_c_free_contract_to_rust_allocation_drop() {
+        let allocation = AbstractAllocId::new(
+            AllocationSiteId::RustCall {
+                node_id: "rust::main::bb0".into(),
+                callee: "std::boxed::Box::<i32>::new".into(),
+            },
+            Vec::new(),
+        );
+        let var = ProgramVarId::c("free_wrapper", 7, Some("rust::main::bb2".into()));
+        let mut identity = AllocationIdentityMemory::default();
+        identity.assign_points_to(var, BTreeSet::from([allocation.clone()]));
+        let node_id = "llvm::free_wrapper::node4::rust::main::bb2";
+        let node = GlobalICFGNode::Llvm(crate::structs::LlvmJsonNode {
+            node_id: 4, node_type: false, info: "call void @free(ptr %7)".into(),
+            node_kind_string: "FunCallBlock".into(), node_kind: 0, node_source_loc: String::new(),
+            function_name: Some("free_wrapper".into()), basic_block: None, basic_block_name: None,
+            basic_block_info: None, svf_statements: vec![], incoming_edges: vec![], outgoing_edges: vec![],
+        });
+        let labels = vec![EventLabel { predicate: "drop", variable: "7@rust::main::bb2".into() }];
+        let out = allocation_labels_for_node(node_id, &node, &labels, &identity, &HashSet::new(), 2);
+        assert!(out.iter().any(|l|
+            l.predicate == "drop"
+                && l.allocation == stable_allocation_id(&allocation)
+                && l.deallocator_contract.as_ref().is_some_and(|c| c.family == "c_malloc" && c.operation == "free" && c.language == "c")
+        ));
+        assert_eq!(allocation_contract(&allocation).family, "rust_global");
     }
 
 }

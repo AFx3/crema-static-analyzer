@@ -1,0 +1,2631 @@
+{
+  "ordered_nodes": [
+    [
+      "dummyCall::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0_internal",
+      {
+        "node_type": "DummyCall",
+        "node_data": {
+          "dummy_node_name": "dummyCall",
+          "incoming_edge": "rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0",
+          "outgoing_edge": "rust::MyStruct::into_inner::bb0",
+          "id": "efff80083ffce64b",
+          "mir_var": "Local(_1)",
+          "llvm_var": null,
+          "is_internal": true
+        }
+      }
+    ],
+    [
+      "dummyCall::rust::main::bb0::rust::main::bb0_internal",
+      {
+        "node_type": "DummyCall",
+        "node_data": {
+          "dummy_node_name": "dummyCall",
+          "incoming_edge": "rust::main::bb0",
+          "outgoing_edge": "rust::MyStruct::new::bb0",
+          "id": "2d362faded4cd48c",
+          "mir_var": "Local(_2) [mutable]",
+          "llvm_var": null,
+          "is_internal": true
+        }
+      }
+    ],
+    [
+      "dummyCall::rust::main::bb4::rust::main::bb4_internal",
+      {
+        "node_type": "DummyCall",
+        "node_data": {
+          "dummy_node_name": "dummyCall",
+          "incoming_edge": "rust::main::bb4",
+          "outgoing_edge": "rust::<MyStruct as std::ops::DerefMut>::deref_mut::bb0",
+          "id": "a4013d4cac5a2b40",
+          "mir_var": "Local(_12) [mutable]",
+          "llvm_var": null,
+          "is_internal": true
+        }
+      }
+    ],
+    [
+      "dummyCall::rust::main::bb5::rust::main::bb5_internal",
+      {
+        "node_type": "DummyCall",
+        "node_data": {
+          "dummy_node_name": "dummyCall",
+          "incoming_edge": "rust::main::bb5",
+          "outgoing_edge": "rust::MyStructSlice::inc::bb0",
+          "id": "f93a2ec883a9a569",
+          "mir_var": "Local(_11) [mutable]",
+          "llvm_var": null,
+          "is_internal": true
+        }
+      }
+    ],
+    [
+      "dummyRet::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::0::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0_internal",
+      {
+        "node_type": "DummyRet",
+        "node_data": {
+          "dummy_node_name": "dummyRet",
+          "incoming_edge": "MyStruct::into_inner",
+          "outgoing_edge": "rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb1",
+          "id": "6931ded0c56d9a38",
+          "mir_var": "_0",
+          "llvm_var": "Local _0",
+          "is_internal": true
+        }
+      }
+    ],
+    [
+      "dummyRet::rust::main::0::rust::main::bb0_internal",
+      {
+        "node_type": "DummyRet",
+        "node_data": {
+          "dummy_node_name": "dummyRet",
+          "incoming_edge": "MyStruct::new",
+          "outgoing_edge": "rust::main::bb1",
+          "id": "ddf9337e99e30f9b",
+          "mir_var": "_1",
+          "llvm_var": "Local _0",
+          "is_internal": true
+        }
+      }
+    ],
+    [
+      "dummyRet::rust::main::4::rust::main::bb4_internal",
+      {
+        "node_type": "DummyRet",
+        "node_data": {
+          "dummy_node_name": "dummyRet",
+          "incoming_edge": "<MyStruct as std::ops::DerefMut>::deref_mut",
+          "outgoing_edge": "rust::main::bb5",
+          "id": "b9ab3d3a4ba7c7e7",
+          "mir_var": "_11",
+          "llvm_var": "Local _0",
+          "is_internal": true
+        }
+      }
+    ],
+    [
+      "dummyRet::rust::main::5::rust::main::bb5_internal",
+      {
+        "node_type": "DummyRet",
+        "node_data": {
+          "dummy_node_name": "dummyRet",
+          "incoming_edge": "MyStructSlice::inc",
+          "outgoing_edge": "rust::main::bb6",
+          "id": "ded352a6807490af",
+          "mir_var": "_10",
+          "llvm_var": "Local _0",
+          "is_internal": true
+        }
+      }
+    ],
+    [
+      "rust::<MyStruct as std::clone::Clone>::clone::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:43:5: 43:22 (#7)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_3, &((*_1).0: std::vec::Vec<u8>)))",
+              "place": "Local(_3)",
+              "is_mutable": false,
+              "rvalue": "&((*_1).0: std::vec::Vec<u8>)"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:43:5: 43:22 (#7), scope: scope[0] }, kind: _2 = <std::vec::Vec<u8> as std::clone::Clone>::clone(copy _3) -> [return: bb1, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:43:5: 43:22 (#7)",
+            "function_called": "<std::vec::Vec<u8> as std::clone::Clone>::clone",
+            "callee_def_path": "std::clone::Clone::clone",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_3)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_2",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStruct as std::clone::Clone>::clone::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:41:10: 41:15 (#7)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_0, MyStruct { contents: move _2 }))",
+              "place": "Local(_0) [mutable]",
+              "is_mutable": true,
+              "rvalue": "MyStruct { contents: move _2 }"
+            }
+          ],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:41:15: 41:15 (#7), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:41:15: 41:15 (#7)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStruct as std::cmp::Eq>::assert_receiver_is_total_eq::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:41:26: 41:26 (#9), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:41:26: 41:26 (#9)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStruct as std::cmp::PartialEq>::eq::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:43:5: 43:22 (#10)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_3, &((*_1).0: std::vec::Vec<u8>)))",
+              "place": "Local(_3) [mutable]",
+              "is_mutable": true,
+              "rvalue": "&((*_1).0: std::vec::Vec<u8>)"
+            },
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:43:5: 43:22 (#10)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_4, &((*_2).0: std::vec::Vec<u8>)))",
+              "place": "Local(_4) [mutable]",
+              "is_mutable": true,
+              "rvalue": "&((*_2).0: std::vec::Vec<u8>)"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:43:5: 43:22 (#10), scope: scope[0] }, kind: _0 = <std::vec::Vec<u8> as std::cmp::PartialEq>::eq(move _3, move _4) -> [return: bb1, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:43:5: 43:22 (#10)",
+            "function_called": "<std::vec::Vec<u8> as std::cmp::PartialEq>::eq",
+            "callee_def_path": "std::cmp::PartialEq::eq",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_3) [mutable]",
+                "is_mutable": true
+              },
+              {
+                "arg": "Local(_4) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_0",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStruct as std::cmp::PartialEq>::eq::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:41:37: 41:37 (#10), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:41:37: 41:37 (#10)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStruct as std::convert::From<std::boxed::Box<MyStructSlice>>>::from::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:85:23: 85:47 (#0), scope: scope[0] }, kind: _3 = <std::boxed::Box<[u8]> as std::convert::From<std::boxed::Box<MyStructSlice>>>::from(move _1) -> [return: bb1, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:85:23: 85:47 (#0)",
+            "function_called": "<std::boxed::Box<[u8]> as std::convert::From<std::boxed::Box<MyStructSlice>>>::from",
+            "callee_def_path": "std::convert::From::from",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_1)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_3",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStruct as std::convert::From<std::boxed::Box<MyStructSlice>>>::from::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:85:23: 85:58 (#0), scope: scope[0] }, kind: _2 = std::slice::<impl [u8]>::into_vec::<std::alloc::Global>(move _3) -> [return: bb2, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:85:23: 85:58 (#0)",
+            "function_called": "std::slice::<impl [u8]>::into_vec::<std::alloc::Global>",
+            "callee_def_path": "std::slice::<impl [T]>::into_vec",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_3) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_2",
+            "return_target": "bb2",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStruct as std::convert::From<std::boxed::Box<MyStructSlice>>>::from::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:84:9: 86:10 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_0, MyStruct { contents: move _2 }))",
+              "place": "Local(_0) [mutable]",
+              "is_mutable": true,
+              "rvalue": "MyStruct { contents: move _2 }"
+            }
+          ],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:87:6: 87:6 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:87:6: 87:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStruct as std::fmt::Debug>::fmt::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:41:17: 41:22 (#8)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_3, const \"MyStruct\"))",
+              "place": "Local(_3) [mutable]",
+              "is_mutable": true,
+              "rvalue": "const \"MyStruct\""
+            },
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:43:5: 43:22 (#8)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_4, const \"contents\"))",
+              "place": "Local(_4) [mutable]",
+              "is_mutable": true,
+              "rvalue": "const \"contents\""
+            },
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:43:5: 43:22 (#8)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_7, &((*_1).0: std::vec::Vec<u8>)))",
+              "place": "Local(_7)",
+              "is_mutable": false,
+              "rvalue": "&((*_1).0: std::vec::Vec<u8>)"
+            },
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:43:5: 43:22 (#8)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_6, &_7))",
+              "place": "Local(_6)",
+              "is_mutable": false,
+              "rvalue": "&_7"
+            },
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:43:5: 43:22 (#8)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_5, copy _6 as &dyn std::fmt::Debug (PointerCoercion(Unsize, Implicit))))",
+              "place": "Local(_5) [mutable]",
+              "is_mutable": true,
+              "rvalue": "copy _6 as &dyn std::fmt::Debug (PointerCoercion(Unsize, Implicit))"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:41:17: 41:22 (#8), scope: scope[0] }, kind: _0 = std::fmt::Formatter::<'_>::debug_struct_field1_finish(copy _2, move _3, move _4, move _5) -> [return: bb1, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:41:17: 41:22 (#8)",
+            "function_called": "std::fmt::Formatter::<'_>::debug_struct_field1_finish",
+            "callee_def_path": "std::fmt::Formatter::<'a>::debug_struct_field1_finish",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_2)",
+                "is_mutable": false
+              },
+              {
+                "arg": "Local(_3) [mutable]",
+                "is_mutable": true
+              },
+              {
+                "arg": "Local(_4) [mutable]",
+                "is_mutable": true
+              },
+              {
+                "arg": "Local(_5) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_0",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStruct as std::fmt::Debug>::fmt::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:41:22: 41:22 (#8), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:41:22: 41:22 (#8)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStruct as std::ops::Deref>::deref::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:72:33: 72:47 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_3, &((*_1).0: std::vec::Vec<u8>)))",
+              "place": "Local(_3)",
+              "is_mutable": false,
+              "rvalue": "&((*_1).0: std::vec::Vec<u8>)"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:72:33: 72:47 (#0), scope: scope[0] }, kind: _2 = <std::vec::Vec<u8> as std::ops::Deref>::deref(copy _3) -> [return: bb1, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:72:33: 72:47 (#0)",
+            "function_called": "<std::vec::Vec<u8> as std::ops::Deref>::deref",
+            "callee_def_path": "std::ops::Deref::deref",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_3)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_2",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStruct as std::ops::Deref>::deref::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:72:18: 72:57 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_0, copy _2 as &MyStructSlice (Transmute)))",
+              "place": "Local(_0) [mutable]",
+              "is_mutable": true,
+              "rvalue": "copy _2 as &MyStructSlice (Transmute)"
+            }
+          ],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:73:6: 73:6 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:73:6: 73:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStruct as std::ops::DerefMut>::deref_mut::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:78:33: 78:51 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_3, &mut ((*_1).0: std::vec::Vec<u8>)))",
+              "place": "Local(_3) [mutable]",
+              "is_mutable": true,
+              "rvalue": "&mut ((*_1).0: std::vec::Vec<u8>)"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:78:33: 78:51 (#0), scope: scope[0] }, kind: _2 = <std::vec::Vec<u8> as std::ops::DerefMut>::deref_mut(copy _3) -> [return: bb1, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:78:33: 78:51 (#0)",
+            "function_called": "<std::vec::Vec<u8> as std::ops::DerefMut>::deref_mut",
+            "callee_def_path": "std::ops::DerefMut::deref_mut",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_3) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_2",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStruct as std::ops::DerefMut>::deref_mut::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:78:18: 78:65 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_0, copy _2 as &mut MyStructSlice (Transmute)))",
+              "place": "Local(_0) [mutable]",
+              "is_mutable": true,
+              "rvalue": "copy _2 as &mut MyStructSlice (Transmute)"
+            }
+          ],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:79:6: 79:6 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:79:6: 79:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStructSlice as std::cmp::Eq>::assert_receiver_is_total_eq::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:4:19: 4:19 (#5), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:4:19: 4:19 (#5)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStructSlice as std::cmp::PartialEq>::eq::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:6:5: 6:19 (#6)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_3, &((*_1).0: [u8])))",
+              "place": "Local(_3) [mutable]",
+              "is_mutable": true,
+              "rvalue": "&((*_1).0: [u8])"
+            },
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:6:5: 6:19 (#6)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_4, &((*_2).0: [u8])))",
+              "place": "Local(_4) [mutable]",
+              "is_mutable": true,
+              "rvalue": "&((*_2).0: [u8])"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:6:5: 6:19 (#6), scope: scope[0] }, kind: _0 = <[u8] as std::cmp::PartialEq>::eq(move _3, move _4) -> [return: bb1, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:6:5: 6:19 (#6)",
+            "function_called": "<[u8] as std::cmp::PartialEq>::eq",
+            "callee_def_path": "std::cmp::PartialEq::eq",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_3) [mutable]",
+                "is_mutable": true
+              },
+              {
+                "arg": "Local(_4) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_0",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStructSlice as std::cmp::PartialEq>::eq::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:4:30: 4:30 (#6), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:4:30: 4:30 (#6)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStructSlice as std::fmt::Debug>::fmt::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:4:10: 4:15 (#4)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_3, const \"MyStructSlice\"))",
+              "place": "Local(_3) [mutable]",
+              "is_mutable": true,
+              "rvalue": "const \"MyStructSlice\""
+            },
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:6:5: 6:19 (#4)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_4, const \"contents\"))",
+              "place": "Local(_4) [mutable]",
+              "is_mutable": true,
+              "rvalue": "const \"contents\""
+            },
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:6:5: 6:19 (#4)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_7, &((*_1).0: [u8])))",
+              "place": "Local(_7)",
+              "is_mutable": false,
+              "rvalue": "&((*_1).0: [u8])"
+            },
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:6:5: 6:19 (#4)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_6, &_7))",
+              "place": "Local(_6)",
+              "is_mutable": false,
+              "rvalue": "&_7"
+            },
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:6:5: 6:19 (#4)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_5, copy _6 as &dyn std::fmt::Debug (PointerCoercion(Unsize, Implicit))))",
+              "place": "Local(_5) [mutable]",
+              "is_mutable": true,
+              "rvalue": "copy _6 as &dyn std::fmt::Debug (PointerCoercion(Unsize, Implicit))"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:4:10: 4:15 (#4), scope: scope[0] }, kind: _0 = std::fmt::Formatter::<'_>::debug_struct_field1_finish(copy _2, move _3, move _4, move _5) -> [return: bb1, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:4:10: 4:15 (#4)",
+            "function_called": "std::fmt::Formatter::<'_>::debug_struct_field1_finish",
+            "callee_def_path": "std::fmt::Formatter::<'a>::debug_struct_field1_finish",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_2)",
+                "is_mutable": false
+              },
+              {
+                "arg": "Local(_3) [mutable]",
+                "is_mutable": true
+              },
+              {
+                "arg": "Local(_4) [mutable]",
+                "is_mutable": true
+              },
+              {
+                "arg": "Local(_5) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_0",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<MyStructSlice as std::fmt::Debug>::fmt::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:4:15: 4:15 (#4), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:4:15: 4:15 (#4)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<impl std::convert::From<&MyStructSlice> for &[u8]>::from::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:31:18: 31:39 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_0, copy _1 as &[u8] (Transmute)))",
+              "place": "Local(_0) [mutable]",
+              "is_mutable": true,
+              "rvalue": "copy _1 as &[u8] (Transmute)"
+            }
+          ],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:32:6: 32:6 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:32:6: 32:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<impl std::convert::From<&mut MyStructSlice> for &mut [u8]>::from::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:37:18: 37:39 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_0, move _1 as &mut [u8] (Transmute)))",
+              "place": "Local(_0) [mutable]",
+              "is_mutable": true,
+              "rvalue": "move _1 as &mut [u8] (Transmute)"
+            }
+          ],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:38:6: 38:6 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:38:6: 38:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:92:9: 92:27 (#0), scope: scope[0] }, kind: _0 = MyStruct::into_inner(move _1) -> [return: bb1, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:92:9: 92:27 (#0)",
+            "function_called": "MyStruct::into_inner",
+            "callee_def_path": "MyStruct::into_inner",
+            "callee_is_local": true,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_1)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_0",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:93:6: 93:6 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:93:6: 93:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<impl std::convert::From<std::boxed::Box<MyStructSlice>> for std::boxed::Box<[u8]>>::from::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:25:32: 25:52 (#0), scope: scope[0] }, kind: _3 = std::boxed::Box::<MyStructSlice>::into_raw(move _1) -> [return: bb1, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:25:32: 25:52 (#0)",
+            "function_called": "std::boxed::Box::<MyStructSlice>::into_raw",
+            "callee_def_path": "std::boxed::Box::<T, A>::into_raw",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_1)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_3",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<impl std::convert::From<std::boxed::Box<MyStructSlice>> for std::boxed::Box<[u8]>>::from::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:25:32: 25:65 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_2, move _3 as *mut [u8] (PtrToPtr)))",
+              "place": "Local(_2) [mutable]",
+              "is_mutable": true,
+              "rvalue": "move _3 as *mut [u8] (PtrToPtr)"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:25:18: 25:66 (#0), scope: scope[0] }, kind: _0 = std::boxed::Box::<[u8]>::from_raw(move _2) -> [return: bb2, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:25:18: 25:66 (#0)",
+            "function_called": "std::boxed::Box::<[u8]>::from_raw",
+            "callee_def_path": "std::boxed::Box::<T>::from_raw",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_2) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_0",
+            "return_target": "bb2",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<impl std::convert::From<std::boxed::Box<MyStructSlice>> for std::boxed::Box<[u8]>>::from::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:26:6: 26:6 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:26:6: 26:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::MyStruct::into_boxed_slice::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:59:41: 59:54 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_5, move (_1.0: std::vec::Vec<u8>)))",
+              "place": "Local(_5) [mutable]",
+              "is_mutable": true,
+              "rvalue": "move (_1.0: std::vec::Vec<u8>)"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:59:41: 59:73 (#0), scope: scope[0] }, kind: _4 = std::vec::Vec::<u8>::into_boxed_slice(move _5) -> [return: bb1, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:59:41: 59:73 (#0)",
+            "function_called": "std::vec::Vec::<u8>::into_boxed_slice",
+            "callee_def_path": "std::vec::Vec::<T, A>::into_boxed_slice",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_5) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_4",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::MyStruct::into_boxed_slice::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:59:27: 59:74 (#0), scope: scope[0] }, kind: _3 = std::boxed::Box::<[u8]>::into_raw(move _4) -> [return: bb2, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:59:27: 59:74 (#0)",
+            "function_called": "std::boxed::Box::<[u8]>::into_raw",
+            "callee_def_path": "std::boxed::Box::<T, A>::into_raw",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_4) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_3",
+            "return_target": "bb2",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::MyStruct::into_boxed_slice::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:59:27: 59:96 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_2, move _3 as *mut MyStructSlice (PtrToPtr)))",
+              "place": "Local(_2) [mutable]",
+              "is_mutable": true,
+              "rvalue": "move _3 as *mut MyStructSlice (PtrToPtr)"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:59:13: 59:97 (#0), scope: scope[0] }, kind: _0 = std::boxed::Box::<MyStructSlice>::from_raw(move _2) -> [return: bb3, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:59:13: 59:97 (#0)",
+            "function_called": "std::boxed::Box::<MyStructSlice>::from_raw",
+            "callee_def_path": "std::boxed::Box::<T>::from_raw",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_2) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_0",
+            "return_target": "bb3",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::MyStruct::into_boxed_slice::bb3",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 3,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:61:6: 61:6 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:61:6: 61:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::MyStruct::into_inner::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:64:9: 64:22 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_0, move (_1.0: std::vec::Vec<u8>)))",
+              "place": "Local(_0) [mutable]",
+              "is_mutable": true,
+              "rvalue": "move (_1.0: std::vec::Vec<u8>)"
+            }
+          ],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:65:6: 65:6 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:65:6: 65:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::MyStruct::new::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:49:23: 49:40 (#0), scope: scope[0] }, kind: _3 = <impl IntoIterator<Item = u8> as std::iter::IntoIterator>::into_iter(move _1) -> [return: bb1, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:49:23: 49:40 (#0)",
+            "function_called": "<impl IntoIterator<Item = u8> as std::iter::IntoIterator>::into_iter",
+            "callee_def_path": "std::iter::IntoIterator::into_iter",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_1)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_3",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::MyStruct::new::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:49:23: 49:50 (#0), scope: scope[0] }, kind: _2 = <<impl IntoIterator<Item = u8> as std::iter::IntoIterator>::IntoIter as std::iter::Iterator>::collect::<std::vec::Vec<u8>>(move _3) -> [return: bb2, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:49:23: 49:50 (#0)",
+            "function_called": "<<impl IntoIterator<Item = u8> as std::iter::IntoIterator>::IntoIter as std::iter::Iterator>::collect::<std::vec::Vec<u8>>",
+            "callee_def_path": "std::iter::Iterator::collect",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_3) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_2",
+            "return_target": "bb2",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::MyStruct::new::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:48:9: 50:10 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_0, MyStruct { contents: move _2 }))",
+              "place": "Local(_0) [mutable]",
+              "is_mutable": true,
+              "rvalue": "MyStruct { contents: move _2 }"
+            }
+          ],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:51:6: 51:6 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:51:6: 51:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::MyStruct::new_unchecked::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:54:9: 54:31 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_0, MyStruct { contents: move _1 }))",
+              "place": "Local(_0) [mutable]",
+              "is_mutable": true,
+              "rvalue": "MyStruct { contents: move _1 }"
+            }
+          ],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:55:6: 55:6 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:55:6: 55:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::MyStructSlice::inc::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:19:9: 19:22 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_4, &mut ((*_1).0: [u8])))",
+              "place": "Local(_4) [mutable]",
+              "is_mutable": true,
+              "rvalue": "&mut ((*_1).0: [u8])"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:19:9: 19:33 (#0), scope: scope[0] }, kind: _3 = core::slice::<impl [u8]>::iter_mut(move _4) -> [return: bb1, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:19:9: 19:33 (#0)",
+            "function_called": "core::slice::<impl [u8]>::iter_mut",
+            "callee_def_path": "core::slice::<impl [T]>::iter_mut",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_4) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_3",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::MyStructSlice::inc::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:19:9: 19:55 (#0), scope: scope[0] }, kind: _2 = <std::slice::IterMut<'_, u8> as std::iter::Iterator>::for_each::<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:19:43: 19:46}>(move _3, const ZeroSized: {closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:19:43: 19:46}) -> [return: bb2, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:19:9: 19:55 (#0)",
+            "function_called": "<std::slice::IterMut<'_, u8> as std::iter::Iterator>::for_each::<{closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:19:43: 19:46}>",
+            "callee_def_path": "std::iter::Iterator::for_each",
+            "callee_is_local": false,
+            "callback_def_paths": [
+              "MyStructSlice::inc::{closure#0}"
+            ],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_3) [mutable]",
+                "is_mutable": true
+              },
+              {
+                "arg": "const ZeroSized: {closure@/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:19:43: 19:46}",
+                "is_mutable": null
+              }
+            ],
+            "return_place": "_2",
+            "return_target": "bb2",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::MyStructSlice::inc::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:20:6: 20:6 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:20:6: 20:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::MyStructSlice::inc::{closure#0}::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:19:47: 19:54 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_3, AddWithOverflow(copy (*_2), const 1_u8)))",
+              "place": "Local(_3) [mutable]",
+              "is_mutable": true,
+              "rvalue": "AddWithOverflow(copy (*_2), const 1_u8)"
+            }
+          ],
+          "terminator": {
+            "kind": "Assert",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:19:47: 19:54 (#0), scope: scope[0] }, kind: assert(!move (_3.1: bool), \"attempt to compute `{} + {}`, which would overflow\", copy (*_2), const 1_u8) -> [success: bb1, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:19:47: 19:54 (#0)",
+            "return_target": "bb1",
+            "unwind_target": "continue",
+            "cond": "move (_3.1: bool)",
+            "expected": false,
+            "msg": "Overflow(Add, copy (*_2), const 1_u8)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::MyStructSlice::inc::{closure#0}::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:19:47: 19:54 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign(((*_2), move (_3.0: u8)))",
+              "place": "Local(_2) -> *",
+              "is_mutable": false,
+              "rvalue": "move (_3.0: u8)"
+            }
+          ],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:19:54: 19:54 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:19:54: 19:54 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::MyStructSlice::new_mut_unchecked::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:15:18: 15:39 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_0, move _1 as &mut MyStructSlice (Transmute)))",
+              "place": "Local(_0) [mutable]",
+              "is_mutable": true,
+              "rvalue": "move _1 as &mut MyStructSlice (Transmute)"
+            }
+          ],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:16:6: 16:6 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:16:6: 16:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::MyStructSlice::new_unchecked::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:11:18: 11:39 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_0, copy _1 as &MyStructSlice (Transmute)))",
+              "place": "Local(_0) [mutable]",
+              "is_mutable": true,
+              "rvalue": "copy _1 as &MyStructSlice (Transmute)"
+            }
+          ],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:12:6: 12:6 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:12:6: 12:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:97:31: 97:40 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_2, [const 1_u8, const 5_u8, const 4_u8]))",
+              "place": "Local(_2) [mutable]",
+              "is_mutable": true,
+              "rvalue": "[const 1_u8, const 5_u8, const 4_u8]"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:97:17: 97:41 (#0), scope: scope[0] }, kind: _1 = MyStruct::new::<[u8; 3]>(move _2) -> [return: bb1, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:97:17: 97:41 (#0)",
+            "function_called": "MyStruct::new::<[u8; 3]>",
+            "callee_def_path": "MyStruct::new",
+            "callee_is_local": true,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [
+              "MyStruct::new"
+            ],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_2) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_1",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:98:14: 98:20 (#0)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_5, const main::promoted[1]))",
+              "place": "Local(_5)",
+              "is_mutable": false,
+              "rvalue": "const main::promoted[1]"
+            },
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:98:22: 98:23 (#12)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_9, &_1))",
+              "place": "Local(_9)",
+              "is_mutable": false,
+              "rvalue": "&_1"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:98:15: 98:19 (#12), scope: scope[1] }, kind: _8 = core::fmt::rt::Argument::<'_>::new_debug::<MyStruct>(copy _9) -> [return: bb2, unwind: bb11] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:98:15: 98:19 (#12)",
+            "function_called": "core::fmt::rt::Argument::<'_>::new_debug::<MyStruct>",
+            "callee_def_path": "core::fmt::rt::Argument::<'_>::new_debug",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_9)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_8",
+            "return_target": "bb2",
+            "unwind_target": "cleanup(bb11)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb10",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 10,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:101:2: 101:2 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:101:2: 101:2 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb11",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 11,
+          "statements": [],
+          "terminator": {
+            "kind": "Drop",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:101:1: 101:2 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb12, unwind terminate(cleanup)] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:101:1: 101:2 (#0)",
+            "return_target": "bb12",
+            "unwind_target": "terminate",
+            "dropped_value": "Local(_1) [mutable]",
+            "is_mutable": true
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb12",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 12,
+          "statements": [],
+          "terminator": {
+            "kind": "UnwindResume",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:96:1: 101:2 (#0), scope: scope[0] }, kind: resume }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:96:1: 101:2 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:28: 143:61 (#12)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_7, [move _8]))",
+              "place": "Local(_7)",
+              "is_mutable": false,
+              "rvalue": "[move _8]"
+            },
+            {
+              "source_info": {
+                "span": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:28: 143:61 (#12)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_6, &_7))",
+              "place": "Local(_6)",
+              "is_mutable": false,
+              "rvalue": "&_7"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:28: 143:61 (#12), scope: scope[1] }, kind: _4 = std::fmt::Arguments::<'_>::new_v1::<2, 1>(copy _5, copy _6) -> [return: bb3, unwind: bb11] }",
+            "source_info": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:28: 143:61 (#12)",
+            "function_called": "std::fmt::Arguments::<'_>::new_v1::<2, 1>",
+            "callee_def_path": "std::fmt::Arguments::<'a>::new_v1",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_5)",
+                "is_mutable": false
+              },
+              {
+                "arg": "Local(_6)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_4",
+            "return_target": "bb3",
+            "unwind_target": "cleanup(bb11)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb3",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 3,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:9: 143:62 (#11), scope: scope[1] }, kind: _3 = std::io::_print(move _4) -> [return: bb4, unwind: bb11] }",
+            "source_info": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:9: 143:62 (#11)",
+            "function_called": "std::io::_print",
+            "callee_def_path": "std::io::_print",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_4) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_3",
+            "return_target": "bb4",
+            "unwind_target": "cleanup(bb11)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb4",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 4,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:99:5: 99:6 (#0)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_12, &mut _1))",
+              "place": "Local(_12) [mutable]",
+              "is_mutable": true,
+              "rvalue": "&mut _1"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:99:5: 99:12 (#0), scope: scope[1] }, kind: _11 = <MyStruct as std::ops::DerefMut>::deref_mut(move _12) -> [return: bb5, unwind: bb11] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:99:5: 99:12 (#0)",
+            "function_called": "<MyStruct as std::ops::DerefMut>::deref_mut",
+            "callee_def_path": "std::ops::DerefMut::deref_mut",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [
+              "<MyStruct as std::ops::DerefMut>::deref_mut"
+            ],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_12) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_11",
+            "return_target": "bb5",
+            "unwind_target": "cleanup(bb11)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb5",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 5,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:99:5: 99:12 (#0), scope: scope[1] }, kind: _10 = MyStructSlice::inc(copy _11) -> [return: bb6, unwind: bb11] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:99:5: 99:12 (#0)",
+            "function_called": "MyStructSlice::inc",
+            "callee_def_path": "MyStructSlice::inc",
+            "callee_is_local": true,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [
+              "MyStructSlice::inc"
+            ],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_11) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_10",
+            "return_target": "bb6",
+            "unwind_target": "cleanup(bb11)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb6",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 6,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:100:14: 100:20 (#0)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_15, const main::promoted[0]))",
+              "place": "Local(_15)",
+              "is_mutable": false,
+              "rvalue": "const main::promoted[0]"
+            },
+            {
+              "source_info": {
+                "span": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:100:22: 100:23 (#14)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_19, &_1))",
+              "place": "Local(_19)",
+              "is_mutable": false,
+              "rvalue": "&_1"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:100:15: 100:19 (#14), scope: scope[1] }, kind: _18 = core::fmt::rt::Argument::<'_>::new_debug::<MyStruct>(copy _19) -> [return: bb7, unwind: bb11] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:100:15: 100:19 (#14)",
+            "function_called": "core::fmt::rt::Argument::<'_>::new_debug::<MyStruct>",
+            "callee_def_path": "core::fmt::rt::Argument::<'_>::new_debug",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_19)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_18",
+            "return_target": "bb7",
+            "unwind_target": "cleanup(bb11)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb7",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 7,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:28: 143:61 (#14)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_17, [move _18]))",
+              "place": "Local(_17)",
+              "is_mutable": false,
+              "rvalue": "[move _18]"
+            },
+            {
+              "source_info": {
+                "span": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:28: 143:61 (#14)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_16, &_17))",
+              "place": "Local(_16)",
+              "is_mutable": false,
+              "rvalue": "&_17"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:28: 143:61 (#14), scope: scope[1] }, kind: _14 = std::fmt::Arguments::<'_>::new_v1::<2, 1>(copy _15, copy _16) -> [return: bb8, unwind: bb11] }",
+            "source_info": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:28: 143:61 (#14)",
+            "function_called": "std::fmt::Arguments::<'_>::new_v1::<2, 1>",
+            "callee_def_path": "std::fmt::Arguments::<'a>::new_v1",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_15)",
+                "is_mutable": false
+              },
+              {
+                "arg": "Local(_16)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_14",
+            "return_target": "bb8",
+            "unwind_target": "cleanup(bb11)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb8",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 8,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:9: 143:62 (#13), scope: scope[1] }, kind: _13 = std::io::_print(move _14) -> [return: bb9, unwind: bb11] }",
+            "source_info": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:143:9: 143:62 (#13)",
+            "function_called": "std::io::_print",
+            "callee_def_path": "std::io::_print",
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_14) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_13",
+            "return_target": "bb9",
+            "unwind_target": "cleanup(bb11)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb9",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 9,
+          "statements": [],
+          "terminator": {
+            "kind": "Drop",
+            "details": "Terminator { source_info: SourceInfo { span: /home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:101:1: 101:2 (#0), scope: scope[0] }, kind: drop(_1) -> [return: bb10, unwind continue] }",
+            "source_info": "/home/af/Documenti/a-phd/tests_and_target_repos/no_errors_projects/unsized_struct/src/main.rs:101:1: 101:2 (#0)",
+            "return_target": "bb10",
+            "unwind_target": "continue",
+            "dropped_value": "Local(_1) [mutable]",
+            "is_mutable": true
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::terminate",
+      {
+        "node_type": "Terminal",
+        "node_data": {
+          "reason": "unwind_terminate"
+        }
+      }
+    ]
+  ],
+  "icfg_edges": [
+    {
+      "source": "dummyCall::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0_internal",
+      "destination": "rust::MyStruct::into_inner::bb0",
+      "label": "dummyCall -> Rust Entry",
+      "source_label": "dummyCall (id: efff80083ffce64b)",
+      "destination_label": "Mir bb0"
+    },
+    {
+      "source": "dummyCall::rust::main::bb0::rust::main::bb0_internal",
+      "destination": "rust::MyStruct::new::bb0",
+      "label": "dummyCall -> Rust Entry",
+      "source_label": "dummyCall (id: 2d362faded4cd48c)",
+      "destination_label": "Mir bb0"
+    },
+    {
+      "source": "dummyCall::rust::main::bb4::rust::main::bb4_internal",
+      "destination": "rust::<MyStruct as std::ops::DerefMut>::deref_mut::bb0",
+      "label": "dummyCall -> Rust Entry",
+      "source_label": "dummyCall (id: a4013d4cac5a2b40)",
+      "destination_label": "Mir bb0"
+    },
+    {
+      "source": "dummyCall::rust::main::bb5::rust::main::bb5_internal",
+      "destination": "rust::MyStructSlice::inc::bb0",
+      "label": "dummyCall -> Rust Entry",
+      "source_label": "dummyCall (id: f93a2ec883a9a569)",
+      "destination_label": "Mir bb0"
+    },
+    {
+      "source": "dummyRet::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::0::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0_internal",
+      "destination": "rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb1",
+      "label": "dummyRet -> Rust Continuation",
+      "source_label": "dummyRet (id: 6931ded0c56d9a38)",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "dummyRet::rust::main::0::rust::main::bb0_internal",
+      "destination": "rust::main::bb1",
+      "label": "dummyRet -> Rust Continuation",
+      "source_label": "dummyRet (id: ddf9337e99e30f9b)",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "dummyRet::rust::main::4::rust::main::bb4_internal",
+      "destination": "rust::main::bb5",
+      "label": "dummyRet -> Rust Continuation",
+      "source_label": "dummyRet (id: b9ab3d3a4ba7c7e7)",
+      "destination_label": "Mir bb5"
+    },
+    {
+      "source": "dummyRet::rust::main::5::rust::main::bb5_internal",
+      "destination": "rust::main::bb6",
+      "label": "dummyRet -> Rust Continuation",
+      "source_label": "dummyRet (id: ded352a6807490af)",
+      "destination_label": "Mir bb6"
+    },
+    {
+      "source": "rust::<MyStruct as std::clone::Clone>::clone::bb0",
+      "destination": "rust::<MyStruct as std::clone::Clone>::clone::bb1",
+      "label": "External/summary call return",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::<MyStruct as std::cmp::PartialEq>::eq::bb0",
+      "destination": "rust::<MyStruct as std::cmp::PartialEq>::eq::bb1",
+      "label": "External/summary call return",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::<MyStruct as std::convert::From<std::boxed::Box<MyStructSlice>>>::from::bb0",
+      "destination": "rust::<MyStruct as std::convert::From<std::boxed::Box<MyStructSlice>>>::from::bb1",
+      "label": "External/summary call return",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::<MyStruct as std::convert::From<std::boxed::Box<MyStructSlice>>>::from::bb1",
+      "destination": "rust::<MyStruct as std::convert::From<std::boxed::Box<MyStructSlice>>>::from::bb2",
+      "label": "External/summary call return",
+      "source_label": "Mir bb1",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::<MyStruct as std::fmt::Debug>::fmt::bb0",
+      "destination": "rust::<MyStruct as std::fmt::Debug>::fmt::bb1",
+      "label": "External/summary call return",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::<MyStruct as std::ops::Deref>::deref::bb0",
+      "destination": "rust::<MyStruct as std::ops::Deref>::deref::bb1",
+      "label": "External/summary call return",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::<MyStruct as std::ops::DerefMut>::deref_mut::bb0",
+      "destination": "rust::<MyStruct as std::ops::DerefMut>::deref_mut::bb1",
+      "label": "Resolved external Instance summary return",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::<MyStruct as std::ops::DerefMut>::deref_mut::bb1",
+      "destination": "dummyRet::rust::main::4::rust::main::bb4_internal",
+      "label": "Rust Return -> dummyRet",
+      "source_label": "Mir bb1",
+      "destination_label": "dummyRet (id: b9ab3d3a4ba7c7e7)"
+    },
+    {
+      "source": "rust::<MyStructSlice as std::cmp::PartialEq>::eq::bb0",
+      "destination": "rust::<MyStructSlice as std::cmp::PartialEq>::eq::bb1",
+      "label": "External/summary call return",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::<MyStructSlice as std::fmt::Debug>::fmt::bb0",
+      "destination": "rust::<MyStructSlice as std::fmt::Debug>::fmt::bb1",
+      "label": "External/summary call return",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0",
+      "destination": "dummyCall::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0_internal",
+      "label": "Rust Call -> dummyCall",
+      "source_label": "Mir bb0",
+      "destination_label": "dummyCall (id: efff80083ffce64b)"
+    },
+    {
+      "source": "rust::<impl std::convert::From<std::boxed::Box<MyStructSlice>> for std::boxed::Box<[u8]>>::from::bb0",
+      "destination": "rust::<impl std::convert::From<std::boxed::Box<MyStructSlice>> for std::boxed::Box<[u8]>>::from::bb1",
+      "label": "External/summary call return",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::<impl std::convert::From<std::boxed::Box<MyStructSlice>> for std::boxed::Box<[u8]>>::from::bb1",
+      "destination": "rust::<impl std::convert::From<std::boxed::Box<MyStructSlice>> for std::boxed::Box<[u8]>>::from::bb2",
+      "label": "External/summary call return",
+      "source_label": "Mir bb1",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::MyStruct::into_boxed_slice::bb0",
+      "destination": "rust::MyStruct::into_boxed_slice::bb1",
+      "label": "External/summary call return",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::MyStruct::into_boxed_slice::bb1",
+      "destination": "rust::MyStruct::into_boxed_slice::bb2",
+      "label": "External/summary call return",
+      "source_label": "Mir bb1",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::MyStruct::into_boxed_slice::bb2",
+      "destination": "rust::MyStruct::into_boxed_slice::bb3",
+      "label": "External/summary call return",
+      "source_label": "Mir bb2",
+      "destination_label": "Mir bb3"
+    },
+    {
+      "source": "rust::MyStruct::into_inner::bb0",
+      "destination": "dummyRet::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::0::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0_internal",
+      "label": "Rust Return -> dummyRet",
+      "source_label": "Mir bb0",
+      "destination_label": "dummyRet (id: 6931ded0c56d9a38)"
+    },
+    {
+      "source": "rust::MyStruct::new::bb0",
+      "destination": "rust::MyStruct::new::bb1",
+      "label": "Resolved external Instance summary return",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::MyStruct::new::bb1",
+      "destination": "rust::MyStruct::new::bb2",
+      "label": "Resolved external Instance summary return",
+      "source_label": "Mir bb1",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::MyStruct::new::bb2",
+      "destination": "dummyRet::rust::main::0::rust::main::bb0_internal",
+      "label": "Rust Return -> dummyRet",
+      "source_label": "Mir bb2",
+      "destination_label": "dummyRet (id: ddf9337e99e30f9b)"
+    },
+    {
+      "source": "rust::MyStructSlice::inc::bb0",
+      "destination": "rust::MyStructSlice::inc::bb1",
+      "label": "Resolved external Instance summary return",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::MyStructSlice::inc::bb1",
+      "destination": "rust::MyStructSlice::inc::bb2",
+      "label": "UNRESOLVED_HIGHER_ORDER: callback semantics not modeled",
+      "source_label": "Mir bb1",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::MyStructSlice::inc::bb2",
+      "destination": "dummyRet::rust::main::5::rust::main::bb5_internal",
+      "label": "Rust Return -> dummyRet",
+      "source_label": "Mir bb2",
+      "destination_label": "dummyRet (id: ded352a6807490af)"
+    },
+    {
+      "source": "rust::MyStructSlice::inc::{closure#0}::bb0",
+      "destination": "rust::MyStructSlice::inc::{closure#0}::bb1",
+      "label": "Assert success",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::main::bb0",
+      "destination": "dummyCall::rust::main::bb0::rust::main::bb0_internal",
+      "label": "Rust Call -> dummyCall",
+      "source_label": "Mir bb0",
+      "destination_label": "dummyCall (id: 2d362faded4cd48c)"
+    },
+    {
+      "source": "rust::main::bb1",
+      "destination": "rust::main::bb11",
+      "label": "Call unwind",
+      "source_label": "Mir bb1",
+      "destination_label": "Mir bb11"
+    },
+    {
+      "source": "rust::main::bb1",
+      "destination": "rust::main::bb2",
+      "label": "Resolved external Instance summary return",
+      "source_label": "Mir bb1",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::main::bb11",
+      "destination": "rust::main::bb12",
+      "label": "Drop return",
+      "source_label": "Mir bb11",
+      "destination_label": "Mir bb12"
+    },
+    {
+      "source": "rust::main::bb11",
+      "destination": "rust::main::terminate",
+      "label": "Drop unwind",
+      "source_label": "Mir bb11",
+      "destination_label": "Terminal (unwind_terminate)"
+    },
+    {
+      "source": "rust::main::bb2",
+      "destination": "rust::main::bb11",
+      "label": "Call unwind",
+      "source_label": "Mir bb2",
+      "destination_label": "Mir bb11"
+    },
+    {
+      "source": "rust::main::bb2",
+      "destination": "rust::main::bb3",
+      "label": "Resolved external Instance summary return",
+      "source_label": "Mir bb2",
+      "destination_label": "Mir bb3"
+    },
+    {
+      "source": "rust::main::bb3",
+      "destination": "rust::main::bb11",
+      "label": "Call unwind",
+      "source_label": "Mir bb3",
+      "destination_label": "Mir bb11"
+    },
+    {
+      "source": "rust::main::bb3",
+      "destination": "rust::main::bb4",
+      "label": "Resolved external Instance summary return",
+      "source_label": "Mir bb3",
+      "destination_label": "Mir bb4"
+    },
+    {
+      "source": "rust::main::bb4",
+      "destination": "dummyCall::rust::main::bb4::rust::main::bb4_internal",
+      "label": "Rust Call -> dummyCall",
+      "source_label": "Mir bb4",
+      "destination_label": "dummyCall (id: a4013d4cac5a2b40)"
+    },
+    {
+      "source": "rust::main::bb4",
+      "destination": "rust::main::bb11",
+      "label": "Call unwind",
+      "source_label": "Mir bb4",
+      "destination_label": "Mir bb11"
+    },
+    {
+      "source": "rust::main::bb5",
+      "destination": "dummyCall::rust::main::bb5::rust::main::bb5_internal",
+      "label": "Rust Call -> dummyCall",
+      "source_label": "Mir bb5",
+      "destination_label": "dummyCall (id: f93a2ec883a9a569)"
+    },
+    {
+      "source": "rust::main::bb5",
+      "destination": "rust::main::bb11",
+      "label": "Call unwind",
+      "source_label": "Mir bb5",
+      "destination_label": "Mir bb11"
+    },
+    {
+      "source": "rust::main::bb6",
+      "destination": "rust::main::bb11",
+      "label": "Call unwind",
+      "source_label": "Mir bb6",
+      "destination_label": "Mir bb11"
+    },
+    {
+      "source": "rust::main::bb6",
+      "destination": "rust::main::bb7",
+      "label": "Resolved external Instance summary return",
+      "source_label": "Mir bb6",
+      "destination_label": "Mir bb7"
+    },
+    {
+      "source": "rust::main::bb7",
+      "destination": "rust::main::bb11",
+      "label": "Call unwind",
+      "source_label": "Mir bb7",
+      "destination_label": "Mir bb11"
+    },
+    {
+      "source": "rust::main::bb7",
+      "destination": "rust::main::bb8",
+      "label": "Resolved external Instance summary return",
+      "source_label": "Mir bb7",
+      "destination_label": "Mir bb8"
+    },
+    {
+      "source": "rust::main::bb8",
+      "destination": "rust::main::bb11",
+      "label": "Call unwind",
+      "source_label": "Mir bb8",
+      "destination_label": "Mir bb11"
+    },
+    {
+      "source": "rust::main::bb8",
+      "destination": "rust::main::bb9",
+      "label": "Resolved external Instance summary return",
+      "source_label": "Mir bb8",
+      "destination_label": "Mir bb9"
+    },
+    {
+      "source": "rust::main::bb9",
+      "destination": "rust::main::bb10",
+      "label": "Drop return",
+      "source_label": "Mir bb9",
+      "destination_label": "Mir bb10"
+    }
+  ],
+  "rust_functions": {
+    "<MyStruct as std::clone::Clone>::clone": {
+      "name": "<MyStruct as std::clone::Clone>::clone",
+      "arg_count": 1,
+      "entry_node": "rust::<MyStruct as std::clone::Clone>::clone::bb0",
+      "return_nodes": [
+        "rust::<MyStruct as std::clone::Clone>::clone::bb1"
+      ]
+    },
+    "<MyStruct as std::cmp::Eq>::assert_receiver_is_total_eq": {
+      "name": "<MyStruct as std::cmp::Eq>::assert_receiver_is_total_eq",
+      "arg_count": 1,
+      "entry_node": "rust::<MyStruct as std::cmp::Eq>::assert_receiver_is_total_eq::bb0",
+      "return_nodes": [
+        "rust::<MyStruct as std::cmp::Eq>::assert_receiver_is_total_eq::bb0"
+      ]
+    },
+    "<MyStruct as std::cmp::PartialEq>::eq": {
+      "name": "<MyStruct as std::cmp::PartialEq>::eq",
+      "arg_count": 2,
+      "entry_node": "rust::<MyStruct as std::cmp::PartialEq>::eq::bb0",
+      "return_nodes": [
+        "rust::<MyStruct as std::cmp::PartialEq>::eq::bb1"
+      ]
+    },
+    "<MyStruct as std::convert::From<std::boxed::Box<MyStructSlice>>>::from": {
+      "name": "<MyStruct as std::convert::From<std::boxed::Box<MyStructSlice>>>::from",
+      "arg_count": 1,
+      "entry_node": "rust::<MyStruct as std::convert::From<std::boxed::Box<MyStructSlice>>>::from::bb0",
+      "return_nodes": [
+        "rust::<MyStruct as std::convert::From<std::boxed::Box<MyStructSlice>>>::from::bb2"
+      ]
+    },
+    "<MyStruct as std::fmt::Debug>::fmt": {
+      "name": "<MyStruct as std::fmt::Debug>::fmt",
+      "arg_count": 2,
+      "entry_node": "rust::<MyStruct as std::fmt::Debug>::fmt::bb0",
+      "return_nodes": [
+        "rust::<MyStruct as std::fmt::Debug>::fmt::bb1"
+      ]
+    },
+    "<MyStruct as std::ops::Deref>::deref": {
+      "name": "<MyStruct as std::ops::Deref>::deref",
+      "arg_count": 1,
+      "entry_node": "rust::<MyStruct as std::ops::Deref>::deref::bb0",
+      "return_nodes": [
+        "rust::<MyStruct as std::ops::Deref>::deref::bb1"
+      ]
+    },
+    "<MyStruct as std::ops::DerefMut>::deref_mut": {
+      "name": "<MyStruct as std::ops::DerefMut>::deref_mut",
+      "arg_count": 1,
+      "entry_node": "rust::<MyStruct as std::ops::DerefMut>::deref_mut::bb0",
+      "return_nodes": [
+        "rust::<MyStruct as std::ops::DerefMut>::deref_mut::bb1"
+      ]
+    },
+    "<MyStructSlice as std::cmp::Eq>::assert_receiver_is_total_eq": {
+      "name": "<MyStructSlice as std::cmp::Eq>::assert_receiver_is_total_eq",
+      "arg_count": 1,
+      "entry_node": "rust::<MyStructSlice as std::cmp::Eq>::assert_receiver_is_total_eq::bb0",
+      "return_nodes": [
+        "rust::<MyStructSlice as std::cmp::Eq>::assert_receiver_is_total_eq::bb0"
+      ]
+    },
+    "<MyStructSlice as std::cmp::PartialEq>::eq": {
+      "name": "<MyStructSlice as std::cmp::PartialEq>::eq",
+      "arg_count": 2,
+      "entry_node": "rust::<MyStructSlice as std::cmp::PartialEq>::eq::bb0",
+      "return_nodes": [
+        "rust::<MyStructSlice as std::cmp::PartialEq>::eq::bb1"
+      ]
+    },
+    "<MyStructSlice as std::fmt::Debug>::fmt": {
+      "name": "<MyStructSlice as std::fmt::Debug>::fmt",
+      "arg_count": 2,
+      "entry_node": "rust::<MyStructSlice as std::fmt::Debug>::fmt::bb0",
+      "return_nodes": [
+        "rust::<MyStructSlice as std::fmt::Debug>::fmt::bb1"
+      ]
+    },
+    "<impl std::convert::From<&MyStructSlice> for &[u8]>::from": {
+      "name": "<impl std::convert::From<&MyStructSlice> for &[u8]>::from",
+      "arg_count": 1,
+      "entry_node": "rust::<impl std::convert::From<&MyStructSlice> for &[u8]>::from::bb0",
+      "return_nodes": [
+        "rust::<impl std::convert::From<&MyStructSlice> for &[u8]>::from::bb0"
+      ]
+    },
+    "<impl std::convert::From<&mut MyStructSlice> for &mut [u8]>::from": {
+      "name": "<impl std::convert::From<&mut MyStructSlice> for &mut [u8]>::from",
+      "arg_count": 1,
+      "entry_node": "rust::<impl std::convert::From<&mut MyStructSlice> for &mut [u8]>::from::bb0",
+      "return_nodes": [
+        "rust::<impl std::convert::From<&mut MyStructSlice> for &mut [u8]>::from::bb0"
+      ]
+    },
+    "<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from": {
+      "name": "<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from",
+      "arg_count": 1,
+      "entry_node": "rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0",
+      "return_nodes": [
+        "rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb1"
+      ]
+    },
+    "<impl std::convert::From<std::boxed::Box<MyStructSlice>> for std::boxed::Box<[u8]>>::from": {
+      "name": "<impl std::convert::From<std::boxed::Box<MyStructSlice>> for std::boxed::Box<[u8]>>::from",
+      "arg_count": 1,
+      "entry_node": "rust::<impl std::convert::From<std::boxed::Box<MyStructSlice>> for std::boxed::Box<[u8]>>::from::bb0",
+      "return_nodes": [
+        "rust::<impl std::convert::From<std::boxed::Box<MyStructSlice>> for std::boxed::Box<[u8]>>::from::bb2"
+      ]
+    },
+    "MyStruct::into_boxed_slice": {
+      "name": "MyStruct::into_boxed_slice",
+      "arg_count": 1,
+      "entry_node": "rust::MyStruct::into_boxed_slice::bb0",
+      "return_nodes": [
+        "rust::MyStruct::into_boxed_slice::bb3"
+      ]
+    },
+    "MyStruct::into_inner": {
+      "name": "MyStruct::into_inner",
+      "arg_count": 1,
+      "entry_node": "rust::MyStruct::into_inner::bb0",
+      "return_nodes": [
+        "rust::MyStruct::into_inner::bb0"
+      ]
+    },
+    "MyStruct::new": {
+      "name": "MyStruct::new",
+      "arg_count": 1,
+      "entry_node": "rust::MyStruct::new::bb0",
+      "return_nodes": [
+        "rust::MyStruct::new::bb2"
+      ]
+    },
+    "MyStruct::new_unchecked": {
+      "name": "MyStruct::new_unchecked",
+      "arg_count": 1,
+      "entry_node": "rust::MyStruct::new_unchecked::bb0",
+      "return_nodes": [
+        "rust::MyStruct::new_unchecked::bb0"
+      ]
+    },
+    "MyStructSlice::inc": {
+      "name": "MyStructSlice::inc",
+      "arg_count": 1,
+      "entry_node": "rust::MyStructSlice::inc::bb0",
+      "return_nodes": [
+        "rust::MyStructSlice::inc::bb2"
+      ]
+    },
+    "MyStructSlice::inc::{closure#0}": {
+      "name": "MyStructSlice::inc::{closure#0}",
+      "arg_count": 2,
+      "entry_node": "rust::MyStructSlice::inc::{closure#0}::bb0",
+      "return_nodes": [
+        "rust::MyStructSlice::inc::{closure#0}::bb1"
+      ]
+    },
+    "MyStructSlice::new_mut_unchecked": {
+      "name": "MyStructSlice::new_mut_unchecked",
+      "arg_count": 1,
+      "entry_node": "rust::MyStructSlice::new_mut_unchecked::bb0",
+      "return_nodes": [
+        "rust::MyStructSlice::new_mut_unchecked::bb0"
+      ]
+    },
+    "MyStructSlice::new_unchecked": {
+      "name": "MyStructSlice::new_unchecked",
+      "arg_count": 1,
+      "entry_node": "rust::MyStructSlice::new_unchecked::bb0",
+      "return_nodes": [
+        "rust::MyStructSlice::new_unchecked::bb0"
+      ]
+    },
+    "main": {
+      "name": "main",
+      "arg_count": 0,
+      "entry_node": "rust::main::bb0",
+      "return_nodes": [
+        "rust::main::bb10"
+      ]
+    }
+  },
+  "rust_calls": [
+    {
+      "caller_function": "<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from",
+      "call_node": "rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0",
+      "callee_function": "MyStruct::into_inner",
+      "dummy_call_node": "dummyCall::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0_internal",
+      "dummy_ret_node": "dummyRet::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::0::rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb0_internal",
+      "arguments": [
+        {
+          "arg": "Local(_1)",
+          "is_mutable": false
+        }
+      ],
+      "return_place": "_0",
+      "return_node": "rust::<impl std::convert::From<MyStruct> for std::vec::Vec<u8>>::from::bb1",
+      "is_closure": false
+    },
+    {
+      "caller_function": "main",
+      "call_node": "rust::main::bb0",
+      "callee_function": "MyStruct::new",
+      "dummy_call_node": "dummyCall::rust::main::bb0::rust::main::bb0_internal",
+      "dummy_ret_node": "dummyRet::rust::main::0::rust::main::bb0_internal",
+      "arguments": [
+        {
+          "arg": "Local(_2) [mutable]",
+          "is_mutable": true
+        }
+      ],
+      "return_place": "_1",
+      "return_node": "rust::main::bb1",
+      "is_closure": false
+    },
+    {
+      "caller_function": "main",
+      "call_node": "rust::main::bb4",
+      "callee_function": "<MyStruct as std::ops::DerefMut>::deref_mut",
+      "dummy_call_node": "dummyCall::rust::main::bb4::rust::main::bb4_internal",
+      "dummy_ret_node": "dummyRet::rust::main::4::rust::main::bb4_internal",
+      "arguments": [
+        {
+          "arg": "Local(_12) [mutable]",
+          "is_mutable": true
+        }
+      ],
+      "return_place": "_11",
+      "return_node": "rust::main::bb5",
+      "is_closure": false
+    },
+    {
+      "caller_function": "main",
+      "call_node": "rust::main::bb5",
+      "callee_function": "MyStructSlice::inc",
+      "dummy_call_node": "dummyCall::rust::main::bb5::rust::main::bb5_internal",
+      "dummy_ret_node": "dummyRet::rust::main::5::rust::main::bb5_internal",
+      "arguments": [
+        {
+          "arg": "Local(_11) [mutable]",
+          "is_mutable": true
+        }
+      ],
+      "return_place": "_10",
+      "return_node": "rust::main::bb6",
+      "is_closure": false
+    }
+  ]
+}
