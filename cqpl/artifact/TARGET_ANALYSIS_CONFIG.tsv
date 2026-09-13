@@ -1,0 +1,2 @@
+# relative_path	cargo_target	rationale
+found vulns/shared-register	shared-register:shared-register	Analyze the executable target whose entry is rust::main; implicit target choice is forbidden.
