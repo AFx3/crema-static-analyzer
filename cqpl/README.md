@@ -1,324 +1,355 @@
-# CQPL — model checker tridimensionale per CREMA
+# CQPL — query language e model checker per CREMA
 
-Questa cartella sostituisce il precedente prototipo CQPL basato su `taint_src`,
-`taint_snk`, wildcard e riconoscimento euristico del tipo di vulnerabilità.
-Quella implementazione non corrispondeva più al modello teorico corrente.
-
-La nuova architettura segue direttamente il formalismo CQPL:
+CQPL valuta proprietà temporali sull'**annotated ICFG** prodotto da CREMA.
+Il checker CQPL non legge direttamente Rust, MIR, LLVM o C: riceve un JSON già
+annotato da CREMA e una query `.cqpl`.
 
 ```text
-CREMA
-  │
-  │  annotated ICFG only
-  ▼
-K# = (B, R, L_B, Pi#_pre, Pi#_post, implementation alias information)
-  │
-  ▼
-CQPL parser
-  │
-  ▼
-three-valued CTL model checker
-  │
-  └── ff / unk / tt
+Cargo project (Rust/C) -> CREMA -> annotated ICFG -> CQPL -> ff | unk | tt
 ```
 
-Il checker **non esegue CREMA**, non legge MIR, LLVM o SVF e non contiene
-classificatori hard-coded `MemoryLeak/DoubleFree/UAF`. CREMA deve esportare un
-solo ICFG annotato conforme a `schemas/annotated_icfg.schema.json`.
+## Risultati
 
-## Corrispondenza con il modello teorico
+- `ff`: il modello astratto refuta il pattern;
+- `unk`: il modello non può refutare né stabilire il pattern;
+- `tt`: la formula è stabilita nel modello astratto.
 
-Il core implementato è:
+`unk` è normale quando la proprietà dipende da informazione MAY. `tt` non è,
+da solo, una prova di una concreta esecuzione del programma.
 
-- dominio di verità `B = {ff < unk < tt}`;
-- `not(unk) = unk`;
-- `and = meet`, `or = join`;
-- predicati semantici may: `alloc(x)`, `drop(x)`, `own_forg(x)`;
-- predicati sintattici di label: `alloc_l(x)`, `drop_l(x)`, `read_l(x)`,
-  `write_l(x)`, `use_l(x)`;
-- quantificatori `exists x.` e `forall x.`;
-- quantificatori di cammino `E`, `A`;
-- `X`, `F`, `G`, `U`;
-- `X` è **strong Next**;
-- la valutazione globale parte dall'entry block.
+## Query disponibili
 
-Un may-predicate positivo restituisce `unk`, non `tt`. Se l'atomo astratto non
-è incluso nell'abstract post-state restituisce `ff`. Questo replica
-`TaintMayHold` del modello.
+`queries/` contiene il core variable-centric originale.
 
-I label-predicate sono esatti rispetto a `L_B` e restituiscono soltanto `tt` o
-`ff`.
-
-## Estensione implementativa Rust + C
-
-La teoria usa intenzionalmente:
+`queries_v2/` è l'interfaccia corrente per gli esperimenti end-to-end e usa
+`AbstractAllocId` per correlare la stessa possibile allocazione tra Rust e C.
+Le query ufficiali sono:
 
 ```text
-Env : Var_logic ⇀ Local
+queries_v2/leak_alloc.cqpl
+queries_v2/double_free_alloc.cqpl
+queries_v2/use_after_free_alloc.cqpl
+queries_v2/allocator_mismatch_ub.cqpl
 ```
 
-per mantenere semplice il modello e i teoremi. Il checker implementativo usa:
+Per nuovi esperimenti usare normalmente `queries_v2/`.
 
-```text
-Env_impl : Var_logic ⇀ ProgramVar
-ProgramVar = RustVar ∪ CVar ∪ OtherVar
-```
+## Struttura di una query
 
-Il dominio dei quantificatori contiene quindi **sia variabili Rust sia variabili
-C** esportate dall'ICFG annotato.
-
-Gli identificatori devono essere globalmente univoci e call-site scoped quando
-necessario, ad esempio:
-
-```text
-rust::main::Local(_1)
-c::free_wrapper::%1@callsite0
-```
-
-Questo evita collisioni tra `%1` di funzioni o repliche FFI diverse.
-
-### Alias
-
-Il modello teorico non espone esplicitamente l'aliasing; l'implementazione di
-CREMA invece lo gestisce. Per mantenere il checker indipendente da MIR/LLVM,
-CREMA esporta l'aliasing dentro le annotazioni `pre/post` di ciascun nodo, come
-componenti `{aliases, value}` dell'`AbstractMemory`.
-
-CQPL le usa così:
-
-- un semantic may-predicate legge il `CellValue` della componente di `x` in `post`;
-- un label-predicate su `x` può essere soddisfatto da un evento su un alias di
-  `x` disponibile nel `pre` o `post` dello stesso nodo, anche cross-language.
-
-Per esempio un `drop_l(x)` con `x` bindata a un raw pointer Rust può essere
-soddisfatto da una `free` etichettata sulla corrispondente variabile C.
-
-Questa è un'estensione dell'implementazione rispetto al core teorico, non un
-allargamento implicito del teorema corrente.
-
-## Query
-
-Una query contiene una sola formula di stato CQPL. `#` e `//` introducono
-commenti.
-
-Esempio leak:
+Un file `.cqpl` contiene zero o più dichiarazioni `requires ...;` seguite da
+una formula. Sono supportati commenti `#` e `//`.
 
 ```cqpl
-exists x. EF (alloc(x) && EX EG !drop(x))
-```
+requires allocation_contracts_v1;
 
-Double free:
-
-```cqpl
-exists x. EF (
-  alloc(x) &&
-  EX EF (
-    drop_l(x) &&
-    EX E[(!alloc_l(x)) U drop_l(x)]
-  )
+exists_alloc a. EF (
+  alloc_l(a) &&
+  EX EF allocator_mismatch_l(a)
 )
 ```
 
-Use-after-free:
+## Variabili e quantificatori
+
+Variabili di programma:
 
 ```cqpl
-exists x. EF (
-  alloc(x) &&
-  EX EF (
-    drop_l(x) &&
-    EX E[(!alloc_l(x)) U use_l(x)]
-  )
-)
+exists x. phi
+forall x. phi
 ```
 
-Le tre query sono in `queries/` e non sono speciali per il checker.
+`x` varia sui `ProgramVar` esportati da CREMA, incluse variabili Rust e C.
 
-## Sintassi supportata
-
-```text
-phi ::= alloc(x)
-      | drop(x)
-      | own_forg(x)
-      | alloc_l(x)
-      | drop_l(x)
-      | read_l(x)
-      | write_l(x)
-      | use_l(x)
-      | !phi
-      | phi && phi
-      | phi || phi
-      | exists x. phi
-      | forall x. phi
-      | EX phi | AX phi
-      | EF phi | AF phi
-      | EG phi | AG phi
-      | E[phi U phi]
-      | A[phi U phi]
-```
-
-Sono inoltre accettate forme esplicite vicine alla notazione teorica, ad
-esempio:
+Allocazioni astratte, schema v2:
 
 ```cqpl
-E(F (alloc(x) && EX EG !drop(x)))
+exists_alloc a. phi
+forall_alloc a. phi
 ```
 
-## Input: annotated ICFG
+`a` varia sugli `AbstractAllocId` esportati da CREMA.
 
-Il checker non deve conoscere le strutture interne di CREMA. L'unico contratto
-è il JSON `AnnotatedIcfg` versione 1.
+## Predicati supportati
 
-Esempio minimale:
+### Predicati semantici MAY
+
+| Predicato | Significato |
+|---|---|
+| `alloc(x)` | `x` può rappresentare memoria allocata |
+| `drop(x)` | `x` può rappresentare memoria freed/deallocata |
+| `own_forg(x)` | l'ownership può essere stata abbandonata |
+
+Leggono lo stato astratto `post` prodotto dall'abstract interpretation.
+Un match MAY vale `unk`; se il predicato è refutato vale `ff`.
+
+### Predicati di evento
+
+| Predicato | Evento |
+|---|---|
+| `alloc_l(v)` | allocazione |
+| `drop_l(v)` | deallocazione/drop |
+| `read_l(v)` | lettura |
+| `write_l(v)` | scrittura |
+| `use_l(v)` | uso, inclusi read/write dove previsto |
+
+Con un `ProgramVar` sono label del nodo, sollevate attraverso l'alias information
+esportata da CREMA. Con un `AbstractAllocId` schema v2 l'associazione
+evento→allocazione è MAY: un witness positivo vale `unk`, l'assenza vale `ff`.
+
+### Allocator mismatch
+
+```cqpl
+allocator_mismatch_l(a)
+```
+
+Alias accettato:
+
+```cqpl
+dealloc_mismatch_l(a)
+```
+
+Richiede un `AbstractAllocId` e la capability:
+
+```cqpl
+requires allocation_contracts_v1;
+```
+
+`AllocatorMismatch-UB` controlla il mismatch della **famiglia** allocator /
+deallocator. Non è una query generica per ogni forma di UB.
+
+## `allocation_contracts_v1`
+
+La query non definisce il contract: dichiara che richiede un annotated ICFG che
+esponga questa capability.
+
+L'artefatto contiene, per esempio:
 
 ```json
-{
-  "schema_version": 1,
-  "entry": "rust::main::bb0",
-  "variables": [
-    {"id":"rust::main::Local(_1)","language":"rust"},
-    {"id":"c::f::%1@callsite0","language":"c"}
-  ],
-  "nodes": [
-    {
-      "id": "rust::main::bb0",
-      "successors": [],
-      "labels": [],
-      "pre": {"cells": []},
-      "post": {
-        "cells": [
-          {"aliases":["rust::main::Local(_1)"],"value":"TOP"}
-        ]
-      }
-    }
-  ]
-}
+"capabilities": ["allocation_contracts_v1"]
 ```
 
-Valori ammessi di `CellValue`:
+Ogni allocazione ha un `allocator_contract` e ogni allocation-label `drop` ha
+un `deallocator_contract`:
+
+```json
+{"family":"c_malloc","operation":"malloc","language":"c"}
+```
+
+Famiglie correnti:
 
 ```text
-BOTTOM BOXTIMES ALLOC FREED MB IMMB MV TOP
+rust_global
+c_malloc
+unknown
 ```
 
-L'ordine è quello della Phase 5 di CREMA:
+Regola corrente:
 
 ```text
-BOTTOM <= ogni valore
-ALLOC <= MB, IMMB, MV
-ogni valore <= TOP
+rust_global -> rust_global : compatibile
+c_malloc    -> c_malloc    : compatibile
+rust_global -> c_malloc    : possibile mismatch
+c_malloc    -> rust_global : possibile mismatch
+unknown     -> ...         : non refutabile
+...         -> unknown     : non refutabile
 ```
 
-Gli altri elementi non collegati sono incomparabili.
+Poiché gli `AbstractAllocId` sono MAY, un witness positivo di mismatch vale
+`unk`, non `tt`. Capability mancante o artifact malformato produce un errore,
+non `ff`.
 
-Vedi `ANNOTATED_ICFG.md` e lo JSON Schema in `schemas/`.
-
-## Semantica temporale e fixed point
-
-Il checker non enumera esplicitamente i cammini. Sul grafo finito calcola gli
-operatori CTL mediante fixed point sul reticolo finito `ff < unk < tt`:
+## Operatori booleani e temporali
 
 ```text
-EF(phi) = lfp Z. phi OR EX Z
-AF(phi) = lfp Z. phi OR AX Z
-EU(p,q) = lfp Z. q OR (p AND EX Z)
-AU(p,q) = lfp Z. q OR (p AND AX Z)
+!phi, not phi
+phi && psi
+phi || psi
 
-EG(phi) = gfp Z. phi AND E-next_G Z
-AG(phi) = gfp Z. phi AND A-next_G Z
+EX phi, AX phi
+EF phi, AF phi
+EG phi, AG phi
+E[phi U psi]
+A[phi U psi]
 ```
 
-Per `X`, un nodo terminale vale `ff` sia sotto `E` sia sotto `A`, perché CQPL
-usa strong Next.
+Sono accettate anche forme come `E(F phi)`, `A(G phi)` e `E(X phi)`.
+`X` è strong Next: su un terminale `EX phi` e `AX phi` valgono `ff`.
 
-Per `G`, invece, su un cammino massimale finito non esistono posizioni future:
-la continuazione dopo un terminale è vacuamente `tt`, quindi `G phi` al nodo
-terminale coincide con `phi` al nodo stesso.
+Il model checker usa fixed point sul reticolo:
 
-## Variabili logiche libere
+```text
+ff < unk < tt
+```
 
-Le query ufficiali dovrebbero essere **chiuse**, coerentemente con il modello.
-Per debugging il CLI ammette binding iniziali:
+## Sintassi riassuntiva
+
+```text
+phi ::= alloc(x) | drop(x) | own_forg(x)
+      | alloc_l(v) | drop_l(v) | read_l(v) | write_l(v) | use_l(v)
+      | allocator_mismatch_l(a)
+      | !phi | phi && phi | phi || phi
+      | exists x. phi | forall x. phi
+      | exists_alloc a. phi | forall_alloc a. phi
+      | EX phi | AX phi | EF phi | AF phi | EG phi | AG phi
+      | E[phi U phi] | A[phi U phi]
+```
+
+Dove `x : ProgramVar`, `a : AbstractAllocId` e `v` dipende dal binding.
+
+## Come funziona CREMA + CQPL
+
+```text
+1. CREMA analizza il Cargo project.
+2. Costruisce l'ICFG Rust/C.
+3. L'abstract interpretation produce pre/post.
+4. Schema v2 aggiunge AbstractAllocId e allocation-event labels.
+5. CREMA esporta annotated_icfg_v2.json.
+6. CQPL carica JSON e query e verifica le capability.
+7. Il model checker valuta la formula dall'entry.
+8. Il risultato è ff, unk oppure tt.
+```
+
+CQPL non deduce allocator contract dai nomi dei nodi: i contract sono metadata
+strutturali prodotti da CREMA.
+
+## Esempio completo su `tests_and_target_repos`
+
+Useremo:
+
+```text
+tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_box_from_raw_ub
+```
+
+Impostare i path:
 
 ```bash
---bind x='c::free_wrapper::%1@callsite0'
+ROOT=/home/af/Documenti/a-phd
+TARGET="$ROOT/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_box_from_raw_ub"
+OUT=/tmp/cqpl-example
+mkdir -p "$OUT"
 ```
 
-Il target può essere una variabile Rust o C. Una formula con variabili libere
-non bindate viene rifiutata invece di assegnare loro un significato implicito.
-
-## Uso
-
-Da `cqpl/cqpl_checker`:
+Compilare il target:
 
 ```bash
-cargo run -- \
-  ../fixtures/cross_language_uaf.json \
-  ../queries/use_after_free.cqpl
+cargo +nightly-2024-11-21 build --manifest-path "$TARGET/Cargo.toml"
 ```
 
-Output atteso per un pattern potenziale basato su may information:
+Generare l'annotated ICFG schema v2:
+
+```bash
+rm -f "$ROOT/crema/global_icfg.json" "$ROOT/crema/ffi_functions.json"
+
+(
+  cd "$ROOT/crema"
+  cargo +nightly-2024-11-21 run -- \
+    "$TARGET" \
+    --entry main \
+    --only-icfg-annotated \
+    --cqpl-schema-version 2 \
+    --annotated-icfg-out "$OUT/annotated_icfg_v2.json" \
+    --allocation-identity-out "$OUT/allocation_identity.json"
+)
+```
+
+Eseguire la query allocator mismatch:
+
+```bash
+cargo +nightly-2024-11-21 run \
+  --manifest-path "$ROOT/cqpl/cqpl_checker/Cargo.toml" \
+  -- \
+  "$OUT/annotated_icfg_v2.json" \
+  "$ROOT/cqpl/queries_v2/allocator_mismatch_ub.cqpl"
+```
+
+Risultato atteso per questo target:
 
 ```text
 CQPL result: unk
-Interpretation: potential match; the sound may abstraction does not refute the queried pattern.
 ```
 
 Output JSON:
 
 ```bash
-cargo run -- ../fixtures/cross_language_uaf.json ../queries/use_after_free.cqpl --json
+cargo +nightly-2024-11-21 run \
+  --manifest-path "$ROOT/cqpl/cqpl_checker/Cargo.toml" \
+  -- \
+  "$OUT/annotated_icfg_v2.json" \
+  "$ROOT/cqpl/queries_v2/allocator_mismatch_ub.cqpl" \
+  --json
 ```
 
-## Interpretazione dei risultati
+## Query personalizzata
 
-- `ff`: il modello astratto annotato refuta il pattern richiesto;
-- `unk`: il pattern non è refutato dalla may-analysis; è il normale risultato
-  di un potenziale memory error dipendente da informazione semantica may;
-- `tt`: la formula viene stabilita dalla composizione tridimensionale, tipicamente
-  quando la parte decisiva dipende da label esatte.
+Esempio `/tmp/my_query.cqpl`:
 
-`TOP` **non è un warning di per sé**. Influenza i may-predicate, i quali possono
-restituire `unk`; è la formula CQPL completa a determinare il risultato.
+```cqpl
+exists_alloc a. EF (alloc_l(a) && EX EF drop_l(a))
+```
 
-## Test inclusi nel crate
-
-I test coprono almeno:
-
-- algebra tridimensionale;
-- parsing della formula Leak teorica;
-- parsing di `E[phi U psi]`;
-- quantificazione anche su variabili C;
-- binding esplicito verso variabili C;
-- `TOP -> unk` per `alloc/drop/own_forg`;
-- strong Next sui terminali;
-- `G` sui cammini massimali finiti;
-- alias cross-language per i label.
-
-Eseguire:
+Esecuzione:
 
 ```bash
-cargo test
+cargo +nightly-2024-11-21 run \
+  --manifest-path "$ROOT/cqpl/cqpl_checker/Cargo.toml" \
+  -- \
+  "$OUT/annotated_icfg_v2.json" \
+  /tmp/my_query.cqpl \
+  --json
 ```
 
-## Cosa NON è ancora rivendicato
+## CLI
 
-Il checker è costruito per corrispondere alla semantica CQPL descritta nel
-modello, ma bisogna distinguere i claim:
+```text
+cqpl_checker <annotated-icfg.json> <query.cqpl>
+  [--entry NODE_OR_FUNCTION]
+  [--intra]
+  [--bind x=PROGRAM_VAR_ID]...
+  [--bind-alloc a=ABSTRACT_ALLOC_ID]...
+  [--json]
+```
 
-1. la soundness dell'abstract interpretation è quella del core teorico;
-2. il teorema corrente sui may-predicate atomici non implica automaticamente la
-   soundness di ogni formula CTL con negazione;
-3. alias C/Rust e identificatori cross-language sono refinement
-   implementativi;
-4. prima di un claim end-to-end CQPL va dimostrato il teorema appropriato sul
-   frammento di formule effettivamente usato (almeno Leak/DF/UAF).
+- `--entry`: cambia entry/proiezione;
+- `--intra`: limita alla funzione selezionata;
+- `--bind`: lega una variabile libera a un `ProgramVar`;
+- `--bind-alloc`: lega una variabile libera a un `AbstractAllocId`;
+- `--json`: output machine-readable.
 
-Questa separazione è intenzionale.
+Le query ufficiali sono normalmente chiuse e non richiedono binding manuali.
 
-## Corpus regression
+## Annotated ICFG schema v2
 
-`regression/` contains the scientific replication harness for running the three
-official CQPL memory-error formulas over CREMA's real `tests_and_target_repos/`
-corpus. It intentionally does not clone CREMA's internal unit tests. See
-`regression/TEST_STRATEGY.md` for the separation between CQPL semantics,
-producer/consumer boundary tests, and end-to-end target replication.
+Schema:
+
+```text
+schemas/annotated_icfg_v2.schema.json
+```
+
+Campi principali:
+
+```text
+schema_version, entry, capabilities, variables, allocations, nodes
+nodes: successors, labels, allocation_labels, identity, event_identity, pre, post
+```
+
+`pre/post` provengono dall'abstract interpretation. `identity/event_identity` e
+`allocation_labels` sono l'estensione MAY allocation-centric dello schema v2.
+
+## Test
+
+```bash
+cargo +nightly-2024-11-21 test --manifest-path cqpl/cqpl_checker/Cargo.toml
+```
+
+## Boundary scientifico
+
+Distinguere sempre:
+
+1. core CQPL variable-centric;
+2. estensione schema v2 con `AbstractAllocId`;
+3. soundness dell'abstract interpretation CREMA;
+4. semantica del model checker;
+5. capability come `allocation_contracts_v1`.
+
+Le allocation-label schema v2 sono MAY-only; `allocator_mismatch_l` controlla
+solo la famiglia allocator/deallocator; capability mancante produce errore e
+non una falsa refutazione `ff`.

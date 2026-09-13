@@ -644,6 +644,7 @@ fn is_identity_preserving_pointer_call(callee: &str) -> bool {
         || typed_terminal("CString", "from_raw")
         || typed_terminal("CStr", "from_ptr")
         || typed_terminal("Vec", "from_raw_parts")
+        || typed_terminal("String", "from_raw_parts")
         || method_terminal(callee, "as_ptr")
         || method_terminal(callee, "as_mut_ptr")
         || (pointer_family && method_terminal(callee, "cast"))
@@ -2162,12 +2163,53 @@ mod tests {
         assert!(is_identity_preserving_pointer_call(
             "std::ffi::CStr::from_ptr::<'_>"
         ));
+        assert!(is_identity_preserving_pointer_call(
+            "std::vec::Vec::<u8>::from_raw_parts"
+        ));
+        assert!(is_identity_preserving_pointer_call(
+            "std::string::String::from_raw_parts"
+        ));
         assert!(!is_identity_preserving_pointer_call(
             "some::unrelated::Value::cast::<usize>"
         ));
         assert!(!is_identity_preserving_pointer_call(
             "std::boxed::Box::<i32>::new"
         ));
+    }
+
+    #[test]
+    fn v6l_string_from_raw_parts_preserves_existing_allocation_identity() {
+        let mut mem = AllocationIdentityMemory::default();
+        let context = Vec::<String>::new();
+        let source = rust("main", 1);
+        let result = rust("main", 2);
+        let a = alloc("C_MALLOC_A");
+        mem.assign_fresh(source.clone(), a.clone());
+
+        transfer_library_call(
+            "rust::main::bb0",
+            "main",
+            &context,
+            "std::string::String::from_raw_parts",
+            &[
+                crate::structs::MirCallArgument {
+                    arg: "Local(_1) [mutable]".to_string(),
+                    is_mutable: Some(true),
+                },
+                crate::structs::MirCallArgument {
+                    arg: "const 5_usize".to_string(),
+                    is_mutable: None,
+                },
+                crate::structs::MirCallArgument {
+                    arg: "const 6_usize".to_string(),
+                    is_mutable: None,
+                },
+            ],
+            "_2",
+            &mut mem,
+        );
+
+        assert_eq!(mem.points_to(&result), BTreeSet::from([a]));
     }
 
     #[test]
