@@ -154,6 +154,28 @@ impl AbstractMemoryAnnotation {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AbstractAllocationCell {
+    pub allocation: String,
+    pub value: CellValue,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AbstractAllocationMemoryAnnotation {
+    #[serde(default)]
+    pub cells: Vec<AbstractAllocationCell>,
+}
+
+impl AbstractAllocationMemoryAnnotation {
+    pub fn value_of(&self, allocation: &str) -> CellValue {
+        self.cells
+            .iter()
+            .find(|cell| cell.allocation == allocation)
+            .map(|cell| cell.value)
+            .unwrap_or(CellValue::Bottom)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnnotatedNode {
     pub id: String,
@@ -167,6 +189,8 @@ pub struct AnnotatedNode {
     pub identity: Option<NodeIdentityAnnotation>,
     #[serde(default)]
     pub event_identity: Option<NodeIdentityAnnotation>,
+    #[serde(default)]
+    pub allocation_post: Option<AbstractAllocationMemoryAnnotation>,
     #[serde(default)]
     pub pre: AbstractMemoryAnnotation,
     #[serde(default)]
@@ -224,8 +248,12 @@ impl Kripke {
         let schema_version = input.schema_version;
         let capabilities: BTreeSet<String> = input.capabilities.iter().cloned().collect();
         let has_allocation_contracts = capabilities.contains("allocation_contracts_v1");
+        let has_allocation_state = capabilities.contains("allocation_state_v1");
         if has_allocation_contracts && schema_version != 2 {
             return Err("allocation_contracts_v1 requires annotated ICFG schema v2".into());
+        }
+        if has_allocation_state && schema_version != 2 {
+            return Err("allocation_state_v1 requires annotated ICFG schema v2".into());
         }
 
         let mut variables = BTreeMap::new();
@@ -260,6 +288,17 @@ impl Kripke {
         for n in input.nodes {
             validate_memory(&n.id, "pre", &n.pre, &variables)?;
             validate_memory(&n.id, "post", &n.post, &variables)?;
+            if has_allocation_state {
+                let allocation_post = n.allocation_post.as_ref().ok_or_else(|| {
+                    format!(
+                        "artifact declares allocation_state_v1 but node '{}' is missing allocation_post",
+                        n.id
+                    )
+                })?;
+                validate_allocation_memory(&n.id, allocation_post, &allocations)?;
+            } else if let Some(allocation_post) = n.allocation_post.as_ref() {
+                validate_allocation_memory(&n.id, allocation_post, &allocations)?;
+            }
             if nodes.insert(n.id.clone(), n).is_some() {
                 return Err("duplicate node id in annotated ICFG".into());
             }
@@ -498,6 +537,20 @@ impl Kripke {
         if holds { Truth::True } else { Truth::False }
     }
 
+    /// Allocation-centric MAY state predicate provided by allocation_state_v1.
+    /// Positive MAY membership yields `unk`, exactly like ProgramVar state
+    /// predicates; exclusion yields `ff`.
+    pub fn allocation_may_hold(&self, node_id: &str, allocation: &str, p: MayPredicate) -> Truth {
+        let Some(node) = self.nodes.get(node_id) else { return Truth::False; };
+        let Some(post) = node.allocation_post.as_ref() else { return Truth::False; };
+        let atom = match p {
+            MayPredicate::Alloc => CellValue::Alloc,
+            MayPredicate::Drop => CellValue::Freed,
+            MayPredicate::OwnForg => CellValue::Mv,
+        };
+        if atom.leq(post.value_of(allocation)) { Truth::Unknown } else { Truth::False }
+    }
+
     /// Allocation-centric event predicate introduced by schema v2.
     ///
     /// Schema v2 contains only `may_abstract` labels.  Matching a positive
@@ -543,6 +596,29 @@ impl Kripke {
         }
         acc
     }
+}
+
+fn validate_allocation_memory(
+    node_id: &str,
+    memory: &AbstractAllocationMemoryAnnotation,
+    allocations: &BTreeMap<String, AbstractAllocation>,
+) -> Result<(), String> {
+    let mut seen = BTreeSet::new();
+    for cell in &memory.cells {
+        if !allocations.contains_key(&cell.allocation) {
+            return Err(format!(
+                "node '{}' allocation_post references undeclared allocation '{}'",
+                node_id, cell.allocation
+            ));
+        }
+        if !seen.insert(cell.allocation.clone()) {
+            return Err(format!(
+                "node '{}' allocation_post contains duplicate allocation '{}'",
+                node_id, cell.allocation
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn validate_contract(contract: &AllocationContract, field: &str) -> Result<(), String> {
@@ -607,6 +683,7 @@ mod tests {
                 allocation_labels: vec![],
                 identity: None,
                 event_identity: None,
+                    allocation_post: None,
                 pre: mem(&["rust::x", "c::p"], CellValue::Alloc),
                 post: mem(&["rust::x", "c::p"], CellValue::Top),
             }],
@@ -643,18 +720,21 @@ mod tests {
                 id: "rust::main::bb0".into(),
                 successors: vec!["rust::main::bb1".into()],
                 labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                    allocation_post: None,
                 pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
             },
             AnnotatedNode {
                 id: "rust::main::bb1".into(),
                 successors: vec![],
                 labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                    allocation_post: None,
                 pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
             },
             AnnotatedNode {
                 id: "rust::dead::bb0".into(),
                 successors: vec![],
                 labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                    allocation_post: None,
                 pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
             },
         ];
@@ -676,18 +756,21 @@ mod tests {
                 id: "rust::main::bb0".into(),
                 successors: vec!["dummyCall::rust::main::bb0".into()],
                 labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                    allocation_post: None,
                 pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
             },
             AnnotatedNode {
                 id: "dummyCall::rust::main::bb0".into(),
                 successors: vec!["rust::callee::bb0".into()],
                 labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                    allocation_post: None,
                 pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
             },
             AnnotatedNode {
                 id: "rust::callee::bb0".into(),
                 successors: vec![],
                 labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                    allocation_post: None,
                 pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
             },
         ];
@@ -740,17 +823,17 @@ mod tests {
                     id: "rust::main::bb0".into(), successors: vec!["rust::main::bb1".into()],
                     labels: vec![EventLabel { predicate: EventKind::Read, variable: "rust::main::Local(_1)".into() }],
                     allocation_labels: vec![AllocationEventLabel { predicate: EventKind::Alloc, allocation: "A".into(), certainty: AllocationEventCertainty::MayAbstract, deallocator_contract: None }],
-                    identity: None, event_identity: None, pre: Default::default(), post: Default::default(),
+                    identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default(),
                 },
                 AnnotatedNode {
                     id: "rust::main::bb1".into(), successors: vec![], labels: vec![], allocation_labels: vec![],
-                    identity: None, event_identity: None, pre: Default::default(), post: Default::default(),
+                    identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default(),
                 },
                 AnnotatedNode {
                     id: "rust::dead::bb0".into(), successors: vec![],
                     labels: vec![EventLabel { predicate: EventKind::Read, variable: "rust::dead::Local(_1)".into() }],
                     allocation_labels: vec![AllocationEventLabel { predicate: EventKind::Alloc, allocation: "DEAD".into(), certainty: AllocationEventCertainty::MayAbstract, deallocator_contract: None }],
-                    identity: None, event_identity: None, pre: Default::default(), post: Default::default(),
+                    identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default(),
                 },
             ],
         };
@@ -775,8 +858,8 @@ mod tests {
             variables: vec![ProgramVariable { id: "rust::x".into(), language: ProgramLanguage::Rust, display: None, function: Some("main".into()) }],
             allocations: vec![],
             nodes: vec![
-                AnnotatedNode { id: "rust::main::bb0".into(), successors: vec!["rust::main::terminate".into()], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, pre: Default::default(), post: Default::default() },
-                AnnotatedNode { id: "rust::main::terminate".into(), successors: vec![], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, pre: Default::default(), post: Default::default() },
+                AnnotatedNode { id: "rust::main::bb0".into(), successors: vec!["rust::main::terminate".into()], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
+                AnnotatedNode { id: "rust::main::terminate".into(), successors: vec![], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
             ],
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();
@@ -796,10 +879,10 @@ mod tests {
             variables: vec![ProgramVariable { id: "v".into(), language: ProgramLanguage::Rust, display: None, function: None }],
             allocations: vec![],
             nodes: vec![
-                AnnotatedNode { id: "rust::main::bb0".into(), successors: vec!["dummyCall::x".into()], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, pre: Default::default(), post: Default::default() },
-                AnnotatedNode { id: "dummyCall::x".into(), successors: vec!["rust::callee::bb0".into()], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, pre: Default::default(), post: Default::default() },
-                AnnotatedNode { id: "rust::callee::bb0".into(), successors: vec!["rust::callee::bb1".into()], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, pre: Default::default(), post: Default::default() },
-                AnnotatedNode { id: "rust::callee::bb1".into(), successors: vec![], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, pre: Default::default(), post: Default::default() },
+                AnnotatedNode { id: "rust::main::bb0".into(), successors: vec!["dummyCall::x".into()], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
+                AnnotatedNode { id: "dummyCall::x".into(), successors: vec!["rust::callee::bb0".into()], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
+                AnnotatedNode { id: "rust::callee::bb0".into(), successors: vec!["rust::callee::bb1".into()], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
+                AnnotatedNode { id: "rust::callee::bb1".into(), successors: vec![], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
             ],
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();

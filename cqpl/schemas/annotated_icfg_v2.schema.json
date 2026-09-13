@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://crema.local/schemas/cqpl-annotated-icfg-v2.json",
-  "title": "CREMA CQPL Annotated ICFG v2 (allocation identity + optional allocation_contracts_v1 capability)",
+  "title": "CREMA CQPL Annotated ICFG v2 (allocation identity + allocation contracts/state capabilities)",
   "type": "object",
   "required": [
     "schema_version",
@@ -569,6 +569,9 @@
         },
         "post": {
           "$ref": "#/$defs/memory"
+        },
+        "allocation_post": {
+          "$ref": "#/$defs/allocationMemory"
         }
       }
     },
@@ -600,6 +603,74 @@
           ]
         }
       }
+    },
+    "allocationStateCell": {
+      "type": "object",
+      "required": [
+        "allocation",
+        "value"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "allocation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "enum": [
+            "BOTTOM",
+            "BOXTIMES",
+            "ALLOC",
+            "FREED",
+            "MB",
+            "IMMB",
+            "MV",
+            "TOP"
+          ]
+        }
+      }
+    },
+    "allocationMemory": {
+      "type": "object",
+      "required": [
+        "cells"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "cells": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/allocationStateCell"
+          }
+        }
+      }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "allocation_state_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "required": [
+                "allocation_post"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
 }

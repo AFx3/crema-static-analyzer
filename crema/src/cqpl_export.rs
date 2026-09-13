@@ -78,6 +78,10 @@ struct AnnotatedNode {
     /// event labels. Present only in v2.
     #[serde(skip_serializing_if = "Option::is_none")]
     event_identity: Option<NodeIdentityAnnotation>,
+    /// Capability allocation_state_v1: pointwise MAY projection of the existing
+    /// ProgramVar post-state through the post allocation-identity relation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allocation_post: Option<AbstractAllocationMemoryAnnotation>,
     /// CREMA Phase 5 stores one converged per-node state after applying the
     /// node transformer. It does not retain a separate stable Pi#_pre map.
     /// Do not fabricate one: v1/v2 export an explicit empty pre-memory.
@@ -135,6 +139,17 @@ struct AbstractMemoryAnnotation {
 #[derive(Debug, Clone, Serialize)]
 struct AbstractCell {
     aliases: Vec<String>,
+    value: &'static str,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+struct AbstractAllocationMemoryAnnotation {
+    cells: Vec<AbstractAllocationCell>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct AbstractAllocationCell {
+    allocation: String,
     value: &'static str,
 }
 
@@ -307,7 +322,7 @@ fn export_cqpl_annotated_icfg_versioned(
             )
             .into());
         }
-        let (identity, event_identity) = if schema_version == 2 {
+        let (identity, event_identity, allocation_post) = if schema_version == 2 {
             let post_identity = identity_state
                 .and_then(|state| state.by_node.get(node_id))
                 .cloned()
@@ -327,9 +342,10 @@ fn export_cqpl_annotated_icfg_versioned(
             (
                 Some(identity_annotation(&post_identity)),
                 Some(identity_annotation(&event_identity)),
+                Some(allocation_memory_annotation(node_id, node, &post_mem, &post_identity)),
             )
         } else {
-            (None, None)
+            (None, None, None)
         };
 
         let mut labels = raw_labels;
@@ -350,6 +366,7 @@ fn export_cqpl_annotated_icfg_versioned(
             allocation_labels,
             identity,
             event_identity,
+            allocation_post,
             pre: AbstractMemoryAnnotation::default(),
             post,
         });
@@ -376,7 +393,11 @@ fn export_cqpl_annotated_icfg_versioned(
     let output = AnnotatedIcfg {
         schema_version,
         entry: entry.to_string(),
-        capabilities: if schema_version == 2 { Some(vec!["allocation_contracts_v1"]) } else { None },
+        capabilities: if schema_version == 2 {
+            Some(vec!["allocation_contracts_v1", "allocation_state_v1"])
+        } else {
+            None
+        },
         variables,
         allocations,
         nodes,
@@ -881,6 +902,40 @@ fn memory_annotation(mem: &AbstractMemory) -> AbstractMemoryAnnotation {
         })
         .collect();
     AbstractMemoryAnnotation { cells }
+}
+
+fn allocation_memory_annotation(
+    node_id: &str,
+    node: &GlobalICFGNode,
+    post: &AbstractMemory,
+    identity: &AllocationIdentityMemory,
+) -> AbstractAllocationMemoryAnnotation {
+    let mut values: BTreeMap<String, CellValue> = BTreeMap::new();
+
+    for (legacy_allocation, value) in &post.state {
+        for alias in &legacy_allocation.set {
+            let Some(var) = identity_var_for_event(node_id, node, alias) else {
+                continue;
+            };
+            for allocation in identity.event_allocations(&var) {
+                let id = stable_allocation_id(&allocation);
+                values
+                    .entry(id)
+                    .and_modify(|current| *current = current.join(*value))
+                    .or_insert(*value);
+            }
+        }
+    }
+
+    AbstractAllocationMemoryAnnotation {
+        cells: values
+            .into_iter()
+            .map(|(allocation, value)| AbstractAllocationCell {
+                allocation,
+                value: cell_value_name(value),
+            })
+            .collect(),
+    }
 }
 
 fn cell_value_name(value: CellValue) -> &'static str {
@@ -2203,6 +2258,72 @@ mod tests {
                 && l.deallocator_contract.as_ref().is_some_and(|c| c.family == "c_malloc" && c.operation == "free" && c.language == "c")
         ));
         assert_eq!(allocation_contract(&allocation).family, "rust_global");
+    }
+
+    #[test]
+    fn v6m_allocation_post_lifts_program_state_through_post_identity() {
+        let node_id = "rust::main::bb0";
+        let node = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 0,
+            statements: vec![],
+            terminator: None,
+        });
+        let allocation = AbstractAllocId::new(
+            AllocationSiteId::Synthetic { scope: "test".into(), label: "A".into() },
+            Vec::new(),
+        );
+        let var = ProgramVarId::rust("main", "_1").unwrap();
+        let mut identity = AllocationIdentityMemory::default();
+        identity.assign_fresh(var, allocation.clone());
+
+        let mut post = AbstractMemory::default();
+        post.state.insert(
+            Allocation { set: BTreeSet::from(["Local(_1)".to_string()]) },
+            CellValue::ALLOC,
+        );
+        post.state.insert(
+            Allocation { set: BTreeSet::from(["Leak(Local(_1))".to_string()]) },
+            CellValue::MV,
+        );
+
+        let lifted = allocation_memory_annotation(node_id, &node, &post, &identity);
+        assert_eq!(lifted.cells.len(), 1);
+        assert_eq!(lifted.cells[0].allocation, stable_allocation_id(&allocation));
+        // Existing lattice law: ALLOC <= MV, therefore their join is MV.
+        assert_eq!(lifted.cells[0].value, "MV");
+    }
+
+    #[test]
+    fn v6m_allocation_post_joins_incompatible_alias_states_to_top() {
+        let node_id = "rust::main::bb0";
+        let node = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 0,
+            statements: vec![],
+            terminator: None,
+        });
+        let allocation = AbstractAllocId::new(
+            AllocationSiteId::Synthetic { scope: "test".into(), label: "A".into() },
+            Vec::new(),
+        );
+        let p = ProgramVarId::rust("main", "_1").unwrap();
+        let q = ProgramVarId::rust("main", "_2").unwrap();
+        let mut identity = AllocationIdentityMemory::default();
+        identity.assign_points_to(p, BTreeSet::from([allocation.clone()]));
+        identity.assign_points_to(q, BTreeSet::from([allocation.clone()]));
+
+        let mut post = AbstractMemory::default();
+        post.state.insert(
+            Allocation { set: BTreeSet::from(["Local(_1)".to_string()]) },
+            CellValue::ALLOC,
+        );
+        post.state.insert(
+            Allocation { set: BTreeSet::from(["Local(_2)".to_string()]) },
+            CellValue::FREED,
+        );
+
+        let lifted = allocation_memory_annotation(node_id, &node, &post, &identity);
+        assert_eq!(lifted.cells.len(), 1);
+        assert_eq!(lifted.cells[0].value, "TOP");
     }
 
 }

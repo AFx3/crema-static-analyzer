@@ -1,0 +1,11 @@
+# Allocation-centric use-after-free pattern.
+# Lifecycle start is read from allocation_post; drop/use ordering remains event-based.
+requires allocation_state_v1;
+
+exists_alloc a. EF (
+  alloc(a) &&
+  EX EF (
+    drop_l(a) &&
+    EX E[(!alloc_l(a)) U use_l(a)]
+  )
+)

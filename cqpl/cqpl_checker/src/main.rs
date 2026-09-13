@@ -70,6 +70,7 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
         })
         .unwrap_or_default();
     let has_allocation_contracts = capabilities.contains("allocation_contracts_v1");
+    let has_allocation_state = capabilities.contains("allocation_state_v1");
 
     if has_allocation_contracts {
         for (index, allocation) in allocations.iter().enumerate() {
@@ -93,6 +94,48 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
                 return Err(format!(
                     "schema-v2 nodes[{index}] is missing required field '{required}'; validate the allocation-identity boundary before model checking"
                 ));
+            }
+        }
+        if has_allocation_state && !object.contains_key("allocation_post") {
+            return Err(format!(
+                "artifact declares allocation_state_v1 but schema-v2 nodes[{index}] is missing allocation_post"
+            ));
+        }
+        if let Some(allocation_post) = object.get("allocation_post") {
+            let post_object = allocation_post
+                .as_object()
+                .ok_or_else(|| format!("schema-v2 nodes[{index}].allocation_post must be an object"))?;
+            let cells = post_object
+                .get("cells")
+                .and_then(Value::as_array)
+                .ok_or_else(|| format!("schema-v2 nodes[{index}].allocation_post.cells must be an array"))?;
+            let known_allocations: std::collections::BTreeSet<_> = allocations
+                .iter()
+                .filter_map(|a| a.get("id").and_then(Value::as_str))
+                .collect();
+            let mut seen = std::collections::BTreeSet::new();
+            for (cell_index, cell) in cells.iter().enumerate() {
+                let allocation = cell
+                    .get("allocation")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| format!(
+                        "schema-v2 nodes[{index}].allocation_post.cells[{cell_index}] is missing string allocation"
+                    ))?;
+                if !known_allocations.contains(allocation) {
+                    return Err(format!(
+                        "schema-v2 nodes[{index}].allocation_post.cells[{cell_index}] references unknown allocation '{allocation}'"
+                    ));
+                }
+                if !seen.insert(allocation) {
+                    return Err(format!(
+                        "schema-v2 nodes[{index}].allocation_post contains duplicate allocation '{allocation}'"
+                    ));
+                }
+                if !cell.get("value").is_some_and(Value::is_string) {
+                    return Err(format!(
+                        "schema-v2 nodes[{index}].allocation_post.cells[{cell_index}] is missing string value"
+                    ));
+                }
             }
         }
         if !object.get("identity").is_some_and(Value::is_object) {

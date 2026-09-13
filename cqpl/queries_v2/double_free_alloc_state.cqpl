@@ -1,0 +1,11 @@
+# Allocation-centric double-free pattern.
+# Lifecycle start is read from allocation_post; repeated drops remain events.
+requires allocation_state_v1;
+
+exists_alloc a. EF (
+  alloc(a) &&
+  EX EF (
+    drop_l(a) &&
+    EX E[(!alloc_l(a)) U drop_l(a)]
+  )
+)
