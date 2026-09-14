@@ -47,6 +47,78 @@ fn validate_contract_object(value: &Value, where_: &str) -> Result<(), String> {
     Ok(())
 }
 
+
+fn validate_v2_deallocator_contract_object(value: &Value, where_: &str) -> Result<(), String> {
+    validate_contract_object(value, where_)?;
+    let object = value.as_object().unwrap();
+    let basis = object
+        .get("basis")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| format!("{where_} requires non-empty string field 'basis' under allocation_contracts_v2"))?;
+    let family = object["family"].as_str().unwrap();
+    let operation = object["operation"].as_str().unwrap();
+    let language = object["language"].as_str().unwrap();
+    let owner = object.get("owner_def_path").and_then(Value::as_str);
+    let allocator = object.get("allocator_def_path").and_then(Value::as_str);
+    let callee = object.get("callee_def_path").and_then(Value::as_str);
+
+    match basis {
+        "rust_box_global_drop" | "rust_vec_global_drop" => {
+            if (family, operation, language) != ("rust_global", "drop", "rust") {
+                return Err(format!(
+                    "{where_} basis '{basis}' requires family=rust_global operation=drop language=rust"
+                ));
+            }
+            if owner.map_or(true, str::is_empty) || allocator.map_or(true, str::is_empty) {
+                return Err(format!(
+                    "{where_} basis '{basis}' requires non-empty owner_def_path and allocator_def_path"
+                ));
+            }
+            if callee.is_some() {
+                return Err(format!("{where_} basis '{basis}' does not accept callee_def_path"));
+            }
+        }
+        "rust_global_dealloc_api" => {
+            if (family, operation, language) != ("rust_global", "dealloc", "rust") {
+                return Err(format!(
+                    "{where_} basis '{basis}' requires family=rust_global operation=dealloc language=rust"
+                ));
+            }
+            if owner.is_some() || allocator.is_some() {
+                return Err(format!("{where_} basis '{basis}' does not accept typed-drop provenance fields"));
+            }
+            if callee.map_or(true, str::is_empty) {
+                return Err(format!("{where_} basis '{basis}' requires non-empty callee_def_path"));
+            }
+        }
+        "structural_c_free_v1" => {
+            if (family, operation, language) != ("c_malloc", "free", "c") {
+                return Err(format!(
+                    "{where_} basis '{basis}' requires family=c_malloc operation=free language=c"
+                ));
+            }
+            if owner.is_some() || allocator.is_some() || callee.is_some() {
+                return Err(format!("{where_} basis '{basis}' does not accept Rust provenance fields"));
+            }
+        }
+        "unresolved" => {
+            if family != "unknown" {
+                return Err(format!("{where_} basis 'unresolved' must remain family=unknown"));
+            }
+            if owner.is_some() || allocator.is_some() || callee.is_some() {
+                return Err(format!("{where_} unresolved contracts must not carry provenance fields"));
+            }
+        }
+        other => {
+            return Err(format!(
+                "{where_} has unsupported allocation_contracts_v2 basis '{other}'"
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     let Some(schema_version) = root.get("schema_version").and_then(Value::as_u64) else {
         return Err("annotated ICFG is missing integer schema_version".into());
@@ -70,7 +142,12 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
         })
         .unwrap_or_default();
     let has_allocation_contracts = capabilities.contains("allocation_contracts_v1");
+    let has_allocation_contracts_v2 = capabilities.contains("allocation_contracts_v2");
     let has_allocation_state = capabilities.contains("allocation_state_v1");
+
+    if has_allocation_contracts_v2 && !has_allocation_contracts {
+        return Err("allocation_contracts_v2 refines allocation_contracts_v1; the artifact must declare both capabilities".into());
+    }
 
     if has_allocation_contracts {
         for (index, allocation) in allocations.iter().enumerate() {
@@ -164,10 +241,11 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
                 let contract = label.get("deallocator_contract").ok_or_else(|| {
                     format!("artifact declares allocation_contracts_v1 but nodes[{index}].allocation_labels[{label_index}] drop is missing deallocator_contract")
                 })?;
-                validate_contract_object(
-                    contract,
-                    &format!("nodes[{index}].allocation_labels[{label_index}].deallocator_contract"),
-                )?;
+                let where_ = format!("nodes[{index}].allocation_labels[{label_index}].deallocator_contract");
+                validate_contract_object(contract, &where_)?;
+                if has_allocation_contracts_v2 {
+                    validate_v2_deallocator_contract_object(contract, &where_)?;
+                }
             }
         }
     }
@@ -340,6 +418,39 @@ mod tests {
         }]);
         let err = validate_boundary_requirements(&value).unwrap_err();
         assert!(err.contains("deallocator_contract"));
+    }
+
+
+    #[test]
+    fn allocation_contracts_v2_cli_guard_requires_v1_and_closed_basis() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["allocation_contracts_v2"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("must declare both"), "unexpected error: {err}");
+
+        value["capabilities"] = json!(["allocation_contracts_v1", "allocation_contracts_v2"]);
+        value["allocations"] = json!([{
+            "id":"A", "display":"A", "site":{"kind":"synthetic","scope":"t","label":"A"}, "context":[],
+            "allocator_contract":{"family":"rust_global","operation":"box_allocation","language":"rust"}
+        }]);
+        value["nodes"][0]["allocation_labels"] = json!([{
+            "predicate":"drop", "allocation":"A", "certainty":"may_abstract",
+            "deallocator_contract":{"family":"rust_global","operation":"drop","language":"rust"}
+        }]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("basis"), "unexpected error: {err}");
+
+        value["nodes"][0]["allocation_labels"][0]["deallocator_contract"] = json!({
+            "family":"rust_global", "operation":"drop", "language":"rust",
+            "basis":"rust_box_global_drop",
+            "owner_def_path":"opaque::owner",
+            "allocator_def_path":"opaque::allocator"
+        });
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["nodes"][0]["allocation_labels"][0]["deallocator_contract"]["family"] = json!("c_malloc");
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("requires family=rust_global"), "unexpected error: {err}");
     }
 
 }

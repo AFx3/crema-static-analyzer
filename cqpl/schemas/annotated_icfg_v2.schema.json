@@ -601,6 +601,22 @@
             "c",
             "unknown"
           ]
+        },
+        "basis": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner_def_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "allocator_def_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "callee_def_path": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },
@@ -644,6 +660,155 @@
           }
         }
       }
+    },
+    "deallocatorContractV2": {
+      "oneOf": [
+        {
+          "required": [
+            "basis",
+            "owner_def_path",
+            "allocator_def_path"
+          ],
+          "properties": {
+            "basis": {
+              "enum": [
+                "rust_box_global_drop",
+                "rust_vec_global_drop"
+              ]
+            },
+            "family": {
+              "const": "rust_global"
+            },
+            "operation": {
+              "const": "drop"
+            },
+            "language": {
+              "const": "rust"
+            },
+            "owner_def_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "allocator_def_path": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "not": {
+            "required": [
+              "callee_def_path"
+            ]
+          }
+        },
+        {
+          "required": [
+            "basis",
+            "callee_def_path"
+          ],
+          "properties": {
+            "basis": {
+              "const": "rust_global_dealloc_api"
+            },
+            "family": {
+              "const": "rust_global"
+            },
+            "operation": {
+              "const": "dealloc"
+            },
+            "language": {
+              "const": "rust"
+            },
+            "callee_def_path": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "owner_def_path"
+                ]
+              },
+              {
+                "required": [
+                  "allocator_def_path"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "basis"
+          ],
+          "properties": {
+            "basis": {
+              "const": "structural_c_free_v1"
+            },
+            "family": {
+              "const": "c_malloc"
+            },
+            "operation": {
+              "const": "free"
+            },
+            "language": {
+              "const": "c"
+            }
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "owner_def_path"
+                ]
+              },
+              {
+                "required": [
+                  "allocator_def_path"
+                ]
+              },
+              {
+                "required": [
+                  "callee_def_path"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "required": [
+            "basis"
+          ],
+          "properties": {
+            "basis": {
+              "const": "unresolved"
+            },
+            "family": {
+              "const": "unknown"
+            }
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "owner_def_path"
+                ]
+              },
+              {
+                "required": [
+                  "allocator_def_path"
+                ]
+              },
+              {
+                "required": [
+                  "callee_def_path"
+                ]
+              }
+            ]
+          }
+        }
+      ]
     }
   },
   "allOf": [
@@ -667,6 +832,88 @@
               "required": [
                 "allocation_post"
               ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "allocation_contracts_v2"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "allocation_contracts_v1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "allocation_contracts_v2"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "properties": {
+                "allocation_labels": {
+                  "items": {
+                    "allOf": [
+                      {
+                        "if": {
+                          "properties": {
+                            "predicate": {
+                              "const": "drop"
+                            }
+                          },
+                          "required": [
+                            "predicate"
+                          ]
+                        },
+                        "then": {
+                          "required": [
+                            "deallocator_contract"
+                          ],
+                          "properties": {
+                            "deallocator_contract": {
+                              "allOf": [
+                                {
+                                  "$ref": "#/$defs/allocationContract"
+                                },
+                                {
+                                  "$ref": "#/$defs/deallocatorContractV2"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
             }
           }
         }

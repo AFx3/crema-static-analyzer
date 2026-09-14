@@ -1,6 +1,7 @@
 # CQPL — query language e model checker per CREMA
 
 CQPL valuta proprietà temporali sull'**annotated ICFG** prodotto da CREMA.
+
 Il checker CQPL non legge direttamente Rust, MIR, LLVM o C: riceve un JSON già
 annotato da CREMA e una query `.cqpl`.
 
@@ -15,32 +16,56 @@ Cargo project (Rust/C) -> CREMA -> annotated ICFG -> CQPL -> ff | unk | tt
 - `tt`: la formula è stabilita nel modello astratto.
 
 `unk` è normale quando la proprietà dipende da informazione MAY. `tt` non è,
-da solo, una prova di una concreta esecuzione del programma.
+da solo, una prova di una concreta esecuzione del programma: l'ICFG e le
+relazioni di identità/evento restano astrazioni.
 
-## Query disponibili
+## Stato corrente: v6N-r1a
 
-`queries/` contiene il core variable-centric originale.
-
-`queries_v2/` è l'interfaccia corrente per gli esperimenti end-to-end e usa
-`AbstractAllocId` per correlare la stessa possibile allocazione tra Rust e C.
-Le query ufficiali sono:
+Il profilo end-to-end corrente usa **schema v2** con entrambe le capability:
 
 ```text
-queries_v2/leak_alloc.cqpl
-queries_v2/double_free_alloc.cqpl
-queries_v2/use_after_free_alloc.cqpl
+allocation_state_v1
+allocation_contracts_v2
+```
+
+`allocation_contracts_v2` è un refinement fail-closed di
+`allocation_contracts_v1`; un artifact che dichiara v2 deve dichiarare anche v1.
+
+La semantica three-valued di `allocator_mismatch_l` non è stata modificata da
+v6M-r1c: v6N-r1a aumenta la precisione dei contract prodotti da CREMA.
+
+## Query ufficiali correnti
+
+Per gli esperimenti end-to-end v6N-r1a usare `queries_v2/`:
+
+```text
+queries_v2/leak_alloc_state.cqpl
+queries_v2/double_free_alloc_state.cqpl
+queries_v2/use_after_free_alloc_state.cqpl
+queries_v2/allocator_mismatch_ub_v2.cqpl
+```
+
+La query:
+
+```text
 queries_v2/allocator_mismatch_ub.cqpl
 ```
 
-Per nuovi esperimenti usare normalmente `queries_v2/`.
+è mantenuta per compatibilità/baseline `allocation_contracts_v1` e non è la
+query allocator-mismatch ufficiale del profilo corrente v6N-r1a.
+
+Le query in `queries/` restano il core/legacy variable-centric e servono anche
+per riproducibilità storica.
 
 ## Struttura di una query
 
-Un file `.cqpl` contiene zero o più dichiarazioni `requires ...;` seguite da
-una formula. Sono supportati commenti `#` e `//`.
+Un file `.cqpl` contiene zero o più dichiarazioni `requires ...;` seguite da una
+formula. Sono supportati commenti `#` e `//`.
+
+La query allocator mismatch corrente è:
 
 ```cqpl
-requires allocation_contracts_v1;
+requires allocation_contracts_v2;
 
 exists_alloc a. EF (
   alloc_l(a) &&
@@ -78,8 +103,11 @@ forall_alloc a. phi
 | `drop(x)` | `x` può rappresentare memoria freed/deallocata |
 | `own_forg(x)` | l'ownership può essere stata abbandonata |
 
-Leggono lo stato astratto `post` prodotto dall'abstract interpretation.
-Un match MAY vale `unk`; se il predicato è refutato vale `ff`.
+Nelle query allocation-centric v6M/v6N, `alloc(a)` e `drop(a)` possono essere
+valutati anche su un `AbstractAllocId` tramite `allocation_state_v1`.
+
+Leggono lo stato astratto `post` prodotto dall'abstract interpretation. Un match
+MAY vale `unk`; se il predicato è refutato vale `ff`.
 
 ### Predicati di evento
 
@@ -95,7 +123,7 @@ Con un `ProgramVar` sono label del nodo, sollevate attraverso l'alias informatio
 esportata da CREMA. Con un `AbstractAllocId` schema v2 l'associazione
 evento→allocazione è MAY: un witness positivo vale `unk`, l'assenza vale `ff`.
 
-### Allocator mismatch
+## Allocator mismatch
 
 ```cqpl
 allocator_mismatch_l(a)
@@ -107,32 +135,16 @@ Alias accettato:
 dealloc_mismatch_l(a)
 ```
 
-Richiede un `AbstractAllocId` e la capability:
+Nel profilo corrente richiede:
 
 ```cqpl
-requires allocation_contracts_v1;
+requires allocation_contracts_v2;
 ```
 
-`AllocatorMismatch-UB` controlla il mismatch della **famiglia** allocator /
-deallocator. Non è una query generica per ogni forma di UB.
+`AllocatorMismatch-UB` controlla soltanto il mismatch della **famiglia**
+allocator/deallocator. Non è una query generica per ogni forma di UB.
 
-## `allocation_contracts_v1`
-
-La query non definisce il contract: dichiara che richiede un annotated ICFG che
-esponga questa capability.
-
-L'artefatto contiene, per esempio:
-
-```json
-"capabilities": ["allocation_contracts_v1"]
-```
-
-Ogni allocazione ha un `allocator_contract` e ogni allocation-label `drop` ha
-un `deallocator_contract`:
-
-```json
-{"family":"c_malloc","operation":"malloc","language":"c"}
-```
+### `allocation_contracts_v2`
 
 Famiglie correnti:
 
@@ -142,20 +154,66 @@ c_malloc
 unknown
 ```
 
-Regola corrente:
+Ogni allocazione espone un `allocator_contract`; ogni allocation-label `drop`
+espone un `deallocator_contract` proof-carrying. I campi v2 includono:
 
 ```text
-rust_global -> rust_global : compatibile
-c_malloc    -> c_malloc    : compatibile
+family
+operation
+language
+basis
+owner_def_path       # audit-only, quando applicabile
+allocator_def_path   # audit-only, quando applicabile
+callee_def_path      # audit-only, quando applicabile
+```
+
+Le proof basis ammesse in v6N-r1a sono chiuse:
+
+```text
+rust_box_global_drop
+rust_vec_global_drop
+rust_global_dealloc_api
+structural_c_free_v1
+unresolved
+```
+
+`Box<_, Global>` e `Vec<_, Global>` sono classificati dal producer usando
+identità rustc strutturali. `std::alloc::dealloc`/`alloc::alloc::dealloc` viene
+certificato producer-side mentre il `DefId` è disponibile; il path serializzato
+serve solo per audit e non viene reinterpretato dal checker.
+
+Generic MIR `Drop`, `String`, `CString`, `Rc`, `Arc`, custom `Drop`, custom
+allocator e call riconosciute solo da pretty text non vengono promosse a
+`rust_global` in v6N-r1a: restano `unknown` salvo futura evidence strutturale.
+
+La regola family-level è:
+
+```text
+rust_global -> rust_global : nessun mismatch witness
+c_malloc    -> c_malloc    : nessun mismatch witness
 rust_global -> c_malloc    : possibile mismatch
 c_malloc    -> rust_global : possibile mismatch
 unknown     -> ...         : non refutabile
 ...         -> unknown     : non refutabile
 ```
 
-Poiché gli `AbstractAllocId` sono MAY, un witness positivo di mismatch vale
-`unk`, non `tt`. Capability mancante o artifact malformato produce un errore,
-non `ff`.
+Poiché `AbstractAllocId` ed eventi di allocazione sono MAY, un witness positivo
+di mismatch vale `unk`, non `tt`. Capability mancante o proof metadata v2
+malformato produce un errore, mai una falsa refutazione `ff`.
+
+## Query state-centric Leak / Double-Free / Use-After-Free
+
+Il profilo corrente usa `allocation_state_v1`:
+
+```text
+leak_alloc_state.cqpl
+double_free_alloc_state.cqpl
+use_after_free_alloc_state.cqpl
+```
+
+`allocation_state_v1` è MAY-only. `allocation_post` è una proiezione pointwise
+dello stato astratto esistente attraverso `AbstractAllocId`; non è una nuova
+MUST lifecycle analysis.
 
 ## Operatori booleani e temporali
 
@@ -163,7 +221,6 @@ non `ff`.
 !phi, not phi
 phi && psi
 phi || psi
-
 EX phi, AX phi
 EF phi, AF phi
 EG phi, AG phi
@@ -172,6 +229,7 @@ A[phi U psi]
 ```
 
 Sono accettate anche forme come `E(F phi)`, `A(G phi)` e `E(X phi)`.
+
 `X` è strong Next: su un terminale `EX phi` e `AX phi` valgono `ff`.
 
 Il model checker usa fixed point sul reticolo:
@@ -195,25 +253,26 @@ phi ::= alloc(x) | drop(x) | own_forg(x)
 
 Dove `x : ProgramVar`, `a : AbstractAllocId` e `v` dipende dal binding.
 
-## Come funziona CREMA + CQPL
+## Pipeline CREMA + CQPL
 
 ```text
 1. CREMA analizza il Cargo project.
 2. Costruisce l'ICFG Rust/C.
 3. L'abstract interpretation produce pre/post.
-4. Schema v2 aggiunge AbstractAllocId e allocation-event labels.
-5. CREMA esporta annotated_icfg_v2.json.
-6. CQPL carica JSON e query e verifica le capability.
-7. Il model checker valuta la formula dall'entry.
-8. Il risultato è ff, unk oppure tt.
+4. Schema v2 aggiunge AbstractAllocId, allocation_post e allocation-event labels.
+5. CREMA produce allocator/deallocator contracts e provenance supportata.
+6. CREMA esporta annotated_icfg_v2.json.
+7. CQPL valida schema e capability richieste dalla query.
+8. Il model checker valuta la formula dall'entry.
+9. Il risultato è ff, unk oppure tt.
 ```
 
-CQPL non deduce allocator contract dai nomi dei nodi: i contract sono metadata
-strutturali prodotti da CREMA.
+CQPL non deduce allocator contract dai nomi dei nodi, dai pretty strings o dai
+DefPath di audit: il producer CREMA deve classificare la famiglia.
 
-## Esempio completo su `tests_and_target_repos`
+## Esempio allocator mismatch v6N-r1a
 
-Useremo:
+Target:
 
 ```text
 tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_box_from_raw_ub
@@ -224,14 +283,15 @@ Impostare i path:
 ```bash
 ROOT=/home/af/Documenti/a-phd
 TARGET="$ROOT/tests_and_target_repos/a-code_c_to_rust_alloc/c_malloc_rust_box_from_raw_ub"
-OUT=/tmp/cqpl-example
+OUT=/tmp/cqpl-v6n-example
+NIGHTLY=nightly-2024-11-21
 mkdir -p "$OUT"
 ```
 
-Compilare il target:
+Compilare:
 
 ```bash
-cargo +nightly-2024-11-21 build --manifest-path "$TARGET/Cargo.toml"
+cargo +"$NIGHTLY" build --manifest-path "$TARGET/Cargo.toml"
 ```
 
 Generare l'annotated ICFG schema v2:
@@ -241,7 +301,7 @@ rm -f "$ROOT/crema/global_icfg.json" "$ROOT/crema/ffi_functions.json"
 
 (
   cd "$ROOT/crema"
-  cargo +nightly-2024-11-21 run -- \
+  cargo +"$NIGHTLY" run -- \
     "$TARGET" \
     --entry main \
     --only-icfg-annotated \
@@ -251,30 +311,33 @@ rm -f "$ROOT/crema/global_icfg.json" "$ROOT/crema/ffi_functions.json"
 )
 ```
 
-Eseguire la query allocator mismatch:
+Eseguire la query **v2**:
 
 ```bash
-cargo +nightly-2024-11-21 run \
+cargo +"$NIGHTLY" run \
   --manifest-path "$ROOT/cqpl/cqpl_checker/Cargo.toml" \
   -- \
   "$OUT/annotated_icfg_v2.json" \
-  "$ROOT/cqpl/queries_v2/allocator_mismatch_ub.cqpl"
+  "$ROOT/cqpl/queries_v2/allocator_mismatch_ub_v2.cqpl"
 ```
 
-Risultato atteso per questo target:
+Per `c_malloc -> Box<_, Global>` il risultato atteso resta:
 
 ```text
 CQPL result: unk
 ```
 
+La precisione v6N consiste nel fatto che il deallocator contract è ora
+`rust_global` con basis `rust_box_global_drop`, non `unknown`.
+
 Output JSON:
 
 ```bash
-cargo +nightly-2024-11-21 run \
+cargo +"$NIGHTLY" run \
   --manifest-path "$ROOT/cqpl/cqpl_checker/Cargo.toml" \
   -- \
   "$OUT/annotated_icfg_v2.json" \
-  "$ROOT/cqpl/queries_v2/allocator_mismatch_ub.cqpl" \
+  "$ROOT/cqpl/queries_v2/allocator_mismatch_ub_v2.cqpl" \
   --json
 ```
 
@@ -283,7 +346,9 @@ cargo +nightly-2024-11-21 run \
 Esempio `/tmp/my_query.cqpl`:
 
 ```cqpl
-exists_alloc a. EF (alloc_l(a) && EX EF drop_l(a))
+requires allocation_state_v1;
+
+exists_alloc a. EF (alloc(a) && EX EF drop_l(a))
 ```
 
 Esecuzione:
@@ -331,25 +396,54 @@ schema_version, entry, capabilities, variables, allocations, nodes
 nodes: successors, labels, allocation_labels, identity, event_identity, pre, post
 ```
 
-`pre/post` provengono dall'abstract interpretation. `identity/event_identity` e
-`allocation_labels` sono l'estensione MAY allocation-centric dello schema v2.
+`pre/post` provengono dall'abstract interpretation. `identity/event_identity`,
+`allocation_post` e `allocation_labels` sono l'estensione allocation-centric MAY.
+I contract allocator/deallocator sono metadata strutturali del producer.
+
+## Corpus `run_all`
+
+Il runner corrente deve eseguire schema v2 con:
+
+```text
+--contract-capability v2
+```
+
+e quindi usare:
+
+```text
+allocator_mismatch_ub_v2.cqpl
+```
+
+Il census resta intenzionalmente quello frozen a v6L (`110` discovered, `109`
+active, con `no_errors_projects/openapi-client-gen` escluso). Il nome storico
+`EXPECTED_TARGETS_V6L.txt` può quindi restare: descrive la provenienza del
+snapshot, non la versione semantica delle query.
 
 ## Test
 
+Regression suite corrente:
+
 ```bash
-cargo +nightly-2024-11-21 test --manifest-path cqpl/cqpl_checker/Cargo.toml
+cargo +nightly-2024-11-21 test \
+  --manifest-path cqpl/cqpl_checker/Cargo.toml
 ```
+
+Nel gate v6N-r1a validato: CQPL lib `48/48`, CLI `7/7`, no-refutation `4/4`.
+L'end-to-end allocator mismatch v2 viene validato dal corpus/focused harness,
+non da una smoke query legacy.
 
 ## Boundary scientifico
 
 Distinguere sempre:
 
 1. core CQPL variable-centric;
-2. estensione schema v2 con `AbstractAllocId`;
-3. soundness dell'abstract interpretation CREMA;
-4. semantica del model checker;
-5. capability come `allocation_contracts_v1`.
+2. schema v2 e `AbstractAllocId` MAY;
+3. `allocation_state_v1` MAY-state projection;
+4. soundness dell'abstract interpretation CREMA;
+5. semantica three-valued del model checker;
+6. `allocation_contracts_v1` come allocator-origin baseline;
+7. `allocation_contracts_v2` come refinement proof-carrying dei deallocator contract.
 
-Le allocation-label schema v2 sono MAY-only; `allocator_mismatch_l` controlla
-solo la famiglia allocator/deallocator; capability mancante produce errore e
-non una falsa refutazione `ff`.
+In particolare, v6N-r1a non introduce MUST allocation/deallocation analysis e
+non classifica genericamente tutti i Rust `Drop`. Le famiglie precise sono
+emesse solo quando il producer dispone della proof basis supportata.

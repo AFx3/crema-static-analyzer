@@ -79,6 +79,17 @@ pub struct AllocationContract {
     pub family: String,
     pub operation: String,
     pub language: String,
+    /// allocation_contracts_v2 proof basis for deallocator contracts.
+    /// The checker validates this closed vocabulary; it never derives family
+    /// from diagnostic provenance strings.
+    #[serde(default)]
+    pub basis: Option<String>,
+    #[serde(default)]
+    pub owner_def_path: Option<String>,
+    #[serde(default)]
+    pub allocator_def_path: Option<String>,
+    #[serde(default)]
+    pub callee_def_path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -248,9 +259,16 @@ impl Kripke {
         let schema_version = input.schema_version;
         let capabilities: BTreeSet<String> = input.capabilities.iter().cloned().collect();
         let has_allocation_contracts = capabilities.contains("allocation_contracts_v1");
+        let has_allocation_contracts_v2 = capabilities.contains("allocation_contracts_v2");
         let has_allocation_state = capabilities.contains("allocation_state_v1");
         if has_allocation_contracts && schema_version != 2 {
             return Err("allocation_contracts_v1 requires annotated ICFG schema v2".into());
+        }
+        if has_allocation_contracts_v2 && schema_version != 2 {
+            return Err("allocation_contracts_v2 requires annotated ICFG schema v2".into());
+        }
+        if has_allocation_contracts_v2 && !has_allocation_contracts {
+            return Err("allocation_contracts_v2 is a refinement of allocation_contracts_v1 and requires both artifact capabilities".into());
         }
         if has_allocation_state && schema_version != 2 {
             return Err("allocation_state_v1 requires annotated ICFG schema v2".into());
@@ -335,6 +353,9 @@ impl Kripke {
                 }
                 if let Some(contract) = label.deallocator_contract.as_ref() {
                     validate_contract(contract, "deallocator_contract")?;
+                    if has_allocation_contracts_v2 && label.predicate == EventKind::Drop {
+                        validate_v2_deallocator_contract(contract, "deallocator_contract")?;
+                    }
                 }
             }
             for (kind, identity) in [
@@ -634,6 +655,83 @@ fn validate_contract(contract: &AllocationContract, field: &str) -> Result<(), S
     Ok(())
 }
 
+
+/// allocation_contracts_v2 closed producer-evidence basis vocabulary.
+///
+/// The producer is solely responsible for proving the basis.  The checker only
+/// validates that a claimed basis is compatible with the serialized family and
+/// operation; it never parses owner/allocator DefPath strings to infer a family.
+fn validate_v2_deallocator_contract(contract: &AllocationContract, field: &str) -> Result<(), String> {
+    let basis = contract.basis.as_deref().ok_or_else(|| {
+        format!("{field} requires proof field 'basis' under allocation_contracts_v2")
+    })?;
+
+    match basis {
+        "rust_box_global_drop" | "rust_vec_global_drop" => {
+            if contract.family != "rust_global" || contract.operation != "drop" || contract.language != "rust" {
+                return Err(format!(
+                    "{field} basis '{basis}' requires family=rust_global operation=drop language=rust"
+                ));
+            }
+            if contract.owner_def_path.as_deref().map_or(true, str::is_empty)
+                || contract.allocator_def_path.as_deref().map_or(true, str::is_empty)
+            {
+                return Err(format!(
+                    "{field} basis '{basis}' requires diagnostic owner_def_path and allocator_def_path"
+                ));
+            }
+            if contract.callee_def_path.is_some() {
+                return Err(format!(
+                    "{field} basis '{basis}' does not accept explicit-call provenance"
+                ));
+            }
+        }
+        "rust_global_dealloc_api" => {
+            if contract.family != "rust_global" || contract.operation != "dealloc" || contract.language != "rust" {
+                return Err(format!(
+                    "{field} basis '{basis}' requires family=rust_global operation=dealloc language=rust"
+                ));
+            }
+            if contract.owner_def_path.is_some() || contract.allocator_def_path.is_some() {
+                return Err(format!(
+                    "{field} basis '{basis}' does not accept typed-drop provenance fields"
+                ));
+            }
+            if contract.callee_def_path.as_deref().map_or(true, str::is_empty) {
+                return Err(format!(
+                    "{field} basis '{basis}' requires producer audit field callee_def_path"
+                ));
+            }
+        }
+        "structural_c_free_v1" => {
+            if contract.family != "c_malloc" || contract.operation != "free" || contract.language != "c" {
+                return Err(format!(
+                    "{field} basis '{basis}' requires family=c_malloc operation=free language=c"
+                ));
+            }
+            if contract.owner_def_path.is_some() || contract.allocator_def_path.is_some() || contract.callee_def_path.is_some() {
+                return Err(format!(
+                    "{field} basis '{basis}' does not accept Rust provenance fields"
+                ));
+            }
+        }
+        "unresolved" => {
+            if contract.family != "unknown" {
+                return Err(format!(
+                    "{field} basis 'unresolved' must remain family=unknown"
+                ));
+            }
+            if contract.owner_def_path.is_some() || contract.allocator_def_path.is_some() || contract.callee_def_path.is_some() {
+                return Err(format!(
+                    "{field} unresolved contracts must not carry provenance fields"
+                ));
+            }
+        }
+        other => return Err(format!("{field} has unsupported allocation_contracts_v2 basis '{other}'")),
+    }
+    Ok(())
+}
+
 fn validate_memory(
     node_id: &str,
     which: &str,
@@ -902,16 +1000,135 @@ mod tests {
         input.capabilities = vec!["allocation_contracts_v1".into()];
         input.allocations = vec![AbstractAllocation {
             id: "A".into(), display: None, site: None, context: vec![],
-            allocator_contract: Some(AllocationContract { family: "rust_global".into(), operation: "box_allocation".into(), language: "rust".into() }),
+            allocator_contract: Some(AllocationContract { family: "rust_global".into(), operation: "box_allocation".into(), language: "rust".into(), basis: None, owner_def_path: None, allocator_def_path: None, callee_def_path: None }),
         }];
         input.nodes[0].allocation_labels = vec![AllocationEventLabel {
             predicate: EventKind::Drop, allocation: "A".into(),
             certainty: AllocationEventCertainty::MayAbstract,
-            deallocator_contract: Some(AllocationContract { family: "c_malloc".into(), operation: "free".into(), language: "c".into() }),
+            deallocator_contract: Some(AllocationContract { family: "c_malloc".into(), operation: "free".into(), language: "c".into(), basis: None, owner_def_path: None, allocator_def_path: None, callee_def_path: None }),
         }];
         let k = Kripke::from_annotated_icfg(input).unwrap();
         assert_eq!(k.allocation_label_hold("b0", "A", LabelPredicate::AllocatorMismatch), Truth::Unknown);
         assert_eq!(k.allocation_label_hold("b0", "A", LabelPredicate::Drop), Truth::Unknown);
+    }
+
+
+    fn v2_contract_test_input(deallocator: AllocationContract) -> AnnotatedIcfg {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec![
+            "allocation_contracts_v1".into(),
+            "allocation_contracts_v2".into(),
+        ];
+        input.allocations = vec![AbstractAllocation {
+            id: "A".into(),
+            display: None,
+            site: None,
+            context: vec![],
+            allocator_contract: Some(AllocationContract {
+                family: "rust_global".into(),
+                operation: "box_allocation".into(),
+                language: "rust".into(),
+                basis: None,
+                owner_def_path: None,
+                allocator_def_path: None,
+                callee_def_path: None,
+            }),
+        }];
+        input.nodes[0].allocation_labels = vec![AllocationEventLabel {
+            predicate: EventKind::Drop,
+            allocation: "A".into(),
+            certainty: AllocationEventCertainty::MayAbstract,
+            deallocator_contract: Some(deallocator),
+        }];
+        input
+    }
+
+    #[test]
+    fn allocation_contracts_v2_requires_v1_artifact_capability() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec!["allocation_contracts_v2".into()];
+        let err = Kripke::from_annotated_icfg(input).unwrap_err();
+        assert!(err.contains("requires both artifact capabilities"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn allocation_contracts_v2_typed_drop_accepts_provenance_without_interpreting_paths() {
+        let contract = AllocationContract {
+            family: "rust_global".into(),
+            operation: "drop".into(),
+            language: "rust".into(),
+            basis: Some("rust_box_global_drop".into()),
+            // Deliberately opaque diagnostic strings. Acceptance proves that
+            // the checker validates the proof basis tuple and does not infer
+            // family by parsing these strings.
+            owner_def_path: Some("opaque::owner::diagnostic".into()),
+            allocator_def_path: Some("opaque::allocator::diagnostic".into()),
+            callee_def_path: None,
+        };
+        Kripke::from_annotated_icfg(v2_contract_test_input(contract)).unwrap();
+    }
+
+    #[test]
+    fn allocation_contracts_v2_rejects_basis_family_mismatch() {
+        let contract = AllocationContract {
+            family: "c_malloc".into(),
+            operation: "drop".into(),
+            language: "rust".into(),
+            basis: Some("rust_vec_global_drop".into()),
+            owner_def_path: Some("opaque::owner".into()),
+            allocator_def_path: Some("opaque::allocator".into()),
+            callee_def_path: None,
+        };
+        let err = Kripke::from_annotated_icfg(v2_contract_test_input(contract)).unwrap_err();
+        assert!(err.contains("requires family=rust_global"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn allocation_contracts_v2_global_dealloc_requires_producer_callee_provenance() {
+        let mut contract = AllocationContract {
+            family: "rust_global".into(),
+            operation: "dealloc".into(),
+            language: "rust".into(),
+            basis: Some("rust_global_dealloc_api".into()),
+            owner_def_path: None,
+            allocator_def_path: None,
+            callee_def_path: Some("alloc::alloc::dealloc".into()),
+        };
+        Kripke::from_annotated_icfg(v2_contract_test_input(contract.clone())).unwrap();
+        contract.callee_def_path = None;
+        let err = Kripke::from_annotated_icfg(v2_contract_test_input(contract)).unwrap_err();
+        assert!(err.contains("requires producer audit field callee_def_path"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn allocation_contracts_v2_rejects_missing_basis() {
+        let contract = AllocationContract {
+            family: "unknown".into(),
+            operation: "drop".into(),
+            language: "rust".into(),
+            basis: None,
+            owner_def_path: None,
+            allocator_def_path: None,
+            callee_def_path: None,
+        };
+        let err = Kripke::from_annotated_icfg(v2_contract_test_input(contract)).unwrap_err();
+        assert!(err.contains("requires proof field 'basis'"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn allocation_contracts_v2_accepts_fail_closed_unresolved_drop() {
+        let contract = AllocationContract {
+            family: "unknown".into(),
+            operation: "drop".into(),
+            language: "rust".into(),
+            basis: Some("unresolved".into()),
+            owner_def_path: None,
+            allocator_def_path: None,
+            callee_def_path: None,
+        };
+        Kripke::from_annotated_icfg(v2_contract_test_input(contract)).unwrap();
     }
 
 }

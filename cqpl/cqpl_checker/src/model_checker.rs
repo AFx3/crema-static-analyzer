@@ -30,7 +30,7 @@ impl<'a> ModelChecker<'a> {
     /// never be interpreted as logical refutation.
     pub fn evaluate(&self, formula: &StateFormula, initial_env: &Env) -> Result<Truth, String> {
         if formula_uses_allocator_mismatch(formula) {
-            return Err("allocator_mismatch_l requires a query document declaring `requires allocation_contracts_v1;`".into());
+            return Err("allocator_mismatch_l requires a query document declaring `requires allocation_contracts_v1;` or `requires allocation_contracts_v2;`".into());
         }
         if formula_uses_allocation_state(formula, initial_env) {
             return Err("allocation-bound state predicates require a query document declaring `requires allocation_state_v1;`".into());
@@ -43,8 +43,9 @@ impl<'a> ModelChecker<'a> {
     pub fn evaluate_document(&self, document: &QueryDocument, initial_env: &Env) -> Result<Truth, String> {
         if formula_uses_allocator_mismatch(&document.formula)
             && !document.required_capabilities.contains("allocation_contracts_v1")
+            && !document.required_capabilities.contains("allocation_contracts_v2")
         {
-            return Err("allocator_mismatch_l requires explicit `requires allocation_contracts_v1;`".into());
+            return Err("allocator_mismatch_l requires explicit `requires allocation_contracts_v1;` or `requires allocation_contracts_v2;`".into());
         }
         if formula_uses_allocation_state(&document.formula, initial_env)
             && !document.required_capabilities.contains("allocation_state_v1")
@@ -138,9 +139,10 @@ impl<'a> ModelChecker<'a> {
                 )),
                 Some(LogicSort::ProgramVar) => Ok(()),
                 Some(LogicSort::Allocation) if *predicate == LabelPredicate::AllocatorMismatch
-                    && self.k.capabilities.contains("allocation_contracts_v1") => Ok(()),
+                    && (self.k.capabilities.contains("allocation_contracts_v1")
+                        || self.k.capabilities.contains("allocation_contracts_v2")) => Ok(()),
                 Some(LogicSort::Allocation) if *predicate == LabelPredicate::AllocatorMismatch => Err(format!(
-                    "allocator_mismatch_l requires annotated-ICFG capability allocation_contracts_v1 (variable '{logic_var}')"
+                    "allocator_mismatch_l requires annotated-ICFG capability allocation_contracts_v1 or allocation_contracts_v2 (variable '{logic_var}')"
                 )),
                 Some(LogicSort::Allocation) if self.k.schema_version >= 2 => Ok(()),
                 Some(LogicSort::Allocation) => Err(format!(
@@ -1083,7 +1085,7 @@ mod tests {
     }
 
     fn contract(family: &str, operation: &str, language: &str) -> AllocationContract {
-        AllocationContract { family: family.into(), operation: operation.into(), language: language.into() }
+        AllocationContract { family: family.into(), operation: operation.into(), language: language.into(), basis: None, owner_def_path: None, allocator_def_path: None, callee_def_path: None }
     }
 
     fn mismatch_fixture(allocator_family: &str, deallocator_family: &str) -> Kripke {
@@ -1178,6 +1180,62 @@ mod tests {
             "requires allocation_contracts_v1; exists_alloc a. EF allocator_mismatch_l(a)"
         ).unwrap();
         assert_eq!(ModelChecker::new(&k).evaluate_document(&doc, &Env::new()).unwrap(), Truth::False);
+    }
+
+
+    #[test]
+    fn allocator_mismatch_query_accepts_allocation_contracts_v2_requirement() {
+        let mut input = AnnotatedIcfg {
+            schema_version: 2,
+            capabilities: vec!["allocation_contracts_v1".into(), "allocation_contracts_v2".into()],
+            entry: "b0".into(),
+            variables: vec![var("rust::main::Local(_1)", ProgramLanguage::Rust)],
+            allocations: vec![AbstractAllocation {
+                id: "A".into(),
+                display: None,
+                site: None,
+                context: vec![],
+                // v2 deliberately preserves the frozen v1 allocator-origin contract.
+                allocator_contract: Some(contract("c_malloc", "malloc", "c")),
+            }],
+            nodes: vec![AnnotatedNode {
+                id: "b0".into(),
+                successors: vec![],
+                labels: vec![],
+                allocation_labels: vec![AllocationEventLabel {
+                    predicate: EventKind::Drop,
+                    allocation: "A".into(),
+                    certainty: AllocationEventCertainty::MayAbstract,
+                    deallocator_contract: Some(AllocationContract {
+                        family: "c_malloc".into(),
+                        operation: "free".into(),
+                        language: "c".into(),
+                        basis: Some("structural_c_free_v1".into()),
+                        owner_def_path: None,
+                        allocator_def_path: None,
+                        callee_def_path: None,
+                    }),
+                }],
+                identity: None,
+                event_identity: None,
+                allocation_post: None,
+                pre: Default::default(),
+                post: Default::default(),
+            }],
+        };
+        let k = Kripke::from_annotated_icfg(input.clone()).unwrap();
+        let doc = parse_query_document(
+            "requires allocation_contracts_v2; exists_alloc a. EF allocator_mismatch_l(a)"
+        ).unwrap();
+        assert_eq!(ModelChecker::new(&k).evaluate_document(&doc, &Env::new()).unwrap(), Truth::False);
+
+        // A v2 query must not silently fall back to v1 artifacts.
+        input.capabilities = vec!["allocation_contracts_v1".into()];
+        let deallocator = input.nodes[0].allocation_labels[0].deallocator_contract.as_mut().unwrap();
+        deallocator.basis = None;
+        let k_v1 = Kripke::from_annotated_icfg(input).unwrap();
+        let err = ModelChecker::new(&k_v1).evaluate_document(&doc, &Env::new()).unwrap_err();
+        assert!(err.contains("does not declare"), "unexpected error: {err}");
     }
 
 }
