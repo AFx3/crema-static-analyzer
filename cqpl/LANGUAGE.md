@@ -1,4 +1,4 @@
-# CQPL v6Q-r1c — linguaggio, semantica e interpretazione
+# CQPL v6R-r1 — linguaggio, semantica e interpretazione (baseline semantica v6Q-r1c)
 
 Questo documento descrive il linguaggio **effettivamente implementato** dal checker v6Q-r1c. La sorgente normativa resta il codice in `cqpl_checker/src/`; questo file ne rende espliciti tipi, truth domain, capability e boundary.
 
@@ -534,3 +534,42 @@ exists_alloc a. EF (
 ## 17. Le query ufficiali
 
 La release final112 congela esattamente 12 file in `queries_v2/`. Vedi [QUERY_CATALOG.md](QUERY_CATALOG.md) per l'interpretazione individuale e i risultati della freeze.
+
+## 18. Explainability v6R: estensione diagnostica, non linguistica
+
+v6R non aggiunge costrutti alla grammatica CQPL e non aggiunge un quarto truth value. `ff < unk < tt`, CTL, quantificatori e predicati hanno esattamente la semantica v6Q-r1c.
+
+L'explainer viene eseguito **dopo** la valutazione normale e deve restituire lo stesso `result`. Se risultato ordinario e risultato spiegato differiscono, il checker fallisce chiuso.
+
+Il file `cqpl_explanation_v1` separa quattro livelli:
+
+1. `result`: truth CQPL già calcolata;
+2. `reason_frontier`: cause di incertezza osservate sulla dependency trace;
+3. `derivation`: operatori logici/CTL attraversati;
+4. `atomic_observations`: atomi terminali che supportano la spiegazione.
+
+Esempio per un allocation-centric atom schema-v2:
+
+```text
+allocation label certainty = may_abstract
+            |
+            v
+alloc_l(a) = unk
+            |
+            v
+reason = MAY_ALLOCATION
+```
+
+`QUERY_THREE_VALUED_PROPAGATION` descrive soltanto la propagazione di quell'`unk` attraverso `&&`, quantificatori o CTL; da solo non è accettato come origine specifica dell'incertezza.
+
+### Campi semantici principali
+
+- `binding`: ambiente delle variabili logiche (`ProgramVar` o `AbstractAllocId`);
+- `relevant_nodes`: nodi del Kripke necessari alla trace;
+- `complete_dependency_trace`: completezza della trace selezionata, non prova di concrete execution;
+- `atomic_observations[].truth`: truth dell'atomo con lo stesso dominio `ff|unk|tt`;
+- `atomic_observations[].reasons`: cause diagnostiche direttamente supportate da grafo/derivazione.
+
+Le reason `EXTERNAL_EFFECT`, `UNRESOLVED_ESCAPE`, `GLOBAL_TOP_EFFECT`, `CONTROL_FLOW_UNRESOLVED`, `HIGHER_ORDER_UNRESOLVED` restano riservate finché il producer non esporta provenance certificata. Non vengono dedotte da stringhe DefPath o dalla sola presenza di `TOP`.
+
+Per la definizione campo-per-campo e un esempio eseguibile dal target `boxed_bool__ml`, vedi [EXPLAINABILITY_GUIDE.md](EXPLAINABILITY_GUIDE.md). Per il contratto normativo completo vedi [EXPLAINABILITY.md](EXPLAINABILITY.md).

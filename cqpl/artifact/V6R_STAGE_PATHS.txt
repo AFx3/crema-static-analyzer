@@ -1,0 +1,25 @@
+# Exact v6R-r1 final-freeze delta over baseline commit bbca5f09096d77718624564e0aafff9d87a96e6e
+cqpl/ANALYSIS_GUIDE.md
+cqpl/EXPLAINABILITY.md
+cqpl/EXPLAINABILITY_GUIDE.md
+cqpl/LANGUAGE.md
+cqpl/MANIFEST_SHA256.json
+cqpl/README.md
+cqpl/V6R_VALIDATION.md
+cqpl/VERSION
+cqpl/artifact/V6R_BASELINE_PRECISION_METRICS.json
+cqpl/artifact/V6R_BASELINE_SHA256.json
+cqpl/artifact/V6R_DELTA_SUMMARY.json
+cqpl/artifact/V6R_LEAK_PREANALYSIS.json
+cqpl/artifact/V6R_RUNTIME_VALIDATED_SOURCE_SHA256.json
+cqpl/artifact/V6R_RUNTIME_VALIDATION.json
+cqpl/artifact/V6R_STAGE_PATHS.txt
+cqpl/cqpl_checker/src/explain.rs
+cqpl/cqpl_checker/src/lib.rs
+cqpl/cqpl_checker/src/main.rs
+cqpl/cqpl_checker/src/model_checker.rs
+cqpl/scripts/analyze_leak_unknowns.py
+cqpl/scripts/compute_precision_metrics.py
+cqpl/scripts/run_explainability_matrix.py
+cqpl/scripts/validate_v6r_candidate.sh
+cqpl/scripts/verify_v6r_static.py

@@ -1,4 +1,4 @@
-# Guida operativa — analizzare target e crate con CREMA + CQPL v6Q-r1c
+# Guida operativa — analizzare target e crate con CREMA + CQPL v6R-r1
 
 Questa guida descrive la procedura riproducibile usata dalla release final112.
 
@@ -276,3 +276,38 @@ CREMA_RUST_TOOLCHAIN="$NIGHTLY" \
 ```
 
 Il protocollo fallisce se cambia silenziosamente census, query count, toolchain, capability, target registry o risultato dei regression gates.
+
+
+## 10. Explainability v6R-r1
+
+Quando una query restituisce `unk`, non cercare subito una causa guardando tutto il grafo. Genera prima la dependency trace v6R sullo stesso artifact:
+
+```bash
+CHECKER="$ROOT/cqpl/cqpl_checker/target/debug/cqpl_checker"
+GRAPH="$OUT/annotated_icfg_v2.json"
+QUERY="$ROOT/cqpl/queries_v2/leak_alloc.cqpl"
+EXPLAIN="$OUT/leak_alloc.explain.json"
+
+"$CHECKER" "$GRAPH" "$QUERY" \
+  --json \
+  --explain-json "$EXPLAIN" \
+  --explain-max-witnesses 8
+```
+
+Leggere nell'ordine:
+
+1. `result`;
+2. `reason_frontier`;
+3. `binding`;
+4. `atomic_observations`;
+5. `derivation`;
+6. `relevant_nodes`;
+7. soltanto dopo correlazioni aggiuntive nell'ICFG.
+
+Il tutorial completo usa il target reale:
+
+```text
+a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_bool
+```
+
+e mostra l'intera catena target → CREMA → annotated ICFG → CQPL `unk` → `MAY_ALLOCATION` witness. Vedi [EXPLAINABILITY_GUIDE.md](EXPLAINABILITY_GUIDE.md).

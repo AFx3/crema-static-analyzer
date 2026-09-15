@@ -1,0 +1,23 @@
+{
+  "files": {
+    "cqpl_checker/Cargo.lock": "9e9284bfa9486aa81f9cdcc984a1ae3aebbe0a5a13fabb41f769529aa3c34f6d",
+    "cqpl_checker/Cargo.toml": "e45165459187a8f903ccdfcfc317153121359d219c44f23981c6c91a2253ce1f",
+    "cqpl_checker/src/ast.rs": "69dc01963264806dd73902c24442cda81acf993ef7a6ff2d3a1a9009866ab95c",
+    "cqpl_checker/src/explain.rs": "83aa00e4cb8c8937f76dc11a24c227942d04e4ca2758574f7dde9ce1b9faae69",
+    "cqpl_checker/src/kripke.rs": "0d7c86474ecd49b624707acfff4ac67da427a3e402fa00fceb5d04dd843d6130",
+    "cqpl_checker/src/lib.rs": "69e1c76764056b5ea49ce9e4a4dd30dc2d359f14aa3b21e99fdb89957299c1ab",
+    "cqpl_checker/src/main.rs": "02be838f97ff8e4e23fe722a610ce8195105429bd6ade06fc558920f618ed725",
+    "cqpl_checker/src/model_checker.rs": "bfeac4077fce5188f1cfcaf7e4b7e47c3871b60c5d922d9c8b3572c801f6b18e",
+    "cqpl_checker/src/parser.rs": "eae300bb543292f5a92f98b67f91da82debaa69fbeec6741ce05aaa32d838847",
+    "cqpl_checker/src/truth.rs": "f8cf730cf0edae997acc300e5cd918a78e848ec3aace1a20f3462267dcda23d2",
+    "cqpl_checker/tests/v6i_query_no_refutation.rs": "6af828acefba4525bfe14c89981ff9abefdbb8dcfb6ed632b1613ccf8a7810c5",
+    "scripts/analyze_leak_unknowns.py": "8f116bad3cf9b5a80bd7c4fc6615dd1d796a01fb89715d2f1a398c3fd7b77604",
+    "scripts/compute_precision_metrics.py": "433ec5139d8edbeac75702697947af058c92305202de0a97440e572b5696011c",
+    "scripts/run_explainability_matrix.py": "ef7d420e961634625c2428dc228a1f3b59c3dd7a5aaefac88c9a94b520c1aed7",
+    "scripts/validate_v6r_candidate.sh": "e80c3f8b2da381d3ca39db7fd7f85f2d020bd0e8f1ea725794bfdae44ca63aec"
+  },
+  "note": "These files are byte-identical to the source used for the successful 1344-cell v6R-r1 runtime validation. Documentation/freeze metadata may change after that run.",
+  "runtime_evidence_sha256": "f41117d1d2fc1838cc1ee830071b07673811765884c9d96e4229ebbd187247d4",
+  "schema": "cqpl_v6r_runtime_validated_source_sha256_v1",
+  "validated_on": "2026-09-15"
+}

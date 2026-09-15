@@ -2,7 +2,7 @@
 
 CQPL è il checker temporale three-valued usato per interrogare il grafo annotato prodotto da CREMA.
 
-La pipeline reale della release v6Q-r1c è:
+La pipeline reale della release v6R-r1 (con semantica v6Q-r1c congelata) è:
 
 ```text
 Cargo project / crate
@@ -17,7 +17,9 @@ annotated_icfg_v2.json
         |
         v
   cqpl_checker
-        |
+        |\
+        | \
+        |  +--> explanation.json (v6R, opt-in)
         v
    ff | unk | tt
 ```
@@ -27,14 +29,14 @@ CQPL **non ricompila il programma e non ricostruisce MIR/LLVM**. Il checker rice
 ## Release corrente
 
 ```text
-CREMA-CQPL-v6Q-r1c
-semantic baseline: CREMA-CQPL-v6Q-r1b
-status: final112 runtime-validated freeze
+CREMA-CQPL-v6R-r1
+semantic baseline: CREMA-CQPL-v6Q-r1c
+status: explainability observational runtime-validated freeze candidate
 primary toolchain: nightly-2024-11-21
 rustc: 1.84.0-nightly (3fee0f12e 2024-11-20)
 ```
 
-La release r1c **non modifica la semantica astratta CREMA r1b e non modifica le 12 query congelate**. Chiude il lato CQPL/harness/documentazione dopo l'audit final112, incluso il drift producer/parser per `term:unwind_terminate`.
+v6R-r1 mantiene **byte-identiche la semantica CREMA e le 12 query congelate di v6Q-r1c**. Aggiunge soltanto un secondo passaggio diagnostico opt-in che spiega `unk` e costruisce witness astratti per `tt`/`unk`. La validation runtime ha verificato identità dei risultati ordinari su tutte le 1344 celle final112.
 
 ### Evidenza runtime finale
 
@@ -59,6 +61,23 @@ SHA-256: bd77b63d67523346b4e3c3cd9554f9787d7685e0f46265912137d55a98a8e902
 ```
 
 Il PASS significa **riproducibilità e coerenza rispetto al protocollo dichiarato**. Non significa perfect accuracy. In particolare la leak analysis è ancora molto conservativa: 105/112 soggetti risultano `unk` nelle due query leak.
+
+### Evidenza explainability v6R-r1
+
+La validation v6R-r1 sullo stesso final112 ha prodotto:
+
+- 112 soggetti × 12 query = 1344 spiegazioni;
+- `baseline_result_mismatches=0`;
+- `ff=650`, `unk=468`, `tt=226`, identici a v6Q-r1c;
+- 0 `unk` senza reason frontier;
+- 0 `unk` senza origine atomica specifica;
+- 0 `tt` senza witness;
+- 0 `tt` senza atomic witness endpoint;
+- per `leak_alloc` e `leak_alloc_state`: 105/112 `unk`, tutti 105/105 con `MAY_ALLOCATION` nella frontier.
+
+Il bundle runtime esterno `explainability.zip` ha SHA-256 `f41117d1d2fc1838cc1ee830071b07673811765884c9d96e4229ebbd187247d4`. Il repository conserva summary e protocollo, non i 1344 JSON runtime.
+
+Per una spiegazione didattica campo-per-campo e un esempio completo su `boxed_bool__ml`, vedi [EXPLAINABILITY_GUIDE.md](EXPLAINABILITY_GUIDE.md).
 
 ## Come CREMA e CQPL si dividono il lavoro
 
@@ -331,6 +350,8 @@ capabilities/                     capability normative
 artifact/FINAL112_AUDIT.md        audit scientifico
 regression/                       test/oracle storici e strategia
 scripts/run_one_target_v6q_r1c.py analisi singolo target
+EXPLAINABILITY_GUIDE.md           tutorial explainability passo-passo
+EXPLAINABILITY.md                 contratto diagnostico normativo
 run_all.sh                        protocollo finale 109+3+12
 ```
 
@@ -347,3 +368,38 @@ La release segue queste regole:
 - `PASS` del protocollo non è una misura di precisione o di security accuracy.
 
 La semantica teorica resta volutamente piccola. Il supporto implementativo può coprire più MIR soltanto tramite transfer esatta o soundly conservative rispetto a quel dominio.
+
+---
+
+## v6R-r1: explainability osservazionale validata
+
+v6R-r1 risponde alla domanda: **“perché questa query è `unk`, e quale parte del modello lo rende inconclusivo?”**
+
+Uso minimo:
+
+```bash
+cqpl_checker annotated_icfg_v2.json queries_v2/leak_alloc.cqpl \
+  --json \
+  --explain-json leak.explain.json \
+  --explain-max-witnesses 8
+```
+
+Il normale stdout continua a contenere il risultato CQPL. Il file separato `leak.explain.json` contiene:
+
+- `reason_frontier`: cause osservate sulla dependency trace;
+- `binding`: binding delle variabili logiche;
+- `relevant_nodes`: nodi usati dalla spiegazione;
+- `derivation`: passi logici/CTL;
+- `atomic_observations`: atomi finali che supportano la spiegazione;
+- `diagnostics`: gate di completezza/non-tautologia.
+
+Una causa come `MAY_ALLOCATION` non significa “vulnerabilità confermata”: significa che l'atomo allocation-centric rilevante è MAY e quindi non può diventare `tt` con la semantica congelata.
+
+La validation v6R-r1 ha verificato 1344/1344 risultati ordinari identici a v6Q-r1c, senza `unk` non spiegati e senza `tt` privi di witness.
+
+Documenti principali:
+
+- [EXPLAINABILITY_GUIDE.md](EXPLAINABILITY_GUIDE.md): guida semplice, campi JSON ed esempio passo-passo `boxed_bool__ml`;
+- [EXPLAINABILITY.md](EXPLAINABILITY.md): contratto scientifico e tassonomia normativa;
+- [V6R_VALIDATION.md](V6R_VALIDATION.md): protocollo e risultati di acceptance;
+- `artifact/V6R_RUNTIME_VALIDATION.json`: summary machine-readable della validation.

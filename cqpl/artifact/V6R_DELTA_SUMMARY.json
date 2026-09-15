@@ -1,0 +1,211 @@
+{
+  "acceptance": {
+    "leak_frontier": "105/105 unk for each leak query contains MAY_ALLOCATION",
+    "ordinary_result_identity": "1344/1344 exactly match v6Q-r1c",
+    "tt_witness": "every tt has witness with atomic endpoint",
+    "unk_frontier": "every unk has non-empty frontier and specific atomic origin"
+  },
+  "baseline_commit": "bbca5f09096d77718624564e0aafff9d87a96e6e",
+  "candidate": "CREMA-CQPL-v6R-r1-final-freeze-r1a",
+  "changed_cqpl_file_count": 24,
+  "changed_cqpl_files": [
+    {
+      "baseline_sha256": "1d13738d298c7238b1362a773795553a0e0c1bb1d6ec92848e5f533d6079ffae",
+      "candidate_sha256": "1ebf9d3c0bdb5a81011d1e2c204bd029c370fb9c589d682769059a5078554869",
+      "file": "ANALYSIS_GUIDE.md",
+      "hash_note": null,
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "e05d11150c5a5115cd9ad07f6db1ff4a0d43722650530191240f4e103a32f672",
+      "file": "EXPLAINABILITY.md",
+      "hash_note": null,
+      "status": "added"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "1e623d863415d630e9f6e759e73c28aa81668001abbf85dc4f90c8e4d0658ab5",
+      "file": "EXPLAINABILITY_GUIDE.md",
+      "hash_note": null,
+      "status": "added"
+    },
+    {
+      "baseline_sha256": "2dad07f130a59e108a7e33a5c6af0fb630138f44daeb0263bc5557c27d0fb243",
+      "candidate_sha256": "fe4bc484dea09fea429569722084669401bf7c7a4e60ae59229c13442419723d",
+      "file": "LANGUAGE.md",
+      "hash_note": null,
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": "cf7f35bb5bbaa5fe012b996f15d2d15f111ab4ad27c9a7138cd47be1a7c05bab",
+      "candidate_sha256": null,
+      "file": "MANIFEST_SHA256.json",
+      "hash_note": "omitted to avoid manifest/summary self-reference",
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": "029546b62b3aa1da1743ea05faf912b112396ec0e6d915014e525a4a274d8ca6",
+      "candidate_sha256": "54eb6a79e3b36b4c32418d95fcb295599a6a69d25c893cdef90b2d0bab645d0c",
+      "file": "README.md",
+      "hash_note": null,
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "48b7cbff5187345f27ce5c25b40f0b6c143b949332b4d0b3305f93ab95de4f13",
+      "file": "V6R_VALIDATION.md",
+      "hash_note": null,
+      "status": "added"
+    },
+    {
+      "baseline_sha256": "4fe1c076cda3179b764a13597ba9cb79b57e8e902fae6276f2ca7d8e22d0e479",
+      "candidate_sha256": "e89ebeb68c69eb7149aedba8918ca17a54bd037165652c20f27d5c20f00a0251",
+      "file": "VERSION",
+      "hash_note": null,
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "80647848b2d00fd599f8cde3f4e5c981e760e7efa1f6721d02070fc79fc3c8e5",
+      "file": "artifact/V6R_BASELINE_PRECISION_METRICS.json",
+      "hash_note": null,
+      "status": "added"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "fcc8bf1fa9405ab25d54d2e51a295f49f4a2a8040ec6e04a9b0dd3d3fcbf7cf6",
+      "file": "artifact/V6R_BASELINE_SHA256.json",
+      "hash_note": null,
+      "status": "added"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": null,
+      "file": "artifact/V6R_DELTA_SUMMARY.json",
+      "hash_note": "omitted to avoid manifest/summary self-reference",
+      "status": "added"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "4768c2bc7549f30c83084afb562e9316ca4809450f2e9ccd1e7e234985110235",
+      "file": "artifact/V6R_LEAK_PREANALYSIS.json",
+      "hash_note": null,
+      "status": "added"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "19f349458427d83d045948987dde20bb8b2df2acb08f65ea43a2a478305baba6",
+      "file": "artifact/V6R_RUNTIME_VALIDATED_SOURCE_SHA256.json",
+      "hash_note": null,
+      "status": "added"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "786ad729fec4db7b362eac0dab09ed6932c51286a21e2d13ddc4674e93caab6b",
+      "file": "artifact/V6R_RUNTIME_VALIDATION.json",
+      "hash_note": null,
+      "status": "added"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "6f1e268ca0358e255b0c9031a9a57f4ec17566e5c5065170ae525685dd47f33d",
+      "file": "artifact/V6R_STAGE_PATHS.txt",
+      "hash_note": null,
+      "status": "added"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "83aa00e4cb8c8937f76dc11a24c227942d04e4ca2758574f7dde9ce1b9faae69",
+      "file": "cqpl_checker/src/explain.rs",
+      "hash_note": null,
+      "status": "added"
+    },
+    {
+      "baseline_sha256": "febda9b0dee30e62e68285b395c16af45b28e3d20640eacf1c309d1c0e3a9481",
+      "candidate_sha256": "69e1c76764056b5ea49ce9e4a4dd30dc2d359f14aa3b21e99fdb89957299c1ab",
+      "file": "cqpl_checker/src/lib.rs",
+      "hash_note": null,
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": "a7fbacde28886c1ee9bce4072e880a37e5b309fd38c415335fa08053f6e07585",
+      "candidate_sha256": "02be838f97ff8e4e23fe722a610ce8195105429bd6ade06fc558920f618ed725",
+      "file": "cqpl_checker/src/main.rs",
+      "hash_note": null,
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": "8a8139a684f6b4517b42f9e40f04fdb4ac2e5383903138b1af0071e1b72d9be3",
+      "candidate_sha256": "bfeac4077fce5188f1cfcaf7e4b7e47c3871b60c5d922d9c8b3572c801f6b18e",
+      "file": "cqpl_checker/src/model_checker.rs",
+      "hash_note": null,
+      "status": "modified"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "8f116bad3cf9b5a80bd7c4fc6615dd1d796a01fb89715d2f1a398c3fd7b77604",
+      "file": "scripts/analyze_leak_unknowns.py",
+      "hash_note": null,
+      "status": "added"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "433ec5139d8edbeac75702697947af058c92305202de0a97440e572b5696011c",
+      "file": "scripts/compute_precision_metrics.py",
+      "hash_note": null,
+      "status": "added"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "ef7d420e961634625c2428dc228a1f3b59c3dd7a5aaefac88c9a94b520c1aed7",
+      "file": "scripts/run_explainability_matrix.py",
+      "hash_note": null,
+      "status": "added"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "e80c3f8b2da381d3ca39db7fd7f85f2d020bd0e8f1ea725794bfdae44ca63aec",
+      "file": "scripts/validate_v6r_candidate.sh",
+      "hash_note": null,
+      "status": "added"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "435c14604566467094be8d9f88c0d9789818240a49208b7eb78c99db9e0e28db",
+      "file": "scripts/verify_v6r_static.py",
+      "hash_note": null,
+      "status": "added"
+    }
+  ],
+  "crema_source_changed_files": [],
+  "deleted_cqpl_files": [],
+  "documentation_freeze_updates": [
+    "README.md",
+    "LANGUAGE.md",
+    "ANALYSIS_GUIDE.md",
+    "EXPLAINABILITY.md",
+    "EXPLAINABILITY_GUIDE.md",
+    "V6R_VALIDATION.md"
+  ],
+  "freeze_protocol_revision": "r1a",
+  "frozen_query_changed_files": [],
+  "hash_cycle_policy": "candidate SHA values for MANIFEST_SHA256.json and V6R_DELTA_SUMMARY.json are omitted; MANIFEST_SHA256.json is authoritative for V6R_DELTA_SUMMARY.json and cannot hash itself.",
+  "model_checker_change": "visibility-only: ModelChecker.k and eval_all are pub(crate); evaluator canonicalizes exactly to v6Q-r1c",
+  "new_runtime_surface": [
+    "--explain-json PATH",
+    "--explain-max-witnesses N"
+  ],
+  "observational_only": true,
+  "runtime_validated": true,
+  "runtime_validated_source_boundary": "byte-identical after documentation-only freeze update",
+  "runtime_validation": {
+    "attempts": "1344/1344",
+    "failures": 0,
+    "result_mismatches": 0,
+    "runtime_evidence_sha256": "f41117d1d2fc1838cc1ee830071b07673811765884c9d96e4229ebbd187247d4"
+  },
+  "schema": "cqpl_v6r_delta_summary_v4",
+  "semantic_baseline": "CREMA-CQPL-v6Q-r1c",
+  "static_verifier_scope_fix": "standalone package hygiene is recursive; installed-tree mode does not scan unrelated repository-local generated trees"
+}

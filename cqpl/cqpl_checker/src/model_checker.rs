@@ -19,7 +19,7 @@ enum LogicSort {
 }
 
 pub struct ModelChecker<'a> {
-    k: &'a Kripke,
+    pub(crate) k: &'a Kripke,
 }
 
 impl<'a> ModelChecker<'a> {
@@ -203,7 +203,7 @@ impl<'a> ModelChecker<'a> {
         }
     }
 
-    fn eval_all(&self, formula: &StateFormula, env: &Env) -> Result<Valuation, String> {
+    pub(crate) fn eval_all(&self, formula: &StateFormula, env: &Env) -> Result<Valuation, String> {
         use StateFormula::*;
         match formula {
             May { predicate, logic_var } => {

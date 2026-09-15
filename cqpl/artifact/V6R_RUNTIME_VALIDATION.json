@@ -1,0 +1,49 @@
+{
+  "schema": "cqpl_v6r_runtime_validation_v1",
+  "candidate": "CREMA-CQPL-v6R-r1",
+  "semantic_baseline": "CREMA-CQPL-v6Q-r1c",
+  "baseline_commit": "bbca5f09096d77718624564e0aafff9d87a96e6e",
+  "validated_on": "2026-09-15",
+  "toolchain": "nightly-2024-11-21",
+  "rustc": "rustc 1.84.0-nightly (3fee0f12e 2024-11-20)",
+  "subjects": 112,
+  "queries": 12,
+  "attempts": 1344,
+  "baseline_result_mismatches": 0,
+  "failures": 0,
+  "result_counts": {
+    "ff": 650,
+    "unk": 468,
+    "tt": 226
+  },
+  "explainability_gates": {
+    "unknown_without_reason_frontier": 0,
+    "unknown_without_specific_origin": 0,
+    "true_without_witness": 0,
+    "true_without_atomic_witness": 0
+  },
+  "leak_frontier": {
+    "leak_alloc": {
+      "subjects": 112,
+      "unknown": 105,
+      "may_allocation_frontier": 105
+    },
+    "leak_alloc_state": {
+      "subjects": 112,
+      "unknown": 105,
+      "may_allocation_frontier": 105
+    }
+  },
+  "reviewed_positive_nonrefutation": {
+    "ML": "33/33",
+    "DF": "29/29",
+    "UAF": "22/22",
+    "UB_FFI": "18/18"
+  },
+  "runtime_evidence_archive": {
+    "name": "explainability.zip",
+    "sha256": "f41117d1d2fc1838cc1ee830071b07673811765884c9d96e4229ebbd187247d4",
+    "explanation_json_files": 1344
+  },
+  "note": "Runtime evidence is intentionally not shipped as repository source. The source implementation validated by this run is unchanged by the later documentation-only freeze packaging update."
+}

@@ -1,0 +1,89 @@
+{
+  "families": {
+    "DF": {
+      "clean_definite_refutation": 0.7468354430379747,
+      "negative_distribution": {
+        "ff": 59,
+        "tt": 0,
+        "unk": 20
+      },
+      "positive_distribution": {
+        "ff": 0,
+        "tt": 0,
+        "unk": 29
+      },
+      "query": "double_free_alloc",
+      "reviewed_negative": 79,
+      "reviewed_positive": 29,
+      "unexpected_ff_on_reviewed_positive": 0,
+      "unexpected_tt_on_reviewed_clean": 0,
+      "unknown_rate_over_reviewed": 0.4537037037037037,
+      "vulnerable_definite_detection": 0.0,
+      "vulnerable_non_refutation_rate": 1.0
+    },
+    "ML": {
+      "clean_definite_refutation": 0.05333333333333334,
+      "negative_distribution": {
+        "ff": 4,
+        "tt": 0,
+        "unk": 71
+      },
+      "positive_distribution": {
+        "ff": 0,
+        "tt": 0,
+        "unk": 33
+      },
+      "query": "leak_alloc",
+      "reviewed_negative": 75,
+      "reviewed_positive": 33,
+      "unexpected_ff_on_reviewed_positive": 0,
+      "unexpected_tt_on_reviewed_clean": 0,
+      "unknown_rate_over_reviewed": 0.9629629629629629,
+      "vulnerable_definite_detection": 0.0,
+      "vulnerable_non_refutation_rate": 1.0
+    },
+    "UAF": {
+      "clean_definite_refutation": 0.8953488372093024,
+      "negative_distribution": {
+        "ff": 77,
+        "tt": 0,
+        "unk": 9
+      },
+      "positive_distribution": {
+        "ff": 0,
+        "tt": 0,
+        "unk": 22
+      },
+      "query": "use_after_free_alloc",
+      "reviewed_negative": 86,
+      "reviewed_positive": 22,
+      "unexpected_ff_on_reviewed_positive": 0,
+      "unexpected_tt_on_reviewed_clean": 0,
+      "unknown_rate_over_reviewed": 0.28703703703703703,
+      "vulnerable_definite_detection": 0.0,
+      "vulnerable_non_refutation_rate": 1.0
+    },
+    "UB_FFI": {
+      "clean_definite_refutation": 0.7333333333333333,
+      "negative_distribution": {
+        "ff": 66,
+        "tt": 0,
+        "unk": 24
+      },
+      "positive_distribution": {
+        "ff": 0,
+        "tt": 0,
+        "unk": 18
+      },
+      "query": "allocator_mismatch_ub_v2",
+      "reviewed_negative": 90,
+      "reviewed_positive": 18,
+      "unexpected_ff_on_reviewed_positive": 0,
+      "unexpected_tt_on_reviewed_clean": 0,
+      "unknown_rate_over_reviewed": 0.3888888888888889,
+      "vulnerable_definite_detection": 0.0,
+      "vulnerable_non_refutation_rate": 1.0
+    }
+  },
+  "schema": "cqpl_precision_metrics_v1"
+}

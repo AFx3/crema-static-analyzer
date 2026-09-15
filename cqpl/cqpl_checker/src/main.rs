@@ -12,7 +12,7 @@ struct JsonOutput<'a> {
 }
 
 fn usage() -> ! {
-    eprintln!("Usage: cqpl_checker <annotated-icfg.json> <query.cqpl> [--entry NODE_OR_FUNCTION] [--intra] [--bind x=PROGRAM_VAR_ID]... [--bind-alloc a=ABSTRACT_ALLOC_ID]... [--json]");
+    eprintln!("Usage: cqpl_checker <annotated-icfg.json> <query.cqpl> [--entry NODE_OR_FUNCTION] [--intra] [--bind x=PROGRAM_VAR_ID]... [--bind-alloc a=ABSTRACT_ALLOC_ID]... [--json] [--explain-json PATH] [--explain-max-witnesses N]");
     process::exit(2);
 }
 
@@ -296,6 +296,8 @@ fn run() -> Result<(), String> {
     let mut json = false;
     let mut entry_override: Option<String> = None;
     let mut intra = false;
+    let mut explain_json: Option<String> = None;
+    let mut explain_max_witnesses: usize = 8;
 
     let mut i = 2;
     while i < args.len() {
@@ -307,6 +309,20 @@ fn run() -> Result<(), String> {
                 i += 2;
             }
             "--intra" => { intra = true; i += 1; }
+            "--explain-json" => {
+                let Some(path) = args.get(i + 1) else { return Err("--explain-json requires PATH".into()); };
+                explain_json = Some(path.clone());
+                i += 2;
+            }
+            "--explain-max-witnesses" => {
+                let Some(raw) = args.get(i + 1) else { return Err("--explain-max-witnesses requires N".into()); };
+                explain_max_witnesses = raw.parse::<usize>()
+                    .map_err(|_| "--explain-max-witnesses requires a positive integer".to_string())?;
+                if explain_max_witnesses == 0 {
+                    return Err("--explain-max-witnesses requires N >= 1".into());
+                }
+                i += 2;
+            }
             "--bind" => {
                 let Some(binding) = args.get(i + 1) else { return Err("--bind requires name=PROGRAM_VAR_ID".into()); };
                 let Some((logic, program)) = binding.split_once('=') else { return Err("--bind requires name=PROGRAM_VAR_ID".into()); };
@@ -337,7 +353,23 @@ fn run() -> Result<(), String> {
 
     let raw_query = fs::read_to_string(query_path).map_err(|e| format!("cannot read CQPL query '{query_path}': {e}"))?;
     let query = parse_query_document(&raw_query)?;
-    let result = ModelChecker::new(&k).evaluate_document(&query, &env0)?;
+    let checker = ModelChecker::new(&k);
+    let result = checker.evaluate_document(&query, &env0)?;
+
+    if let Some(path) = explain_json.as_deref() {
+        let report = checker.explain_document(&query, &env0, explain_max_witnesses)?;
+        if report.result != result.as_str() {
+            return Err(format!(
+                "v6R explainability invariant violated: semantic result {} != explanation result {}",
+                result.as_str(),
+                report.result,
+            ));
+        }
+        let text = serde_json::to_string_pretty(&report)
+            .map_err(|e| format!("cannot serialize explanation JSON: {e}"))?;
+        fs::write(path, format!("{text}\n"))
+            .map_err(|e| format!("cannot write explanation JSON '{path}': {e}"))?;
+    }
 
     if json {
         println!("{}", serde_json::to_string_pretty(&JsonOutput {
