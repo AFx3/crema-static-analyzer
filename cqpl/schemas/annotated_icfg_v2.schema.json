@@ -552,6 +552,14 @@
             "$ref": "#/$defs/eventLabel"
           }
         },
+        "semantic_labels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(stmt|rvalue|term):[a-z0-9_]+$"
+          },
+          "uniqueItems": true
+        },
         "allocation_labels": {
           "type": "array",
           "items": {
@@ -914,6 +922,54 @@
                   }
                 }
               }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "mir_semantic_labels_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "required": [
+                "semantic_labels"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "mir_semantics_v2"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "mir_semantic_labels_v1"
             }
           }
         }

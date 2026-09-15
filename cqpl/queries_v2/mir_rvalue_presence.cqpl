@@ -1,0 +1,3 @@
+# v6P normalized MIR rvalue-family presence query.
+requires mir_semantic_labels_v1;
+EF rvalue_l(checked_binary_op)

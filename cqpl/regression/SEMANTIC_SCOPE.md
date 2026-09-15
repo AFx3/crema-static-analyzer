@@ -1,61 +1,70 @@
-# CQPL regression semantic scope (v2)
+# CQPL regression semantic scope — v6Q-r1c final112
 
-## Modeled memory-error formulas
+La release finale distingue fra **proprietà memory/allocator** e **probe strutturali MIR**.
 
-The current formal CQPL layer evaluates exactly three memory-error families:
+## Proprietà memory/allocator
 
-- Leak
-- Double Free (DF)
-- Use After Free (UAF)
+Le famiglie interrogate sono:
 
-The regression runner therefore executes exactly the corresponding three query
-files for every target.
+1. Leak;
+2. Double Free;
+3. Use After Free;
+4. Allocator-family mismatch.
 
-`UB_FFI` from the legacy CREMA detector is **not silently mapped** to one of
-these three properties.  The current CQPL formal language has no allocator-
-family/provenance predicate able to distinguish, for example, C `malloc`
-origin from a Rust allocator origin and no formal label predicate for an
-allocator-family/ownership-contract mismatch.
+L'allocator mismatch è una classe specifica di UB legata all'incompatibilità di famiglia allocator/deallocator; non è una query generica per ogni UB Rust/C.
 
-Adding an `UB_FFI` CQPL query before extending the formal syntax, abstract
-Kripke annotation, and atomic-predicate semantics would therefore create a
-query whose meaning is not justified by the current theory.
+Per DF, Leak e UAF sono congelate due formulazioni:
 
-The runner records `UB_FFI` as an explicitly unmodeled legacy class.
+- event-centric (`*_alloc.cqpl`);
+- state-start (`*_alloc_state.cqpl`).
 
-## Why there is no `no_errors.cqpl`
+Per allocator mismatch sono congelate capability v1 e v2.
 
-A formula can be written syntactically as the negation of a finite disjunction
-of error formulas.  For example, at the meta level,
+Queste coppie coincidono su 112/112 soggetti della freeze final112; la coincidenza è un regression fact, non un'identità semantica garantita per future versioni.
 
-    !(Leak || DF || UAF)
+## Structural MIR probes
 
-would be the complement of those three formulas.
+La matrice include:
 
-This is **not** equivalent to proving that the program is memory-safe:
+```text
+mir_statement_presence
+mir_rvalue_presence
+mir_terminator_presence
+mir_structural_allocator_example
+```
 
-1. it covers only the error families included in the disjunction;
-2. in the three-valued semantics, `!unk = unk`;
-3. a sound over-approximation may therefore leave the complement unknown;
-4. the present formal result establishes the required no-false-negative
-   property for positive atomic may predicates, not yet an unrestricted
-   formula-level theorem for arbitrary CQPL/CTL formulas.
+I primi tre verificano presenza strutturale e non sono vulnerability verdicts. Il quarto mostra composizione fra un structural fact esatto e un allocator MAY predicate.
 
-For this reason the regression runner emits the derived status
+## Perché non esiste un singolo `NO_ERRORS`
 
-- `all-modeled-queries-refuted`, or
-- `at-least-one-modeled-query-nonrefuting`
+La negazione delle query correnti non equivale a una prova generale di memory safety:
 
-instead of a misleading `NO_ERRORS` verdict.
+- il set di proprietà è finito;
+- `!unk = unk`;
+- la sovra-approssimazione può rimanere imprecisa;
+- unsupported future properties non sono coperte.
 
-`all-modeled-queries-refuted` means only that the currently modeled Leak/DF/UAF
-formulas all evaluate to `ff` on the exported abstract Kripke.
+Quindi una serie di `ff` significa soltanto che quelle formule sono refutate nel modello corrente.
 
-## UB_FFI extension path
+## Truth interpretation
 
-A principled future CQPL extension should first formalize enough information to
-express allocator/ownership-family contracts.  One possible design is to add
-an implementation/formal provenance component and corresponding MAY
-predicates, together with syntactic labels for relevant deallocation/ownership
-APIs.  The concrete predicate, abstraction, three-valued atomic semantics, and
-soundness statement must be defined before using such a query as an oracle.
+Per le property allocation-centric correnti:
+
+```text
+ff  -> pattern refutato nell'astrazione
+unk -> pattern possibile/non refutabile
+tt  -> non atteso per witness MAY positivi nello schema corrente
+```
+
+Per structural MIR labels:
+
+```text
+ff -> categoria assente nel relativo scope raggiungibile
+tt -> categoria presente
+```
+
+## Legacy detector
+
+I risultati del detector storico CREMA sono reference differenziale, non ground truth CQPL.
+
+Una divergenza richiede source/artifact review. La freeze final112 documenta due deviazioni legacy spiegate (`df_rand_cargo_c_ffi`, `unsized_struct`) e zero incoerenze irrisolte.

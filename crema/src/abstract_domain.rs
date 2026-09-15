@@ -4,6 +4,7 @@ use std::fmt::{self};
 use log::debug;
 use crate::utils::load_ffi_functions; // load_ffi_functions in utils.rs
 use crate::memory_events;
+use crate::mir_semantics::{mir_semantics_v2_enabled, rvalue_category};
 use std::collections::HashSet;
 use crate::structs::GlobalICFGNode;
 use crate::structs::{MirStatement, MirTerminator, MirBasicBlock};
@@ -1628,6 +1629,317 @@ fn extract_arg_name(arg: &str) -> String {
 
 
 // ----------------------------------------------------------------------
+// v6P MIR semantic-extension transfer layer
+// ----------------------------------------------------------------------
+//
+// Scientific boundary:
+// * `apply_mir_statement` below is the frozen legacy transfer and is not
+//   modified by v6P.
+// * this adapter is opt-in (`--mir-semantics-v2`), handles only cases that the
+//   frozen classifier calls `unmodeled`, and otherwise delegates byte-for-byte
+//   to the legacy transfer;
+// * no new CellValue element or order edge is introduced.
+//
+// For an unmodeled assignment, TOP is the conservative abstraction of the
+// produced value.  This intentionally sacrifices precision rather than
+// manufacturing ALLOC/FREED/borrow facts. StorageLive/StorageDead follow the
+// formal distinction between uninitialized stack storage (BOXTIMES) and an
+// absent stack local (BOTTOM); Deinit exact locals map to BOXTIMES.
+fn v2_overwrite_destination(
+    mem: &AbstractMemory,
+    taint: &mut TaintStateMap,
+    stmt: &MirStatement,
+    value: CellValue,
+) -> Option<AbstractMemory> {
+    let dest = stmt.place.as_ref()?;
+    let dest_key = full_local_name(dest);
+    let mut new_mem = mem.clone();
+    new_mem.assign_local_value(&dest_key, value);
+    taint.remove(&dest_key);
+    Some(new_mem)
+}
+
+/// Transfer for a MIR `Assign` whose Rvalue was not positively covered by the
+/// frozen v6O transfer.  Every branch is either justified by the MIR value
+/// contract or deliberately widens to TOP; it never manufactures allocation,
+/// deallocation, ownership, or borrow facts.
+fn transfer_unmodeled_assign_v2(
+    mem: &AbstractMemory,
+    taint: &mut TaintStateMap,
+    stmt: &MirStatement,
+) -> Option<AbstractMemory> {
+    let rvalue = stmt.rvalue.as_deref()?;
+    let category = rvalue_category(rvalue);
+
+    let value = match category {
+        // Rvalue::Use evaluates one Operand.  Reuse the frozen evaluator when
+        // it can positively recover a represented value.  A sparse/projection
+        // fallback to BOTTOM is *not* evidence that the runtime value is
+        // absent, so widen that case to TOP.
+        "use" | "const" => {
+            let evaluated = eval_rvalue(rvalue, mem);
+            if evaluated == CellValue::BOTTOM { CellValue::TOP } else { evaluated }
+        }
+
+        // Discriminant and Len are integer/scalar results. Checked integer
+        // arithmetic produces a pair `(value, overflow)`; for the allocation
+        // domain every component is non-owning scalar data, so BOXTIMES is the
+        // precise abstraction needed by CellValue (no field sensitivity is
+        // claimed here).
+        "discriminant" | "len" | "nullary_op" | "checked_binary_op" => {
+            CellValue::BOXTIMES
+        }
+
+        // Pointer metadata may itself be pointer-shaped (e.g. vtable metadata)
+        // and aggregates can contain arbitrary operands.  CellValue has no
+        // representation precise enough to distinguish those cases, therefore
+        // the sound extension is TOP rather than a fabricated scalar/heap fact.
+        "ptr_metadata"
+        | "aggregate"
+        | "repeat"
+        | "thread_local_ref"
+        | "shallow_init_box"
+        | "copy_for_deref"
+        | "address_of"
+        | "ref"
+        | "cast"
+        | "binary_op"
+        | "unary_op"
+        | "other" => CellValue::TOP,
+
+        // `rvalue_category` is a closed v1 adapter.  Keep this wildcard so a
+        // future vocabulary extension remains fail-safe rather than silently
+        // acquiring a precise transfer.
+        _ => CellValue::TOP,
+    };
+
+    v2_overwrite_destination(mem, taint, stmt, value)
+}
+
+/// Return the canonical root local for producer-recorded statement places.
+/// v6P-r1d deliberately consumes `MirStatement::place`, which is emitted from
+/// the typed rustc MIR place, rather than reparsing `details` Debug text.
+fn statement_place_key(stmt: &MirStatement) -> Option<Name> {
+    stmt.place.as_deref().map(full_local_name)
+}
+
+fn statement_place_is_projected(stmt: &MirStatement) -> bool {
+    stmt.place
+        .as_deref()
+        .map(|p| p.contains(" -> "))
+        .unwrap_or(false)
+}
+
+/// Fail-safe havoc for effects that the current CellValue domain cannot
+/// localize.  TOP is the greatest element of the unchanged lattice, so this is
+/// an over-approximation and cannot manufacture ALLOC/FREED/borrow facts.
+fn widen_all_tracked_to_top(mem: &AbstractMemory) -> AbstractMemory {
+    let mut out = mem.clone();
+    let vars: Vec<Name> = out.all_vars().into_iter().collect();
+    for var in vars {
+        out.set_cell_value(&var, CellValue::TOP);
+    }
+    out
+}
+
+/// `StorageLive(local)` allocates fresh *uninitialized* stack storage in the
+/// pinned rustc MIR semantics.  The formal stack abstraction maps an existing
+/// uninitialized local to BOXTIMES; BOTTOM is reserved for an absent/unallocated
+/// local.  Repeated StorageLive also replaces prior storage with fresh uninit.
+fn transfer_storage_live_v2(
+    mem: &AbstractMemory,
+    taint: &mut TaintStateMap,
+    stmt: &MirStatement,
+) -> Option<AbstractMemory> {
+    let key = statement_place_key(stmt)?;
+    let mut new_mem = mem.clone();
+    new_mem.assign_local_value(&key, CellValue::BOXTIMES);
+    taint.remove(&key);
+    Some(new_mem)
+}
+
+/// `StorageDead(local)` deallocates the stack slot (or is a NOP if already
+/// dead).  In the formal stack abstraction an unallocated local is outside the
+/// stack domain and therefore maps to BOTTOM.  This is *not* a heap free.
+fn transfer_storage_dead_v2(
+    mem: &AbstractMemory,
+    taint: &mut TaintStateMap,
+    stmt: &MirStatement,
+) -> Option<AbstractMemory> {
+    let key = statement_place_key(stmt)?;
+    let mut new_mem = mem.clone();
+    new_mem.assign_local_value(&key, CellValue::BOTTOM);
+    taint.remove(&key);
+    Some(new_mem)
+}
+
+/// MIR `Deinit(place)` writes uninitialized bytes to the entire place without
+/// executing its destructor.  Exact locals therefore abstract to BOXTIMES.
+/// For projections the current domain is not field-sensitive: changing only a
+/// sub-place cannot be represented, so widen the root allocation component to
+/// TOP.  Missing producer place evidence falls back to global TOP rather than
+/// under-approximating.
+fn transfer_deinit_v2(
+    mem: &AbstractMemory,
+    taint: &mut TaintStateMap,
+    stmt: &MirStatement,
+) -> Option<AbstractMemory> {
+    let Some(key) = statement_place_key(stmt) else {
+        return Some(widen_all_tracked_to_top(mem));
+    };
+    let mut new_mem = mem.clone();
+    if statement_place_is_projected(stmt) {
+        new_mem.set_cell_value(&key, CellValue::TOP);
+    } else {
+        new_mem.assign_local_value(&key, CellValue::BOXTIMES);
+        taint.remove(&key);
+    }
+    Some(new_mem)
+}
+
+/// A statement that mutates a typed MIR place in a way not expressible in the
+/// CellValue lattice conservatively havocs the represented allocation component
+/// to TOP.  This is used for SetDiscriminant and Retag.
+fn transfer_opaque_place_write_v2(
+    mem: &AbstractMemory,
+    stmt: &MirStatement,
+) -> AbstractMemory {
+    let Some(key) = statement_place_key(stmt) else {
+        return widen_all_tracked_to_top(mem);
+    };
+    let mut new_mem = mem.clone();
+    new_mem.set_cell_value(&key, CellValue::TOP);
+    new_mem
+}
+
+/// Pinned `NonDivergingIntrinsic` has two variants.
+///
+/// * Assume only restricts feasible executions. Retaining the current abstract
+///   state even when the condition is false is a standard MAY over-approximation
+///   (we do not claim path pruning precision).
+/// * CopyNonOverlapping writes through `dst`.  Without a complete points-to
+///   proof, changing only the pointer operand would miss possible aliases, so
+///   every tracked CellValue is widened to TOP.
+fn transfer_intrinsic_v2(mem: &AbstractMemory, stmt: &MirStatement) -> AbstractMemory {
+    if stmt.details.starts_with("Intrinsic::Assume ") {
+        return mem.clone();
+    }
+    if stmt.details.starts_with("Intrinsic::CopyNonOverlapping ") {
+        // The destination is reached through a raw/reference/Box operand.  The
+        // present domain has allocation identity but no complete points-to
+        // relation for arbitrary bytewise writes, so localizing the mutation
+        // to the pointer operand would be unsound.  Global TOP preserves every
+        // possible heap-state effect without inventing one.
+        return widen_all_tracked_to_top(mem);
+    }
+    widen_all_tracked_to_top(mem)
+}
+
+/// Statements documented by the pinned rustc semantics as runtime no-ops (or
+/// metadata-only operations with no CellValue memory effect) preserve the
+/// abstract memory.  This helper is intentionally not used for SetDiscriminant,
+/// Retag, or CopyNonOverlapping.
+fn transfer_runtime_noop_statement_v2(mem: &AbstractMemory) -> AbstractMemory {
+    mem.clone()
+}
+
+fn apply_mir_statement_v2_extension(
+    mem: &AbstractMemory,
+    taint: &mut TaintStateMap,
+    stmt: &MirStatement,
+) -> Option<AbstractMemory> {
+    if !mir_semantics_v2_enabled() || classify_mir_statement_coverage(stmt) != "unmodeled" {
+        return None;
+    }
+
+    match stmt.kind.as_str() {
+        "Assign" => transfer_unmodeled_assign_v2(mem, taint, stmt),
+        "StorageLive" => transfer_storage_live_v2(mem, taint, stmt),
+        "StorageDead" => transfer_storage_dead_v2(mem, taint, stmt),
+        "Deinit" => transfer_deinit_v2(mem, taint, stmt),
+        "SetDiscriminant" | "Retag" => Some(transfer_opaque_place_write_v2(mem, stmt)),
+        "Intrinsic" => Some(transfer_intrinsic_v2(mem, stmt)),
+        "FakeRead"
+        | "PlaceMention"
+        | "AscribeUserType"
+        | "Coverage"
+        | "ConstEvalCounter"
+        | "BackwardIncompatibleDropHint" => Some(transfer_runtime_noop_statement_v2(mem)),
+        _ => None,
+    }
+}
+
+pub fn apply_mir_statement_with_extensions(
+    mem: &AbstractMemory,
+    taint: &mut TaintStateMap,
+    stmt: &MirStatement,
+) -> AbstractMemory {
+    if let Some(updated) = apply_mir_statement_v2_extension(mem, taint, stmt) {
+        updated
+    } else {
+        apply_mir_statement(mem, taint, stmt)
+    }
+}
+
+/// v6P-r1d terminator extension. The frozen legacy transfer remains byte-
+/// identical and is used for all previously represented cases.  Terminators
+/// whose memory effect is not representable are supported by widening rather
+/// than by silently treating them as no-ops.
+pub fn apply_mir_terminator_with_extensions(
+    mem: &AbstractMemory,
+    taint: &mut TaintStateMap,
+    term: &MirTerminator,
+) -> AbstractMemory {
+    if mir_semantics_v2_enabled() {
+        match term {
+            // Inline assembly may read/write arbitrary memory according to its
+            // operands/options.  Until those effects are typed into CellValue,
+            // global TOP is the only sound memory-state abstraction.
+            MirTerminator::InlineAsm { .. } => return widen_all_tracked_to_top(mem),
+            // Yield transfers control out of the current coroutine invocation
+            // and later writes a resume argument.  The current intraprocedural
+            // state domain has no coroutine-frame abstraction, so widen before
+            // propagating to the MAY resume/drop continuations.
+            MirTerminator::Yield { .. } => return widen_all_tracked_to_top(mem),
+            _ => {}
+        }
+    }
+    apply_mir_terminator(mem, taint, term)
+}
+
+/// Coverage view for the opt-in extension profile.  The legacy classifier is
+/// intentionally retained as a separate function so v6O evidence remains
+/// reproducible and auditable.
+pub fn classify_mir_statement_coverage_v2(stmt: &MirStatement) -> &'static str {
+    let legacy = classify_mir_statement_coverage(stmt);
+    if !mir_semantics_v2_enabled() || legacy != "unmodeled" {
+        return legacy;
+    }
+
+    match stmt.kind.as_str() {
+        "Assign" => match stmt.rvalue.as_deref().map(rvalue_category) {
+            Some("discriminant" | "len" | "nullary_op" | "checked_binary_op") => "precise",
+            Some(_) => "conservative",
+            None => "unmodeled",
+        },
+        "StorageLive" | "StorageDead" => "precise",
+        "Deinit" => {
+            if statement_place_is_projected(stmt) { "conservative" } else { "precise" }
+        }
+        "FakeRead"
+        | "PlaceMention"
+        | "AscribeUserType"
+        | "Coverage"
+        | "ConstEvalCounter"
+        | "BackwardIncompatibleDropHint" => "precise",
+        // These statements are supported but deliberately widened because the
+        // current CellValue domain does not represent their full effect.
+        "SetDiscriminant" | "Retag" | "Intrinsic" => "conservative",
+        _ => "unmodeled",
+    }
+}
+
+// ----------------------------------------------------------------------
 // MIR STATEMENT/TERMINATOR DISPATCH
 // ----------------------------------------------------------------------
 // process an entire MIR basic block (which may consist of zero or more statements followed by a terminator)
@@ -1636,10 +1948,10 @@ pub fn process_mir_basic_block(block: &MirBasicBlock, init_mem: &AbstractMemory,
     let mut current_mem = init_mem.clone();
     let mut current_taint = init_taint.clone();
     for stmt in &block.statements {
-        current_mem = apply_mir_statement(&current_mem, &mut current_taint, stmt);
+        current_mem = apply_mir_statement_with_extensions(&current_mem, &mut current_taint, stmt);
     }
     if let Some(term) = &block.terminator {
-        current_mem = apply_mir_terminator(&current_mem, &mut current_taint, term);
+        current_mem = apply_mir_terminator_with_extensions(&current_mem, &mut current_taint, term);
     }
     (current_mem, current_taint)
 
@@ -2322,6 +2634,87 @@ pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place
 }
 
 
+
+
+/// v6O telemetry-only classifier for the existing MIR statement transfer.
+///
+/// This function does not change the abstract semantics.  It mirrors the
+/// positive dispatch in `apply_mir_statement`/`eval_rvalue` so the coverage
+/// report can distinguish dedicated transfer rules from deliberate TOP and
+/// from the sparse fallback.  The returned vocabulary is intentionally small
+/// and stable for artifact comparison.
+pub fn classify_mir_statement_coverage(stmt: &MirStatement) -> &'static str {
+    match stmt.kind.as_str() {
+        "Nop" => "precise",
+        "Assign" => {
+            let Some(rvalue) = stmt.rvalue.as_deref() else {
+                return "unmodeled";
+            };
+            let trimmed = rvalue.trim();
+
+            // Historical `&(*...)` branch deliberately preserves state and is
+            // therefore not counted as a positively modeled transfer.
+            if trimmed.contains("&(*") {
+                return "unmodeled";
+            }
+
+            if direct_stack_borrow_source(trimmed).is_some()
+                || trimmed.starts_with('&')
+                || pointer_cast_source(trimmed).is_some()
+                || pointer_offset_source(trimmed).is_some()
+                || is_closure_aggregate_rvalue(trimmed)
+                || is_copy_for_deref_rvalue(trimmed)
+                || is_direct_deref_use_rvalue(trimmed)
+            {
+                return "conservative";
+            }
+
+            if exact_local_operand(trimmed, "copy ").is_some()
+                || exact_local_operand(trimmed, "move ").is_some()
+                || is_scalar_const_rvalue(trimmed)
+                || is_scalar_nullary_rvalue(trimmed)
+                || scalar_cast_target(trimmed).is_some()
+                || comparison_rvalue_args(trimmed).is_some()
+                || binary_rvalue_args(trimmed).is_some()
+                || unary_rvalue_arg(trimmed).is_some()
+            {
+                return "precise";
+            }
+
+            "unmodeled"
+        }
+        // Current memory transfer leaves all other MIR statement kinds
+        // unchanged.  Telemetry records these as explicit coverage gaps rather
+        // than silently calling the no-op precise.
+        _ => "unmodeled",
+    }
+}
+
+/// Lower-bound inventory of external Rust calls with an explicit memory effect
+/// in the current CREMA transfer.  This is telemetry only: returning false does
+/// not imply that a call is semantically opaque in every CREMA component.
+/// Keeping this helper next to the actual transfer predicates avoids a second
+/// text-pattern vocabulary in the coverage exporter.
+pub fn has_explicit_rust_call_summary(s: &str) -> bool {
+    is_box_new_call(s)
+        || is_owning_into_raw_call(s)
+        || is_owning_from_raw_call(s)
+        || is_mem_forget_call(s)
+        || is_box_leak_call(s)
+        || is_vec_from_raw_parts_call(s)
+        || is_string_from_raw_parts_call(s)
+        || is_raw_alloc_call(s)
+        || is_raw_alloc_zeroed_call(s)
+        || is_raw_dealloc_call(s)
+        || is_raw_realloc_call(s)
+        || is_cstr_from_ptr_call(s)
+        || is_borrowed_raw_pointer_view_call(s)
+        || is_pointer_memory_use_call(s)
+        || memory_events::is_into_vec_transfer_call(s)
+        || memory_events::is_exchange_malloc_call(s)
+        || is_explicit_mem_drop(s)
+        || s.contains("std::result::Result::<std::ffi::CString, std::ffi::NulError>::expect")
+}
 
 pub fn apply_mir_statement(mem: &AbstractMemory, taint: &mut TaintStateMap, stmt: &MirStatement) -> AbstractMemory {
     let mut new_mem = mem.clone();
@@ -6575,6 +6968,8 @@ mod phase4_std_memory_tests {
             source_info: "<phase5-real-shape>".to_string(),
             function_called: "std::ptr::mut_ptr::<impl *mut i32>::cast::<std::ffi::c_void>".to_string(),
             callee_def_path: None,
+            deallocator_evidence: None,
+            higher_order_evidence: None,
             callee_is_local: false,
             callback_def_paths: Vec::new(),
             resolved_instance_callees: Vec::new(),
@@ -6994,6 +7389,8 @@ mod phase4_std_memory_tests {
             source_info: "<phase4-test>".to_string(),
             function_called: "std::ffi::CStr::from_ptr::<'_>".to_string(),
             callee_def_path: None,
+            deallocator_evidence: None,
+            higher_order_evidence: None,
             callee_is_local: false,
             callback_def_paths: Vec::new(),
             resolved_instance_callees: Vec::new(),
@@ -7074,3 +7471,153 @@ mod phase4_std_memory_tests {
     }
 }
 
+#[cfg(test)]
+mod v6p_mir_extension_tests {
+    use super::*;
+    use crate::structs::SourceInfoData;
+
+    fn assign(place: &str, rvalue: &str) -> MirStatement {
+        MirStatement {
+            source_info: SourceInfoData { span: "test".into(), scope: "test".into() },
+            kind: "Assign".into(),
+            details: format!("{place} = {rvalue}"),
+            place: Some(place.into()),
+            is_mutable: Some(true),
+            rvalue: Some(rvalue.into()),
+        }
+    }
+
+    #[test]
+    fn checked_arithmetic_extension_is_non_owning_scalar() {
+        let mem = AbstractMemory::default();
+        let mut taint = TaintStateMap::new();
+        let out = transfer_unmodeled_assign_v2(
+            &mem,
+            &mut taint,
+            &assign("Local(_1)", "AddWithOverflow(copy _2, copy _3)"),
+        ).unwrap();
+        assert_eq!(out.get_cell_value(&full_local_name("Local(_1)")), CellValue::BOXTIMES);
+    }
+
+    #[test]
+    fn pointer_metadata_extension_widens_to_top_not_heap_fact() {
+        let mem = AbstractMemory::default();
+        let mut taint = TaintStateMap::new();
+        let out = transfer_unmodeled_assign_v2(
+            &mem,
+            &mut taint,
+            &assign("Local(_1)", "PtrMetadata(copy _2)"),
+        ).unwrap();
+        assert_eq!(out.get_cell_value(&full_local_name("Local(_1)")), CellValue::TOP);
+    }
+
+    fn stmt(kind: &str, place: Option<&str>, details: &str) -> MirStatement {
+        MirStatement {
+            source_info: SourceInfoData { span: "test".into(), scope: "test".into() },
+            kind: kind.into(),
+            details: details.into(),
+            place: place.map(|p| p.to_string()),
+            is_mutable: Some(true),
+            rvalue: None,
+        }
+    }
+
+    #[test]
+    fn storage_live_is_fresh_uninitialized_not_bottom() {
+        let mut mem = AbstractMemory::default();
+        let key = full_local_name("Local(_1)");
+        mem.assign_local_value(&key, CellValue::ALLOC);
+        let mut taint = TaintStateMap::new();
+        let out = transfer_storage_live_v2(
+            &mem,
+            &mut taint,
+            &stmt("StorageLive", Some("Local(_1)"), "StorageLive(_1)"),
+        ).unwrap();
+        assert_eq!(out.get_cell_value(&key), CellValue::BOXTIMES);
+        assert_ne!(out.get_cell_value(&key), CellValue::BOTTOM);
+    }
+
+    #[test]
+    fn storage_dead_removes_stack_slot_without_freeing_heap_alias() {
+        let mut mem = AbstractMemory::default();
+        let local = full_local_name("Local(_1)");
+        let alias = full_local_name("Local(_2)");
+        mem.set_cell_value(&local, CellValue::ALLOC);
+        mem.propagate_cell_value(&local, &alias);
+        let mut taint = TaintStateMap::new();
+        let out = transfer_storage_dead_v2(
+            &mem,
+            &mut taint,
+            &stmt("StorageDead", Some("Local(_1)"), "StorageDead(_1)"),
+        ).unwrap();
+        assert_eq!(out.get_cell_value(&local), CellValue::BOTTOM);
+        assert_eq!(out.get_cell_value(&alias), CellValue::ALLOC);
+        assert_ne!(out.get_cell_value(&alias), CellValue::FREED);
+    }
+
+    #[test]
+    fn exact_local_deinit_becomes_uninitialized_not_absent_or_freed() {
+        let mut mem = AbstractMemory::default();
+        let key = full_local_name("Local(_1)");
+        mem.assign_local_value(&key, CellValue::ALLOC);
+        let mut taint = TaintStateMap::new();
+        let statement = stmt("Deinit", Some("Local(_1)"), "Deinit(Local(_1))");
+        let out = transfer_deinit_v2(&mem, &mut taint, &statement).unwrap();
+        assert_eq!(out.get_cell_value(&key), CellValue::BOXTIMES);
+        assert_ne!(out.get_cell_value(&key), CellValue::BOTTOM);
+        assert_ne!(out.get_cell_value(&key), CellValue::FREED);
+    }
+
+    #[test]
+    fn projected_deinit_widens_root_allocation_component() {
+        let mut mem = AbstractMemory::default();
+        let key = full_local_name("Local(_1)");
+        mem.assign_local_value(&key, CellValue::ALLOC);
+        let mut taint = TaintStateMap::new();
+        let statement = stmt(
+            "Deinit",
+            Some("Local(_1) [mutable] -> Field(0, Type: i32)"),
+            "Deinit((_1.0: i32))",
+        );
+        let out = transfer_deinit_v2(&mem, &mut taint, &statement).unwrap();
+        assert_eq!(out.get_cell_value(&key), CellValue::TOP);
+    }
+
+    #[test]
+    fn set_discriminant_and_retag_are_supported_by_sound_widening() {
+        let mut mem = AbstractMemory::default();
+        let key = full_local_name("Local(_1)");
+        mem.assign_local_value(&key, CellValue::ALLOC);
+        let sd = stmt("SetDiscriminant", Some("Local(_1)"), "SetDiscriminant(_1, 1)");
+        let rt = stmt("Retag", Some("Local(_1)"), "Retag(_1)");
+        assert_eq!(transfer_opaque_place_write_v2(&mem, &sd).get_cell_value(&key), CellValue::TOP);
+        assert_eq!(transfer_opaque_place_write_v2(&mem, &rt).get_cell_value(&key), CellValue::TOP);
+    }
+
+    #[test]
+    fn assume_retains_state_as_may_overapproximation() {
+        let mut mem = AbstractMemory::default();
+        let key = full_local_name("Local(_1)");
+        mem.assign_local_value(&key, CellValue::ALLOC);
+        let statement = stmt("Intrinsic", None, "Intrinsic::Assume Assume(copy _2)");
+        let out = transfer_intrinsic_v2(&mem, &statement);
+        assert_eq!(out.get_cell_value(&key), CellValue::ALLOC);
+    }
+
+    #[test]
+    fn copy_nonoverlapping_globally_widens_without_points_to_proof() {
+        let mut mem = AbstractMemory::default();
+        let one = full_local_name("Local(_1)");
+        let two = full_local_name("Local(_2)");
+        mem.assign_local_value(&one, CellValue::ALLOC);
+        mem.assign_local_value(&two, CellValue::MV);
+        let statement = stmt(
+            "Intrinsic",
+            Some("Local(_2)"),
+            "Intrinsic::CopyNonOverlapping CopyNonOverlapping { .. }",
+        );
+        let out = transfer_intrinsic_v2(&mem, &statement);
+        assert_eq!(out.get_cell_value(&one), CellValue::TOP);
+        assert_eq!(out.get_cell_value(&two), CellValue::TOP);
+    }
+}

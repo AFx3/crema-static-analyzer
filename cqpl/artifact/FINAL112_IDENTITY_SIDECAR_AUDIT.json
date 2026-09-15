@@ -1,0 +1,12 @@
+{
+  "subjects": 112,
+  "records_checked": 6894,
+  "records_by_kind": {
+    "identity": 3447,
+    "event_identity": 3447
+  },
+  "failures": 0,
+  "failure_details": [],
+  "status": "PASS",
+  "note": "Sidecars may intentionally cover only a subset of global graph nodes. Every sidecar by_node/event_by_node record is normalized to the annotated-ICFG serialization and compared exactly at the same node id."
+}

@@ -1,0 +1,24 @@
+{
+  "profile": "CREMA-CQPL-v6Q-r1c-final112",
+  "status": "PASS",
+  "evidence_archive": "cqpl-v6q-r1c-final112.zip",
+  "sha256": "bd77b63d67523346b4e3c3cd9554f9787d7685e0f46265912137d55a98a8e902",
+  "sha256sums_final_entries": 4295,
+  "sha256sums_final_failures": 0,
+  "subjects": 112,
+  "corpus_subjects": 109,
+  "registry_subjects": 3,
+  "queries": 12,
+  "attempts": 1344,
+  "query_nonzero_rc": 0,
+  "result_counts": {
+    "ff": 650,
+    "unk": 468,
+    "tt": 226
+  },
+  "canonical_four_crosscheck": "PASS",
+  "event_state_pair_regression": "PASS",
+  "allocator_v1_v2_regression": "PASS",
+  "r1c_vs_r1b_matrix_mismatches": 0,
+  "precision_note": "PASS is reproducibility/consistency, not an accuracy score; leak remains unknown on 105/112 subjects."
+}

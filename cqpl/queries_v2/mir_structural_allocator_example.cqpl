@@ -1,0 +1,8 @@
+# Structural labels can be composed with the existing allocation predicates.
+# This does not strengthen MAY allocation truth to definite truth.
+requires mir_semantic_labels_v1;
+requires allocation_contracts_v2;
+exists_alloc a. EF (
+  term_l(drop) &&
+  allocator_mismatch_l(a)
+)

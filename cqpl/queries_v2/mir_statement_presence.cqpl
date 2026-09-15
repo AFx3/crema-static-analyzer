@@ -1,0 +1,3 @@
+# v6P structural MIR statement-presence query.
+requires mir_semantic_labels_v1;
+EF stmt_l(assign)

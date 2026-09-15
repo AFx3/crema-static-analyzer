@@ -19,6 +19,14 @@ pub enum LabelPredicate {
     AllocatorMismatch,
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StructuralLabelKind {
+    Statement,
+    Rvalue,
+    Terminator,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PathQuantifier {
     Exists,
@@ -43,6 +51,12 @@ pub enum StateFormula {
     Label {
         predicate: LabelPredicate,
         logic_var: String,
+    },
+    /// v6P structural MIR-presence predicate.  It is independent of program
+    /// variables and therefore has no free logical variable.
+    StructuralLabel {
+        kind: StructuralLabelKind,
+        name: String,
     },
     Not(Box<StateFormula>),
     And(Box<StateFormula>, Box<StateFormula>),
@@ -92,6 +106,7 @@ impl StateFormula {
                         out.insert(logic_var.clone());
                     }
                 }
+                StateFormula::StructuralLabel { .. } => {}
                 StateFormula::Not(inner) => visit(inner, bound, out),
                 StateFormula::And(a, b) | StateFormula::Or(a, b) => {
                     visit(a, bound, out);

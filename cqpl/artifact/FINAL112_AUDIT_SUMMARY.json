@@ -1,0 +1,112 @@
+{
+  "profile": "CREMA-CQPL-v6Q-r1c-final112",
+  "semantic_baseline": "CREMA-CQPL-v6Q-r1b",
+  "audit_date": "2026-09-15",
+  "evidence": {
+    "graph_bundle_sha256": "2e1e94945ac1b1d4ad97c71981f720e82c49fa8f6840a61786fa4dd3cf4ae26f",
+    "matrix_bundle_sha256": "aad99604e8a3bbed3a108df974c7c47f8f6753eec07ac59a9109d5ed81ac870a",
+    "source_cqpl_bundle_sha256": "b775958a9906d3575f16faaf4776fcdc0f26052e293e7966de40e42e9be3f49a",
+    "runtime_r1c_bundle_sha256": "bd77b63d67523346b4e3c3cd9554f9787d7685e0f46265912137d55a98a8e902"
+  },
+  "census": {
+    "corpus_discovered": 110,
+    "corpus_active": 109,
+    "corpus_complete": 109,
+    "corpus_skipped": 1,
+    "registry_complete": 3,
+    "subjects": 112
+  },
+  "query_matrix": {
+    "queries": 12,
+    "attempts": 1344,
+    "all_rc_zero": true,
+    "graph_validation_failures": 0,
+    "query_result_mismatches": 0,
+    "result_counts": {
+      "ff": 650,
+      "unk": 468,
+      "tt": 226
+    }
+  },
+  "graph_totals": {
+    "nodes": 16512,
+    "edges": 22710,
+    "variables": 6094,
+    "allocations": 148,
+    "graphs_with_unreachable_nodes": 20,
+    "unreachable_nodes": 12125
+  },
+  "capabilities_all_112": [
+    "allocation_contracts_v1",
+    "allocation_contracts_v2",
+    "allocation_state_v1",
+    "mir_semantic_labels_v1",
+    "mir_semantics_v2"
+  ],
+  "identity_sidecars": {
+    "records_checked": 6894,
+    "identity_records": 3447,
+    "event_identity_records": 3447,
+    "mismatches": 0,
+    "status": "PASS"
+  },
+  "source_oracle_audit": {
+    "RESULT_SOURCE_CONSISTENT": 106,
+    "RESULT_SOURCE_CONSISTENT_EXPLAINED_LEGACY_DEVIATION": 2,
+    "RESULT_CONSISTENT_NO_REFERENCE_ORACLE": 4,
+    "unresolved_inconsistencies": 0
+  },
+  "registry": {
+    "crates": [
+      "unicode-ident 1.0.18",
+      "ryu 1.0.20",
+      "memchr 2.7.4"
+    ],
+    "cqpl_complete": 3,
+    "higher_order_unresolved": 0,
+    "unmodeled": {
+      "rvalues": 0,
+      "statements": 0,
+      "terminators": 0
+    }
+  },
+  "precision_limits": {
+    "leak_unknown_subjects": 105,
+    "leak_total_subjects": 112,
+    "interpretation": "precision limitation; not a soundness PASS/FAIL claim"
+  },
+  "language_contract_finding": {
+    "status_in_v6q_r1b": "FAIL_CONSISTENCY",
+    "producer_label": "term:unwind_terminate",
+    "observed_occurrences": 2,
+    "observed_nodes": [
+      {
+        "subject": "rusant",
+        "node": "rust::open_url::bb9",
+        "reachable_from_entry": true
+      },
+      {
+        "subject": "whisper-rs-example",
+        "node": "rust::callback::bb12",
+        "reachable_from_entry": false
+      }
+    ],
+    "r1b_parser_accepted": false,
+    "r1c_fix": "parser term_l vocabulary aligned with all 16 CREMA terminator categories; regression test added",
+    "existing_12_query_results_affected": false
+  },
+  "candidate_status": "RUNTIME_VALIDATED_FINAL_FREEZE",
+  "scientific_conclusion": "The v6Q-r1b semantic evidence and the v6Q-r1c CQPL/parser/harness release are now runtime-validated as one final112 freeze. The 112x12 matrix is graph-level reproducible, source/oracle consistent, and r1c reproduces the audited r1b matrix cell-for-cell while fixing the term_l producer/parser vocabulary drift. This is a reproducibility/consistency result, not a perfect-accuracy claim.",
+  "runtime_validation": {
+    "status": "PASS",
+    "archive": "cqpl-v6q-r1c-final112.zip",
+    "archive_sha256": "bd77b63d67523346b4e3c3cd9554f9787d7685e0f46265912137d55a98a8e902",
+    "sha256_manifest_entries_checked": 4295,
+    "sha256_manifest_failures": 0,
+    "subjects": 112,
+    "queries": 12,
+    "attempts": 1344,
+    "all_query_rc_zero": true,
+    "r1c_vs_audited_r1b_matrix_mismatches": 0
+  }
+}

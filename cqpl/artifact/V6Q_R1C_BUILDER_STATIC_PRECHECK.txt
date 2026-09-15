@@ -1,0 +1,14 @@
+=== v6Q-r1c builder static precheck ===
+shell syntax:
+shell_syntax_rc=0
+python syntax:
+python_files=10 errors=0
+python_syntax_rc=0
+json parse:
+json_files=13 errors=0
+json_parse_rc=0
+frozen query byte identity:
+frozen_query_byte_identity_rc=0
+builder Rust tool availability:
+cargo_available_rc=1
+rustc_available_rc=1

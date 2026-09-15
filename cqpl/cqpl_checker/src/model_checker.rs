@@ -1,4 +1,4 @@
-use crate::ast::{LabelPredicate, MayPredicate, PathFormula, PathQuantifier, QueryDocument, StateFormula};
+use crate::ast::{LabelPredicate, MayPredicate, PathFormula, PathQuantifier, QueryDocument, StateFormula, StructuralLabelKind};
 use crate::kripke::{CellValue, Kripke};
 use crate::truth::Truth;
 use std::collections::{BTreeMap, BTreeSet};
@@ -35,6 +35,9 @@ impl<'a> ModelChecker<'a> {
         if formula_uses_allocation_state(formula, initial_env) {
             return Err("allocation-bound state predicates require a query document declaring `requires allocation_state_v1;`".into());
         }
+        if formula_uses_structural_labels(formula) {
+            return Err("stmt_l/rvalue_l/term_l require a query document declaring `requires mir_semantic_labels_v1;`".into());
+        }
         self.evaluate_formula(formula, initial_env)
     }
 
@@ -51,6 +54,11 @@ impl<'a> ModelChecker<'a> {
             && !document.required_capabilities.contains("allocation_state_v1")
         {
             return Err("allocation-bound state predicates require explicit `requires allocation_state_v1;`".into());
+        }
+        if formula_uses_structural_labels(&document.formula)
+            && !document.required_capabilities.contains("mir_semantic_labels_v1")
+        {
+            return Err("stmt_l/rvalue_l/term_l require explicit `requires mir_semantic_labels_v1;`".into());
         }
         for capability in &document.required_capabilities {
             if !self.k.capabilities.contains(capability) {
@@ -150,6 +158,10 @@ impl<'a> ModelChecker<'a> {
                 )),
                 None => Err(format!("logical variable '{logic_var}' is unbound")),
             },
+            StructuralLabel { .. } => {
+                if self.k.capabilities.contains("mir_semantic_labels_v1") { Ok(()) }
+                else { Err("structural MIR label predicate requires annotated-ICFG capability mir_semantic_labels_v1".into()) }
+            }
             Not(inner) => self.validate_state_sorts(inner, sorts),
             And(a, b) | Or(a, b) => {
                 self.validate_state_sorts(a, sorts)?;
@@ -219,6 +231,11 @@ impl<'a> ModelChecker<'a> {
                         .map(|n| (n.clone(), self.k.allocation_label_hold(n, allocation, *predicate)))
                         .collect(),
                 })
+            }
+            StructuralLabel { kind, name } => {
+                Ok(self.k.nodes.keys()
+                    .map(|n| (n.clone(), self.k.structural_label_hold(n, *kind, name)))
+                    .collect())
             }
             Not(inner) => Ok(map_unary(self.eval_all(inner, env)?, Truth::not)),
             And(a, b) => {
@@ -424,7 +441,7 @@ fn formula_uses_allocation_state(formula: &StateFormula, initial_env: &Env) -> b
         use StateFormula::*;
         match formula {
             May { logic_var, .. } => sorts.get(logic_var) == Some(&LogicSort::Allocation),
-            Label { .. } => false,
+            Label { .. } | StructuralLabel { .. } => false,
             Not(inner) => visit(inner, sorts),
             And(a, b) | Or(a, b) => visit(a, sorts) || visit(b, sorts),
             Exists { logic_var, body } | ForAll { logic_var, body } => {
@@ -468,11 +485,28 @@ fn formula_uses_allocation_state(formula: &StateFormula, initial_env: &Env) -> b
     visit(formula, &mut sorts)
 }
 
+fn formula_uses_structural_labels(formula: &StateFormula) -> bool {
+    use StateFormula::*;
+    match formula {
+        StructuralLabel { .. } => true,
+        May { .. } | Label { .. } => false,
+        Not(inner) => formula_uses_structural_labels(inner),
+        And(a, b) | Or(a, b) => formula_uses_structural_labels(a) || formula_uses_structural_labels(b),
+        Exists { body, .. } | ForAll { body, .. } | ExistsAlloc { body, .. } | ForAllAlloc { body, .. } =>
+            formula_uses_structural_labels(body),
+        Path { formula, .. } => match formula {
+            PathFormula::State(s) | PathFormula::Next(s) | PathFormula::Eventually(s) | PathFormula::Globally(s) =>
+                formula_uses_structural_labels(s),
+            PathFormula::Until(a, b) => formula_uses_structural_labels(a) || formula_uses_structural_labels(b),
+        },
+    }
+}
+
 fn formula_uses_allocator_mismatch(formula: &StateFormula) -> bool {
     use StateFormula::*;
     match formula {
         Label { predicate: LabelPredicate::AllocatorMismatch, .. } => true,
-        May { .. } | Label { .. } => false,
+        May { .. } | Label { .. } | StructuralLabel { .. } => false,
         Not(inner) => formula_uses_allocator_mismatch(inner),
         And(a, b) | Or(a, b) => {
             formula_uses_allocator_mismatch(a) || formula_uses_allocator_mismatch(b)
@@ -531,7 +565,7 @@ fn necessary_positive_may_mask(formula: &StateFormula, logic_var: &str) -> u8 {
         May { predicate, logic_var: atom_var } if atom_var == logic_var => {
             may_predicate_bit(*predicate)
         }
-        May { .. } | Label { .. } => 0,
+        May { .. } | Label { .. } | StructuralLabel { .. } => 0,
         Not(_) => 0,
         And(a, b) => {
             necessary_positive_may_mask(a, logic_var)
@@ -601,6 +635,7 @@ mod tests {
             id: id.into(),
             successors: succ.iter().map(|s| s.to_string()).collect(),
             labels,
+            semantic_labels: vec![],
             allocation_labels: vec![],
             identity: None,
             event_identity: None,
@@ -988,6 +1023,7 @@ mod tests {
             allocations: vec![AbstractAllocation { id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None }],
             nodes: vec![
                 AnnotatedNode {
+                    semantic_labels: vec![],
                     id: "b0".into(), successors: vec!["b1".into()], labels: vec![],
                     allocation_labels: vec![AllocationEventLabel {
                         predicate: EventKind::Alloc, allocation: "A".into(),
@@ -997,6 +1033,7 @@ mod tests {
                     identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default(),
                 },
                 AnnotatedNode {
+                    semantic_labels: vec![],
                     id: "b1".into(), successors: vec![], labels: vec![],
                     allocation_labels: vec![AllocationEventLabel {
                         predicate: EventKind::Drop, allocation: "A".into(),
@@ -1024,7 +1061,7 @@ mod tests {
             variables: vec![ProgramVariable { id: "Local(_1)".into(), language: ProgramLanguage::Rust, display: None, function: None }],
             allocations: vec![AbstractAllocation { id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None }],
             nodes: vec![AnnotatedNode {
-                id: "b0".into(), successors: vec![], labels: vec![], allocation_labels: vec![],
+                id: "b0".into(), successors: vec![], labels: vec![], semantic_labels: vec![], allocation_labels: vec![],
                 identity: None, event_identity: None,
                 allocation_post: Some(AbstractAllocationMemoryAnnotation {
                     cells: vec![AbstractAllocationCell { allocation: "A".into(), value: CellValue::Alloc }],
@@ -1058,7 +1095,7 @@ mod tests {
             capabilities: vec![], entry: "b0".into(),
             variables: vec![ProgramVariable { id: "Local(_1)".into(), language: ProgramLanguage::Rust, display: None, function: None }],
             allocations: vec![AbstractAllocation { id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None }],
-            nodes: vec![AnnotatedNode { id: "b0".into(), successors: vec![], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() }],
+            nodes: vec![AnnotatedNode { id: "b0".into(), successors: vec![], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() }],
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();
         let doc = parse_query_document(
@@ -1076,7 +1113,7 @@ mod tests {
             capabilities: vec![], entry: "b0".into(),
             variables: vec![ProgramVariable { id: "Local(_1)".into(), language: ProgramLanguage::Rust, display: None, function: None }],
             allocations: vec![],
-            nodes: vec![AnnotatedNode { id: "b0".into(), successors: vec![], labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() }],
+            nodes: vec![AnnotatedNode { id: "b0".into(), successors: vec![], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() }],
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();
         let q = parse_query("exists_alloc a. drop_l(a)").unwrap();
@@ -1103,6 +1140,7 @@ mod tests {
                 )),
             }],
             nodes: vec![AnnotatedNode {
+                semantic_labels: vec![],
                 id: "b0".into(), successors: vec![], labels: vec![],
                 allocation_labels: vec![AllocationEventLabel {
                     predicate: EventKind::Drop, allocation: "A".into(),
@@ -1202,6 +1240,7 @@ mod tests {
                 id: "b0".into(),
                 successors: vec![],
                 labels: vec![],
+                semantic_labels: vec![],
                 allocation_labels: vec![AllocationEventLabel {
                     predicate: EventKind::Drop,
                     allocation: "A".into(),
@@ -1236,6 +1275,51 @@ mod tests {
         let k_v1 = Kripke::from_annotated_icfg(input).unwrap();
         let err = ModelChecker::new(&k_v1).evaluate_document(&doc, &Env::new()).unwrap_err();
         assert!(err.contains("does not declare"), "unexpected error: {err}");
+    }
+
+
+    #[test]
+    fn structural_mir_labels_are_capability_gated_and_queryable() {
+        let input = AnnotatedIcfg {
+            schema_version: 2,
+            capabilities: vec!["mir_semantic_labels_v1".into(), "mir_semantics_v2".into()],
+            entry: "b0".into(),
+            variables: vec![ProgramVariable {
+                id: "Local(_0)".into(),
+                language: ProgramLanguage::Rust,
+                display: None,
+                function: None,
+            }],
+            allocations: vec![],
+            nodes: vec![AnnotatedNode {
+                id: "b0".into(),
+                successors: vec![],
+                labels: vec![],
+                semantic_labels: vec![
+                    "stmt:assign".into(),
+                    "rvalue:ptr_metadata".into(),
+                    "term:return".into(),
+                ],
+                allocation_labels: vec![],
+                identity: Some(Default::default()),
+                event_identity: Some(Default::default()),
+                allocation_post: None,
+                pre: Default::default(),
+                post: Default::default(),
+            }],
+        };
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        let mc = ModelChecker::new(&k);
+        for query in [
+            "requires mir_semantic_labels_v1; EF stmt_l(assign)",
+            "requires mir_semantic_labels_v1; EF rvalue_l(ptr_metadata)",
+            "requires mir_semantic_labels_v1; EF term_l(return)",
+        ] {
+            let doc = parse_query_document(query).unwrap();
+            assert_eq!(mc.evaluate_document(&doc, &Env::new()).unwrap(), Truth::True);
+        }
+        let missing = parse_query_document("EF term_l(return)").unwrap();
+        assert!(mc.evaluate_document(&missing, &Env::new()).is_err());
     }
 
 }

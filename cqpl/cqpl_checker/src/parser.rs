@@ -1,5 +1,5 @@
 use crate::ast::{
-    LabelPredicate, MayPredicate, PathFormula, PathQuantifier, QueryDocument, StateFormula,
+    LabelPredicate, MayPredicate, PathFormula, PathQuantifier, QueryDocument, StateFormula, StructuralLabelKind,
 };
 use std::collections::BTreeSet;
 
@@ -143,6 +143,40 @@ fn lex(input: &str) -> Result<Vec<Token>, String> {
         }
     }
     Ok(out)
+}
+
+
+fn structural_label_name_is_known(kind: StructuralLabelKind, name: &str) -> bool {
+    match kind {
+        StructuralLabelKind::Statement => matches!(name,
+            "assign" | "fake_read" | "set_discriminant" | "deinit" |
+            "storage_live" | "storage_dead" | "retag" | "place_mention" |
+            "ascribe_user_type" | "coverage" | "intrinsic" |
+            "const_eval_counter" | "nop" | "backward_incompatible_drop_hint" |
+            "other"
+        ),
+        StructuralLabelKind::Rvalue => matches!(name,
+            "use" | "const" | "checked_binary_op" | "ptr_metadata" |
+            "discriminant" | "len" | "nullary_op" | "copy_for_deref" |
+            "address_of" | "ref" | "cast" | "binary_op" | "unary_op" |
+            "repeat" | "thread_local_ref" | "shallow_init_box" | "aggregate" |
+            "other"
+        ),
+        StructuralLabelKind::Terminator => matches!(name,
+            "goto" | "switch_int" | "unwind_resume" | "unwind_terminate" |
+            "return" | "unreachable" | "drop" | "call" | "tail_call" |
+            "assert" | "yield" | "coroutine_drop" | "false_edge" |
+            "false_unwind" | "inline_asm" | "unhandled"
+        ),
+    }
+}
+
+fn structural_formula(kind: StructuralLabelKind, name: String) -> Result<StateFormula, String> {
+    let normalized = name.to_ascii_lowercase();
+    if !structural_label_name_is_known(kind, &normalized) {
+        return Err(format!("unknown structural MIR label '{name}' for {:?}", kind));
+    }
+    Ok(StateFormula::StructuralLabel { kind, name: normalized })
 }
 
 struct Parser {
@@ -321,6 +355,9 @@ impl Parser {
             "write_l" => Ok(StateFormula::Label { predicate: LabelPredicate::Write, logic_var }),
             "use_l" => Ok(StateFormula::Label { predicate: LabelPredicate::Use, logic_var }),
             "allocator_mismatch_l" | "dealloc_mismatch_l" => Ok(StateFormula::Label { predicate: LabelPredicate::AllocatorMismatch, logic_var }),
+            "stmt_l" => structural_formula(StructuralLabelKind::Statement, logic_var),
+            "rvalue_l" => structural_formula(StructuralLabelKind::Rvalue, logic_var),
+            "term_l" => structural_formula(StructuralLabelKind::Terminator, logic_var),
             _ => Err(format!("unknown CQPL predicate '{pred}'")),
         }
     }
@@ -375,6 +412,32 @@ mod tests {
     #[test]
     fn dealloc_mismatch_alias_remains_parse_compatible() {
         parse_query("exists_alloc a. EF dealloc_mismatch_l(a)").unwrap();
+    }
+
+    #[test]
+    fn parses_structural_mir_label_predicates_as_closed_formulas() {
+        let q = parse_query("EF (stmt_l(assign) && rvalue_l(ptr_metadata) && term_l(call))").unwrap();
+        assert!(q.free_vars().is_empty());
+    }
+
+    #[test]
+    fn rejects_unknown_structural_mir_label_names() {
+        assert!(parse_query("EF stmt_l(typo_statement)").is_err());
+        assert!(parse_query("EF term_l(typo_terminator)").is_err());
+    }
+
+    #[test]
+    fn parses_full_v6q_terminator_vocabulary_emitted_by_crema() {
+        for name in [
+            "goto", "switch_int", "unwind_resume", "unwind_terminate",
+            "return", "unreachable", "drop", "call", "tail_call",
+            "assert", "yield", "coroutine_drop", "false_edge",
+            "false_unwind", "inline_asm", "unhandled",
+        ] {
+            let q = parse_query(&format!("EF term_l({name})"))
+                .unwrap_or_else(|e| panic!("failed to parse term_l({name}): {e}"));
+            assert!(q.free_vars().is_empty(), "term_l({name}) must be closed");
+        }
     }
 
 }

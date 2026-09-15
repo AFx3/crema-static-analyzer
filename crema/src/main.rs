@@ -19,6 +19,9 @@ mod abstract_domain;
 mod cqpl_export;
 mod identity;
 mod memory_events;
+mod cargo_project;
+mod semantic_coverage;
+mod mir_semantics;
 
 use cargo_metadata::{MetadataCommand, Target};
 use icfg::MirExtractor;
@@ -37,6 +40,14 @@ use std::path::PathBuf;
 use crate::abstract_domain::set_entrypoint;
 use crate::cqpl_export::{export_cqpl_annotated_icfg, export_cqpl_annotated_icfg_with_identity};
 use crate::identity::fixed_point_identity_analysis;
+use crate::cargo_project::{
+    AnalysisMode, CargoBuildInvocation, CargoCliConfig, CargoTargetKind,
+    discover_analysis_plan, isolated_cargo_target_dir, normalize_local_def_path_request, run_selected_target_with_cargo,
+    wrapper_selected_source_matches,
+};
+use crate::semantic_coverage::{collect_root_coverage, SemanticCoverageBundle};
+use crate::mir_semantics::set_mir_semantics_v2_enabled;
+use serde_json::json;
 
 static GLOBAL_ICFG_JSON: &str = "global_icfg.json";
 static CQPL_ANNOTATED_ICFG_JSON: &str = "cqpl_annotated_icfg.json";
@@ -82,13 +93,21 @@ fn resolve_entrypoint(icfg: &GlobalICFGOrdered, requested: &str) -> Result<Strin
 }
 
 fn main() {
+    if env::var_os("CREMA_V6O_RUSTC_WRAPPER_MODE").is_some() {
+        exit(run_v6o_rustc_wrapper());
+    }
+
     // --- step 0: process cmd args ---
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         eprintln!(
             "Usage: cargo run -- /path/to/cargo/project [-f <entry>|--entry <entry>] \
 [--only-icfg-annotated] [--annotated-icfg-out <path>] \
-[--allocation-identity-out <path>] [--cqpl-schema-version <1|2>] [--cargo-target <name|package:name>]"
+[--allocation-identity-out <path>] [--cqpl-schema-version <1|2>] [--cargo-target <name|package:name>] \
+[--analysis-mode <application|library|workspace>] [-p|--package <name>] \
+[--cargo-kind <bin|lib|example|test|bench>] [--api-root <def-path>]... \
+[--features <a,b>] [--all-features] [--no-default-features] [--target-triple <triple>] \
+[--analysis-out-dir <dir>] [--cargo-plan-out <path>] [--semantic-coverage-out <path>] [--mir-semantics-v2]"
         );
         exit(1);
     }
@@ -103,6 +122,21 @@ fn main() {
     let mut allocation_identity_out: Option<PathBuf> = None;
     let mut cqpl_schema_version: u32 = 1;
     let mut cargo_target_override: Option<String> = None;
+    // v6O opt-in Cargo/crate generalization.  Leaving --analysis-mode absent
+    // preserves the frozen v6N execution path byte-for-byte at the CLI level.
+    let mut analysis_mode: Option<AnalysisMode> = None;
+    let mut package_override: Option<String> = None;
+    let mut cargo_kind: Option<CargoTargetKind> = None;
+    let mut api_roots: Vec<String> = Vec::new();
+    let mut features: Vec<String> = Vec::new();
+    let mut all_features = false;
+    let mut no_default_features = false;
+    let mut target_triple: Option<String> = None;
+    let mut analysis_out_dir: Option<PathBuf> = None;
+    let mut cargo_plan_out: Option<PathBuf> = None;
+    let mut semantic_coverage_out: Option<PathBuf> = None;
+    // v6P opt-in extension profile. The frozen v6O/v6N semantics remain the default.
+    let mut mir_semantics_v2 = false;
     let mut idx = 2;
     while idx < args.len() {
         match args[idx].as_str() {
@@ -157,11 +191,71 @@ fn main() {
                 cargo_target_override = Some(args[idx + 1].clone());
                 idx += 2;
             }
+            "--analysis-mode" => {
+                if idx + 1 >= args.len() { eprintln!("Missing value after --analysis-mode"); exit(1); }
+                analysis_mode = Some(AnalysisMode::parse(&args[idx + 1]).unwrap_or_else(|e| { eprintln!("{e}"); exit(1); }));
+                idx += 2;
+            }
+            "-p" | "--package" => {
+                if idx + 1 >= args.len() { eprintln!("Missing value after {}", args[idx]); exit(1); }
+                package_override = Some(args[idx + 1].clone());
+                idx += 2;
+            }
+            "--cargo-kind" => {
+                if idx + 1 >= args.len() { eprintln!("Missing value after --cargo-kind"); exit(1); }
+                cargo_kind = Some(CargoTargetKind::parse(&args[idx + 1]).unwrap_or_else(|e| { eprintln!("{e}"); exit(1); }));
+                idx += 2;
+            }
+            "--api-root" => {
+                if idx + 1 >= args.len() { eprintln!("Missing value after --api-root"); exit(1); }
+                api_roots.push(args[idx + 1].clone());
+                idx += 2;
+            }
+            "--features" => {
+                if idx + 1 >= args.len() { eprintln!("Missing value after --features"); exit(1); }
+                features.extend(args[idx + 1].split(',').map(str::trim).filter(|s| !s.is_empty()).map(ToOwned::to_owned));
+                idx += 2;
+            }
+            "--all-features" => { all_features = true; idx += 1; }
+            "--no-default-features" => { no_default_features = true; idx += 1; }
+            "--target-triple" => {
+                if idx + 1 >= args.len() { eprintln!("Missing value after --target-triple"); exit(1); }
+                target_triple = Some(args[idx + 1].clone());
+                idx += 2;
+            }
+            "--analysis-out-dir" => {
+                if idx + 1 >= args.len() { eprintln!("Missing value after --analysis-out-dir"); exit(1); }
+                analysis_out_dir = Some(PathBuf::from(&args[idx + 1]));
+                idx += 2;
+            }
+            "--cargo-plan-out" => {
+                if idx + 1 >= args.len() { eprintln!("Missing value after --cargo-plan-out"); exit(1); }
+                cargo_plan_out = Some(PathBuf::from(&args[idx + 1]));
+                idx += 2;
+            }
+            "--semantic-coverage-out" => {
+                if idx + 1 >= args.len() { eprintln!("Missing value after --semantic-coverage-out"); exit(1); }
+                semantic_coverage_out = Some(PathBuf::from(&args[idx + 1]));
+                idx += 2;
+            }
+            "--mir-semantics-v2" => {
+                mir_semantics_v2 = true;
+                idx += 1;
+            }
             other => {
                 eprintln!("Unknown flag: {}", other);
                 exit(1);
             }
         }
+    }
+
+    set_mir_semantics_v2_enabled(mir_semantics_v2);
+    if mir_semantics_v2 && cqpl_schema_version != 2 {
+        eprintln!("--mir-semantics-v2 requires --cqpl-schema-version 2 so structural MIR labels are capability-gated");
+        exit(1);
+    }
+    if mir_semantics_v2 {
+        println!("mir_semantics_profile=v2-extension-over-v6O");
     }
 
     let cargo_toml_path = project_path.join("Cargo.toml");
@@ -170,6 +264,36 @@ fn main() {
         exit(1);
     }
     println!("Analyzing Cargo project at: {}", project_path.display());
+
+    if analysis_mode.is_some() {
+        let cfg = CargoCliConfig {
+            mode: analysis_mode,
+            package: package_override,
+            target_name: cargo_target_override,
+            target_kind: cargo_kind,
+            entry: entry_override,
+            api_roots,
+            features,
+            all_features,
+            no_default_features,
+            target_triple,
+        };
+        if let Err(err) = run_v6o_pipeline(
+            &project_path,
+            &cfg,
+            only_icfg_annotated,
+            &annotated_icfg_out,
+            allocation_identity_out.as_ref(),
+            cqpl_schema_version,
+            analysis_out_dir.as_ref(),
+            cargo_plan_out.as_ref(),
+            semantic_coverage_out.as_ref(),
+        ) {
+            eprintln!("CREMA v6O analysis failed: {err}");
+            exit(1);
+        }
+        return;
+    }
 
     // --- step 0.1: run FFI xxtraction ---
     let tool_dir = env::current_dir().expect("Failed to get tool directory");
@@ -329,6 +453,362 @@ continuing legacy detection unchanged: {}",
     println!("Final Abstract State: {:#?}", abstract_state);
     println!("Final Taint State: {:#?}", taint_state);
     detect_mem_issues(&global_icfg, &taint_state, &abstract_state);
+}
+
+
+fn root_slug(root: &str) -> String {
+    let mut out: String = root
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    while out.contains("__") { out = out.replace("__", "_"); }
+    out.trim_matches('_').to_string()
+}
+
+fn run_v6o_rustc_wrapper() -> i32 {
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        eprintln!("CREMA v6O rustc wrapper: missing real rustc argv[1]");
+        return 2;
+    }
+    let real_rustc = &args[1];
+    let rustc_tail = &args[2..];
+    let selected_src = match env::var("CREMA_V6O_SELECTED_SRC") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => {
+            eprintln!("CREMA v6O rustc wrapper: missing CREMA_V6O_SELECTED_SRC");
+            return 2;
+        }
+    };
+
+    if !wrapper_selected_source_matches(rustc_tail, &selected_src) {
+        return match Command::new(real_rustc).args(rustc_tail).status() {
+            Ok(status) => status.code().unwrap_or(1),
+            Err(err) => {
+                eprintln!("CREMA v6O wrapper failed to forward rustc: {err}");
+                2
+            }
+        };
+    }
+
+    let svf_output = env::var("CREMA_V6O_SVF_OUTPUT_DIR").unwrap_or_default();
+    let ffi_path = env::var("CREMA_V6O_FFI_FUNCTIONS_PATH").unwrap_or_else(|_| "ffi_functions.json".to_string());
+    let icfg_path = env::var("CREMA_V6O_ICFG_OUTPUT_PATH").unwrap_or_else(|_| "global_icfg.json".to_string());
+    let entry_hint = env::var("CREMA_V6O_ENTRY_HINT").unwrap_or_else(|_| "main".to_string());
+
+    let mut compiler_args = Vec::with_capacity(args.len() - 1);
+    compiler_args.push(real_rustc.clone());
+    compiler_args.extend(rustc_tail.iter().cloned());
+    let mut callbacks = MirExtractor::new_with_operational_paths(
+        svf_output,
+        entry_hint,
+        ffi_path,
+        icfg_path,
+        true,
+    );
+    if let Err(err) = RunCompiler::new(&compiler_args, &mut callbacks).run() {
+        eprintln!("CREMA v6O selected-target rustc analysis failed: {err:?}");
+        return 2;
+    }
+    if let Some(boundary) = callbacks.instance_dispatch_boundary.as_deref() {
+        eprintln!("{boundary}");
+        return 3;
+    }
+    0
+}
+
+fn run_v6o_pipeline(
+    project_path: &PathBuf,
+    cfg: &CargoCliConfig,
+    only_icfg_annotated: bool,
+    annotated_icfg_out: &PathBuf,
+    allocation_identity_out: Option<&PathBuf>,
+    cqpl_schema_version: u32,
+    analysis_out_dir: Option<&PathBuf>,
+    cargo_plan_out: Option<&PathBuf>,
+    semantic_coverage_out: Option<&PathBuf>,
+) -> Result<(), String> {
+    let plan = discover_analysis_plan(project_path, cfg)?;
+    if plan.analysis_roots.len() > 1 && analysis_out_dir.is_none() {
+        return Err("multiple library --api-root values require --analysis-out-dir so each root has a distinct artifact".to_string());
+    }
+    println!(
+        "CREMA v6O Cargo plan: mode={:?} package={} {} target={:?}:{} roots={}",
+        plan.analysis_mode,
+        plan.package_name,
+        plan.package_version,
+        plan.selected_target.kind,
+        plan.selected_target.name,
+        plan.analysis_roots.join(",")
+    );
+    println!("cargo_metadata_format_version=1");
+    println!("resolved_features={}", plan.resolved_package_features.join(","));
+    println!("resolved_features_source={}", plan.resolved_package_features_source);
+    if let Some(triple) = plan.target_triple.as_deref() {
+        println!("target_triple={triple}");
+    }
+
+    let tool_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let plan_path = cargo_plan_out.cloned().unwrap_or_else(|| tool_dir.join("cargo_analysis_plan.json"));
+    plan.write_json(&plan_path)?;
+    println!("Cargo analysis plan saved to {}", plan_path.display());
+
+    let package_root = PathBuf::from(&plan.package_root);
+    let ffi_functions_path = tool_dir.join("ffi_functions.json");
+    if ffi_functions_path.exists() {
+        fs::remove_file(&ffi_functions_path)
+            .map_err(|e| format!("failed to remove stale {}: {e}", ffi_functions_path.display()))?;
+    }
+
+    // v6O-r1a runtime fix: do not run the historical standalone
+    // ffi_extraction pre-pass here. That tool reconstructs rustc from
+    // target/debug and assumes a root bin, which is incompatible with the
+    // Cargo-target-generalization boundary (lib/example/test/workspace,
+    // feature selection, and --target). In v6O wrapper mode MirExtractor
+    // writes ffi_functions.json directly from the exact selected crate HIR.
+    // The legacy non-v6O path above remains byte-for-byte on its historical
+    // extractor behavior.
+    let svf_output_dir = prepare_svf_output_dir(&package_root);
+    let c_files = find_c_files(&package_root);
+    if cqpl_schema_version == 2 && c_files.len() > 1 {
+        return Err(format!(
+            "schema-v2 fail-closed: selected package {} contains {} authored C translation units; current SVF boundary supports one. Files: {}",
+            plan.package_name,
+            c_files.len(),
+            c_files.join(", ")
+        ));
+    }
+    if !c_files.is_empty() {
+        let _ = compile_c_files(&c_files, &package_root, &svf_output_dir);
+    } else {
+        println!("No authored C files found in selected package {}", plan.package_name);
+    }
+
+    let exe = env::current_exe().map_err(|e| format!("failed to locate running CREMA executable: {e}"))?;
+    let operational_dir = tool_dir
+        .join("target")
+        .join("crema-v6o-operational")
+        .join(format!("{}", std::process::id()));
+    fs::create_dir_all(&operational_dir)
+        .map_err(|e| format!("failed to create {}: {e}", operational_dir.display()))?;
+
+    let mut coverage_roots = Vec::new();
+    let mut artifact_records = Vec::new();
+    let project_manifest = project_path.join("Cargo.toml");
+
+    for requested_root in &plan.analysis_roots {
+        let normalized_root = normalize_local_def_path_request(
+            requested_root,
+            &plan.selected_target.name,
+        );
+        if normalized_root.is_empty() {
+            return Err(format!(
+                "invalid v6O root '{requested_root}': crate namespace alone does not denote a function"
+            ));
+        }
+        println!(
+            "V6O_LOCAL_ROOT_NAMESPACE: requested={} normalized={} crate={}",
+            requested_root, normalized_root, plan.selected_target.name
+        );
+        let slug = root_slug(requested_root);
+        let icfg_path = operational_dir.join(format!("global_icfg--{slug}.json"));
+        let cargo_target_dir = isolated_cargo_target_dir(&tool_dir, requested_root);
+        run_selected_target_with_cargo(
+            &plan,
+            cfg,
+            CargoBuildInvocation {
+                project_manifest: &project_manifest,
+                tool_executable: &exe,
+                tool_dir: &tool_dir,
+                svf_output_dir: &svf_output_dir,
+                ffi_functions_path: &ffi_functions_path,
+                icfg_output_path: &icfg_path,
+                semantic_root: &normalized_root,
+                cargo_target_dir: &cargo_target_dir,
+            },
+        )?;
+
+        // Preserve compatibility with existing DOT tooling while reading the
+        // root-specific ICFG from its collision-free operational path.
+        let staged_icfg = tool_dir.join(GLOBAL_ICFG_JSON);
+        fs::copy(&icfg_path, &staged_icfg)
+            .map_err(|e| format!("failed to stage global ICFG for DOT export: {e}"))?;
+        dump_dot_from_global_icfg(staged_icfg.to_string_lossy().as_ref());
+        let json_str = fs::read_to_string(&icfg_path)
+            .map_err(|e| format!("failed to read {}: {e}", icfg_path.display()))?;
+        let global_icfg: GlobalICFGOrdered = serde_json::from_str(&json_str)
+            .map_err(|e| format!("failed to deserialize {}: {e}", icfg_path.display()))?;
+        let selected_entry = resolve_entrypoint(&global_icfg, &normalized_root)
+            .map_err(|e| format!(
+                "invalid v6O root '{requested_root}' (normalized local DefPath '{normalized_root}'): {e}"
+            ))?;
+        println!("entrypoint: {}", selected_entry);
+        set_entrypoint(selected_entry.clone());
+
+        let (abstract_state, taint_state) = fixed_point_analysis(&global_icfg);
+        let allocation_identity_state = fixed_point_identity_analysis(&global_icfg, &selected_entry);
+
+        let (annotated_path, identity_path) = if plan.analysis_roots.len() == 1 {
+            (
+                annotated_icfg_out.clone(),
+                allocation_identity_out
+                    .cloned()
+                    .unwrap_or_else(|| tool_dir.join("allocation_identity.json")),
+            )
+        } else {
+            let out_dir = analysis_out_dir.expect("checked above");
+            fs::create_dir_all(out_dir)
+                .map_err(|e| format!("failed to create {}: {e}", out_dir.display()))?;
+            (
+                out_dir.join(format!("annotated_icfg_v{cqpl_schema_version}--{slug}.json")),
+                out_dir.join(format!("allocation_identity--{slug}.json")),
+            )
+        };
+
+        let identity_json = serde_json::to_string_pretty(&allocation_identity_state.to_dump())
+            .map_err(|e| format!("failed to serialize allocation identity: {e}"))?;
+        fs::write(&identity_path, identity_json)
+            .map_err(|e| format!("failed to write {}: {e}", identity_path.display()))?;
+
+        // v6O-r1e: collect telemetry before CQPL export.  A schema-v2
+        // fail-closed rejection is itself coverage evidence and must not censor
+        // the real-crate sample.  This does not relax CQPL: export failure is
+        // still returned to the caller as a non-zero analysis result.
+        coverage_roots.push(collect_root_coverage(
+            &global_icfg,
+            requested_root,
+            &selected_entry,
+        ));
+
+        let export_result = if cqpl_schema_version == 1 {
+            export_cqpl_annotated_icfg(
+                &global_icfg,
+                &abstract_state,
+                &selected_entry,
+                &annotated_path,
+            )
+        } else {
+            export_cqpl_annotated_icfg_with_identity(
+                &global_icfg,
+                &abstract_state,
+                &allocation_identity_state,
+                &selected_entry,
+                cqpl_schema_version,
+                &annotated_path,
+            )
+        };
+
+        match export_result {
+            Ok(()) => {
+                println!("CQPL annotated ICFG saved to {}", annotated_path.display());
+                artifact_records.push(json!({
+                    "requested_root": requested_root,
+                    "normalized_local_def_path": normalized_root,
+                    "root_resolution": "local_def_path_namespace_v1",
+                    "selected_entry": selected_entry,
+                    "icfg": icfg_path,
+                    "annotated_icfg": annotated_path,
+                    "allocation_identity": identity_path,
+                    "cargo_target_dir": cargo_target_dir,
+                    "cqpl_export_status": "pass",
+                    "cqpl_export_error": serde_json::Value::Null,
+                }));
+            }
+            Err(err) => {
+                let failure = format!("failed CQPL export for root {requested_root}: {err}");
+                artifact_records.push(json!({
+                    "requested_root": requested_root,
+                    "normalized_local_def_path": normalized_root,
+                    "root_resolution": "local_def_path_namespace_v1",
+                    "selected_entry": selected_entry,
+                    "icfg": icfg_path,
+                    "annotated_icfg": serde_json::Value::Null,
+                    "allocation_identity": identity_path,
+                    "cargo_target_dir": cargo_target_dir,
+                    "cqpl_export_status": "failed",
+                    "cqpl_export_error": failure,
+                }));
+                write_v6o_telemetry_outputs(
+                    &plan,
+                    &plan_path,
+                    &coverage_roots,
+                    &artifact_records,
+                    analysis_out_dir,
+                    semantic_coverage_out,
+                    &tool_dir,
+                    "incomplete_cqpl_export",
+                )?;
+                return Err(failure);
+            }
+        }
+
+        if !only_icfg_annotated {
+            println!("=== CREMA v6O detector root: {requested_root} ===");
+            detect_mem_issues(&global_icfg, &taint_state, &abstract_state);
+        }
+    }
+
+    write_v6o_telemetry_outputs(
+        &plan,
+        &plan_path,
+        &coverage_roots,
+        &artifact_records,
+        analysis_out_dir,
+        semantic_coverage_out,
+        &tool_dir,
+        "complete",
+    )?;
+    Ok(())
+}
+
+fn write_v6o_telemetry_outputs(
+    plan: &crate::cargo_project::CargoAnalysisPlan,
+    plan_path: &PathBuf,
+    coverage_roots: &[crate::semantic_coverage::RootCoverageReport],
+    artifact_records: &[serde_json::Value],
+    analysis_out_dir: Option<&PathBuf>,
+    semantic_coverage_out: Option<&PathBuf>,
+    tool_dir: &Path,
+    analysis_status: &str,
+) -> Result<(), String> {
+    let coverage = SemanticCoverageBundle::new(plan, coverage_roots.to_vec());
+    let coverage_path = semantic_coverage_out
+        .cloned()
+        .or_else(|| analysis_out_dir.map(|d| d.join("semantic_coverage.json")))
+        .unwrap_or_else(|| tool_dir.join("semantic_coverage.json"));
+    coverage.write_json(&coverage_path)?;
+    println!("Semantic coverage saved to {}", coverage_path.display());
+
+    let manifest_path = analysis_out_dir
+        .map(|d| d.join("analysis_manifest.json"))
+        .unwrap_or_else(|| tool_dir.join("analysis_manifest.json"));
+    if let Some(parent) = manifest_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to create {}: {e}", parent.display()))?;
+    }
+    let cqpl_complete = artifact_records
+        .iter()
+        .filter(|a| a.get("cqpl_export_status").and_then(|v| v.as_str()) == Some("pass"))
+        .count();
+    let cqpl_incomplete = artifact_records.len().saturating_sub(cqpl_complete);
+    fs::write(
+        &manifest_path,
+        serde_json::to_string_pretty(&json!({
+            "schema_version": 2,
+            "feature": "cargo_crate_generalization_v1",
+            "telemetry": "semantic_coverage_v2",
+            "analysis_status": analysis_status,
+            "cargo_plan": plan_path,
+            "semantic_coverage": coverage_path,
+            "cqpl_export_complete_roots": cqpl_complete,
+            "cqpl_export_incomplete_roots": cqpl_incomplete,
+            "artifacts": artifact_records,
+        }))
+        .map_err(|e| format!("failed to serialize analysis manifest: {e}"))?,
+    )
+    .map_err(|e| format!("failed to write {}: {e}", manifest_path.display()))?;
+    println!("CREMA v6O analysis manifest saved to {}", manifest_path.display());
+    Ok(())
 }
 
 // Resolve exactly one supported workspace target.  Historically CREMA iterated

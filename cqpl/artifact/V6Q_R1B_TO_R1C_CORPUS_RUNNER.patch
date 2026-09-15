@@ -1,0 +1,39 @@
+--- /mnt/data/cqpl7_orig/cqpl/scripts/run_corpus_allocator_contracts.py	2026-09-14 09:13:50.000000000 +0000
++++ /mnt/data/cqpl_v6q_r1c_final112_candidate/cqpl/scripts/run_corpus_allocator_contracts.py	2026-09-15 04:59:42.274444275 +0000
+@@ -1,5 +1,5 @@
+ #!/usr/bin/env python3
+-"""CREMA/CQPL v6N allocator-contract corpus runner.
++"""CREMA/CQPL v6Q-r1c MIR-v2 allocator-contract corpus runner.
+
+ Runs the frozen 109-target schema-v2 corpus in either v1-baseline or v2-candidate
+ contract mode and records both CQPL truth values and per-(node,allocation) drop
+@@ -229,7 +229,7 @@
+     out = args.out.resolve()
+     tests = (root / "tests_and_target_repos").resolve()
+     crema = (root / "crema").resolve()
+-    cqpl = (root / "cqpl").resolve()
++    cqpl = Path(os.environ.get("CREMA_CQPL_DIR", str(root / "cqpl"))).resolve()
+     checker_manifest = cqpl / "cqpl_checker" / "Cargo.toml"
+     checker_bin = cqpl / "cqpl_checker" / "target" / "debug" / "cqpl_checker"
+     query_dir = cqpl / ("queries" if args.schema_version == 1 else "queries_v2")
+@@ -406,7 +406,10 @@
+             "--annotated-icfg-out", str(annotated),
+         ]
+         if args.schema_version == 2:
+-            cmd += ["--allocation-identity-out", str(identity)]
++            cmd += [
++                "--allocation-identity-out", str(identity),
++                "--mir-semantics-v2",
++            ]
+
+         rc, timed = timeout_run(cmd, cwd=crema, log=tdir / "crema-export.log", timeout=args.export_timeout)
+         sentinel.unlink(missing_ok=True)
+@@ -510,7 +513,7 @@
+
+     complete = sum(1 for x in results.values() if x.get("status") == "complete")
+     aggregate = {
+-        "protocol": f"CREMA-CQPL-v6N-contract-corpus-schema-v{args.schema_version}-{args.contract_capability}",
++        "protocol": f"CREMA-CQPL-v6Q-r1c-mirv2-contract-corpus-schema-v{args.schema_version}-{args.contract_capability}",
+         "schema_version": args.schema_version,
+         "contract_capability": args.contract_capability,
+         "discovered_targets": len(discovered),

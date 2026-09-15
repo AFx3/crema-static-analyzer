@@ -1,0 +1,35 @@
+--- /mnt/data/cqpl7_orig/cqpl/cqpl_checker/src/parser.rs	2026-09-14 16:36:27.000000000 +0000
++++ /mnt/data/cqpl_v6q_r1c_final112_candidate/cqpl/cqpl_checker/src/parser.rs	2026-09-15 04:55:33.434670523 +0000
+@@ -163,9 +163,10 @@
+             "other"
+         ),
+         StructuralLabelKind::Terminator => matches!(name,
+-            "goto" | "switch_int" | "unwind_resume" | "return" |
+-            "unreachable" | "drop" | "call" | "assert" | "inline_asm" |
+-            "unhandled"
++            "goto" | "switch_int" | "unwind_resume" | "unwind_terminate" |
++            "return" | "unreachable" | "drop" | "call" | "tail_call" |
++            "assert" | "yield" | "coroutine_drop" | "false_edge" |
++            "false_unwind" | "inline_asm" | "unhandled"
+         ),
+     }
+ }
+@@ -425,4 +426,18 @@
+         assert!(parse_query("EF term_l(typo_terminator)").is_err());
+     }
+
++    #[test]
++    fn parses_full_v6q_terminator_vocabulary_emitted_by_crema() {
++        for name in [
++            "goto", "switch_int", "unwind_resume", "unwind_terminate",
++            "return", "unreachable", "drop", "call", "tail_call",
++            "assert", "yield", "coroutine_drop", "false_edge",
++            "false_unwind", "inline_asm", "unhandled",
++        ] {
++            let q = parse_query(&format!("EF term_l({name})"))
++                .unwrap_or_else(|e| panic!("failed to parse term_l({name}): {e}"));
++            assert!(q.free_vars().is_empty(), "term_l({name}) must be closed");
++        }
++    }
++
+ }

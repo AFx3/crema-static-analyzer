@@ -1,0 +1,48 @@
+{
+  "crates": [
+    {
+      "analysis_mode": "library",
+      "api_root": "unicode_ident::is_xid_start",
+      "cargo_kind": "lib",
+      "expected_cqpl_export": "pass",
+      "expected_normalized_root": "is_xid_start",
+      "features": [],
+      "name": "unicode-ident",
+      "no_default_features": false,
+      "rationale": "small pure-Rust library; crate-qualified top-level defining function; baseline Cargo-library compatibility",
+      "root_resolution": "local_def_path_namespace_v1",
+      "version": "1.0.18"
+    },
+    {
+      "analysis_mode": "library",
+      "api_root": "ryu::pretty::format32",
+      "cargo_kind": "lib",
+      "expected_cqpl_export": "pass",
+      "expected_normalized_root": "pretty::format32",
+      "features": [
+        "small"
+      ],
+      "name": "ryu",
+      "no_default_features": false,
+      "rationale": "no_std/unsafe implementation; crate-qualified local defining DefPath with exact published feature-selection exercise",
+      "root_resolution": "local_def_path_namespace_v1",
+      "version": "1.0.20"
+    },
+    {
+      "analysis_mode": "library",
+      "api_root": "memchr::memchr::memchr",
+      "cargo_kind": "lib",
+      "expected_cqpl_export": "pass",
+      "expected_normalized_root": "memchr::memchr",
+      "features": [],
+      "name": "memchr",
+      "no_default_features": true,
+      "rationale": "optimized target-dependent pure-Rust library; no-default-features; exercises producer-certified Option::map/Option::map_or higher-order evidence under the pinned host target",
+      "root_resolution": "local_def_path_namespace_v1",
+      "version": "2.7.4"
+    }
+  ],
+  "registry": "crates.io",
+  "schema_version": 2,
+  "selection_policy": "exact-version, explicit library target and crate-qualified API root; no silent lib/bin fallback; target-selection ambiguity is a hard error; telemetry retained"
+}

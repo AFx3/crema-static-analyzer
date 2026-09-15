@@ -1,14 +1,28 @@
-# Running CQPL on CREMA's target corpus
+# Regression e protocolli storici CQPL
 
-From the repository root:
+Per la release v6Q-r1c il protocollo normativo corrente è:
 
 ```bash
-python3 cqpl/regression/scripts/run_target_repo_cqpl.py \
-  --root /home/af/Documenti/a-phd \
-  --scope phase5-focus16
+CREMA_PHD_ROOT=/home/af/Documenti/a-phd \
+CREMA_RUST_TOOLCHAIN=nightly-2024-11-21 \
+./cqpl/run_all.sh
 ```
 
-Run the historical frozen protocol:
+Questo esegue corpus frozen 109 + tre crate registry + 12 query su 112 soggetti.
+
+## Analisi singolo target corrente
+
+```bash
+python3 cqpl/scripts/run_one_target_v6q_r1c.py \
+  --root /home/af/Documenti/a-phd \
+  --relative-path 'a-code_c_to_rust_alloc/c_malloc_rust_free_then_use_uaf'
+```
+
+## Harness regression storico
+
+`regression/scripts/run_target_repo_cqpl.py` è mantenuto per riprodurre scope storici (`frozen92`, `phase5-focus16`, `all`) e per review/oracle engineering. Non è il protocollo final112 normativo.
+
+Esempio:
 
 ```bash
 python3 cqpl/regression/scripts/run_target_repo_cqpl.py \
@@ -16,15 +30,7 @@ python3 cqpl/regression/scripts/run_target_repo_cqpl.py \
   --scope frozen92
 ```
 
-Run every currently discovered target, including slow targets and later additions:
-
-```bash
-python3 cqpl/regression/scripts/run_target_repo_cqpl.py \
-  --root /home/af/Documenti/a-phd \
-  --scope all
-```
-
-Debug one target without changing the suite:
+Debug storico di un target:
 
 ```bash
 python3 cqpl/regression/scripts/run_target_repo_cqpl.py \
@@ -33,49 +39,10 @@ python3 cqpl/regression/scripts/run_target_repo_cqpl.py \
   --only c_malloc_rust_free_then_use_uaf
 ```
 
-Outputs are written under `repro-results/cqpl-<scope>-<timestamp>/` and include
-per-target K# files, CREMA logs, per-query JSON, aggregate results, status TSV,
-environment data, an explicitly unreviewed candidate oracle, and SHA-256 hashes.
+## Documenti
 
-Inspect the selected corpus without running analysis:
+- `SEMANTIC_SCOPE.md`: cosa significano le property correnti;
+- `TEST_STRATEGY.md`: livelli di verifica final112;
+- `PERFORMANCE_NOTES.md`: note storiche di performance.
 
-```bash
-python3 cqpl/regression/scripts/run_target_repo_cqpl.py \
-  --root /home/af/Documenti/a-phd \
-  --scope all \
-  --list-targets
-```
-
-Validate the Python harness itself:
-
-```bash
-python3 cqpl/regression/scripts/test_regression_harness.py -v
-```
-
-After installing this suite, rerun the Rust semantic tests:
-
-```bash
-cd cqpl/cqpl_checker
-cargo +nightly-2024-11-21 test -- --nocapture
-```
-
-
-## Semantic scope and timeouts
-
-See [`SEMANTIC_SCOPE.md`](SEMANTIC_SCOPE.md) for the deliberate distinction
-between Leak/DF/UAF and the currently unmodeled legacy `UB_FFI` class, and for
-why the runner does not report a `NO_ERRORS` CQPL verdict.
-
-See [`PERFORMANCE_NOTES.md`](PERFORMANCE_NOTES.md) for the `square` performance
-investigation.
-
-Each CQPL query has a wall-clock timeout of 120 seconds by default:
-
-```bash
-python3 cqpl/regression/scripts/run_target_repo_cqpl.py \
-  --root /home/af/Documenti/a-phd \
-  --scope frozen92 \
-  --query-timeout-seconds 120
-```
-
-Use a non-positive value only when deliberately disabling the guard.
+Gli oracle legacy sono riferimento differenziale, non ground truth automatica.

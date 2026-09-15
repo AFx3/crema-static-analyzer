@@ -1,0 +1,128 @@
+{
+  "baseline_uploaded_cqpl_sha256": "b775958a9906d3575f16faaf4776fcdc0f26052e293e7966de40e42e9be3f49a",
+  "semantic_baseline": "CREMA-CQPL-v6Q-r1b",
+  "candidate": "CREMA-CQPL-v6Q-r1c",
+  "checker_source_delta": [
+    {
+      "file": "ast.rs",
+      "changed": false,
+      "pre_sha256": "69dc01963264806dd73902c24442cda81acf993ef7a6ff2d3a1a9009866ab95c",
+      "post_sha256": "69dc01963264806dd73902c24442cda81acf993ef7a6ff2d3a1a9009866ab95c"
+    },
+    {
+      "file": "kripke.rs",
+      "changed": false,
+      "pre_sha256": "0d7c86474ecd49b624707acfff4ac67da427a3e402fa00fceb5d04dd843d6130",
+      "post_sha256": "0d7c86474ecd49b624707acfff4ac67da427a3e402fa00fceb5d04dd843d6130"
+    },
+    {
+      "file": "lib.rs",
+      "changed": false,
+      "pre_sha256": "febda9b0dee30e62e68285b395c16af45b28e3d20640eacf1c309d1c0e3a9481",
+      "post_sha256": "febda9b0dee30e62e68285b395c16af45b28e3d20640eacf1c309d1c0e3a9481"
+    },
+    {
+      "file": "main.rs",
+      "changed": false,
+      "pre_sha256": "a7fbacde28886c1ee9bce4072e880a37e5b309fd38c415335fa08053f6e07585",
+      "post_sha256": "a7fbacde28886c1ee9bce4072e880a37e5b309fd38c415335fa08053f6e07585"
+    },
+    {
+      "file": "model_checker.rs",
+      "changed": false,
+      "pre_sha256": "8a8139a684f6b4517b42f9e40f04fdb4ac2e5383903138b1af0071e1b72d9be3",
+      "post_sha256": "8a8139a684f6b4517b42f9e40f04fdb4ac2e5383903138b1af0071e1b72d9be3"
+    },
+    {
+      "file": "parser.rs",
+      "changed": true,
+      "pre_sha256": "63602ae49c6d75e9b302aea7f0446fd415967b6dc0b04e3c18f4f37bd5667edf",
+      "post_sha256": "eae300bb543292f5a92f98b67f91da82debaa69fbeec6741ce05aaa32d838847"
+    },
+    {
+      "file": "truth.rs",
+      "changed": false,
+      "pre_sha256": "f8cf730cf0edae997acc300e5cd918a78e848ec3aace1a20f3462267dcda23d2",
+      "post_sha256": "f8cf730cf0edae997acc300e5cd918a78e848ec3aace1a20f3462267dcda23d2"
+    }
+  ],
+  "checker_semantic_delta": "closed term_l vocabulary only; truth/model-checker/AST/Kripke logic byte-identical",
+  "queries_v2": [
+    {
+      "file": "allocator_mismatch_ub.cqpl",
+      "candidate_sha256": "8267af66ddfd3268b5042a71c5cb4869c7ba4d954bb0da0b7bae11322426d1bd",
+      "frozen_sha256": "8267af66ddfd3268b5042a71c5cb4869c7ba4d954bb0da0b7bae11322426d1bd",
+      "byte_identical_to_final_run": true
+    },
+    {
+      "file": "allocator_mismatch_ub_v2.cqpl",
+      "candidate_sha256": "f7cd73debdbeba84a944f1e2926c529e3a811ec897878d7b792a63fa69f5621a",
+      "frozen_sha256": "f7cd73debdbeba84a944f1e2926c529e3a811ec897878d7b792a63fa69f5621a",
+      "byte_identical_to_final_run": true
+    },
+    {
+      "file": "double_free_alloc.cqpl",
+      "candidate_sha256": "2836e2bfb638bfdb13fa77764ca0d5f0367102e14e5815eb26324c8d8a9a7833",
+      "frozen_sha256": "2836e2bfb638bfdb13fa77764ca0d5f0367102e14e5815eb26324c8d8a9a7833",
+      "byte_identical_to_final_run": true
+    },
+    {
+      "file": "double_free_alloc_state.cqpl",
+      "candidate_sha256": "bf2aa3b95ca2f92eeef515afc531d7c38d5a43789070273975ad0bf85e1c3aba",
+      "frozen_sha256": "bf2aa3b95ca2f92eeef515afc531d7c38d5a43789070273975ad0bf85e1c3aba",
+      "byte_identical_to_final_run": true
+    },
+    {
+      "file": "leak_alloc.cqpl",
+      "candidate_sha256": "a72c8d58e25539b8481d792f28f26acb93700c14ba31477be25eca9655474a3c",
+      "frozen_sha256": "a72c8d58e25539b8481d792f28f26acb93700c14ba31477be25eca9655474a3c",
+      "byte_identical_to_final_run": true
+    },
+    {
+      "file": "leak_alloc_state.cqpl",
+      "candidate_sha256": "e1ef5c74adf8ec5944e5595330ea0de27b3b6fa56f0df76a96f297d9314f3c74",
+      "frozen_sha256": "e1ef5c74adf8ec5944e5595330ea0de27b3b6fa56f0df76a96f297d9314f3c74",
+      "byte_identical_to_final_run": true
+    },
+    {
+      "file": "mir_rvalue_presence.cqpl",
+      "candidate_sha256": "fab9fde19ebf7bcec466ae8202b2f80f1c27465cb555b70b781f0e9976215018",
+      "frozen_sha256": "fab9fde19ebf7bcec466ae8202b2f80f1c27465cb555b70b781f0e9976215018",
+      "byte_identical_to_final_run": true
+    },
+    {
+      "file": "mir_statement_presence.cqpl",
+      "candidate_sha256": "8e741b721370fc3d78d26b39d2752a6f924531018a4a78b4d54b42676a61d91b",
+      "frozen_sha256": "8e741b721370fc3d78d26b39d2752a6f924531018a4a78b4d54b42676a61d91b",
+      "byte_identical_to_final_run": true
+    },
+    {
+      "file": "mir_structural_allocator_example.cqpl",
+      "candidate_sha256": "65ffafbdcb6f9040872f745ee6e69c9de1b6eab308457d06c48b02bc547fa570",
+      "frozen_sha256": "65ffafbdcb6f9040872f745ee6e69c9de1b6eab308457d06c48b02bc547fa570",
+      "byte_identical_to_final_run": true
+    },
+    {
+      "file": "mir_terminator_presence.cqpl",
+      "candidate_sha256": "e141a2ba9056cf9d4e71c47c04810626c9b6f1075ea7649e19d9a19cc984bf37",
+      "frozen_sha256": "e141a2ba9056cf9d4e71c47c04810626c9b6f1075ea7649e19d9a19cc984bf37",
+      "byte_identical_to_final_run": true
+    },
+    {
+      "file": "use_after_free_alloc.cqpl",
+      "candidate_sha256": "202b3e39728564fa135022b3cb860b394dc05999f87c5cf37cacc2605f977eef",
+      "frozen_sha256": "202b3e39728564fa135022b3cb860b394dc05999f87c5cf37cacc2605f977eef",
+      "byte_identical_to_final_run": true
+    },
+    {
+      "file": "use_after_free_alloc_state.cqpl",
+      "candidate_sha256": "c0ec0edc20f149bdb9b26a34a24ffba12485e61d27fd9d5debf14c367d41c1c8",
+      "frozen_sha256": "c0ec0edc20f149bdb9b26a34a24ffba12485e61d27fd9d5debf14c367d41c1c8",
+      "byte_identical_to_final_run": true
+    }
+  ],
+  "all_12_queries_byte_identical_to_final_run": true,
+  "harness_delta": "canonical schema-v2 corpus export now passes --mir-semantics-v2; runner supports CREMA_CQPL_DIR; run_all expands to 109 corpus + 3 pinned registry + 12x112 matrix and scientific gates",
+  "documentation_delta": "README/LANGUAGE/ANNOTATED_ICFG/capability/integration docs aligned to final112 evidence and limitations",
+  "manifest_delta": "stale uploaded manifest replaced with exhaustive current-tree SHA-256 manifest"
+}

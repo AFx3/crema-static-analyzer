@@ -1,6 +1,6 @@
 use rustc_driver::Callbacks;
 use rustc_interface::Queries;
-use rustc_middle::mir::{Place, PlaceElem, Statement, StatementKind, Terminator, TerminatorKind, Operand};
+use rustc_middle::mir::{Place, PlaceElem, Statement, StatementKind, Terminator, TerminatorKind, Operand, NonDivergingIntrinsic};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::{Write, Read};
@@ -10,13 +10,201 @@ use rustc_middle::mir::{Local, LocalDecl, Mutability};
 use rustc_index::IndexVec;
 use std::fs::read_dir;
 use rustc_hir::def::DefKind;
+use rustc_hir::{ForeignItemKind, ItemKind};
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::{self, TyCtxt, TyKind};
+use rustc_span::symbol::sym;
 
 use crate::structs::{MirStatement, MirTerminator, MirBasicBlock, MirRepresentation, SourceInfoData,
     LlvmRepresentation, LlvmFunction, LlvmJson, LlvmJsonNode, SvfStatement, LlvmEdge, IcfgEdge, DummyNode, GlobalICFGNode, GlobalICFGOrdered, MirCallArgument,
-    RustFunctionMetadata, RustCallMetadata, TerminalNode };
+    RustFunctionMetadata, RustCallMetadata, TerminalNode, RustDropAllocatorEvidence, RustDropAllocatorEvidenceKind,
+    RustCallDeallocatorEvidence, RustCallDeallocatorEvidenceKind, RustHigherOrderCallEvidence,
+    RustHigherOrderCallEvidenceKind };
 use crate::utils::{unwind_action_to_string,compute_hash, load_ffi_functions};
+use crate::mir_semantics::mir_semantics_v2_enabled;
+
+
+/// v6N-r1: prove the allocator family of a generic MIR `Drop` from rustc's
+/// semantic type identity, never from `Debug`/pretty-printed type strings.
+///
+/// Soundness basis (official Rust documentation):
+/// - `Box<T, A = Global>` and its memory-layout contract state that non-ZST
+///   backing allocations use `Global`: https://doc.rust-lang.org/std/boxed/index.html#memory-layout
+/// - `Vec<T, A = Global>` and its memory-layout contract state that a non-ZST,
+///   nonzero-capacity backing allocation uses `Global`: https://doc.rust-lang.org/std/vec/index.html#memory-layout
+/// - `Global` is the standard-library global allocator abstraction:
+///   https://doc.rust-lang.org/std/alloc/struct.Global.html
+///
+/// Identity mechanism (official rustc documentation):
+/// - rustc-dev-guide recommends lang/diagnostic items instead of hard-coded
+///   type paths: https://rustc-dev-guide.rust-lang.org/diagnostics/diagnostic-items.html
+/// - `LanguageItems::{owned_box,global_alloc_ty}` identify Box and Global.
+///
+/// The evidence is intentionally narrow. String/CString/Rc/Arc, custom Drop,
+/// custom allocators, aliases that do not normalize to an ADT, and unresolved
+/// generic allocator parameters remain `None` and therefore `unknown`.
+fn rust_drop_allocator_evidence<'tcx>(
+    place: &Place<'tcx>,
+    local_decls: &IndexVec<Local, LocalDecl<'tcx>>,
+    tcx: TyCtxt<'tcx>,
+) -> Option<RustDropAllocatorEvidence> {
+    let dropped_ty = place.ty(local_decls, tcx).ty;
+    let TyKind::Adt(owner_def, args) = dropped_ty.kind() else {
+        return None;
+    };
+
+    let kind = if tcx.lang_items().owned_box() == Some(owner_def.did()) {
+        RustDropAllocatorEvidenceKind::BoxGlobal
+    } else if tcx.is_diagnostic_item(sym::Vec, owner_def.did()) {
+        RustDropAllocatorEvidenceKind::VecGlobal
+    } else {
+        return None;
+    };
+
+    // Box<T, A> and Vec<T, A> both place the allocator type after T.  We do
+    // not rely on its printed name: the allocator ADT must be rustc's
+    // `global_alloc_ty` lang item.  Any custom/parametric allocator fails
+    // closed to `None`.
+    let allocator_ty = args.types().nth(1)?;
+    let TyKind::Adt(allocator_def, _) = allocator_ty.kind() else {
+        return None;
+    };
+    if tcx.lang_items().global_alloc_ty() != Some(allocator_def.did()) {
+        return None;
+    }
+
+    Some(RustDropAllocatorEvidence {
+        kind,
+        owner_def_path: tcx.def_path_str(owner_def.did()),
+        allocator_def_path: tcx.def_path_str(allocator_def.did()),
+    })
+}
+
+
+/// v6N-r1a: classify the public Rust global deallocation API while the rustc
+/// `DefId` is available.  This intentionally avoids exporter-side matching of
+/// `function_called` or rendered MIR strings.
+///
+/// For the pinned nightly, `std::alloc::dealloc` resolves to the public item
+/// `alloc::alloc::dealloc`.  We establish this structurally from DefId metadata:
+/// external crate `alloc`, parent module named `alloc`, item named `dealloc`.
+/// The canonical DefPath is retained only as audit provenance.
+fn rust_call_deallocator_evidence<'tcx>(
+    def_id: DefId,
+    tcx: TyCtxt<'tcx>,
+) -> Option<RustCallDeallocatorEvidence> {
+    if def_id.is_local() {
+        return None;
+    }
+    if tcx.crate_name(def_id.krate).as_str() != "alloc"
+        || tcx.item_name(def_id).as_str() != "dealloc"
+    {
+        return None;
+    }
+    let parent = tcx.parent(def_id);
+    if tcx.item_name(parent).as_str() != "alloc" {
+        return None;
+    }
+    Some(RustCallDeallocatorEvidence {
+        kind: RustCallDeallocatorEvidenceKind::GlobalDeallocApi,
+        callee_def_path: tcx.def_path_str(def_id),
+    })
+}
+
+/// v6Q-r1: producer-certify bounded higher-order `Option` combinators while
+/// the rustc `DefId`, associated-item descriptor, and inherent-impl self type
+/// are still available.  Consumers MUST NOT infer this classification from
+/// `def_path_str`; those strings are retained only as audit provenance.
+///
+/// Structural identity follows rustc's associated-item API:
+/// - `TyCtxt::opt_associated_item(def_id)` identifies the associated item;
+/// - `AssocItem::impl_container(tcx)` identifies its impl container;
+/// - `tcx.impl_trait_ref(impl_id).is_none()` proves an inherent impl;
+/// - `tcx.type_of(impl_id).instantiate_identity()` yields the impl self type;
+/// - the self ADT DefId must equal rustc's `Option` lang item.
+///
+/// Official rustc API documentation:
+/// https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/ty/struct.AssocItem.html#method.impl_container
+/// https://doc.rust-lang.org/nightly/nightly-rustc/rustc_hir/lang_items/struct.LanguageItems.html#method.option_type
+///
+/// Callback cardinality is taken from the official `core::option` semantics,
+/// not inferred from crate names.  At the pinned rustc source revision used by
+/// this package, these APIs dispatch through a match/if-let and their callback
+/// bounds are `FnOnce`, hence each certified callback is invoked at most once:
+///
+/// https://github.com/rust-lang/rust/blob/3fee0f12e4f595948f8f54f57c8b7a7a58127124/library/core/src/option.rs
+/// https://doc.rust-lang.org/core/ops/trait.FnOnce.html
+/// https://doc.rust-lang.org/core/option/enum.Option.html#method.map
+/// https://doc.rust-lang.org/core/option/enum.Option.html#method.map_or
+/// https://doc.rust-lang.org/core/option/enum.Option.html#method.map_or_else
+/// https://doc.rust-lang.org/core/option/enum.Option.html#method.and_then
+/// https://doc.rust-lang.org/core/option/enum.Option.html#method.filter
+/// https://doc.rust-lang.org/core/option/enum.Option.html#method.inspect
+/// https://doc.rust-lang.org/core/option/enum.Option.html#method.or_else
+/// https://doc.rust-lang.org/core/option/enum.Option.html#method.unwrap_or_else
+/// https://doc.rust-lang.org/core/option/enum.Option.html#method.ok_or_else
+/// https://doc.rust-lang.org/core/option/enum.Option.html#method.is_some_and
+/// https://doc.rust-lang.org/core/option/enum.Option.html#method.is_none_or
+///
+/// `callback_argument_indices` are MIR call argument positions (receiver is
+/// argument 0).  Recording them producer-side prevents unrelated closure-typed
+/// arguments from being mistaken for callbacks by the ICFG consumer.
+fn rust_higher_order_call_evidence<'tcx>(
+    def_id: DefId,
+    tcx: TyCtxt<'tcx>,
+) -> Option<RustHigherOrderCallEvidence> {
+    // Keep the rustc `Symbol` binding alive while borrowing its underlying str.
+    // Official rustc API: https://doc.rust-lang.org/nightly/nightly-rustc/rustc_span/symbol/struct.Symbol.html#method.as_str
+    // Pinned rustc source: https://github.com/rust-lang/rust/blob/3fee0f12e4f595948f8f54f57c8b7a7a58127124/compiler/rustc_span/src/symbol.rs
+    // The pinned compiler rejects `tcx.item_name(def_id).as_str()` with E0716
+    // because that form borrows through a temporary `Symbol`.
+    let method_symbol = tcx.item_name(def_id);
+    let method = method_symbol.as_str();
+    let (kind, callback_argument_indices) = match method {
+        "map" => (RustHigherOrderCallEvidenceKind::OptionMap, vec![1]),
+        "map_or" => (RustHigherOrderCallEvidenceKind::OptionMapOr, vec![2]),
+        // `map_or_else(default, f)` executes exactly one of the two FnOnce callbacks.
+        "map_or_else" => (RustHigherOrderCallEvidenceKind::OptionMapOrElse, vec![1, 2]),
+        "and_then" => (RustHigherOrderCallEvidenceKind::OptionAndThen, vec![1]),
+        "filter" => (RustHigherOrderCallEvidenceKind::OptionFilter, vec![1]),
+        "inspect" => (RustHigherOrderCallEvidenceKind::OptionInspect, vec![1]),
+        "or_else" => (RustHigherOrderCallEvidenceKind::OptionOrElse, vec![1]),
+        "unwrap_or_else" => (RustHigherOrderCallEvidenceKind::OptionUnwrapOrElse, vec![1]),
+        "ok_or_else" => (RustHigherOrderCallEvidenceKind::OptionOkOrElse, vec![1]),
+        "is_some_and" => (RustHigherOrderCallEvidenceKind::OptionIsSomeAnd, vec![1]),
+        "is_none_or" => (RustHigherOrderCallEvidenceKind::OptionIsNoneOr, vec![1]),
+        // Intentionally excluded: callback-bearing APIs such as `get_or_insert_with`
+        // and `take_if` also mutate the receiver.  A control-flow-only callback
+        // summary would not model that memory effect, so they remain fail-closed
+        // until a dedicated abstract transfer is justified.
+        _ => return None,
+    };
+
+    // Pinned nightly-2024-11-21 (rustc 1.84.0-nightly) compatibility path.
+    // `impl_container` rejects trait declarations; `impl_trait_ref` then
+    // rejects trait impls.  Therefore only the inherent impl on the exact
+    // `Option` lang-item ADT can reach the evidence constructor below.
+    let assoc_item = tcx.opt_associated_item(def_id)?;
+    let impl_id = assoc_item.impl_container(tcx)?;
+    if tcx.impl_trait_ref(impl_id).is_some() {
+        return None;
+    }
+    let self_ty = tcx.type_of(impl_id).instantiate_identity();
+    let TyKind::Adt(owner_def, _) = self_ty.kind() else {
+        return None;
+    };
+    if tcx.lang_items().option_type() != Some(owner_def.did()) {
+        return None;
+    }
+
+    Some(RustHigherOrderCallEvidence {
+        kind,
+        callee_def_path: tcx.def_path_str(def_id),
+        owner_def_path: tcx.def_path_str(owner_def.did()),
+        callback_argument_indices,
+    })
+}
+
 
 // NOTE: rustc unwind Terminate is materialized as an explicit terminal ICFG node; from 1.86, unwind actions are:
 /* 
@@ -110,6 +298,15 @@ pub struct MirExtractor {
     /// parametrically, with genuinely unresolved local trait dispatch rejected
     /// at the callsite instead of rejecting the whole entry.
     pub instance_dispatch_boundary: Option<String>,
+    /// v6O operational paths.  These are explicit so a Cargo rustc wrapper may
+    /// run from the analyzed package directory without reading/writing stale
+    /// files from an unrelated current working directory.
+    pub ffi_functions_path: String,
+    pub icfg_output_path: String,
+    /// Legacy direct RunCompiler invocations stop after MIR extraction.  Cargo
+    /// wrapper invocations must continue through codegen so Cargo receives the
+    /// artifact it requested.
+    pub continue_after_analysis: bool,
 }
 
 impl MirExtractor {
@@ -123,7 +320,24 @@ impl MirExtractor {
             closure_bindings: BTreeMap::new(),
             instance_entry_hint,
             instance_dispatch_boundary: None,
+            ffi_functions_path: "./ffi_functions.json".to_string(),
+            icfg_output_path: "global_icfg.json".to_string(),
+            continue_after_analysis: false,
         }
+    }
+
+    pub fn new_with_operational_paths(
+        llvm_output_dir: String,
+        instance_entry_hint: String,
+        ffi_functions_path: String,
+        icfg_output_path: String,
+        continue_after_analysis: bool,
+    ) -> Self {
+        let mut extractor = Self::new(llvm_output_dir, instance_entry_hint);
+        extractor.ffi_functions_path = ffi_functions_path;
+        extractor.icfg_output_path = icfg_output_path;
+        extractor.continue_after_analysis = continue_after_analysis;
+        extractor
     }
     
     // NOTE: now pass the local declarations so that we can check a place’s mutability, store this info also in mir terminator's call arguments
@@ -152,22 +366,83 @@ impl MirExtractor {
             StatementKind::BackwardIncompatibleDropHint { .. } => "BackwardIncompatibleDropHint",
         };
 
-        // defaults for when a place isn’t present:
+        // Typed producer-side statement evidence.  v6P-r1d records the primary
+        // affected place for every pinned MIR statement that has one; consumers
+        // never need to recover it from rustc Debug text.  `details` remains
+        // diagnostic provenance, except for Intrinsic where a stable producer
+        // prefix records which of the two pinned semantic variants was observed.
         let mut place_info: Option<String> = None;
         let mut rvalue: Option<String> = None;
         let mut is_mutable: Option<bool> = None;
+        let mut details = format!("{:?}", statement.kind);
 
-        if let StatementKind::Assign(box (lhs, rhs)) = &statement.kind {
-            let (place_desc, mutable_flag) = self.describe_place(lhs, local_decls);
-            place_info = Some(place_desc);
-            rvalue = Some(format!("{:?}", rhs));
-            is_mutable = Some(mutable_flag);
+        match &statement.kind {
+            StatementKind::Assign(box (lhs, rhs)) => {
+                let (place_desc, mutable_flag) = self.describe_place(lhs, local_decls);
+                place_info = Some(place_desc);
+                rvalue = Some(format!("{:?}", rhs));
+                is_mutable = Some(mutable_flag);
+            }
+            StatementKind::FakeRead(data) => {
+                let (_, place) = &**data;
+                let (place_desc, mutable_flag) = self.describe_place(place, local_decls);
+                place_info = Some(place_desc);
+                is_mutable = Some(mutable_flag);
+            }
+            StatementKind::SetDiscriminant { place, .. }
+            | StatementKind::Deinit(place)
+            | StatementKind::PlaceMention(place) => {
+                let (place_desc, mutable_flag) = self.describe_place(place, local_decls);
+                place_info = Some(place_desc);
+                is_mutable = Some(mutable_flag);
+            }
+            StatementKind::Retag(_, place) => {
+                let (place_desc, mutable_flag) = self.describe_place(place, local_decls);
+                place_info = Some(place_desc);
+                is_mutable = Some(mutable_flag);
+            }
+            StatementKind::AscribeUserType(data, _) => {
+                let (place, _) = &**data;
+                let (place_desc, mutable_flag) = self.describe_place(place, local_decls);
+                place_info = Some(place_desc);
+                is_mutable = Some(mutable_flag);
+            }
+            StatementKind::StorageLive(local) | StatementKind::StorageDead(local) => {
+                place_info = Some(format!("Local({:?})", local));
+                is_mutable = Some(
+                    local_decls
+                        .get(*local)
+                        .map(|decl| decl.mutability == Mutability::Mut)
+                        .unwrap_or(false),
+                );
+            }
+            StatementKind::BackwardIncompatibleDropHint { place, .. } => {
+                let (place_desc, mutable_flag) = self.describe_place(place, local_decls);
+                place_info = Some(place_desc);
+                is_mutable = Some(mutable_flag);
+            }
+            StatementKind::Intrinsic(intrinsic) => match &**intrinsic {
+                NonDivergingIntrinsic::Assume(_) => {
+                    details = format!("Intrinsic::Assume {:?}", intrinsic);
+                }
+                NonDivergingIntrinsic::CopyNonOverlapping(copy) => {
+                    details = format!("Intrinsic::CopyNonOverlapping {:?}", intrinsic);
+                    if let Operand::Copy(place) | Operand::Move(place) = &copy.dst {
+                        let (place_desc, mutable_flag) = self.describe_place(place, local_decls);
+                        place_info = Some(place_desc);
+                        is_mutable = Some(mutable_flag);
+                    }
+                }
+            },
+            StatementKind::Coverage(..)
+            | StatementKind::ConstEvalCounter
+            | StatementKind::Nop => {}
         }
 
         MirStatement {
             source_info: source_info_data,
             kind: statement_kind.to_string(),
-            details: format!("{:?}", statement.kind),
+            details,
             place: place_info,
             rvalue,
             is_mutable,
@@ -258,12 +533,18 @@ impl MirExtractor {
                 details: format!("{:?}", t),
                 source_info: format!("{:?}", t.source_info.span),
             },
+            TerminatorKind::UnwindTerminate(reason) => MirTerminator::UnwindTerminate {
+                details: format!("{:?}", t),
+                source_info: format!("{:?}", t.source_info.span),
+                reason: format!("{:?}", reason),
+            },
             TerminatorKind::Unreachable => MirTerminator::Unreachable {
                 details: format!("{:?}", t),
                 source_info: format!("{:?}", t.source_info.span),
             },
             TerminatorKind::Drop { place, target, unwind, .. } => {
                 let (dropped_desc, is_mut) = self.describe_place(place, local_decls);
+                let deallocator_evidence = rust_drop_allocator_evidence(place, local_decls, tcx);
                 MirTerminator::Drop {
                     details: format!("{:?}", t),
                     source_info: format!("{:?}", t.source_info.span),
@@ -271,6 +552,7 @@ impl MirExtractor {
                     unwind_target: unwind_action_to_string(unwind),
                     dropped_value: dropped_desc,
                     is_mutable: is_mut,
+                    deallocator_evidence,
                 }
             },
             // --- Modified Call terminator for args local mut ---
@@ -294,25 +576,65 @@ impl MirExtractor {
                 // Constant function items carry an exact rustc DefId; record its
                 // canonical DefPath separately and resolve local calls from it.
                 let func_ty = func.ty(local_decls, tcx);
-                let (callee_def_path, callee_is_local) = match func_ty.kind() {
-                    TyKind::FnDef(def_id, _) => {
-                        (Some(tcx.def_path_str(*def_id)), def_id.is_local())
-                    }
-                    _ => (None, false),
-                };
+                let (callee_def_path, callee_is_local, deallocator_evidence, higher_order_evidence) =
+                    match func_ty.kind() {
+                        TyKind::FnDef(def_id, _) => {
+                            (
+                                Some(tcx.def_path_str(*def_id)),
+                                def_id.is_local(),
+                                rust_call_deallocator_evidence(*def_id, tcx),
+                                if mir_semantics_v2_enabled() {
+                                    rust_higher_order_call_evidence(*def_id, tcx)
+                                } else {
+                                    None
+                                },
+                            )
+                        }
+                        _ => (None, false, None, None),
+                    };
 
-                // Recover closure identities structurally from the operand type
-                // tree.  This sees closures nested inside iterator/adaptor types
-                // as well as direct closure operands, and is independent of
-                // HashMap order and Debug-format source-location strings.
+                if let Some(evidence) = &higher_order_evidence {
+                    eprintln!(
+                        "V6Q_HIGHER_ORDER_PRODUCER_EVIDENCE: kind={:?} callee={} owner={} callback_args={:?}",
+                        evidence.kind,
+                        evidence.callee_def_path,
+                        evidence.owner_def_path,
+                        evidence.callback_argument_indices,
+                    );
+                }
+
+                // Recover callback identities from rustc types, never from MIR
+                // Debug strings.  For producer-certified APIs, inspect ONLY the
+                // callback-bearing MIR argument positions recorded by the producer.
+                // This prevents unrelated closure-typed arguments from acquiring
+                // callback control-flow edges.  Legacy non-certified summaries keep
+                // their historical all-argument scan for compatibility.
+                //
+                // `FnDef` is included in addition to `Closure`: a real crate may
+                // pass a named local function as an `FnOnce` callback.  A coerced
+                // `fn` pointer no longer carries a unique DefId; if certification
+                // exists but no callback identity can be recovered, schema-v2 will
+                // fail closed below rather than silently treating the call as plain
+                // external control flow.
+                let certified_callback_indices = higher_order_evidence
+                    .as_ref()
+                    .map(|e| e.callback_argument_indices.as_slice());
                 let mut callback_paths = BTreeSet::new();
-                for spanned_arg in args {
+                for (arg_index, spanned_arg) in args.iter().enumerate() {
+                    if let Some(indices) = certified_callback_indices {
+                        if !indices.contains(&arg_index) {
+                            continue;
+                        }
+                    }
                     let operand = &spanned_arg.node;
                     let arg_ty = operand.ty(local_decls, tcx);
                     for generic_arg in arg_ty.walk() {
                         let Some(nested_ty) = generic_arg.as_type() else { continue; };
-                        if let TyKind::Closure(def_id, _) = nested_ty.kind() {
-                            callback_paths.insert(tcx.def_path_str(*def_id));
+                        match nested_ty.kind() {
+                            TyKind::Closure(def_id, _) | TyKind::FnDef(def_id, _) => {
+                                callback_paths.insert(tcx.def_path_str(*def_id));
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -322,6 +644,8 @@ impl MirExtractor {
                     source_info: format!("{:?}", t.source_info.span),
                     function_called: format!("{:?}", func),
                     callee_def_path,
+                    deallocator_evidence,
+                    higher_order_evidence,
                     callee_is_local,
                     callback_def_paths: callback_paths.into_iter().collect(),
                     resolved_instance_callees: Vec::new(),
@@ -332,6 +656,31 @@ impl MirExtractor {
                     return_place: format!("{:?}", destination),
                     return_target: target.map(|t| format!("{:?}", t)),
                     unwind_target: unwind_action_to_string(unwind),
+                }
+            },
+            TerminatorKind::TailCall { func, args, .. } => {
+                let call_arguments: Vec<MirCallArgument> = args.iter().map(|spanned_arg| {
+                    let operand = &spanned_arg.node;
+                    match operand {
+                        Operand::Copy(place) | Operand::Move(place) => {
+                            let (desc, is_mut) = self.describe_place(place, local_decls);
+                            MirCallArgument { arg: desc, is_mutable: Some(is_mut) }
+                        },
+                        _ => MirCallArgument { arg: format!("{:?}", operand), is_mutable: None },
+                    }
+                }).collect();
+                let func_ty = func.ty(local_decls, tcx);
+                let (callee_def_path, callee_is_local) = match func_ty.kind() {
+                    TyKind::FnDef(def_id, _) => (Some(tcx.def_path_str(*def_id)), def_id.is_local()),
+                    _ => (None, false),
+                };
+                MirTerminator::TailCall {
+                    details: format!("{:?}", t),
+                    source_info: format!("{:?}", t.source_info.span),
+                    function_called: format!("{:?}", func),
+                    callee_def_path,
+                    callee_is_local,
+                    arguments: call_arguments,
                 }
             },
             TerminatorKind::Assert { cond, expected, msg, target, unwind } => {
@@ -348,7 +697,34 @@ impl MirExtractor {
                     msg: msg_str,
                 }
             },
-            TerminatorKind::InlineAsm { template, operands, options, line_spans, unwind, .. } => {
+            TerminatorKind::Yield { value, resume, resume_arg, drop } => {
+                let (resume_desc, _) = self.describe_place(resume_arg, local_decls);
+                MirTerminator::Yield {
+                    details: format!("{:?}", t),
+                    source_info: format!("{:?}", t.source_info.span),
+                    resume_target: format!("{:?}", resume),
+                    drop_target: drop.map(|bb| format!("{:?}", bb)),
+                    resume_arg: resume_desc,
+                    value: format!("{:?}", value),
+                }
+            },
+            TerminatorKind::CoroutineDrop => MirTerminator::CoroutineDrop {
+                details: format!("{:?}", t),
+                source_info: format!("{:?}", t.source_info.span),
+            },
+            TerminatorKind::FalseEdge { real_target, imaginary_target } => MirTerminator::FalseEdge {
+                details: format!("{:?}", t),
+                source_info: format!("{:?}", t.source_info.span),
+                real_target: format!("{:?}", real_target),
+                imaginary_target: format!("{:?}", imaginary_target),
+            },
+            TerminatorKind::FalseUnwind { real_target, unwind } => MirTerminator::FalseUnwind {
+                details: format!("{:?}", t),
+                source_info: format!("{:?}", t.source_info.span),
+                real_target: format!("{:?}", real_target),
+                unwind_target: unwind_action_to_string(unwind),
+            },
+            TerminatorKind::InlineAsm { template, operands, options, line_spans, targets, unwind, .. } => {
                 MirTerminator::InlineAsm {
                     details: format!("{:?}", t),
                     source_info: format!("{:?}", t.source_info.span),
@@ -356,9 +732,11 @@ impl MirExtractor {
                     operands: operands.iter().map(|op| format!("{:?}", op)).collect(),
                     options: format!("{:?}", options),
                     line_spans: line_spans.iter().map(|span| format!("{:?}", span)).collect(),
+                    targets: targets.iter().map(|bb| format!("{:?}", bb)).collect(),
                     unwind_target: Some(unwind_action_to_string(unwind)),
                 }
             },
+            // Any future pinned variant lands here and remains visible in telemetry.
             // catch-all for unhandled variants
             _ => MirTerminator::Unhandled {
                 details: format!("{:?}", t),
@@ -687,19 +1065,65 @@ enum HigherOrderCallSemantics {
     /// CREMA does not claim a full concurrency/interleaving semantics; it
     /// conservatively exposes both caller continuation and one callback branch.
     SpawnMayOnce,
+    /// A branch-selecting combinator such as `Option::map_or` invokes its
+    /// callback zero or one time depending on the receiver discriminant.  The
+    /// ICFG overapproximates both branches and rejoins at the caller continuation.
+    ConditionalCallbackOnce,
     /// A callback-bearing external API without a proven summary stays closed.
     Unknown,
 }
 
-/// Classify only canonical rustc DefPaths.  Never infer higher-order semantics
-/// from pretty-printed MIR strings or target names.
+/// Consume only producer-certified higher-order evidence. DefPath strings in
+/// the evidence are audit provenance and are not reinterpreted here.
+fn producer_certified_higher_order_semantics(
+    evidence: Option<&RustHigherOrderCallEvidence>,
+) -> Option<HigherOrderCallSemantics> {
+    match evidence.map(|e| &e.kind) {
+        Some(
+            RustHigherOrderCallEvidenceKind::OptionMap
+            | RustHigherOrderCallEvidenceKind::OptionMapOr
+            | RustHigherOrderCallEvidenceKind::OptionMapOrElse
+            | RustHigherOrderCallEvidenceKind::OptionAndThen
+            | RustHigherOrderCallEvidenceKind::OptionFilter
+            | RustHigherOrderCallEvidenceKind::OptionInspect
+            | RustHigherOrderCallEvidenceKind::OptionOrElse
+            | RustHigherOrderCallEvidenceKind::OptionUnwrapOrElse
+            | RustHigherOrderCallEvidenceKind::OptionOkOrElse
+            | RustHigherOrderCallEvidenceKind::OptionIsSomeAnd
+            | RustHigherOrderCallEvidenceKind::OptionIsNoneOr,
+        ) => Some(HigherOrderCallSemantics::ConditionalCallbackOnce),
+        None => None,
+    }
+}
+
 fn higher_order_call_semantics(
     callee_def_path: Option<&str>,
     callback_def_paths: &[String],
+    higher_order_evidence: Option<&RustHigherOrderCallEvidence>,
 ) -> Option<HigherOrderCallSemantics> {
+    // v6Q-r1: certified API identity is considered before callback recovery.
+    // If rustc proves that this is a supported higher-order Option API but the
+    // callback value has lost its unique DefId (e.g. a coerced function pointer),
+    // return Unknown so schema-v2 remains fail-closed.  Never silently downgrade
+    // a certified higher-order call to an ordinary external summary.
+    // Producer-certified evidence is itself the capability proof that this call
+    // was classified on the opt-in MIR-semantics-v2 path.  The producer only
+    // constructs `higher_order_evidence` while `mir_semantics_v2_enabled()` is
+    // true, so re-reading the process environment here is redundant and makes
+    // this pure consumer inconsistent under direct unit testing.  Consume the
+    // evidence whenever it is present; the legacy path remains unchanged because
+    // it serializes/constructs `None`.
+    if let Some(semantics) = producer_certified_higher_order_semantics(higher_order_evidence) {
+        if callback_def_paths.is_empty() {
+            return Some(HigherOrderCallSemantics::Unknown);
+        }
+        return Some(semantics);
+    }
+
     if callback_def_paths.is_empty() {
         return None;
     }
+
     let Some(path) = callee_def_path else {
         return Some(HigherOrderCallSemantics::Unknown);
     };
@@ -754,7 +1178,8 @@ fn higher_order_callback_return_node(
 ) -> String {
     match semantics {
         HigherOrderCallSemantics::RepeatedCallbacks => call_site.to_string(),
-        HigherOrderCallSemantics::SpawnMayOnce => caller_return.to_string(),
+        HigherOrderCallSemantics::SpawnMayOnce
+        | HigherOrderCallSemantics::ConditionalCallbackOnce => caller_return.to_string(),
         HigherOrderCallSemantics::LazyCarrier | HigherOrderCallSemantics::Unknown => {
             caller_return.to_string()
         }
@@ -783,17 +1208,20 @@ fn materialize_terminal_nodes(
     let existing: BTreeSet<String> = nodes.iter().map(|(id, _)| id.clone()).collect();
     let terminals: BTreeSet<String> = edges
         .iter()
-        .filter(|edge| edge.destination.ends_with("::terminate"))
+        .filter(|edge| edge.destination.ends_with("::terminate") || edge.destination.ends_with("::unresolved_tail_call"))
         .map(|edge| edge.destination.clone())
         .filter(|id| !existing.contains(id))
         .collect();
 
     for id in terminals {
+        let reason = if id.ends_with("::unresolved_tail_call") {
+            "unresolved_tail_call".to_string()
+        } else {
+            "unwind_terminate".to_string()
+        };
         nodes.push((
             id,
-            GlobalICFGNode::Terminal(TerminalNode {
-                reason: "unwind_terminate".to_string(),
-            }),
+            GlobalICFGNode::Terminal(TerminalNode { reason }),
         ));
     }
 }
@@ -841,6 +1269,46 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
     // hashmap per memorizzare, per ciascuna  FFI, tutti i call suffix (cioè le chiamate)
     let mut ffi_call_sites: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
     queries.global_ctxt().unwrap().enter(|tcx| {
+        // v6O-r1a: in Cargo-wrapper mode, discover foreign declarations from
+        // the exact selected rustc invocation.  This replaces the historical
+        // standalone ffi_extraction pre-pass for the opt-in v6O path.  The
+        // legacy path remains unchanged because continue_after_analysis=false.
+        //
+        // Scientific boundary: this records declarations present in the
+        // selected crate HIR only. It does not synthesize summaries for
+        // external libraries or dependency crates and therefore cannot create
+        // allocator/deallocator facts that are absent from the selected crate.
+        if self.continue_after_analysis {
+            let hir = tcx.hir();
+            let mut ffi_names = BTreeSet::new();
+            for item_id in hir.items() {
+                let item = hir.item(item_id);
+                if let ItemKind::ForeignMod { items, .. } = &item.kind {
+                    for foreign_item_ref in *items {
+                        let foreign_item = hir.foreign_item(foreign_item_ref.id);
+                        if matches!(&foreign_item.kind, ForeignItemKind::Fn(..)) {
+                            ffi_names.insert(foreign_item.ident.to_string());
+                        }
+                    }
+                }
+            }
+            let payload = serde_json::json!({
+                "ffi_functions": ffi_names.iter().cloned().collect::<Vec<_>>()
+            });
+            let serialized = serde_json::to_string_pretty(&payload)
+                .expect("Failed to serialize v6O Cargo-selected FFI declarations");
+            std::fs::write(&self.ffi_functions_path, serialized)
+                .unwrap_or_else(|e| panic!(
+                    "Failed to write v6O Cargo-selected FFI declarations {}: {e}",
+                    self.ffi_functions_path
+                ));
+            println!(
+                "V6O_CARGO_FFI_DECLARATIONS: PASS functions={} names={}",
+                ffi_names.len(),
+                ffi_names.iter().cloned().collect::<Vec<_>>().join(",")
+            );
+        }
+
         // --- 1. build concrete rustc Instance dispatch from the selected entry ---
         let concrete_dispatch = match resolve_reachable_instance_dispatch(tcx, &self.instance_entry_hint) {
             Ok(dispatch) => dispatch,
@@ -933,7 +1401,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
             ),
         }
         // --- 3. LOAD FFI functions da JSON ---
-        let ffi_functions = match load_ffi_functions("./ffi_functions.json") {
+        let ffi_functions = match load_ffi_functions(&self.ffi_functions_path) {
             Ok(set) => set,
             Err(e) => {
                 eprintln!("Failed to load FFI functions: {:?}", e);
@@ -954,6 +1422,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                     callee_def_path,
                     callee_is_local,
                     callback_def_paths,
+                    higher_order_evidence,
                     resolved_instance_callees,
                     instance_dispatch_observed,
                     instance_dispatch_external,
@@ -1155,13 +1624,15 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                 higher_order_call_semantics(
                                     callee_def_path.as_deref(),
                                     callback_def_paths,
+                                    higher_order_evidence.as_ref(),
                                 )
                             } else {
                                 None
                             };
                             let callback_targets = match higher_order {
                                 Some(HigherOrderCallSemantics::RepeatedCallbacks)
-                                | Some(HigherOrderCallSemantics::SpawnMayOnce) => {
+                                | Some(HigherOrderCallSemantics::SpawnMayOnce)
+                                | Some(HigherOrderCallSemantics::ConditionalCallbackOnce) => {
                                     local_higher_order_callbacks(
                                         callback_def_paths,
                                         &self.mir_representation.functions,
@@ -1176,6 +1647,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                 higher_order,
                                 Some(HigherOrderCallSemantics::RepeatedCallbacks)
                                     | Some(HigherOrderCallSemantics::SpawnMayOnce)
+                                    | Some(HigherOrderCallSemantics::ConditionalCallbackOnce)
                             ) && callback_bodies_complete
                             {
                                 let semantics = higher_order.unwrap();
@@ -1251,6 +1723,8 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                                 "Higher-order callback loop",
                                             HigherOrderCallSemantics::SpawnMayOnce =>
                                                 "Spawn callback -> caller continuation",
+                                            HigherOrderCallSemantics::ConditionalCallbackOnce =>
+                                                "Conditional callback -> caller continuation",
                                             _ => unreachable!(),
                                         }.to_string()),
                                         source_label: None,
@@ -1282,9 +1756,15 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                             Some(HigherOrderCallSemantics::SpawnMayOnce)
                                                 if callback_bodies_complete =>
                                                     "Spawn caller continuation",
+                                            Some(HigherOrderCallSemantics::ConditionalCallbackOnce)
+                                                if callback_bodies_complete =>
+                                                    "Higher-order conditional callback exit",
                                             Some(HigherOrderCallSemantics::RepeatedCallbacks)
-                                            | Some(HigherOrderCallSemantics::SpawnMayOnce) =>
+                                            | Some(HigherOrderCallSemantics::SpawnMayOnce)
+                                            | Some(HigherOrderCallSemantics::ConditionalCallbackOnce) =>
                                                 "UNRESOLVED_HIGHER_ORDER: local callback MIR body missing",
+                                            Some(HigherOrderCallSemantics::Unknown) if higher_order_evidence.is_some() =>
+                                                "UNRESOLVED_HIGHER_ORDER: producer-certified callback identity not recoverable",
                                             Some(HigherOrderCallSemantics::Unknown) =>
                                                 "UNRESOLVED_HIGHER_ORDER: callback API semantics not modeled",
                                             None if *instance_dispatch_observed && *instance_dispatch_external =>
@@ -1408,6 +1888,98 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                         });
                     }
                 }
+                // TailCall has a distinct stack discipline: rustc pops the
+                // current frame and calls with the current caller's return address.
+                // The current ICFG cannot encode that without changing call/return
+                // matching, so preserve the terminator structurally but force
+                // schema-v2 CQPL export to fail closed on a reachable occurrence.
+                if let Some(MirTerminator::TailCall { .. }) = &block.terminator {
+                    let src = format!("rust::{}::bb{}", rust_func, block.block_id);
+                    let dst = format!("rust::{}::bb{}::unresolved_tail_call", rust_func, block.block_id);
+                    icfg_edges.push(IcfgEdge {
+                        source: src,
+                        destination: dst,
+                        label: Some("UNRESOLVED_TAIL_CALL: caller-pop return-address semantics not modeled".to_string()),
+                        source_label: Some(format!("Mir bb{}", block.block_id)),
+                        destination_label: None,
+                    });
+                }
+                // Borrow-checking-only false edges are runtime gotos to the
+                // real target; the imaginary edge is deliberately not put in
+                // the executable ICFG.
+                if let Some(MirTerminator::FalseEdge { real_target, .. }) = &block.terminator {
+                    let src = format!("rust::{}::bb{}", rust_func, block.block_id);
+                    let dst = format!("rust::{}::{}", rust_func, real_target);
+                    icfg_edges.push(IcfgEdge {
+                        source: src,
+                        destination: dst,
+                        label: Some("FalseEdge real target".to_string()),
+                        source_label: Some(format!("Mir bb{}", block.block_id)),
+                        destination_label: None,
+                    });
+                }
+                if let Some(MirTerminator::FalseUnwind { real_target, .. }) = &block.terminator {
+                    let src = format!("rust::{}::bb{}", rust_func, block.block_id);
+                    let dst = format!("rust::{}::{}", rust_func, real_target);
+                    icfg_edges.push(IcfgEdge {
+                        source: src,
+                        destination: dst,
+                        label: Some("FalseUnwind real target".to_string()),
+                        source_label: Some(format!("Mir bb{}", block.block_id)),
+                        destination_label: None,
+                    });
+                }
+                // Coroutine Yield is represented as a MAY abstraction over the
+                // future resume continuation and optional drop continuation.
+                if let Some(MirTerminator::Yield { resume_target, drop_target, .. }) = &block.terminator {
+                    let src = format!("rust::{}::bb{}", rust_func, block.block_id);
+                    let resume_dst = format!("rust::{}::{}", rust_func, resume_target);
+                    icfg_edges.push(IcfgEdge {
+                        source: src.clone(),
+                        destination: resume_dst,
+                        label: Some("Yield MAY resume".to_string()),
+                        source_label: Some(format!("Mir bb{}", block.block_id)),
+                        destination_label: None,
+                    });
+                    if let Some(drop_target) = drop_target {
+                        let drop_dst = format!("rust::{}::{}", rust_func, drop_target);
+                        icfg_edges.push(IcfgEdge {
+                            source: src,
+                            destination: drop_dst,
+                            label: Some("Yield MAY drop".to_string()),
+                            source_label: Some(format!("Mir bb{}", block.block_id)),
+                            destination_label: None,
+                        });
+                    }
+                }
+                // InlineAsm may have multiple normal targets.  Preserve every
+                // rustc-provided target plus a real cleanup unwind target.
+                if let Some(MirTerminator::InlineAsm { targets, unwind_target, .. }) = &block.terminator {
+                    let src = format!("rust::{}::bb{}", rust_func, block.block_id);
+                    for target in targets {
+                        let dst = format!("rust::{}::{}", rust_func, target);
+                        icfg_edges.push(IcfgEdge {
+                            source: src.clone(),
+                            destination: dst,
+                            label: Some("InlineAsm target".to_string()),
+                            source_label: Some(format!("Mir bb{}", block.block_id)),
+                            destination_label: None,
+                        });
+                    }
+                    if let Some(unwind_target) = unwind_target {
+                        let effective_unwind = extract_target(unwind_target);
+                        if effective_unwind != "unreachable" && effective_unwind != "continue" {
+                            let dst = format!("rust::{}::{}", rust_func, effective_unwind);
+                            icfg_edges.push(IcfgEdge {
+                                source: src,
+                                destination: dst,
+                                label: Some("InlineAsm unwind".to_string()),
+                                source_label: Some(format!("Mir bb{}", block.block_id)),
+                                destination_label: None,
+                            });
+                        }
+                    }
+                }
             }
         }
         // --- 6. BUILD GLOBAL ICFG ordered NODES ---
@@ -1423,6 +1995,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                     callee_def_path,
                     callee_is_local,
                     callback_def_paths,
+                    higher_order_evidence,
                     resolved_instance_callees,
                     instance_dispatch_observed,
                     instance_dispatch_external: _,
@@ -1597,6 +2170,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                 higher_order_call_semantics(
                                     callee_def_path.as_deref(),
                                     callback_def_paths,
+                                    higher_order_evidence.as_ref(),
                                 )
                             } else {
                                 None
@@ -1605,6 +2179,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                 higher_order,
                                 Some(HigherOrderCallSemantics::RepeatedCallbacks)
                                     | Some(HigherOrderCallSemantics::SpawnMayOnce)
+                                    | Some(HigherOrderCallSemantics::ConditionalCallbackOnce)
                             ) {
                                 let semantics = higher_order.unwrap();
                                 let callback_targets = local_higher_order_callbacks(
@@ -1795,8 +2370,8 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
             rust_functions,
             rust_calls,
         };
-        let output_filename = "global_icfg.json";
-        let mut file = File::create(output_filename)
+        let output_filename = self.icfg_output_path.clone();
+        let mut file = File::create(&output_filename)
             .expect("Failed to create output file");
         let json_output =
             serde_json::to_string_pretty(&global_icfg_ordered).expect("Failed to serialize JSON");
@@ -1804,7 +2379,11 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
             .expect("Failed to write JSON output");
         println!("Global ICFG saved to {}", output_filename);
     });
-    rustc_driver::Compilation::Stop
+    if self.continue_after_analysis {
+        rustc_driver::Compilation::Continue
+    } else {
+        rustc_driver::Compilation::Stop
+    }
 }
 }
 
@@ -1935,7 +2514,7 @@ mod phase6k_callee_resolution_tests {
             "std::iter::Iterator::filter",
         ] {
             assert_eq!(
-                higher_order_call_semantics(Some(path), &callbacks),
+                higher_order_call_semantics(Some(path), &callbacks, None),
                 Some(HigherOrderCallSemantics::LazyCarrier)
             );
         }
@@ -1945,16 +2524,59 @@ mod phase6k_callee_resolution_tests {
             "std::iter::Iterator::for_each",
         ] {
             assert_eq!(
-                higher_order_call_semantics(Some(path), &callbacks),
+                higher_order_call_semantics(Some(path), &callbacks, None),
                 Some(HigherOrderCallSemantics::RepeatedCallbacks)
             );
         }
         assert_eq!(
-            higher_order_call_semantics(Some("std::thread::spawn"), &callbacks),
+            higher_order_call_semantics(Some("std::thread::spawn"), &callbacks, None),
             Some(HigherOrderCallSemantics::SpawnMayOnce)
         );
         assert_eq!(
-            higher_order_call_semantics(Some("third_party::register_callback"), &callbacks),
+            higher_order_call_semantics(Some("third_party::register_callback"), &callbacks, None),
+            Some(HigherOrderCallSemantics::Unknown)
+        );
+    }
+
+    #[test]
+    fn producer_certified_option_family_maps_to_conditional_once() {
+        for kind in [
+            RustHigherOrderCallEvidenceKind::OptionMap,
+            RustHigherOrderCallEvidenceKind::OptionMapOr,
+            RustHigherOrderCallEvidenceKind::OptionMapOrElse,
+            RustHigherOrderCallEvidenceKind::OptionAndThen,
+            RustHigherOrderCallEvidenceKind::OptionFilter,
+            RustHigherOrderCallEvidenceKind::OptionInspect,
+            RustHigherOrderCallEvidenceKind::OptionOrElse,
+            RustHigherOrderCallEvidenceKind::OptionUnwrapOrElse,
+            RustHigherOrderCallEvidenceKind::OptionOkOrElse,
+            RustHigherOrderCallEvidenceKind::OptionIsSomeAnd,
+            RustHigherOrderCallEvidenceKind::OptionIsNoneOr,
+        ] {
+            let evidence = RustHigherOrderCallEvidence {
+                kind,
+                callee_def_path: "audit-only".into(),
+                owner_def_path: "core::option::Option".into(),
+                callback_argument_indices: vec![1],
+            };
+            assert_eq!(
+                producer_certified_higher_order_semantics(Some(&evidence)),
+                Some(HigherOrderCallSemantics::ConditionalCallbackOnce)
+            );
+        }
+        assert_eq!(producer_certified_higher_order_semantics(None), None);
+    }
+
+    #[test]
+    fn certified_higher_order_without_callback_identity_fails_closed() {
+        let evidence = RustHigherOrderCallEvidence {
+            kind: RustHigherOrderCallEvidenceKind::OptionMap,
+            callee_def_path: "core::option::{impl#0}::map".into(),
+            owner_def_path: "core::option::Option".into(),
+            callback_argument_indices: vec![1],
+        };
+        assert_eq!(
+            higher_order_call_semantics(Some("audit-only"), &[], Some(&evidence)),
             Some(HigherOrderCallSemantics::Unknown)
         );
     }
@@ -2071,6 +2693,36 @@ mod phase6k_callee_resolution_tests {
             nodes.iter().find(|(id, _)| id == "rust::main::terminate").map(|(_, n)| n),
             Some(GlobalICFGNode::Terminal(TerminalNode { reason })) if reason == "unwind_terminate"
         ));
+        assert!(validate_closed_edge_domain(&nodes, &edges).is_ok());
+    }
+
+    #[test]
+    fn unresolved_tail_call_destination_is_materialized_and_labeled_fail_closed() {
+        let mut nodes = vec![(
+            "rust::main::bb0".to_string(),
+            GlobalICFGNode::Mir(MirBasicBlock {
+                block_id: 0,
+                statements: vec![],
+                terminator: None,
+            }),
+        )];
+        let edges = vec![IcfgEdge {
+            source: "rust::main::bb0".into(),
+            destination: "rust::main::bb0::unresolved_tail_call".into(),
+            label: Some("UNRESOLVED_TAIL_CALL: caller-pop return-address semantics not modeled".into()),
+            source_label: None,
+            destination_label: None,
+        }];
+
+        materialize_terminal_nodes(&mut nodes, &edges);
+        assert!(matches!(
+            nodes.iter().find(|(id, _)| id.ends_with("::unresolved_tail_call")).map(|(_, n)| n),
+            Some(GlobalICFGNode::Terminal(TerminalNode { reason })) if reason == "unresolved_tail_call"
+        ));
+        assert!(edges[0]
+            .label
+            .as_deref()
+            .is_some_and(|label| label.starts_with("UNRESOLVED_")));
         assert!(validate_closed_edge_domain(&nodes, &edges).is_ok());
     }
 

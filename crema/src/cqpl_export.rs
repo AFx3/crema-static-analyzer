@@ -1,9 +1,11 @@
 use crate::abstract_domain::{AbstractMemory, AbstractState, CellValue, Name};
 use crate::identity::{AllocationIdentityMemory, AllocationIdentityState};
+use crate::mir_semantics::{mir_semantics_v2_enabled, semantic_labels_for_block};
 use crate::memory_events;
 use crate::structs::{
     AbstractAllocId, AllocationSiteId, GlobalICFGNode, GlobalICFGOrdered, MirTerminator,
-    PlaceId, PlaceProjection, ProgramVarId, SvfStatement,
+    PlaceId, PlaceProjection, ProgramVarId, RustDropAllocatorEvidence, RustDropAllocatorEvidenceKind,
+    RustCallDeallocatorEvidence, RustCallDeallocatorEvidenceKind, SvfStatement,
 };
 use crate::utils::load_ffi_functions;
 use regex::Regex;
@@ -60,6 +62,52 @@ struct AllocationContract {
     family: &'static str,
     operation: &'static str,
     language: &'static str,
+    /// allocation_contracts_v2 proof basis.  v6N-r1 requires this field on
+    /// deallocator contracts only; allocator-origin classification remains the
+    /// frozen v1 boundary and is not silently re-certified by this gate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    basis: Option<&'static str>,
+    /// Diagnostic provenance emitted only for rustc-structural typed drops.
+    /// The checker validates the basis/family tuple but never infers from these
+    /// strings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    owner_def_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allocator_def_path: Option<String>,
+    /// Audit-only provenance for producer-classified explicit Rust calls.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    callee_def_path: Option<String>,
+}
+
+impl AllocationContract {
+    fn v1(family: &'static str, operation: &'static str, language: &'static str) -> Self {
+        Self {
+            family,
+            operation,
+            language,
+            basis: None,
+            owner_def_path: None,
+            allocator_def_path: None,
+            callee_def_path: None,
+        }
+    }
+
+    fn v2_deallocator(
+        family: &'static str,
+        operation: &'static str,
+        language: &'static str,
+        basis: &'static str,
+    ) -> Self {
+        Self {
+            family,
+            operation,
+            language,
+            basis: Some(basis),
+            owner_def_path: None,
+            allocator_def_path: None,
+            callee_def_path: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -67,6 +115,11 @@ struct AnnotatedNode {
     id: String,
     successors: Vec<String>,
     labels: Vec<EventLabel>,
+    /// v6P structural MIR labels.  They are emitted only under the explicit
+    /// `mir_semantic_labels_v1` capability and denote block-level presence,
+    /// not an invented statement ordering inside the block.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    semantic_labels: Option<Vec<String>>,
     /// Allocation-centric event labels derived from the canonical identity
     /// fixed point.  Present only in schema v2.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -354,6 +407,15 @@ fn export_cqpl_annotated_icfg_versioned(
             variable_ids.insert(label.variable.clone());
         }
 
+        let semantic_labels = if mir_semantics_v2_enabled() {
+            match node {
+                GlobalICFGNode::Mir(block) => Some(semantic_labels_for_block(block)),
+                _ => Some(Vec::new()),
+            }
+        } else {
+            None
+        };
+
         nodes.push(AnnotatedNode {
             id: node_id.clone(),
             successors: successors
@@ -363,6 +425,7 @@ fn export_cqpl_annotated_icfg_versioned(
                 .into_iter()
                 .collect(),
             labels,
+            semantic_labels,
             allocation_labels,
             identity,
             event_identity,
@@ -394,7 +457,12 @@ fn export_cqpl_annotated_icfg_versioned(
         schema_version,
         entry: entry.to_string(),
         capabilities: if schema_version == 2 {
-            Some(vec!["allocation_contracts_v1", "allocation_state_v1"])
+            let mut caps = vec!["allocation_contracts_v1", "allocation_contracts_v2", "allocation_state_v1"];
+            if mir_semantics_v2_enabled() {
+                caps.push("mir_semantic_labels_v1");
+                caps.push("mir_semantics_v2");
+            }
+            Some(caps)
         } else {
             None
         },
@@ -576,13 +644,17 @@ fn allocation_labels_for_node(
 }
 
 fn allocation_contract(allocation: &AbstractAllocId) -> AllocationContract {
+    // v6N-r1 deliberately preserves the v1 allocator-origin boundary.  The
+    // new v2 capability strengthens deallocator evidence only; this avoids
+    // silently re-certifying legacy origin summaries that were not designed as
+    // producer-certified contracts.  Known C family naming follows LLVM LangRef's
+    // `"alloc-family"="malloc"` family for malloc/calloc/realloc/free:
+    // https://llvm.org/docs/LangRef.html#alloc-family
     match &allocation.site {
-        AllocationSiteId::CCall { allocator, .. } if allocator == "malloc" => AllocationContract {
-            family: "c_malloc", operation: "malloc", language: "c",
-        },
-        AllocationSiteId::CCall { allocator, .. } if allocator == "calloc" => AllocationContract {
-            family: "c_malloc", operation: "calloc", language: "c",
-        },
+        AllocationSiteId::CCall { allocator, .. } if allocator == "malloc" =>
+            AllocationContract::v1("c_malloc", "malloc", "c"),
+        AllocationSiteId::CCall { allocator, .. } if allocator == "calloc" =>
+            AllocationContract::v1("c_malloc", "calloc", "c"),
         AllocationSiteId::RustCall { callee, .. } if memory_events::is_modeled_fresh_allocation(callee) => {
             let operation = if (callee.contains("std::boxed::Box::<") || callee.contains("alloc::boxed::Box::<"))
                 && (callee.ends_with("::new") || callee.contains("::new::<"))
@@ -599,9 +671,9 @@ fn allocation_contract(allocation: &AbstractAllocId) -> AllocationContract {
             } else {
                 "rust_allocation"
             };
-            AllocationContract { family: "rust_global", operation, language: "rust" }
+            AllocationContract::v1("rust_global", operation, "rust")
         }
-        _ => AllocationContract { family: "unknown", operation: "unknown", language: "unknown" },
+        _ => AllocationContract::v1("unknown", "unknown", "unknown"),
     }
 }
 
@@ -609,35 +681,88 @@ fn deallocator_contract(
     node: &GlobalICFGNode,
     ffi_functions: &HashSet<String>,
 ) -> AllocationContract {
+    // allocation_contracts_v2 is a producer-certified *deallocator* refinement.
+    // Official specification mapping:
+    //
+    // LLVM LangRef defines `"alloc-family"="malloc"` as the family shared by
+    // malloc/calloc/realloc/free and `allockind("free")` as freeing `allocptr`:
+    // https://llvm.org/docs/LangRef.html#alloc-family
+    // https://llvm.org/docs/LangRef.html#allockind
+    // CREMA serializes that LLVM family as `c_malloc` to avoid confusing the
+    // abstract family name with one concrete allocation operation.
+    //
+    // Rust Box/Vec `Global` facts are established upstream by rustc semantic
+    // type identity (see `rust_drop_allocator_evidence` in icfg.rs) and the
+    // official memory-layout contracts:
+    // https://doc.rust-lang.org/std/boxed/index.html#memory-layout
+    // https://doc.rust-lang.org/std/vec/index.html#memory-layout
+    //
+    // `std::alloc::dealloc` is documented to deallocate with the global allocator:
+    // https://doc.rust-lang.org/std/alloc/fn.dealloc.html
     match node {
         GlobalICFGNode::Llvm(llvm)
             if llvm.node_kind_string == "FunCallBlock" && llvm.info.contains("@free(") =>
-                AllocationContract { family: "c_malloc", operation: "free", language: "c" },
+                AllocationContract::v2_deallocator(
+                    "c_malloc", "free", "c", "structural_c_free_v1",
+                ),
         GlobalICFGNode::Mir(bb) => match &bb.terminator {
-            // A generic MIR Drop is not proof of the concrete allocator family.
-            // Its destructor may delegate to foreign code; remain conservative for
-            // the no-refutation theorem by serializing an explicit unknown family.
-            Some(MirTerminator::Drop { .. }) =>
-                AllocationContract { family: "unknown", operation: "drop", language: "rust" },
-            Some(MirTerminator::Call { function_called, details, .. }) => {
+            Some(MirTerminator::Drop { deallocator_evidence: Some(evidence), .. }) => {
+                let basis = match evidence.kind {
+                    RustDropAllocatorEvidenceKind::BoxGlobal => "rust_box_global_drop",
+                    RustDropAllocatorEvidenceKind::VecGlobal => "rust_vec_global_drop",
+                };
+                let mut contract = AllocationContract::v2_deallocator(
+                    "rust_global", "drop", "rust", basis,
+                );
+                contract.owner_def_path = Some(evidence.owner_def_path.clone());
+                contract.allocator_def_path = Some(evidence.allocator_def_path.clone());
+                contract
+            }
+            Some(MirTerminator::Drop { deallocator_evidence: None, .. }) =>
+                AllocationContract::v2_deallocator(
+                    "unknown", "drop", "rust", "unresolved",
+                ),
+            Some(MirTerminator::Call { function_called, deallocator_evidence, details, .. }) => {
                 let call_text = if details.is_empty() { function_called } else { details };
                 if is_c_free_function(function_called, ffi_functions)
                     || is_c_free_call_text(call_text, ffi_functions)
                 {
-                    AllocationContract { family: "c_malloc", operation: "free", language: "c" }
+                    AllocationContract::v2_deallocator(
+                        "c_malloc", "free", "c", "structural_c_free_v1",
+                    )
+                } else if let Some(evidence) = deallocator_evidence {
+                    match evidence.kind {
+                        RustCallDeallocatorEvidenceKind::GlobalDeallocApi => {
+                            let mut contract = AllocationContract::v2_deallocator(
+                                "rust_global", "dealloc", "rust", "rust_global_dealloc_api",
+                            );
+                            contract.callee_def_path = Some(evidence.callee_def_path.clone());
+                            contract
+                        }
+                    }
                 } else if is_raw_dealloc_call(function_called) || is_raw_dealloc_call(call_text) {
-                    AllocationContract { family: "rust_global", operation: "dealloc", language: "rust" }
+                    // v1 recognized additional pretty-printed spellings. v2
+                    // refuses to promote them without canonical API identity.
+                    AllocationContract::v2_deallocator(
+                        "unknown", "dealloc", "rust", "unresolved",
+                    )
                 } else if is_explicit_mem_drop(function_called) || is_explicit_mem_drop(call_text) {
-                    // `drop`/`drop_in_place` is an ownership/destructor action,
-                    // not sufficient structural evidence for RustGlobal deallocation.
-                    AllocationContract { family: "unknown", operation: "drop", language: "rust" }
+                    AllocationContract::v2_deallocator(
+                        "unknown", "drop", "rust", "unresolved",
+                    )
                 } else {
-                    AllocationContract { family: "unknown", operation: "unknown", language: "unknown" }
+                    AllocationContract::v2_deallocator(
+                        "unknown", "unknown", "unknown", "unresolved",
+                    )
                 }
             }
-            _ => AllocationContract { family: "unknown", operation: "unknown", language: "unknown" },
+            _ => AllocationContract::v2_deallocator(
+                "unknown", "unknown", "unknown", "unresolved",
+            ),
         },
-        _ => AllocationContract { family: "unknown", operation: "unknown", language: "unknown" },
+        _ => AllocationContract::v2_deallocator(
+            "unknown", "unknown", "unknown", "unresolved",
+        ),
     }
 }
 
@@ -1033,11 +1158,31 @@ fn collect_program_variables(node_id: &str, node: &GlobalICFGNode) -> BTreeSet<N
                         vars.extend(mir_locals(cond));
                         vars.extend(mir_locals(details));
                     }
+                    MirTerminator::TailCall { arguments, details, .. } => {
+                        for arg in arguments {
+                            vars.extend(mir_locals(&arg.arg));
+                        }
+                        vars.extend(mir_locals(details));
+                    }
+                    MirTerminator::Yield { resume_arg, value, details, .. } => {
+                        vars.extend(mir_locals(resume_arg));
+                        vars.extend(mir_locals(value));
+                        vars.extend(mir_locals(details));
+                    }
+                    MirTerminator::InlineAsm { operands, details, .. } => {
+                        for operand in operands {
+                            vars.extend(mir_locals(operand));
+                        }
+                        vars.extend(mir_locals(details));
+                    }
                     MirTerminator::Goto { details, .. }
                     | MirTerminator::UnwindResume { details, .. }
+                    | MirTerminator::UnwindTerminate { details, .. }
                     | MirTerminator::Return { details, .. }
                     | MirTerminator::Unreachable { details, .. }
-                    | MirTerminator::InlineAsm { details, .. }
+                    | MirTerminator::CoroutineDrop { details, .. }
+                    | MirTerminator::FalseEdge { details, .. }
+                    | MirTerminator::FalseUnwind { details, .. }
                     | MirTerminator::Unhandled { details, .. } => {
                         vars.extend(mir_locals(details));
                     }
@@ -1589,6 +1734,8 @@ mod tests {
                 source_info: "x".into(),
                 function_called: "callee".into(),
                 callee_def_path: Some("callee".into()),
+                deallocator_evidence: None,
+                higher_order_evidence: None,
                 callee_is_local: true,
                 callback_def_paths: Vec::new(),
                 resolved_instance_callees: Vec::new(),
@@ -1781,6 +1928,7 @@ mod tests {
                 unwind_target: "unreachable".into(),
                 dropped_value: "_3".into(),
                 is_mutable: false,
+                deallocator_evidence: None,
             }),
         });
         let c2 = GlobalICFGNode::Mir(MirBasicBlock {
@@ -1801,6 +1949,7 @@ mod tests {
                 unwind_target: "unreachable".into(),
                 dropped_value: "_6".into(),
                 is_mutable: false,
+                deallocator_evidence: None,
             }),
         });
 
@@ -1887,6 +2036,8 @@ mod tests {
                 source_info: "<cqpl-test>".into(),
                 function_called: "std::ffi::CString::from_raw".into(),
                 callee_def_path: None,
+                deallocator_evidence: None,
+                higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
                 resolved_instance_callees: Vec::new(),
@@ -1926,6 +2077,8 @@ mod tests {
                 source_info: "<cqpl-test>".into(),
                 function_called: "std::boxed::Box::<i32>::from_raw".into(),
                 callee_def_path: None,
+                deallocator_evidence: None,
+                higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
                 resolved_instance_callees: Vec::new(),
@@ -2174,6 +2327,7 @@ mod tests {
                 unwind_target: "unreachable".into(),
                 dropped_value: "_6".into(),
                 is_mutable: false,
+                deallocator_evidence: None,
             }),
         });
 
@@ -2223,12 +2377,112 @@ mod tests {
                 unwind_target: "continue".into(),
                 dropped_value: "_6".into(),
                 is_mutable: false,
+                deallocator_evidence: None,
             }),
         });
         let contract = deallocator_contract(&node, &HashSet::new());
         assert_eq!(contract.family, "unknown");
         assert_eq!(contract.operation, "drop");
         assert_eq!(contract.language, "rust");
+        assert_eq!(contract.basis, Some("unresolved"));
+        assert!(contract.owner_def_path.is_none());
+        assert!(contract.allocator_def_path.is_none());
+    }
+
+    #[test]
+    fn v6n_typed_box_global_drop_contract_is_proof_carrying() {
+        let node = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 4,
+            statements: vec![],
+            terminator: Some(MirTerminator::Drop {
+                details: "drop(_1)".into(),
+                source_info: "<cqpl-test>".into(),
+                return_target: "bb5".into(),
+                unwind_target: "continue".into(),
+                dropped_value: "_1".into(),
+                is_mutable: false,
+                deallocator_evidence: Some(RustDropAllocatorEvidence {
+                    kind: RustDropAllocatorEvidenceKind::BoxGlobal,
+                    owner_def_path: "alloc::boxed::Box".into(),
+                    allocator_def_path: "alloc::alloc::Global".into(),
+                }),
+            }),
+        });
+        let contract = deallocator_contract(&node, &HashSet::new());
+        assert_eq!(contract.family, "rust_global");
+        assert_eq!(contract.operation, "drop");
+        assert_eq!(contract.language, "rust");
+        assert_eq!(contract.basis, Some("rust_box_global_drop"));
+        assert_eq!(contract.owner_def_path.as_deref(), Some("alloc::boxed::Box"));
+        assert_eq!(contract.allocator_def_path.as_deref(), Some("alloc::alloc::Global"));
+    }
+
+    #[test]
+    fn v6n_typed_vec_global_drop_contract_is_proof_carrying() {
+        let node = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 4,
+            statements: vec![],
+            terminator: Some(MirTerminator::Drop {
+                details: "drop(_1)".into(),
+                source_info: "<cqpl-test>".into(),
+                return_target: "bb5".into(),
+                unwind_target: "continue".into(),
+                dropped_value: "_1".into(),
+                is_mutable: false,
+                deallocator_evidence: Some(RustDropAllocatorEvidence {
+                    kind: RustDropAllocatorEvidenceKind::VecGlobal,
+                    owner_def_path: "alloc::vec::Vec".into(),
+                    allocator_def_path: "alloc::alloc::Global".into(),
+                }),
+            }),
+        });
+        let contract = deallocator_contract(&node, &HashSet::new());
+        assert_eq!(contract.family, "rust_global");
+        assert_eq!(contract.operation, "drop");
+        assert_eq!(contract.language, "rust");
+        assert_eq!(contract.basis, Some("rust_vec_global_drop"));
+    }
+
+    #[test]
+    fn v6n_r1a_global_dealloc_requires_producer_evidence_not_pretty_or_canonical_text() {
+        fn call(with_evidence: bool) -> GlobalICFGNode {
+            GlobalICFGNode::Mir(MirBasicBlock {
+                block_id: 5,
+                statements: vec![],
+                terminator: Some(MirTerminator::Call {
+                    details: "std::alloc::dealloc(copy _1, copy _2)".into(),
+                    source_info: "<cqpl-test>".into(),
+                    function_called: "std::alloc::dealloc".into(),
+                    // A canonical-looking path alone is diagnostic and must not
+                    // authorize a family refinement in the exporter.
+                    callee_def_path: Some("alloc::alloc::dealloc".into()),
+                    deallocator_evidence: with_evidence.then(|| RustCallDeallocatorEvidence {
+                        kind: RustCallDeallocatorEvidenceKind::GlobalDeallocApi,
+                        callee_def_path: "alloc::alloc::dealloc".into(),
+                    }),
+                    higher_order_evidence: None,
+                    callee_is_local: false,
+                    callback_def_paths: Vec::new(),
+                    resolved_instance_callees: Vec::new(),
+                    instance_dispatch_observed: false,
+                    instance_dispatch_external: false,
+                    instance_dispatch_unresolved: false,
+                    arguments: Vec::new(),
+                    return_place: "_0".into(),
+                    return_target: Some("bb6".into()),
+                    unwind_target: "continue".into(),
+                }),
+            })
+        }
+        let proven = deallocator_contract(&call(true), &HashSet::new());
+        assert_eq!(proven.family, "rust_global");
+        assert_eq!(proven.basis, Some("rust_global_dealloc_api"));
+        assert_eq!(proven.callee_def_path.as_deref(), Some("alloc::alloc::dealloc"));
+
+        let text_only = deallocator_contract(&call(false), &HashSet::new());
+        assert_eq!(text_only.family, "unknown");
+        assert_eq!(text_only.basis, Some("unresolved"));
+        assert!(text_only.callee_def_path.is_none());
     }
 
     #[test]
@@ -2255,7 +2509,7 @@ mod tests {
         assert!(out.iter().any(|l|
             l.predicate == "drop"
                 && l.allocation == stable_allocation_id(&allocation)
-                && l.deallocator_contract.as_ref().is_some_and(|c| c.family == "c_malloc" && c.operation == "free" && c.language == "c")
+                && l.deallocator_contract.as_ref().is_some_and(|c| c.family == "c_malloc" && c.operation == "free" && c.language == "c" && c.basis == Some("structural_c_free_v1"))
         ));
         assert_eq!(allocation_contract(&allocation).family, "rust_global");
     }

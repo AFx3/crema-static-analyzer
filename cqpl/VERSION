@@ -1,0 +1,10 @@
+CREMA-CQPL-v6Q-r1c
+status=final112-runtime-validated-frozen
+semantic_baseline=CREMA-CQPL-v6Q-r1b
+primary_toolchain=nightly-2024-11-21
+rustc=1.84.0-nightly (3fee0f12e 2024-11-20)
+subjects=112
+queries=12
+attempts=1344
+runtime_evidence_zip=cqpl-v6q-r1c-final112.zip
+runtime_evidence_sha256=bd77b63d67523346b4e3c3cd9554f9787d7685e0f46265912137d55a98a8e902

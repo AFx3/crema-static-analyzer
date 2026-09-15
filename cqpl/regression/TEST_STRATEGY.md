@@ -1,73 +1,99 @@
-# CQPL regression strategy over CREMA targets
+# Strategia di test CQPL v6Q-r1c
 
-This suite deliberately separates three validation layers.
+La release separa esplicitamente cinque livelli di verifica.
 
-## Layer 1 — CQPL unit semantics
+## Layer 1 — unit semantics del checker
 
-The Rust unit tests validate the CQPL parser, the three-valued truth lattice,
-cross-language quantification, alias-aware atomic predicates, strong `X`, and
-least/greatest fixed-point implementations of existential/universal `F`, `G`
-and `U`.
+I test Rust coprono:
 
-These tests do **not** duplicate CREMA transfer-function or lattice tests.
+- parser e capability declarations;
+- sort checking ProgramVar/AbstractAllocId;
+- truth lattice `ff < unk < tt`;
+- label ProgramVar e allocation-centric;
+- allocator mismatch;
+- strong `X`;
+- fixed point di `F`, `G`, `U`;
+- quantificatori;
+- intero vocabolario MIR terminator prodotto da CREMA v6Q.
 
-## Layer 2 — CREMA → CQPL boundary
+Non duplicano i test delle transfer CREMA.
 
-`crema/src/cqpl_export.rs` is tested inside CREMA. The checker independently
-validates `AnnotatedIcfg` schema version 1, graph closure, declared variables,
-per-program-point alias components, syntactic labels, and the post-state used by
-semantic may predicates.
+## Layer 2 — boundary CREMA → CQPL
 
-## Layer 3 — target repository replication
+Il checker valida indipendentemente:
 
-Every selected Cargo analysis root under `tests_and_target_repos/` is:
+- schema e capability;
+- closure del grafo;
+- domini variables/allocations;
+- alias components;
+- allocation identity/state;
+- contract allocator/deallocator;
+- structural MIR labels.
 
-1. built with the pinned Rust toolchain;
-2. analyzed by CREMA with `--only-icfg-annotated`;
-3. validated as an `AnnotatedIcfg`;
-4. checked with the same official `Leak`, `DF`, and `UAF` CQPL formulas;
-5. recorded as `ff`, `unk`, or `tt` together with reproducibility evidence.
+Unsupported/malformed è hard error, non `ff`.
 
-The runner is serial by design because CREMA/SVF use shared intermediate files.
-Parallel execution would risk cross-target contamination.
+## Layer 3 — corpus frozen 109
 
-## Target discovery
+`run_all.sh` usa `scripts/run_corpus_allocator_contracts.py` con:
 
-A target is a **minimal Cargo root**: a directory containing `Cargo.toml` that
-is not nested below another Cargo root inside `tests_and_target_repos/`.
-This includes the literal-box micro-targets while avoiding duplicate analysis of
-workspace members when a workspace root already exists.
+```text
+110 discovered
+109 active
+1 skipped: no_errors_projects/openapi-client-gen
+```
 
-Scopes:
+Ogni target viene buildato col nightly pinned e analizzato con `--mir-semantics-v2` mantenendo target config ed entry override congelati.
 
-- `all`: every currently discovered minimal Cargo root. No silent exclusion.
-- `frozen92`: historical frozen protocol. It excludes `openapi-client-gen` and
-  `a-code_full_rust/drop_raw_ptr_no_free`, and excludes later Phase-5 C-origin
-  additions. Exactly 92 targets are required.
-- `phase5-focus16`: exactly the 16 targets under `a-code_c_to_rust_alloc/`.
+Il corpus runner calcola anche le quattro proprietà canoniche Leak/DF/UAF/allocator-mismatch, poi la matrice finale le cross-checka.
 
-## Legacy results are not CQPL ground truth
+## Layer 4 — tre crate registry
 
-The frozen CREMA detector result is retained only as a **differential reference**.
-For a memory-error class:
+Le tre analisi sono explicit library subjects:
 
-- legacy positive + CQPL `unk|tt`: old detector reports it and CQPL does not refute it;
-- legacy positive + CQPL `ff`: review required;
-- legacy negative + CQPL `unk|tt`: CQPL-only non-refuting result, potentially a
-  conservative false positive or a semantic difference;
-- legacy negative + CQPL `ff`: both analyses do not report/non-refute that class.
+- unicode-ident 1.0.18;
+- ryu 1.0.20;
+- memchr 2.7.4.
 
-This relation is engineering evidence, not a soundness theorem.
+Versione, feature e API root sono pinned. Nessun fallback silenzioso target-kind è ammesso.
 
-`UB_FFI` is outside the three current CQPL queries and is therefore retained as
-an unmodeled legacy class, never coerced into Leak/DF/UAF.
+Il gate richiede inoltre semantic coverage senza statement/rvalue/terminator unmodeled e, per memchr, higher-order Option evidence senza unresolved.
 
-## Oracle policy
+## Layer 5 — matrice final112
 
-`oracles/reviewed_cqpl.json` contains only target/query outcomes that have been
-actually inspected and accepted. Missing entries mean **unreviewed**, not
-"don't care" in a scientific claim.
+112 grafi × 12 query = 1344 celle.
 
-Every complete run writes `candidate_oracle.UNREVIEWED.json`. It must never be
-promoted automatically. Review the corresponding K#, labels, abstract states,
-and source target before copying an outcome into the reviewed oracle.
+Gate:
+
+- 112 soggetti esatti;
+- 12 query esatte;
+- 1344 invocazioni;
+- tutti `rc=0`;
+- risultati solo `ff/unk/tt`;
+- cross-check quattro query canoniche;
+- coppie event/state uguali nella freeze;
+- allocator v1/v2 uguali nella freeze;
+- `mir_terminator_presence=tt` per 112/112 nella freeze;
+- checksum di tutti gli output.
+
+## Audit indipendente final112
+
+L'evidenza è stata inoltre verificata sui byte dei 112 grafi:
+
+- 112/112 graph validation PASS;
+- 1344/1344 query-result replay match;
+- 6894/6894 sidecar identity records match;
+- 0 source/oracle inconsistency irrisolta.
+
+Questo audit ha trovato il drift `term:unwind_terminate` producer/parser, corretto in r1c.
+
+## Policy sugli oracle
+
+Gli oracle storici/reviewed non vengono promossi automaticamente. Una differenza richiede review di:
+
+- sorgente target;
+- entry;
+- grafo;
+- state/labels/identity;
+- query esatta.
+
+`unk` non è failure e non è vulnerability proof.

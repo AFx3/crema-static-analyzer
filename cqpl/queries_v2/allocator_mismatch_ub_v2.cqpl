@@ -1,0 +1,8 @@
+# AllocatorMismatch-UB v6N-r1.
+# Family-level MAY mismatch with producer-certified v2 deallocator contracts.
+requires allocation_contracts_v2;
+
+exists_alloc a. EF (
+  alloc_l(a) &&
+  EX EF allocator_mismatch_l(a)
+)

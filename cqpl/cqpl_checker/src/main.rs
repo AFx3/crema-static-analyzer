@@ -144,9 +144,14 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     let has_allocation_contracts = capabilities.contains("allocation_contracts_v1");
     let has_allocation_contracts_v2 = capabilities.contains("allocation_contracts_v2");
     let has_allocation_state = capabilities.contains("allocation_state_v1");
+    let has_mir_semantic_labels = capabilities.contains("mir_semantic_labels_v1");
+    let has_mir_semantics_v2 = capabilities.contains("mir_semantics_v2");
 
     if has_allocation_contracts_v2 && !has_allocation_contracts {
         return Err("allocation_contracts_v2 refines allocation_contracts_v1; the artifact must declare both capabilities".into());
+    }
+    if has_mir_semantics_v2 && !has_mir_semantic_labels {
+        return Err("mir_semantics_v2 requires mir_semantic_labels_v1 so the active transfer profile remains auditable".into());
     }
 
     if has_allocation_contracts {
@@ -172,6 +177,36 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
                     "schema-v2 nodes[{index}] is missing required field '{required}'; validate the allocation-identity boundary before model checking"
                 ));
             }
+        }
+        if has_mir_semantic_labels {
+            let structural = object.get("semantic_labels").ok_or_else(|| format!(
+                "artifact declares mir_semantic_labels_v1 but schema-v2 nodes[{index}] is missing semantic_labels"
+            ))?;
+            let labels = structural.as_array().ok_or_else(|| format!(
+                "schema-v2 nodes[{index}].semantic_labels must be an array"
+            ))?;
+            let mut seen = std::collections::BTreeSet::new();
+            for (label_index, label) in labels.iter().enumerate() {
+                let label = label.as_str().ok_or_else(|| format!(
+                    "schema-v2 nodes[{index}].semantic_labels[{label_index}] must be a string"
+                ))?;
+                let Some((kind, name)) = label.split_once(':') else {
+                    return Err(format!("invalid structural MIR label '{label}'"));
+                };
+                if !matches!(kind, "stmt" | "rvalue" | "term")
+                    || name.is_empty()
+                    || !name.chars().all(|c| c == '_' || c.is_ascii_lowercase() || c.is_ascii_digit())
+                {
+                    return Err(format!("invalid structural MIR label '{label}'"));
+                }
+                if !seen.insert(label) {
+                    return Err(format!("duplicate structural MIR label '{label}' in nodes[{index}]"));
+                }
+            }
+        } else if object.get("semantic_labels").is_some_and(|v| v.as_array().is_some_and(|a| !a.is_empty())) {
+            return Err(format!(
+                "schema-v2 nodes[{index}] contains structural MIR labels without capability mir_semantic_labels_v1"
+            ));
         }
         if has_allocation_state && !object.contains_key("allocation_post") {
             return Err(format!(
