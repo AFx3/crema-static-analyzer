@@ -1,7 +1,7 @@
 use cqpl_checker::{parse_query_document, AnnotatedIcfg, Binding, Env, Kripke, ModelChecker};
 use serde::Serialize;
 use serde_json::Value;
-use std::{env, fs, process};
+use std::{env, fs, path::Path, process};
 
 #[derive(Serialize)]
 struct JsonOutput<'a> {
@@ -12,7 +12,7 @@ struct JsonOutput<'a> {
 }
 
 fn usage() -> ! {
-    eprintln!("Usage: cqpl_checker <annotated-icfg.json> <query.cqpl> [--entry NODE_OR_FUNCTION] [--intra] [--bind x=PROGRAM_VAR_ID]... [--bind-alloc a=ABSTRACT_ALLOC_ID]... [--json] [--explain-json PATH] [--explain-max-witnesses N]");
+    eprintln!("Usage: cqpl_checker <annotated-icfg.json> <query.cqpl> [--entry NODE_OR_FUNCTION] [--intra] [--bind x=PROGRAM_VAR_ID]... [--bind-alloc a=ABSTRACT_ALLOC_ID]... [--json] [--explain-json PATH] [--explain-unk-verbose] [--explain-max-witnesses N]");
     process::exit(2);
 }
 
@@ -119,6 +119,53 @@ fn validate_v2_deallocator_contract_object(value: &Value, where_: &str) -> Resul
     Ok(())
 }
 
+fn validate_disposition_object(
+    value: &Value,
+    known_allocations: &std::collections::BTreeSet<&str>,
+    where_: &str,
+) -> Result<(), String> {
+    let object = value.as_object().ok_or_else(|| format!("{where_} must be an object"))?;
+    let allocation = object.get("allocation").and_then(Value::as_str)
+        .ok_or_else(|| format!("{where_} is missing string allocation"))?;
+    if !known_allocations.contains(allocation) {
+        return Err(format!("{where_} references unknown allocation '{allocation}'"));
+    }
+    let kind = object.get("kind").and_then(Value::as_str)
+        .ok_or_else(|| format!("{where_} is missing string kind"))?;
+    let certainty = object.get("certainty").and_then(Value::as_str)
+        .ok_or_else(|| format!("{where_} is missing string certainty"))?;
+    if certainty != "may_abstract" {
+        return Err(format!("{where_}.certainty must be 'may_abstract', got '{certainty}'"));
+    }
+    let effect = object.get("obligation_effect").and_then(Value::as_str)
+        .ok_or_else(|| format!("{where_} is missing string obligation_effect"))?;
+    let basis = object.get("basis").and_then(Value::as_str)
+        .ok_or_else(|| format!("{where_} is missing string basis"))?;
+    let (expected_effect, expected_basis, requires_callee) = match kind {
+        "box_into_raw" => ("preserve_manual_obligation", "rustc_box_into_raw_v1", true),
+        "box_from_raw" => ("restore_raii_obligation", "rustc_box_from_raw_v1", true),
+        "box_leak" => ("preserve_persistent_obligation", "rustc_box_leak_v1", true),
+        "mem_forget_owned_box" => ("preserve_unreclaimed_obligation", "rustc_mem_forget_owned_box_v1", true),
+        "raw_pointer_drop_noop" => ("no_pointee_lifecycle_effect", "rustc_mem_drop_raw_pointer_v1", true),
+        "return_escape" => ("may_escape_to_caller", "rust_return_identity_v1", false),
+        "may_deallocate" => ("may_discharge", "allocation_drop_label_v1", false),
+        other => return Err(format!("{where_} has unsupported allocation_disposition_v1 kind '{other}'")),
+    };
+    if effect != expected_effect || basis != expected_basis {
+        return Err(format!(
+            "{where_} invalid disposition tuple kind={kind} effect={effect} basis={basis}"
+        ));
+    }
+    let callee = object.get("callee_def_path").and_then(Value::as_str);
+    if requires_callee && callee.map_or(true, str::is_empty) {
+        return Err(format!("{where_} kind '{kind}' requires non-empty callee_def_path"));
+    }
+    if !requires_callee && callee.is_some() {
+        return Err(format!("{where_} kind '{kind}' must not carry call provenance"));
+    }
+    Ok(())
+}
+
 fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     let Some(schema_version) = root.get("schema_version").and_then(Value::as_u64) else {
         return Err("annotated ICFG is missing integer schema_version".into());
@@ -144,6 +191,7 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     let has_allocation_contracts = capabilities.contains("allocation_contracts_v1");
     let has_allocation_contracts_v2 = capabilities.contains("allocation_contracts_v2");
     let has_allocation_state = capabilities.contains("allocation_state_v1");
+    let has_allocation_disposition = capabilities.contains("allocation_disposition_v1");
     let has_mir_semantic_labels = capabilities.contains("mir_semantic_labels_v1");
     let has_mir_semantics_v2 = capabilities.contains("mir_semantics_v2");
 
@@ -152,6 +200,10 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     }
     if has_mir_semantics_v2 && !has_mir_semantic_labels {
         return Err("mir_semantics_v2 requires mir_semantic_labels_v1 so the active transfer profile remains auditable".into());
+    }
+
+    if has_allocation_disposition && schema_version != 2 {
+        return Err("allocation_disposition_v1 requires annotated ICFG schema v2".into());
     }
 
     if has_allocation_contracts {
@@ -212,6 +264,27 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
             return Err(format!(
                 "artifact declares allocation_state_v1 but schema-v2 nodes[{index}] is missing allocation_post"
             ));
+        }
+        if has_allocation_disposition && !object.contains_key("allocation_disposition") {
+            return Err(format!(
+                "artifact declares allocation_disposition_v1 but schema-v2 nodes[{index}] is missing allocation_disposition"
+            ));
+        }
+        if let Some(records) = object.get("allocation_disposition") {
+            let records = records.as_array().ok_or_else(|| format!(
+                "schema-v2 nodes[{index}].allocation_disposition must be an array"
+            ))?;
+            let known_allocations: std::collections::BTreeSet<_> = allocations
+                .iter()
+                .filter_map(|a| a.get("id").and_then(Value::as_str))
+                .collect();
+            for (record_index, record) in records.iter().enumerate() {
+                validate_disposition_object(
+                    record,
+                    &known_allocations,
+                    &format!("nodes[{index}].allocation_disposition[{record_index}]"),
+                )?;
+            }
         }
         if let Some(allocation_post) = object.get("allocation_post") {
             let post_object = allocation_post
@@ -297,6 +370,7 @@ fn run() -> Result<(), String> {
     let mut entry_override: Option<String> = None;
     let mut intra = false;
     let mut explain_json: Option<String> = None;
+    let mut explain_unk_verbose = false;
     let mut explain_max_witnesses: usize = 8;
 
     let mut i = 2;
@@ -314,6 +388,7 @@ fn run() -> Result<(), String> {
                 explain_json = Some(path.clone());
                 i += 2;
             }
+            "--explain-unk-verbose" => { explain_unk_verbose = true; i += 1; }
             "--explain-max-witnesses" => {
                 let Some(raw) = args.get(i + 1) else { return Err("--explain-max-witnesses requires N".into()); };
                 explain_max_witnesses = raw.parse::<usize>()
@@ -356,7 +431,8 @@ fn run() -> Result<(), String> {
     let checker = ModelChecker::new(&k);
     let result = checker.evaluate_document(&query, &env0)?;
 
-    if let Some(path) = explain_json.as_deref() {
+    let need_explanation = explain_json.is_some() || (explain_unk_verbose && result.as_str() == "unk");
+    let explanation_report = if need_explanation {
         let report = checker.explain_document(&query, &env0, explain_max_witnesses)?;
         if report.result != result.as_str() {
             return Err(format!(
@@ -365,7 +441,13 @@ fn run() -> Result<(), String> {
                 report.result,
             ));
         }
-        let text = serde_json::to_string_pretty(&report)
+        Some(report)
+    } else {
+        None
+    };
+
+    if let (Some(path), Some(report)) = (explain_json.as_deref(), explanation_report.as_ref()) {
+        let text = serde_json::to_string_pretty(report)
             .map_err(|e| format!("cannot serialize explanation JSON: {e}"))?;
         fs::write(path, format!("{text}\n"))
             .map_err(|e| format!("cannot write explanation JSON '{path}': {e}"))?;
@@ -388,6 +470,17 @@ fn run() -> Result<(), String> {
             "tt" => println!("Interpretation: the formula is established in the annotated abstract Kripke model; this is not by itself a proof of a concrete execution."),
             _ => unreachable!(),
         }
+    }
+
+    if explain_unk_verbose && result.as_str() == "unk" {
+        let report = explanation_report
+            .as_ref()
+            .ok_or_else(|| "internal error: verbose UNKNOWN explanation report was not built".to_string())?;
+        let query_name = Path::new(query_path)
+            .file_stem()
+            .and_then(|x| x.to_str())
+            .unwrap_or(query_path);
+        eprint!("{}", report.render_unknown_verbose(query_name));
     }
     Ok(())
 }

@@ -2,7 +2,9 @@
 
 CQPL è il checker temporale three-valued usato per interrogare il grafo annotato prodotto da CREMA.
 
-La pipeline reale della release v6R-r1 (con semantica v6Q-r1c congelata) è:
+La pipeline del candidate v6S-r1 parte dal freeze v6R-r1 e mantiene la semantica delle 12 query v6Q-r1c congelata:
+
+> **Implementation revision r1a.** The first r1 full-run exposed a pinned-rustc ICE caused by reading `item_name` from an `Impl` parent `DefId`. r1a guards parent-name reads with `DefKind::Mod`; allocation-disposition semantics and frozen-query truth remain unchanged.
 
 ```text
 Cargo project / crate
@@ -20,6 +22,7 @@ annotated_icfg_v2.json
         |\
         | \
         |  +--> explanation.json (v6R, opt-in)
+        |  +--> allocation_disposition[] (v6S-r1 producer provenance)
         v
    ff | unk | tt
 ```
@@ -29,9 +32,10 @@ CQPL **non ricompila il programma e non ricostruisce MIR/LLVM**. Il checker rice
 ## Release corrente
 
 ```text
-CREMA-CQPL-v6R-r1
+CREMA-CQPL-v6S-r1
 semantic baseline: CREMA-CQPL-v6Q-r1c
-status: explainability observational runtime-validated freeze candidate
+explainability baseline: CREMA-CQPL-v6R-r1 (commit aa7ed4e...)
+status: allocation-disposition observational candidate; runtime validation required
 primary toolchain: nightly-2024-11-21
 rustc: 1.84.0-nightly (3fee0f12e 2024-11-20)
 ```
@@ -79,6 +83,14 @@ Il bundle runtime esterno `explainability.zip` ha SHA-256 `f41117d1d2fc1838cc1ee
 
 Per una spiegazione didattica campo-per-campo e un esempio completo su `boxed_bool__ml`, vedi [EXPLAINABILITY_GUIDE.md](EXPLAINABILITY_GUIDE.md).
 
+### v6S-r1: allocation disposition senza cambiare le query storiche
+
+v6S-r1 aggiunge la capability artifact `allocation_disposition_v1`. CREMA serializza osservazioni MAY sull'evoluzione della responsabilità di cleanup di un `AbstractAllocId`: `Box::into_raw`, `Box::from_raw`, `Box::leak`, `mem::forget(Box)`, return escape, deallocation MAY e soprattutto `mem::drop(raw_pointer)` come **no-op sul pointee**.
+
+La Rust Reference specifica che copiare o droppare un raw pointer non influenza il lifecycle di altri valori; quindi una call `std::mem::drop(raw: *mut T)` non produce `drop_l(a)`, non produce `may_deallocate(a)` e non deve portare il pointee a `FREED`. La classificazione v6S è fatta dal producer usando rustc `DefId` e il tipo dell'argomento, non ricostruita nel checker da stringhe.
+
+Tutti i record r1 hanno `certainty=may_abstract`. **Le 12 query esistenti non consumano questi record**, quindi l'accettazione v6S-r1 richiede una nuova run 112×12 con zero mismatch contro v6R. Per la spiegazione semplice e i tre esempi `boxed_bool__ml`, `clean_into_from_raw` e `drop_raw_ptr_no_free`, vedi [V6S_R1_GUIDE.md](V6S_R1_GUIDE.md). Il contratto normativo è [capabilities/allocation_disposition_v1.md](capabilities/allocation_disposition_v1.md).
+
 ## Come CREMA e CQPL si dividono il lavoro
 
 CREMA produce il significato astratto; CQPL lo interroga.
@@ -91,7 +103,8 @@ CREMA calcola:
 4. eventi `alloc/drop/read/write/use`;
 5. contratti allocator/deallocator;
 6. label strutturali MIR `stmt:*`, `rvalue:*`, `term:*`;
-7. opzionalmente telemetry di semantic coverage per il pipeline library v6O/v6Q.
+7. provenance v6S-r1 `allocation_disposition_v1` per eventi ownership/lifecycle certificati;
+8. opzionalmente telemetry di semantic coverage per il pipeline library v6O/v6Q.
 
 CQPL usa soltanto ciò che è serializzato nell'annotated ICFG. In particolare **il TaintState interno di CREMA non è un dominio di predicati CQPL**: serve a CREMA come componente ausiliaria MAY/provenance, ma non viene esportato come `taint_src`/`taint_snk`. Vedi [LANGUAGE.md](LANGUAGE.md) e [ANNOTATED_ICFG.md](ANNOTATED_ICFG.md).
 
@@ -351,6 +364,8 @@ artifact/FINAL112_AUDIT.md        audit scientifico
 regression/                       test/oracle storici e strategia
 scripts/run_one_target_v6q_r1c.py analisi singolo target
 EXPLAINABILITY_GUIDE.md           tutorial explainability passo-passo
+V6S_R1_GUIDE.md                    guida allocation disposition + raw-pointer drop
+NEXT_STEPS_V6S.md                  roadmap empirica verso leak query più precisa
 EXPLAINABILITY.md                 contratto diagnostico normativo
 run_all.sh                        protocollo finale 109+3+12
 ```
@@ -397,9 +412,27 @@ Una causa come `MAY_ALLOCATION` non significa “vulnerabilità confermata”: s
 
 La validation v6R-r1 ha verificato 1344/1344 risultati ordinari identici a v6Q-r1c, senza `unk` non spiegati e senza `tt` privi di witness.
 
+Uso interattivo raccomandato per una run v2:
+
+```bash
+python3 scripts/run_one_target_v6q_r1c.py \
+  --root "$ROOT" \
+  --relative-path 'a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_bool' \
+  --explain-unk-verbose
+```
+
+Ogni `unk` genera sempre il relativo `.explain.json`; con `--explain-unk-verbose` lo stesso report validato viene anche mostrato nel terminale. Gli esempi empirici validati includono leak, UAF, double-free, allocator mismatch noto, contratto allocator irrisolto e UNKNOWN senza finding positivo.
+
 Documenti principali:
 
-- [EXPLAINABILITY_GUIDE.md](EXPLAINABILITY_GUIDE.md): guida semplice, campi JSON ed esempio passo-passo `boxed_bool__ml`;
+- [EXPLAINABILITY_GUIDE.md](EXPLAINABILITY_GUIDE.md): guida semplice, campi JSON, uso di `--explain-unk-verbose` ed esempi reali leak/UAF/double-free/allocator-mismatch;
 - [EXPLAINABILITY.md](EXPLAINABILITY.md): contratto scientifico e tassonomia normativa;
 - [V6R_VALIDATION.md](V6R_VALIDATION.md): protocollo e risultati di acceptance;
 - `artifact/V6R_RUNTIME_VALIDATION.json`: summary machine-readable della validation.
+
+## Documentazione v6S-r1
+
+- [V6S_R1_GUIDE.md](V6S_R1_GUIDE.md): spiegazione semplice, esempi e comportamento atteso;
+- [capabilities/allocation_disposition_v1.md](capabilities/allocation_disposition_v1.md): contratto machine-readable;
+- [V6S_VALIDATION.md](V6S_VALIDATION.md): protocollo di acceptance;
+- [NEXT_STEPS_V6S.md](NEXT_STEPS_V6S.md): next steps dopo il census dei 105 leak unknown.

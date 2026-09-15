@@ -485,6 +485,34 @@ fn local(function: &str, raw: &str) -> Option<ProgramVarId> {
     ProgramVarId::rust(function.to_string(), raw)
 }
 
+/// Return the destination variable only for a direct MIR-local assignment.
+/// `describe_place` appends ` -> ...` for every non-empty MIR projection; a
+/// write through such a place mutates projected storage, not the base local
+/// that carries the pointer/owner identity.
+fn direct_assignment_local(function: &str, place: &str) -> Option<ProgramVarId> {
+    if place.contains(" -> ") {
+        return None;
+    }
+    local(function, place)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum IdentityTransferProfile {
+    LegacyFrozen,
+    DispositionV6S,
+}
+
+fn assignment_destination(
+    function: &str,
+    place: &str,
+    profile: IdentityTransferProfile,
+) -> Option<ProgramVarId> {
+    match profile {
+        IdentityTransferProfile::LegacyFrozen => local(function, place),
+        IdentityTransferProfile::DispositionV6S => direct_assignment_local(function, place),
+    }
+}
+
 fn first_local_operand(function: &str, text: &str) -> Option<ProgramVarId> {
     // Prefer the canonical `Local(_N)` spelling emitted by the CREMA census.
     if let Some(pos) = text.find("Local(_") {
@@ -878,12 +906,26 @@ fn transfer_statement(
     stmt: &MirStatement,
     memory: &mut AllocationIdentityMemory,
 ) {
+    transfer_statement_with_profile(
+        function,
+        stmt,
+        memory,
+        IdentityTransferProfile::LegacyFrozen,
+    );
+}
+
+fn transfer_statement_with_profile(
+    function: &str,
+    stmt: &MirStatement,
+    memory: &mut AllocationIdentityMemory,
+    profile: IdentityTransferProfile,
+) {
     if stmt.kind != "Assign" {
         return;
     }
 
     let Some(place) = stmt.place.as_deref() else { return; };
-    let Some(dest) = local(function, place) else { return; };
+    let Some(dest) = assignment_destination(function, place, profile) else { return; };
     let Some(rvalue) = stmt.rvalue.as_deref() else {
         clear_destination(memory, &dest);
         return;
@@ -1052,6 +1094,7 @@ fn transfer_mir_node(
     context: &[String],
     internal_call: bool,
     input: &AllocationIdentityMemory,
+    profile: IdentityTransferProfile,
 ) -> (AllocationIdentityMemory, AllocationIdentityMemory) {
     let Some(function) = rust_function_from_node(node_id) else {
         return (input.clone(), input.clone());
@@ -1065,7 +1108,7 @@ fn transfer_mir_node(
         // after every statement so an event that occurs before a later strong
         // overwrite cannot lose its AbstractAllocId at export time.
         event_summary = event_summary.join(&out);
-        transfer_statement(function, stmt, &mut out);
+        transfer_statement_with_profile(function, stmt, &mut out, profile);
         event_summary = event_summary.join(&out);
     }
 
@@ -1300,6 +1343,29 @@ pub fn fixed_point_identity_analysis(
     icfg: &GlobalICFGOrdered,
     entry: &str,
 ) -> AllocationIdentityState {
+    fixed_point_identity_analysis_with_profile(
+        icfg,
+        entry,
+        IdentityTransferProfile::LegacyFrozen,
+    )
+}
+
+pub fn fixed_point_disposition_identity_analysis(
+    icfg: &GlobalICFGOrdered,
+    entry: &str,
+) -> AllocationIdentityState {
+    fixed_point_identity_analysis_with_profile(
+        icfg,
+        entry,
+        IdentityTransferProfile::DispositionV6S,
+    )
+}
+
+fn fixed_point_identity_analysis_with_profile(
+    icfg: &GlobalICFGOrdered,
+    entry: &str,
+    profile: IdentityTransferProfile,
+) -> AllocationIdentityState {
     validate_canonical_rust_call_relation(icfg);
     let nodes = node_map(icfg);
     let succs = successor_map(icfg);
@@ -1337,6 +1403,7 @@ pub fn fixed_point_identity_analysis(
                 &point.context,
                 has_internal_rust_branch,
                 &input,
+                profile,
             ),
             GlobalICFGNode::Llvm(llvm_node) => transfer_llvm_identity(
                 &point.node,
@@ -1628,6 +1695,7 @@ mod tests {
                 function_called: callee.to_string(),
                 callee_def_path: None,
                 deallocator_evidence: None,
+                allocation_disposition_evidence: None,
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -2093,14 +2161,114 @@ mod tests {
             terminator: None,
         };
 
-        let (post, event_summary) =
-            transfer_mir_node("rust::main::bb0", &bb, &[], false, &input);
+        let (post, event_summary) = transfer_mir_node(
+            "rust::main::bb0",
+            &bb,
+            &[],
+            false,
+            &input,
+            IdentityTransferProfile::LegacyFrozen,
+        );
 
         assert_eq!(post.points_to(&p), BTreeSet::from([b.clone()]));
         assert_eq!(
             event_summary.event_allocations(&p),
             BTreeSet::from([a, b])
         );
+    }
+
+    #[test]
+    fn v6s_legacy_identity_keeps_frozen_projected_lhs_behavior() {
+        let raw = rust("main", 9);
+        let allocation = alloc("A");
+        let mut mem = AllocationIdentityMemory::default();
+        mem.assign_fresh(raw.clone(), allocation);
+
+        let stmt = MirStatement {
+            source_info: source_info(),
+            kind: "Assign".to_string(),
+            details: "Assign(((*_9), move (_14.0: i32)))".to_string(),
+            place: Some("Local(_9) -> *".to_string()),
+            is_mutable: Some(false),
+            rvalue: Some("move (_14.0: i32)".to_string()),
+        };
+
+        transfer_statement("main", &stmt, &mut mem);
+
+        assert!(mem.points_to(&raw).is_empty());
+    }
+
+    #[test]
+    fn v6s_projected_deref_write_preserves_base_pointer_identity() {
+        let raw = rust("main", 9);
+        let allocation = alloc("A");
+        let mut mem = AllocationIdentityMemory::default();
+        mem.assign_fresh(raw.clone(), allocation.clone());
+
+        let stmt = MirStatement {
+            source_info: source_info(),
+            kind: "Assign".to_string(),
+            details: "Assign(((*_9), move (_14.0: i32)))".to_string(),
+            place: Some("Local(_9) -> *".to_string()),
+            is_mutable: Some(false),
+            rvalue: Some("move (_14.0: i32)".to_string()),
+        };
+
+        transfer_statement_with_profile(
+            "main",
+            &stmt,
+            &mut mem,
+            IdentityTransferProfile::DispositionV6S,
+        );
+
+        assert_eq!(mem.points_to(&raw), BTreeSet::from([allocation]));
+    }
+
+    #[test]
+    fn v6s_projected_field_write_does_not_strong_overwrite_base_identity() {
+        let base = rust("main", 9);
+        let allocation = alloc("A");
+        let mut mem = AllocationIdentityMemory::default();
+        mem.assign_fresh(base.clone(), allocation.clone());
+
+        let stmt = MirStatement {
+            source_info: source_info(),
+            kind: "Assign".to_string(),
+            details: "Assign(((_9.0: i32), const 1_i32))".to_string(),
+            place: Some("Local(_9) -> Field(0, Type: i32)".to_string()),
+            is_mutable: Some(false),
+            rvalue: Some("const 1_i32".to_string()),
+        };
+
+        transfer_statement_with_profile(
+            "main",
+            &stmt,
+            &mut mem,
+            IdentityTransferProfile::DispositionV6S,
+        );
+
+        assert_eq!(mem.points_to(&base), BTreeSet::from([allocation]));
+    }
+
+    #[test]
+    fn v6s_direct_local_unknown_assignment_still_strong_overwrites_identity() {
+        let local = rust("main", 9);
+        let allocation = alloc("A");
+        let mut mem = AllocationIdentityMemory::default();
+        mem.assign_fresh(local.clone(), allocation);
+
+        let stmt = MirStatement {
+            source_info: source_info(),
+            kind: "Assign".to_string(),
+            details: "Assign((_9, const 1_i32))".to_string(),
+            place: Some("Local(_9)".to_string()),
+            is_mutable: Some(false),
+            rvalue: Some("const 1_i32".to_string()),
+        };
+
+        transfer_statement("main", &stmt, &mut mem);
+
+        assert!(mem.points_to(&local).is_empty());
     }
 
     #[test]
@@ -2384,6 +2552,7 @@ mod tests {
                 function_called: "<{closure@test.rs:1:1: 1:2} as std::ops::Fn<()>>::call".to_string(),
                 callee_def_path: None,
                 deallocator_evidence: None,
+                allocation_disposition_evidence: None,
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -2434,6 +2603,7 @@ mod tests {
                 function_called: "std::boxed::Box::<i32>::from_raw".to_string(),
                 callee_def_path: None,
                 deallocator_evidence: None,
+                allocation_disposition_evidence: None,
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -2485,6 +2655,7 @@ mod tests {
                 function_called: "std::boxed::Box::<i32>::from_raw".to_string(),
                 callee_def_path: None,
                 deallocator_evidence: None,
+                allocation_disposition_evidence: None,
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),

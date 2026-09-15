@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://crema.local/schemas/cqpl-annotated-icfg-v2.json",
-  "title": "CREMA CQPL Annotated ICFG v2 (allocation identity + allocation contracts/state capabilities)",
+  "title": "CREMA CQPL Annotated ICFG v2 (allocation identity + contracts/state + v6S disposition provenance)",
   "type": "object",
   "required": [
     "schema_version",
@@ -580,6 +580,12 @@
         },
         "allocation_post": {
           "$ref": "#/$defs/allocationMemory"
+        },
+        "allocation_disposition": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/allocationDispositionRecord"
+          }
         }
       }
     },
@@ -817,6 +823,71 @@
           }
         }
       ]
+    },
+    "allocationDispositionRecord": {
+      "type": "object",
+      "required": [
+        "allocation",
+        "kind",
+        "certainty",
+        "obligation_effect",
+        "basis"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "allocation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "box_into_raw",
+            "box_from_raw",
+            "box_leak",
+            "mem_forget_owned_box",
+            "raw_pointer_drop_noop",
+            "return_escape",
+            "may_deallocate"
+          ]
+        },
+        "certainty": {
+          "const": "may_abstract"
+        },
+        "obligation_effect": {
+          "enum": [
+            "preserve_manual_obligation",
+            "restore_raii_obligation",
+            "preserve_persistent_obligation",
+            "preserve_unreclaimed_obligation",
+            "no_pointee_lifecycle_effect",
+            "may_escape_to_caller",
+            "may_discharge"
+          ]
+        },
+        "basis": {
+          "enum": [
+            "rustc_box_into_raw_v1",
+            "rustc_box_from_raw_v1",
+            "rustc_box_leak_v1",
+            "rustc_mem_forget_owned_box_v1",
+            "rustc_mem_drop_raw_pointer_v1",
+            "rust_return_identity_v1",
+            "allocation_drop_label_v1"
+          ]
+        },
+        "source_variable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_variable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "callee_def_path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     }
   },
   "allOf": [
@@ -839,6 +910,31 @@
             "items": {
               "required": [
                 "allocation_post"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "allocation_disposition_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "required": [
+                "allocation_disposition"
               ]
             }
           }

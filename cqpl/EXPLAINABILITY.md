@@ -69,6 +69,7 @@ Campi top-level:
 | `scope_note` | Specifica che la spiegazione riguarda il modello astratto. |
 | `reason_frontier` | Reason code deduplicati nei witness emessi. |
 | `reason_counts` | Conteggi dei reason code nei witness; non sono probabilità né classi disgiunte. |
+| `supporting_findings` | Evidenza bug-supporting osservazionale separata dalla truth semantics; può essere presente anche con `result=unk`. |
 | `witnesses` | Dependency trace strutturate per `unk`/`tt`. |
 | `diagnostics` | Gate automatici di completezza/minima specificità. |
 
@@ -278,3 +279,80 @@ v6R-r1 è uno strumento di misura, non un intervento di precisione. Non aggiunge
 Questi interventi appartengono alle versioni successive e devono essere scelti dai dati misurati.
 
 Per l'esempio completo target → CREMA → CQPL → explanation, vedi [EXPLAINABILITY_GUIDE.md](EXPLAINABILITY_GUIDE.md).
+
+## 12. Invariante di orchestrazione: ogni `unk` v2 ha un report
+
+Per le esecuzioni standard schema-v2, explainability non è più un pass manuale opzionale.
+I runner ufficiali applicano la policy fail-closed:
+
+```text
+query result = ff  -> nessun report obbligatorio
+query result = tt  -> nessun report obbligatorio
+query result = unk -> explanation sidecar obbligatorio
+```
+
+L'obbligo vale per ogni query v2 effettivamente eseguita e per ogni target/crate.
+Il numero corrente del catalogo ufficiale è 12 query; la policy non dipende dal
+numero e resta valida per un sottoinsieme selezionato da un runner specializzato.
+
+Il runner esegue prima la query normale. Solo se il risultato congelato è `unk`,
+riesegue la stessa coppia artifact/query con `--explain-json`. La seconda esecuzione
+deve soddisfare tutte le proprietà seguenti:
+
+```text
+plain_result == unk
+explanation.result == unk
+reason_frontier != []
+diagnostics.unknown_has_reason_frontier == true
+diagnostics.unknown_has_specific_origin == true
+```
+
+Qualunque violazione è un errore infrastrutturale: il runner termina non-zero.
+Questa policy non modifica CTL, il lattice three-valued o il risultato della query.
+
+Per il one-target runner i sidecar sono:
+
+```text
+queries/<query>.explain.json
+unknown-explanations.tsv
+unknown-explanations-summary.json
+```
+
+Per la matrice multi-target:
+
+```text
+results/<target>/<query>.explain.json
+unknown-explanations.tsv
+unknown-explanations-summary.json
+```
+
+`unknown-explanations-summary.json` usa lo schema:
+
+```text
+cqpl_unknown_explanations_v1
+```
+
+e certifica l'invariante quantitativo:
+
+```text
+unknown_results == explanations_generated
+complete == true
+```
+
+`supporting_findings` non è obbligatorio per ogni `unk`: dipende dalla disponibilità
+di evidenza diagnostica specifica per la proprietà. In particolare, una leak query
+può associare a `unk` un `normal_return_open_manual_obligation` con
+`strong_abstract_evidence`, mentre un altro `unk` può avere solo una frontier
+d'incertezza specifica. L'assenza di un supporting finding non cambia la truth
+semantics e non autorizza a inventare una diagnosi positiva.
+
+### v6T memory-error diagnostic findings
+
+The v6T interactive UNKNOWN layer generalizes `supporting_findings` beyond
+leaks.  Query truth remains the frozen CQPL `tt/ff/unk`; the diagnostic layer
+only summarizes ordered evidence already present in the projected Kripke
+model.  UAF findings require drop-before-use with no re-allocation, double-free
+findings require two ordered drops with no re-allocation, and allocator-mismatch
+findings report the serialized allocator/deallocator families.  Unknown
+allocator families are reported as unresolved candidates rather than as proven
+family mismatches.

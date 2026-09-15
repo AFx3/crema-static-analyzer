@@ -1,4 +1,4 @@
-# CQPL v6R-r1 — linguaggio, semantica e interpretazione (baseline semantica v6Q-r1c)
+# CQPL v6S-r1 — linguaggio congelato + provenance disposition (baseline semantica v6Q-r1c)
 
 Questo documento descrive il linguaggio **effettivamente implementato** dal checker v6Q-r1c. La sorgente normativa resta il codice in `cqpl_checker/src/`; questo file ne rende espliciti tipi, truth domain, capability e boundary.
 
@@ -573,3 +573,22 @@ reason = MAY_ALLOCATION
 Le reason `EXTERNAL_EFFECT`, `UNRESOLVED_ESCAPE`, `GLOBAL_TOP_EFFECT`, `CONTROL_FLOW_UNRESOLVED`, `HIGHER_ORDER_UNRESOLVED` restano riservate finché il producer non esporta provenance certificata. Non vengono dedotte da stringhe DefPath o dalla sola presenza di `TOP`.
 
 Per la definizione campo-per-campo e un esempio eseguibile dal target `boxed_bool__ml`, vedi [EXPLAINABILITY_GUIDE.md](EXPLAINABILITY_GUIDE.md). Per il contratto normativo completo vedi [EXPLAINABILITY.md](EXPLAINABILITY.md).
+
+## 19. `allocation_disposition_v1`: informazione artifact, non nuovo predicato CQPL
+
+v6S-r1 non estende la grammatica. `allocation_disposition[]` è provenance prodotta da CREMA e validata dal checker, ma le 12 formule congelate non la interrogano.
+
+Ogni record è legato a un `AbstractAllocId` e ha `certainty = may_abstract`. Di conseguenza la presenza di un record significa “questa transizione è rappresentata dall'analisi MAY”; l'assenza non autorizza una negazione MUST.
+
+La distinzione fondamentale per leak reasoning è tra **valore puntatore** e **lifecycle del pointee**. Per un raw pointer `p: *mut T`, `std::mem::drop(p)` consuma/copia il valore puntatore ma non invoca il destructor di `T` e non dealloca l'allocazione puntata. v6S registra quindi:
+
+```text
+kind = raw_pointer_drop_noop
+obligation_effect = no_pointee_lifecycle_effect
+```
+
+e proibisce che tale evidenza autorizzi `drop_l(a)` o `may_deallocate(a)`.
+
+`Box::into_raw` è invece `preserve_manual_obligation`: la documentazione Rust rende il caller responsabile della distruzione e del rilascio della memoria. `Box::from_raw` ricostruisce l'owner RAII, ma in r1 resta una osservazione MAY e non equivale da sola a deallocation.
+
+Per il vocabolario completo vedi `capabilities/allocation_disposition_v1.md`. Una futura v6S-r2 potrà aggiungere predicati MUST/obligation separati, senza reinterpretare `alloc_l` e `drop_l`.

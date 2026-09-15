@@ -1,0 +1,35 @@
+{
+  "baseline_attempts": 1344,
+  "baseline_commit": "aa7ed4edcb4b6240aa14e3d23c7d7b848bfa2fb6",
+  "baseline_leak_alloc_unknown": 105,
+  "baseline_queries": 12,
+  "baseline_subjects": 112,
+  "compiler_safety_gate": "parent item_name only after DefKind::Mod",
+  "disposition_certainty": "may_abstract",
+  "fixture_gates": {
+    "boxed_bool__ml": [
+      "box_into_raw",
+      "no_box_from_raw"
+    ],
+    "clean_into_from_raw": [
+      "box_into_raw",
+      "box_from_raw"
+    ],
+    "drop_raw_ptr_no_free": [
+      "raw_pointer_drop_noop",
+      "no_drop_l_for_same_allocation_at_raw_drop_node",
+      "no_may_deallocate_for_same_allocation_at_raw_drop_node",
+      "pointee_not_freed_by_raw_drop_node"
+    ]
+  },
+  "focused_conservativity_gate": "clean_into_from_raw: 12 query results identical to r1a; allocation_identity.json byte-identical; legacy graph projection identical",
+  "identity_observation_model": "dual-view: legacy identity frozen; disposition identity uses projected-LHS-preserving transfer",
+  "implementation_revision": "CREMA-CQPL-v6S-r1b",
+  "required_artifact_capability": "allocation_disposition_v1",
+  "required_result_mismatches": 0,
+  "schema": "cqpl_v6s_r1_expected_gates_v1",
+  "schema_closure_gate": "new variable declarations may only be canonical source/target variables referenced by allocation_disposition",
+  "scientific_note": "v6S-r1 remains observational with respect to the frozen 12 CQPL queries. r1b separates the frozen legacy identity view from a disposition-only identity view, closes the variable catalog over disposition provenance only, and still introduces no MUST facts or new leak truth classification.",
+  "superseded_attempt": "20260915T110915Z",
+  "supersedes_candidate": "CREMA-CQPL-v6S-r1a"
+}

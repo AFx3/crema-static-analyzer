@@ -486,3 +486,278 @@ I grafi v6Q-r1c non esportano provenance sufficiente per attribuire con certezza
 Per questo i relativi reason code sono riservati e non inferiti. Questa è una scelta conservativa, non una mancanza da aggirare con euristiche sui nomi delle funzioni.
 
 Per il contratto completo vedi [EXPLAINABILITY.md](EXPLAINABILITY.md). Per la semantica CQPL vedi [LANGUAGE.md](LANGUAGE.md).
+
+## 11. Interactive UNKNOWN report (`--explain-unk-verbose`)
+
+For interactive diagnosis, the checker can render the same validated explanation
+object used by `--explain-json` directly in the terminal:
+
+```bash
+cqpl_checker annotated_icfg_v2.json query.cqpl \
+  --json \
+  --explain-unk-verbose
+```
+
+The flag is conditional: it emits the human-readable report only when the CQPL
+truth value is `unk`.  Under `--json`, stdout remains valid JSON; the verbose
+report is written to stderr so scripts that parse stdout are not broken.
+
+The report contains the uncertainty frontier, supporting findings, witness path,
+evidence, interpretation, and atomic uncertainty witnesses.  It is presentation
+only and cannot promote or demote `tt` / `ff` / `unk`.
+
+The v2 runners expose the same flag.  UNKNOWN explanation sidecars remain
+mandatory and fail-closed even when the verbose flag is not requested; the flag
+only controls whether the already-validated report is also printed interactively.
+
+## 12. Bug-specific supporting findings for UNKNOWN memory-error queries
+
+`--explain-unk-verbose` keeps CQPL truth unchanged and renders a second,
+read-only diagnostic layer.  For the official allocation-centric memory-error
+families, `supporting_findings` is query-shape specific:
+
+- leak: `normal_return_open_manual_obligation` when a producer-certified manual
+  ownership handoff reaches normal return without a modeled discharge;
+- use-after-free: `drop_then_use_without_reallocation` when the same
+  `AbstractAllocId` has an ordered MAY drop followed by a MAY use/read/write and
+  no intervening allocation event;
+- double-free: `repeated_drop_without_reallocation` when two ordered MAY drops
+  of the same `AbstractAllocId` occur without an intervening allocation event;
+- allocator mismatch: `allocator_family_mismatch` when known producer and
+  deallocator families differ; if either family is unresolved, the weaker
+  `unresolved_allocator_contract_candidate` is emitted instead.
+
+`strong_abstract_evidence` never means concrete MUST proof.  It means the
+already-annotated abstract model contains the complete ordered evidence pattern
+for the queried bug class.  `observational_candidate` is used when a required
+contract/origin component is unresolved.  Neither strength changes the
+three-valued query result.
+
+If no bug-specific witness can be certified, the verbose report prints an
+explicit interpretation stating that UNKNOWN denotes insufficient abstract
+evidence for a definite verdict and is not, by itself, a positive bug finding.
+
+
+## 13. Esempi empirici reali validati: leak, UAF, double-free, allocator mismatch
+
+Questa sezione documenta output osservati su run reali con `--explain-unk-verbose`. Gli esempi sono intenzionalmente diversi per strength: la guida deve mostrare sia evidenza forte sia candidati osservazionali, senza trasformare il diagnostic layer in una proof MUST.
+
+### 13.1 Leak: obbligo manuale aperto fino al normal return
+
+Target:
+
+```text
+a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_bool
+```
+
+Output rappresentativo:
+
+```text
+QUERY: leak_alloc_state
+truth: unk
+
+why unknown:
+  - MAY_ALLOCATION
+  - QUERY_THREE_VALUED_PROPAGATION
+
+supporting findings:
+  kind       : normal_return_open_manual_obligation
+  strength   : strong_abstract_evidence
+  handoff    : rust::main::bb4
+  return     : rust::main::bb5
+  path:
+    -> rust::main::bb4
+    -> rust::main::bb5
+  evidence:
+    - producer_certified_box_into_raw
+    - normal_return_reachable
+    - no_modeled_discharge_on_witness_path
+    - no_intervening_call_after_handoff
+    - non_returning_discharge_observed_off_witness
+```
+
+Interpretazione: la query resta `unk` perché l'evento allocation è MAY, ma il diagnostic layer osserva un handoff `Box::into_raw` producer-certified seguito da normal return senza discharge sul witness. La documentazione Rust di `Box::into_raw` assegna al chiamante la responsabilità di distruggere e liberare la memoria; `Box::from_raw` è il meccanismo standard per ripristinare ownership RAII.
+
+### 13.2 Use-after-free: candidato ordinato drop -> use
+
+Target:
+
+```text
+a-code_full_rust/a-use_after_free_full_rust_literals/boxed_bool
+```
+
+Output rappresentativo:
+
+```text
+QUERY: use_after_free_alloc_state
+truth: unk
+
+why unknown:
+  - MAY_ALLOCATION
+  - MAY_DEALLOCATION
+  - MAY_USE
+  - UNRESOLVED_CONTRACT
+  - PATH_JOIN
+  - QUERY_THREE_VALUED_PROPAGATION
+
+supporting findings:
+  kind       : drop_then_use_without_reallocation
+  strength   : observational_candidate
+  first drop : rust::main::bb6
+  use        : rust::main::bb7
+  path:
+    -> rust::main::bb6
+    -> rust::main::bb7
+  evidence:
+    - allocation_state_includes_allocated
+    - may_deallocation_observed
+    - may_use_observed
+    - ordered_drop_before_use
+    - no_reallocation_between_events
+```
+
+Interpretazione: l'ordine drop-then-use è esattamente il pattern astratto richiesto dalla classe UAF, ma la strength resta `observational_candidate` perché l'origine nel witness è supportata dallo stato allocation-centric e compare una provenance contrattuale irrisolta. Questo è coerente con le API raw-pointer Rust: un read/write richiede che il puntatore sia valido per l'accesso.
+
+### 13.3 Double-free: più witness candidati possono coesistere
+
+Target:
+
+```text
+a-code_full_rust/a-double_free_full_rust_literals/boxed_bool
+```
+
+Uno dei witness osservati:
+
+```text
+QUERY: double_free_alloc_state
+truth: unk
+
+supporting findings:
+  kind       : repeated_drop_without_reallocation
+  strength   : observational_candidate
+  first drop : rust::main::bb10
+  second drop: rust::main::bb12
+  path:
+    -> rust::main::bb10
+    -> rust::main::bb13
+    -> rust::main::bb12
+  evidence:
+    - allocation_state_includes_allocated
+    - may_deallocation_observed
+    - two_ordered_drops_observed
+    - no_reallocation_between_events
+```
+
+Nella run reale il report contiene più witness `repeated_drop_without_reallocation`. Non sono duplicati semantici da comprimere arbitrariamente: rappresentano coppie ordinate/path candidate differenti. La documentazione Rust di `Box::from_raw` avverte esplicitamente che ricostruire ownership due volte dallo stesso raw pointer può causare double-free; il finding CQPL resta comunque MAY/observational finché l'origine e le drop non sono MUST.
+
+### 13.4 Allocator mismatch: famiglie note e diverse
+
+Target:
+
+```text
+a-code_c_to_rust_alloc/rust_box_direct_c_free_ub
+```
+
+Output rappresentativo:
+
+```text
+QUERY: allocator_mismatch_ub_v2
+truth: unk
+
+why unknown:
+  - MAY_ALLOCATION
+  - MAY_DEALLOCATION
+  - QUERY_THREE_VALUED_PROPAGATION
+
+supporting findings:
+  kind       : allocator_family_mismatch
+  strength   : strong_abstract_evidence
+  allocator  : rust_global
+  deallocator: c_malloc
+  evidence:
+    - allocation_state_includes_allocated
+    - may_deallocation_observed
+    - known_allocator_family
+    - known_deallocator_family
+    - allocator_families_differ
+    - producer_certified_deallocator_contract
+```
+
+Interpretazione: qui entrambe le famiglie sono note, quindi il diagnostic layer può classificare il mismatch come `strong_abstract_evidence`. La truth resta `unk` perché la relazione allocation/deallocation è MAY. Questo è coerente con il contratto Rust degli allocator: `Allocator::deallocate` richiede un blocco attualmente allocato tramite quello stesso allocator; `Box::from_raw` richiede a sua volta memoria compatibile con l'allocator/layout di `Box`.
+
+### 13.5 Contratto irrisolto: non chiamarlo mismatch provato
+
+In altri target reali può comparire:
+
+```text
+kind       : unresolved_allocator_contract_candidate
+strength   : observational_candidate
+allocator  : rust_global
+deallocator: unknown
+```
+
+Questo output è intenzionalmente più debole. `unknown` non è una famiglia diversa: significa che il producer non ha certificato abbastanza informazione per confrontare le famiglie. Il report deve quindi dire "candidate", non "allocator mismatch confirmed".
+
+### 13.6 UNKNOWN senza finding positivo
+
+È corretto anche questo caso:
+
+```text
+supporting findings:
+  <none>
+
+interpretation:
+  No bug-specific supporting witness was certified beyond the uncertainty frontier.
+  UNKNOWN therefore means insufficient abstract evidence for a definite verdict,
+  not a positive finding by itself.
+```
+
+Questa uscita è essenziale per evitare che il solo fatto di avere `unk` venga reinterpretato come vulnerabilità.
+
+### 13.7 Gate empirico
+
+La run real-target usata per questi esempi deve chiudere con:
+
+```text
+UAF
+  use_after_free_alloc       -> drop_then_use_without_reallocation
+  use_after_free_alloc_state -> drop_then_use_without_reallocation
+
+DOUBLE_FREE
+  double_free_alloc       -> repeated_drop_without_reallocation
+  double_free_alloc_state -> repeated_drop_without_reallocation
+
+ALLOCATOR_MISMATCH
+  allocator_mismatch_ub    -> allocator_family_mismatch
+  allocator_mismatch_ub_v2 -> allocator_family_mismatch
+
+errors = 0
+CQPL_MEMORY_ERROR_EXPLAINABILITY_GATE: PASS
+```
+
+Il gate verifica la coerenza fra famiglia della query e famiglia del finding; non richiede che ogni query memory sia `unk` e non promuove il result a `tt`.
+
+
+### 13.8 Cross-check con le formule ufficiali v2 e con i contratti Rust
+
+I finding UAF e double-free non sono euristiche aggiunte dopo la query: riprendono la stessa relazione d'ordine già richiesta dalle formule v2.
+
+```cqpl
+# use_after_free_alloc(.state), forma essenziale
+drop_l(a) && EX E[(!alloc_l(a)) U use_l(a)]
+
+# double_free_alloc(.state), forma essenziale
+drop_l(a) && EX E[(!alloc_l(a)) U drop_l(a)]
+```
+
+Perciò `drop_then_use_without_reallocation` e `repeated_drop_without_reallocation` sono diagnostiche strutturalmente allineate alla formula, ma mantengono la stessa natura MAY degli atomi. Per allocator mismatch il finding non ricostruisce una nuova nozione di UB: espone la provenance delle famiglie che alimenta `allocator_mismatch_l(a)`.
+
+Il leak finding è deliberatamente più debole della formula temporale completa: `normal_return_open_manual_obligation` documenta un witness ownership/disposition rilevante, ma non viene usato come sostituto di `EX EG !drop(a)`. È per questo che può coesistere con `query_truth = unk`.
+
+Riferimenti upstream Rust usati per controllare la coerenza del diagnostic layer:
+
+- [`Box::into_raw` / `Box::from_raw`](https://doc.rust-lang.org/std/boxed/struct.Box.html): dopo `into_raw` il chiamante assume la responsabilità della memoria; un uso scorretto di `from_raw` può causare double-free;
+- [raw pointers](https://doc.rust-lang.org/std/primitive.pointer.html) e [`ptr::read`](https://doc.rust-lang.org/std/ptr/fn.read.html): un accesso raw richiede memoria valida per l'accesso;
+- [`Allocator::deallocate`](https://doc.rust-lang.org/std/alloc/trait.Allocator.html): il blocco passato a `deallocate` deve essere attualmente allocato tramite quell'allocator.
+
+Questi riferimenti giustificano la classificazione delle evidenze, non trasformano una relazione MAY del modello CQPL in una prova concreta MUST.

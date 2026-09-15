@@ -1,0 +1,64 @@
+{
+  "baseline_commit": "aa7ed4edcb4b6240aa14e3d23c7d7b848bfa2fb6",
+  "baseline_version": "CREMA-CQPL-v6R-r1",
+  "compiler_hotfix": "rustc-parent-defkind-guard-before-item-name",
+  "focused_r1b_gate": {
+    "allocation_identity": "byte-identical to r1a focused baseline",
+    "box_from_raw": "same AbstractAllocId as box_into_raw; may_abstract; rustc_box_from_raw_v1; restore_raii_obligation",
+    "crema_tests": "188/188 pass",
+    "fixture": "a-code_full_rust/clean_into_from_raw",
+    "legacy_artifact_projection": "identical after removing allocation_disposition and disposition-only variable declarations",
+    "query_results": "12/12 byte-identical to r1a focused baseline"
+  },
+  "frozen_queries": 12,
+  "hotfix": "dual-view-identity-observation-and-disposition-variable-schema-closure",
+  "identity_derived_events": [
+    "return_escape"
+  ],
+  "identity_observation_model": {
+    "disposition_view": "projected MIR writes preserve the base local allocation identity; consumed only by allocation_disposition_v1",
+    "legacy_view": "frozen v6R/v6S-r1a transfer semantics; exported to identity/event_identity/allocation_labels/allocation_post and consumed by frozen queries",
+    "schema_closure": "declare only canonical source_variable/target_variable identifiers actually referenced by allocation_disposition records"
+  },
+  "implementation_revision": "CREMA-CQPL-v6S-r1b",
+  "mirrored_existing_events": [
+    "may_deallocate"
+  ],
+  "new_capability": "allocation_disposition_v1",
+  "new_certainty": "may_abstract_only",
+  "next_step": "run fresh 112-subject x 12-query validation (1344 attempts), require zero frozen-result mismatches and all disposition fixture gates PASS, then freeze v6S-r1b",
+  "not_in_v6s_r1": [
+    "must_alloc",
+    "must_discharge",
+    "new leak query truth classification",
+    "unknown external-call ownership transfer inference",
+    "libc/std external effect summary framework"
+  ],
+  "old_query_semantics": "frozen",
+  "producer_certified_events": [
+    "box_into_raw",
+    "box_from_raw",
+    "box_leak",
+    "mem_forget_owned_box",
+    "raw_pointer_drop_noop"
+  ],
+  "purpose": "producer-certified MAY allocation-disposition and escape provenance for future leak-precision work",
+  "raw_pointer_drop_invariant": {
+    "effect_on_pointee_lifecycle": "none",
+    "effect_on_pointer_value": "ordinary Copy-value drop",
+    "must_not_emit": [
+      "allocation drop_l caused by this call",
+      "may_deallocate caused by this call",
+      "FREED transition of the pointee caused by this call"
+    ],
+    "operation": "std/core::mem::drop(raw: *mut T | *const T)"
+  },
+  "required_runtime_attempts": 1344,
+  "required_runtime_result_mismatches": 0,
+  "required_runtime_subjects": 112,
+  "schema": "cqpl_v6s_r1_delta_summary_v1",
+  "semantic_baseline": "CREMA-CQPL-v6Q-r1c",
+  "superseded_validation_attempt": "20260915T110915Z (rustc ICE before successful subject export; not an experimental result)",
+  "supersedes_candidate": "CREMA-CQPL-v6S-r1a",
+  "version": "CREMA-CQPL-v6S-r1"
+}

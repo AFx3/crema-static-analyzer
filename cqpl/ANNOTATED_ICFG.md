@@ -1,4 +1,4 @@
-# Contratto CREMA → CQPL v6Q-r1c — `annotated_icfg_v2.json`
+# Contratto CREMA → CQPL v6S-r1 — `annotated_icfg_v2.json`
 
 L'annotated ICFG è il boundary versionato fra l'analizzatore CREMA e il checker CQPL.
 
@@ -265,3 +265,37 @@ Il checker rifiuta almeno:
 - structural label con formato non normalizzato.
 
 Query/capability mismatch è errore esplicito, mai `ff`.
+
+## 15. `allocation_disposition[]` e `allocation_disposition_v1`
+
+Quando la capability `allocation_disposition_v1` è dichiarata, ogni nodo schema-v2 contiene un array `allocation_disposition` (eventualmente vuoto).
+
+Esempio:
+
+```json
+{
+  "allocation": "<AbstractAllocId>",
+  "kind": "raw_pointer_drop_noop",
+  "certainty": "may_abstract",
+  "obligation_effect": "no_pointee_lifecycle_effect",
+  "basis": "rustc_mem_drop_raw_pointer_v1",
+  "source_variable": "rust::main::Local(_2)",
+  "callee_def_path": "core::mem::drop"
+}
+```
+
+Il checker valida che `allocation` esista nel catalogo, che eventuali variabili siano dichiarate e che `(kind, obligation_effect, basis)` appartenga al vocabolario chiuso. I record call-based devono avere provenance `callee_def_path`; `return_escape` e `may_deallocate` non possono inventarla.
+
+`callee_def_path` è **audit-only**. La classificazione semantica viene fatta upstream mentre CREMA dispone ancora di rustc `DefId`/tipo.
+
+### Raw-pointer drop invariant
+
+Per `std/core::mem::drop::<*mut T>` o `*const T`, certificato dal producer:
+
+```text
+allocation_disposition.kind = raw_pointer_drop_noop
+allocation_labels must NOT gain predicate=drop from that call
+allocation_post for the pointee must NOT become FREED because of that call
+```
+
+Questo segue la Rust Reference: dropping a raw pointer does not affect the lifecycle of the pointee. `ptr::drop_in_place` è un'operazione distinta e non viene reinterpretata come allocator deallocation.

@@ -34,7 +34,8 @@ Per i target che usano C/FFI, CREMA deve essere eseguito con working directory `
 ```bash
 python3 "$ROOT/cqpl/scripts/run_one_target_v6q_r1c.py" \
   --root "$ROOT" \
-  --relative-path 'a-code_full_rust/a-double_free_full_rust_literals/boxed_bool'
+  --relative-path 'a-code_full_rust/a-double_free_full_rust_literals/boxed_bool' \
+  --explain-unk-verbose
 ```
 
 Output di default:
@@ -53,6 +54,9 @@ allocation_identity.json
 ffi_functions.json
 query-results.tsv
 query-results.json
+unknown-explanations.tsv
+unknown-explanations-summary.json
+queries/*.explain.json
 summary.json
 SHA256SUMS
 queries/*.json
@@ -143,12 +147,23 @@ CHECKER="$ROOT/cqpl/cqpl_checker/target/debug/cqpl_checker"
 "$CHECKER" \
   "$OUT/annotated_icfg_v2.json" \
   "$ROOT/cqpl/queries_v2/double_free_alloc_state.cqpl" \
-  --json
+  --json \
+  --explain-unk-verbose
 ```
 
 ### 3.7 Eseguire tutte le query
 
-Usare `scripts/run_one_target_v6q_r1c.py` oppure iterare i 12 file. Il protocollo finale tratta `rc != 0` come errore, non come truth value.
+Per una run interattiva usare il runner con il verbose UNKNOWN:
+
+```bash
+python3 "$ROOT/cqpl/scripts/run_one_target_v6q_r1c.py" \
+  --root "$ROOT" \
+  --relative-path 'a-code_full_rust/a-double_free_full_rust_literals/boxed_bool' \
+  --toolchain "$NIGHTLY" \
+  --explain-unk-verbose
+```
+
+Il protocollo finale tratta `rc != 0` come errore, non come truth value. Per ogni query v2 che ritorna `unk`, il runner genera comunque un sidecar `queries/<query>.explain.json` e aggiorna `unknown-explanations.tsv` / `unknown-explanations-summary.json`; questa closure è obbligatoria anche senza il flag verbose. Il flag controlla solo la stampa umana immediata del report.
 
 ## 4. Analisi di una crate library
 
@@ -197,7 +212,15 @@ Non significa automaticamente “programma sicuro”: refuta soltanto quella for
 
 La formula non è refutabile né stabilibile con l'informazione MAY.
 
-Per query memory è normale e frequente. Investigare sorgente, identity, allocation labels e percorso, ma non promuovere `unk` a bug concreto senza ulteriore evidenza.
+Per query memory è normale e frequente. La run v6T produce automaticamente una spiegazione specifica per ogni `unk`. Interpretare separatamente:
+
+- `reason_frontier`: perché la formula resta three-valued `unk`;
+- `supporting_findings`: eventuale evidenza bug-specifica read-only;
+- `strong_abstract_evidence`: pattern astratto completo per quella classe di bug, ma non prova MUST concreta;
+- `observational_candidate`: pattern utile ma con origine/contratto ancora parzialmente irrisolti;
+- nessun finding: `unk` indica solo evidenza astratta insufficiente, non un bug positivo.
+
+Non promuovere mai `unk` a `tt` sulla base del solo diagnostic layer.
 
 ### `tt`
 
@@ -311,3 +334,74 @@ a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_bool
 ```
 
 e mostra l'intera catena target → CREMA → annotated ICFG → CQPL `unk` → `MAY_ALLOCATION` witness. Vedi [EXPLAINABILITY_GUIDE.md](EXPLAINABILITY_GUIDE.md).
+
+## v6S-r1: leggere allocation disposition
+
+Dopo una run v6S, ogni `annotated_icfg_v2.json` può contenere `allocation_disposition[]`. Per una lettura umana usa `V6S_R1_GUIDE.md`; per aggregare i 105 leak `unk` usa:
+
+```bash
+python3 cqpl/scripts/analyze_allocation_disposition.py \
+  --subjects "$OUT/subjects.tsv" \
+  --baseline-wide "$BASE/query-matrix/query-results-wide.tsv" \
+  --out "$OUT/allocation-disposition-summary.json"
+```
+
+Non interpretare `box_into_raw` come leak definitivo e non interpretare l'assenza di `may_deallocate` come prova MUST di leak. In r1 tutti i fatti sono MAY. Un record `raw_pointer_drop_noop` significa esplicitamente che `mem::drop(raw)` non ha effetto sul pointee.
+
+
+## 11. Esempi reali validati della run `--explain-unk-verbose`
+
+Questi esempi provengono da run reali sul toolchain pinned `nightly-2024-11-21`; non sono output sintetici. Il gate automatico `CQPL_MEMORY_ERROR_EXPLAINABILITY_GATE` richiede che, quando le query sotto sono `unk`, il finding appartenga alla famiglia corretta.
+
+| Target reale | Query UNKNOWN rappresentativa | Finding | Strength | Interpretazione corretta |
+|---|---|---|---|---|
+| `a-memory_leaks_full_rust_literals/boxed_bool` | `leak_alloc_state` | `normal_return_open_manual_obligation` | `strong_abstract_evidence` | `Box::into_raw` lascia un obbligo manuale aperto su un witness che raggiunge normal return senza discharge modellato. |
+| `a-use_after_free_full_rust_literals/boxed_bool` | `use_after_free_alloc_state` | `drop_then_use_without_reallocation` | `observational_candidate` | drop ordinato prima del use senza re-allocation; l'origine nel witness resta supportata dallo stato astratto e quindi non viene presentata come MUST proof. |
+| `a-double_free_full_rust_literals/boxed_bool` | `double_free_alloc_state` | `repeated_drop_without_reallocation` | `observational_candidate` | due drop MAY ordinati senza re-allocation intermedia; possono esistere più witness candidati nello stesso artifact. |
+| `a-code_c_to_rust_alloc/rust_box_direct_c_free_ub` | `allocator_mismatch_ub_v2` | `allocator_family_mismatch` | `strong_abstract_evidence` | producer `rust_global`, deallocator `c_malloc`: famiglie note e differenti. |
+
+Esempio UAF abbreviato:
+
+```text
+QUERY: use_after_free_alloc_state
+truth: unk
+
+why unknown:
+  - MAY_ALLOCATION
+  - MAY_DEALLOCATION
+  - MAY_USE
+  - UNRESOLVED_CONTRACT
+  - PATH_JOIN
+  - QUERY_THREE_VALUED_PROPAGATION
+
+supporting findings:
+  kind       : drop_then_use_without_reallocation
+  strength   : observational_candidate
+  first drop : rust::main::bb6
+  use        : rust::main::bb7
+  evidence:
+    - may_deallocation_observed
+    - may_use_observed
+    - ordered_drop_before_use
+    - no_reallocation_between_events
+```
+
+Esempio allocator mismatch abbreviato:
+
+```text
+QUERY: allocator_mismatch_ub_v2
+truth: unk
+
+supporting findings:
+  kind       : allocator_family_mismatch
+  strength   : strong_abstract_evidence
+  allocator  : rust_global
+  deallocator: c_malloc
+  evidence:
+    - known_allocator_family
+    - known_deallocator_family
+    - allocator_families_differ
+    - producer_certified_deallocator_contract
+```
+
+Questi esempi non autorizzano una reinterpretazione dei truth values. Il report spiega l'evidenza disponibile nel modello astratto; `unk` resta `unk`. Inoltre il nome del fixture indica l'intento del test, non un oracle esclusivo: una crate UAF può esporre anche candidate DF/allocator-mismatch sotto l'astrazione corrente. Valutare sempre `kind`, `strength`, frontier e witness della query specifica. Per gli output completi, il cross-check con le formule v2 e gli esempi leak/DF/no-finding vedi [EXPLAINABILITY_GUIDE.md](EXPLAINABILITY_GUIDE.md).

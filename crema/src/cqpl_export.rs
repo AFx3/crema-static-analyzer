@@ -5,7 +5,7 @@ use crate::memory_events;
 use crate::structs::{
     AbstractAllocId, AllocationSiteId, GlobalICFGNode, GlobalICFGOrdered, MirTerminator,
     PlaceId, PlaceProjection, ProgramVarId, RustDropAllocatorEvidence, RustDropAllocatorEvidenceKind,
-    RustCallDeallocatorEvidence, RustCallDeallocatorEvidenceKind, SvfStatement,
+    RustCallDeallocatorEvidence, RustCallDeallocatorEvidenceKind, RustAllocationDispositionEvidence, RustAllocationDispositionEvidenceKind, SvfStatement,
 };
 use crate::utils::load_ffi_functions;
 use regex::Regex;
@@ -124,6 +124,11 @@ struct AnnotatedNode {
     /// fixed point.  Present only in schema v2.
     #[serde(skip_serializing_if = "Option::is_none")]
     allocation_labels: Option<Vec<AllocationEventLabel>>,
+    /// v6S-r1 allocation-disposition/escape provenance. These records are
+    /// observational MAY facts and are not consumed by the frozen v6R query
+    /// semantics. Present only with capability allocation_disposition_v1.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allocation_disposition: Option<Vec<AllocationDispositionRecord>>,
     /// Auditable scoped post-state identity relation at this node. Present only in v2.
     #[serde(skip_serializing_if = "Option::is_none")]
     identity: Option<NodeIdentityAnnotation>,
@@ -150,6 +155,27 @@ struct AllocationEventLabel {
     /// Capability allocation_contracts_v1: semantic deallocator contract.
     #[serde(skip_serializing_if = "Option::is_none")]
     deallocator_contract: Option<AllocationContract>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct AllocationDispositionRecord {
+    allocation: String,
+    /// Closed v6S-r1 event vocabulary; see allocation_disposition_v1.md.
+    kind: &'static str,
+    /// Identity resolution is MAY in v6S-r1.  A singleton AbstractAllocId is
+    /// not promoted to a concrete MUST fact.
+    certainty: &'static str,
+    /// Effect on the deallocation obligation, not on pointer-variable storage.
+    obligation_effect: &'static str,
+    /// Producer proof basis.  Consumers validate the closed kind/basis/effect
+    /// tuple instead of inferring semantics from DefPath strings.
+    basis: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_variable: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    target_variable: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    callee_def_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -235,7 +261,7 @@ pub fn export_cqpl_annotated_icfg(
     entry: &str,
     output_path: &Path,
 ) -> Result<(), Box<dyn Error>> {
-    export_cqpl_annotated_icfg_versioned(icfg, abs_state, None, entry, 1, output_path)
+    export_cqpl_annotated_icfg_versioned(icfg, abs_state, None, None, entry, 1, output_path)
 }
 
 pub fn export_cqpl_annotated_icfg_with_identity(
@@ -250,6 +276,27 @@ pub fn export_cqpl_annotated_icfg_with_identity(
         icfg,
         abs_state,
         Some(identity_state),
+        Some(identity_state),
+        entry,
+        schema_version,
+        output_path,
+    )
+}
+
+pub fn export_cqpl_annotated_icfg_with_identity_and_disposition(
+    icfg: &GlobalICFGOrdered,
+    abs_state: &AbstractState,
+    identity_state: &AllocationIdentityState,
+    disposition_identity_state: &AllocationIdentityState,
+    entry: &str,
+    schema_version: u32,
+    output_path: &Path,
+) -> Result<(), Box<dyn Error>> {
+    export_cqpl_annotated_icfg_versioned(
+        icfg,
+        abs_state,
+        Some(identity_state),
+        Some(disposition_identity_state),
         entry,
         schema_version,
         output_path,
@@ -260,6 +307,7 @@ fn export_cqpl_annotated_icfg_versioned(
     icfg: &GlobalICFGOrdered,
     abs_state: &AbstractState,
     identity_state: Option<&AllocationIdentityState>,
+    disposition_identity_state: Option<&AllocationIdentityState>,
     entry: &str,
     schema_version: u32,
     output_path: &Path,
@@ -267,8 +315,8 @@ fn export_cqpl_annotated_icfg_versioned(
     if !matches!(schema_version, 1 | 2) {
         return Err(format!("unsupported CQPL annotated ICFG schema version {schema_version}; expected 1 or 2").into());
     }
-    if schema_version == 2 && identity_state.is_none() {
-        return Err("CQPL annotated ICFG schema v2 requires AllocationIdentityState".into());
+    if schema_version == 2 && (identity_state.is_none() || disposition_identity_state.is_none()) {
+        return Err("CQPL annotated ICFG schema v2 requires legacy and disposition AllocationIdentityState views".into());
     }
     let node_ids: BTreeSet<String> = icfg
         .ordered_nodes
@@ -375,12 +423,12 @@ fn export_cqpl_annotated_icfg_versioned(
             )
             .into());
         }
-        let (identity, event_identity, allocation_post) = if schema_version == 2 {
+        let (identity, event_identity, allocation_post, allocation_disposition) = if schema_version == 2 {
             let post_identity = identity_state
                 .and_then(|state| state.by_node.get(node_id))
                 .cloned()
                 .unwrap_or_default();
-            let event_identity = identity_state
+            let event_identity_mem = identity_state
                 .and_then(|state| state.event_by_node.get(node_id))
                 .cloned()
                 .unwrap_or_default();
@@ -390,15 +438,52 @@ fn export_cqpl_annotated_icfg_versioned(
             // Identity uses globally scoped canonical IDs, so keep those IDs
             // distinct from the legacy unscoped Name strings used by Pi#_post.
             variable_ids.extend(collect_identity_program_variables(&post_identity));
-            variable_ids.extend(collect_identity_program_variables(&event_identity));
+            variable_ids.extend(collect_identity_program_variables(&event_identity_mem));
+
+            let disposition_event_identity = disposition_identity_state
+                .and_then(|state| state.event_by_node.get(node_id))
+                .cloned()
+                .unwrap_or_default();
+            let disposition_post_identity = disposition_identity_state
+                .and_then(|state| state.by_node.get(node_id))
+                .cloned()
+                .unwrap_or_default();
+
+            let disposition = allocation_disposition_for_node(
+                node_id,
+                node,
+                &disposition_event_identity,
+                &disposition_post_identity,
+                allocation_labels.as_deref().unwrap_or(&[]),
+            );
+
+            // Schema closure for v6S observational provenance only.
+            //
+            // The legacy identity view deliberately remains frozen, but
+            // allocation_disposition may refer to canonical source/target
+            // variables observed only by the disposition identity view.
+            // Declare exactly those referenced variables without merging the
+            // disposition identity relation into legacy identity/event state.
+            for record in &disposition {
+                for variable in [
+                    record.source_variable.as_ref(),
+                    record.target_variable.as_ref(),
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    variable_ids.insert(variable.clone());
+                }
+            }
 
             (
                 Some(identity_annotation(&post_identity)),
-                Some(identity_annotation(&event_identity)),
+                Some(identity_annotation(&event_identity_mem)),
                 Some(allocation_memory_annotation(node_id, node, &post_mem, &post_identity)),
+                Some(disposition),
             )
         } else {
-            (None, None, None)
+            (None, None, None, None)
         };
 
         let mut labels = raw_labels;
@@ -427,6 +512,7 @@ fn export_cqpl_annotated_icfg_versioned(
             labels,
             semantic_labels,
             allocation_labels,
+            allocation_disposition,
             identity,
             event_identity,
             allocation_post,
@@ -457,7 +543,12 @@ fn export_cqpl_annotated_icfg_versioned(
         schema_version,
         entry: entry.to_string(),
         capabilities: if schema_version == 2 {
-            let mut caps = vec!["allocation_contracts_v1", "allocation_contracts_v2", "allocation_state_v1"];
+            let mut caps = vec![
+                "allocation_contracts_v1",
+                "allocation_contracts_v2",
+                "allocation_state_v1",
+                "allocation_disposition_v1",
+            ];
             if mir_semantics_v2_enabled() {
                 caps.push("mir_semantic_labels_v1");
                 caps.push("mir_semantics_v2");
@@ -640,6 +731,131 @@ fn allocation_labels_for_node(
             });
         }
     }
+    out.into_iter().collect()
+}
+
+fn allocation_disposition_for_node(
+    node_id: &str,
+    node: &GlobalICFGNode,
+    event_identity: &AllocationIdentityMemory,
+    post_identity: &AllocationIdentityMemory,
+    allocation_labels: &[AllocationEventLabel],
+) -> Vec<AllocationDispositionRecord> {
+    let mut out = BTreeSet::new();
+
+    // Existing allocation-centric drop events remain MAY.  v6S-r1 mirrors them
+    // as obligation observations so disposition traces can be inspected without
+    // changing the historical `drop_l` semantics.
+    for label in allocation_labels.iter().filter(|l| l.predicate == "drop") {
+        out.insert(AllocationDispositionRecord {
+            allocation: label.allocation.clone(),
+            kind: "may_deallocate",
+            certainty: "may_abstract",
+            obligation_effect: "may_discharge",
+            basis: "allocation_drop_label_v1",
+            source_variable: None,
+            target_variable: None,
+            callee_def_path: None,
+        });
+    }
+
+    let GlobalICFGNode::Mir(bb) = node else {
+        return out.into_iter().collect();
+    };
+    let Some(term) = &bb.terminator else {
+        return out.into_iter().collect();
+    };
+
+    match term {
+        MirTerminator::Call {
+            arguments,
+            return_place,
+            allocation_disposition_evidence: Some(evidence),
+            ..
+        } => {
+            let source_local = arguments.iter().find_map(|arg| canonical_mir_local(&arg.arg));
+            let source_var = source_local
+                .as_deref()
+                .and_then(|local| identity_var_for_event(node_id, node, local));
+            let allocations = source_var
+                .as_ref()
+                .map(|var| event_identity.event_allocations(var))
+                .unwrap_or_default();
+            let source_variable = source_var.as_ref().map(ProgramVarId::canonical_string);
+            let return_variable = canonical_mir_local(return_place)
+                .as_deref()
+                .and_then(|local| identity_var_for_event(node_id, node, local))
+                .map(|v| v.canonical_string());
+
+            let (kind, obligation_effect, basis, target_variable) = match evidence.kind {
+                RustAllocationDispositionEvidenceKind::BoxIntoRaw => (
+                    "box_into_raw",
+                    "preserve_manual_obligation",
+                    "rustc_box_into_raw_v1",
+                    return_variable.clone(),
+                ),
+                RustAllocationDispositionEvidenceKind::BoxFromRaw => (
+                    "box_from_raw",
+                    "restore_raii_obligation",
+                    "rustc_box_from_raw_v1",
+                    return_variable.clone(),
+                ),
+                RustAllocationDispositionEvidenceKind::BoxLeak => (
+                    "box_leak",
+                    "preserve_persistent_obligation",
+                    "rustc_box_leak_v1",
+                    return_variable.clone(),
+                ),
+                RustAllocationDispositionEvidenceKind::MemForgetOwnedBox => (
+                    "mem_forget_owned_box",
+                    "preserve_unreclaimed_obligation",
+                    "rustc_mem_forget_owned_box_v1",
+                    None,
+                ),
+                RustAllocationDispositionEvidenceKind::MemDropRawPointer => (
+                    "raw_pointer_drop_noop",
+                    "no_pointee_lifecycle_effect",
+                    "rustc_mem_drop_raw_pointer_v1",
+                    None,
+                ),
+            };
+
+            for allocation in allocations {
+                out.insert(AllocationDispositionRecord {
+                    allocation: stable_allocation_id(&allocation),
+                    kind,
+                    certainty: "may_abstract",
+                    obligation_effect,
+                    basis,
+                    source_variable: source_variable.clone(),
+                    target_variable: target_variable.clone(),
+                    callee_def_path: Some(evidence.callee_def_path.clone()),
+                });
+            }
+        }
+        MirTerminator::Return { .. } => {
+            // MIR local _0 is the return place.  If the post identity says it
+            // may denote an AbstractAllocId, that allocation may escape to the
+            // caller.  This is escape provenance, not proof that ownership was
+            // safely discharged.
+            if let Some(ret_var) = identity_var_for_event(node_id, node, "Local(_0)") {
+                for allocation in post_identity.event_allocations(&ret_var) {
+                    out.insert(AllocationDispositionRecord {
+                        allocation: stable_allocation_id(&allocation),
+                        kind: "return_escape",
+                        certainty: "may_abstract",
+                        obligation_effect: "may_escape_to_caller",
+                        basis: "rust_return_identity_v1",
+                        source_variable: Some(ret_var.canonical_string()),
+                        target_variable: None,
+                        callee_def_path: None,
+                    });
+                }
+            }
+        }
+        _ => {}
+    }
+
     out.into_iter().collect()
 }
 
@@ -1042,7 +1258,15 @@ fn allocation_memory_annotation(
             let Some(var) = identity_var_for_event(node_id, node, alias) else {
                 continue;
             };
-            for allocation in identity.event_allocations(&var) {
+            // allocation_post is a lifecycle-state projection, not event-subject
+            // resolution. `event_allocations` deliberately follows stack_refs so
+            // read/write/drop event subjects expressed through `&x` can still be
+            // correlated with the allocation denoted by x. Applying that closure
+            // here would instead join the CellValue of the reference temporary
+            // itself into the pointee allocation (for example TOP for a `&Box<_>`
+            // temporary), spuriously widening an otherwise ALLOC pointee to TOP.
+            // Only direct heap points-to identities may contribute lifecycle state.
+            for allocation in identity.points_to(&var) {
                 let id = stable_allocation_id(&allocation);
                 values
                     .entry(id)
@@ -1265,6 +1489,7 @@ fn labels_for_node(
                         arguments,
                         return_place,
                         details,
+                        allocation_disposition_evidence,
                         ..
                     } => {
                         let call_text = if details.is_empty() { function_called } else { details };
@@ -1280,7 +1505,15 @@ fn labels_for_node(
                             }
                         }
 
-                        if is_deallocation_call(function_called, call_text, ffi_functions) {
+                        let certified_raw_pointer_drop = allocation_disposition_evidence
+                            .as_ref()
+                            .is_some_and(|e| matches!(
+                                e.kind,
+                                RustAllocationDispositionEvidenceKind::MemDropRawPointer
+                            ));
+                        if is_deallocation_call(function_called, call_text, ffi_functions)
+                            && !certified_raw_pointer_drop
+                        {
                             if let Some(v) = first_arg.clone() {
                                 labels.insert(EventLabel { predicate: "drop", variable: v });
                             }
@@ -1591,7 +1824,7 @@ impl LlvmNameResolver {
 mod tests {
     use super::*;
     use crate::abstract_domain::{Allocation, CellValue};
-    use crate::structs::{DummyNode, IcfgEdge, MirBasicBlock, MirCallArgument, SourceInfoData, MirStatement, RustCallMetadata, RustFunctionMetadata, TerminalNode};
+    use crate::structs::{DummyNode, IcfgEdge, MirBasicBlock, MirCallArgument, SourceInfoData, MirStatement, RustCallMetadata, RustFunctionMetadata, TerminalNode, RustAllocationDispositionEvidence, RustAllocationDispositionEvidenceKind};
 
     fn edge(a: &str, b: &str) -> IcfgEdge {
         IcfgEdge {
@@ -1735,6 +1968,7 @@ mod tests {
                 function_called: "callee".into(),
                 callee_def_path: Some("callee".into()),
                 deallocator_evidence: None,
+                allocation_disposition_evidence: None,
                 higher_order_evidence: None,
                 callee_is_local: true,
                 callback_def_paths: Vec::new(),
@@ -2026,6 +2260,49 @@ mod tests {
         }));
     }
 
+
+    #[test]
+    fn v6s_raw_pointer_mem_drop_is_not_exported_as_deallocation_label() {
+        let call = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 42,
+            statements: vec![],
+            terminator: Some(MirTerminator::Call {
+                details: "_0 = core::mem::drop::<opaque>(copy _1)".into(),
+                source_info: "<v6s-raw-drop-test>".into(),
+                function_called: "core::mem::drop::<opaque>".into(),
+                callee_def_path: Some("core::mem::drop".into()),
+                deallocator_evidence: None,
+                allocation_disposition_evidence: Some(RustAllocationDispositionEvidence {
+                    kind: RustAllocationDispositionEvidenceKind::MemDropRawPointer,
+                    callee_def_path: "core::mem::drop".into(),
+                    owner_def_path: None,
+                }),
+                higher_order_evidence: None,
+                callee_is_local: false,
+                callback_def_paths: Vec::new(),
+                resolved_instance_callees: Vec::new(),
+                instance_dispatch_observed: false,
+                instance_dispatch_external: false,
+                instance_dispatch_unresolved: false,
+                arguments: vec![MirCallArgument {
+                    arg: "Local(_1)".into(),
+                    is_mutable: Some(false),
+                }],
+                return_place: "_0".into(),
+                return_target: Some("bb43".into()),
+                unwind_target: "continue".into(),
+            }),
+        });
+
+        let labels = labels_for_node(
+            "rust::main::bb42",
+            &call,
+            &LlvmNameResolver::default(),
+            &HashSet::new(),
+        );
+        assert!(!labels.iter().any(|l| l.predicate == "drop"));
+    }
+
     #[test]
     fn cstring_from_raw_call_gets_read_summary_but_not_drop_at_call_site() {
         let call = GlobalICFGNode::Mir(MirBasicBlock {
@@ -2037,6 +2314,7 @@ mod tests {
                 function_called: "std::ffi::CString::from_raw".into(),
                 callee_def_path: None,
                 deallocator_evidence: None,
+                allocation_disposition_evidence: None,
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -2078,6 +2356,7 @@ mod tests {
                 function_called: "std::boxed::Box::<i32>::from_raw".into(),
                 callee_def_path: None,
                 deallocator_evidence: None,
+                allocation_disposition_evidence: None,
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -2460,6 +2739,7 @@ mod tests {
                         kind: RustCallDeallocatorEvidenceKind::GlobalDeallocApi,
                         callee_def_path: "alloc::alloc::dealloc".into(),
                     }),
+                    allocation_disposition_evidence: None,
                     higher_order_evidence: None,
                     callee_is_local: false,
                     callback_def_paths: Vec::new(),
@@ -2545,6 +2825,46 @@ mod tests {
         assert_eq!(lifted.cells[0].allocation, stable_allocation_id(&allocation));
         // Existing lattice law: ALLOC <= MV, therefore their join is MV.
         assert_eq!(lifted.cells[0].value, "MV");
+    }
+
+    #[test]
+    fn v6m_allocation_post_does_not_lift_stack_reference_top_into_pointee_state() {
+        let node_id = "rust::main::bb1";
+        let node = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 1,
+            statements: vec![],
+            terminator: None,
+        });
+        let allocation = AbstractAllocId::new(
+            AllocationSiteId::Synthetic { scope: "test".into(), label: "A".into() },
+            Vec::new(),
+        );
+        let owner = ProgramVarId::rust("main", "_1").unwrap();
+        let reference = ProgramVarId::rust("main", "_8").unwrap();
+        let mut identity = AllocationIdentityMemory::default();
+        identity.assign_fresh(owner.clone(), allocation.clone());
+        identity.assign_stack_refs(
+            reference,
+            BTreeSet::from([PlaceId {
+                base: owner,
+                projection: Vec::new(),
+            }]),
+        );
+
+        let mut post = AbstractMemory::default();
+        post.state.insert(
+            Allocation { set: BTreeSet::from(["Local(_1)".to_string()]) },
+            CellValue::ALLOC,
+        );
+        post.state.insert(
+            Allocation { set: BTreeSet::from(["Local(_8)".to_string()]) },
+            CellValue::TOP,
+        );
+
+        let lifted = allocation_memory_annotation(node_id, &node, &post, &identity);
+        assert_eq!(lifted.cells.len(), 1);
+        assert_eq!(lifted.cells[0].allocation, stable_allocation_id(&allocation));
+        assert_eq!(lifted.cells[0].value, "ALLOC");
     }
 
     #[test]

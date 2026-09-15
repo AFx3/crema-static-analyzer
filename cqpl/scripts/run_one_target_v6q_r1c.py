@@ -13,6 +13,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from unknown_explanations import UnknownExplanationError, explain_unknown
+
 EXPECTED_RUSTC = "rustc 1.84.0-nightly (3fee0f12e 2024-11-20)"
 REQUIRED_CAPS = {
     "allocation_state_v1",
@@ -60,6 +62,10 @@ def main() -> int:
     ap.add_argument("--relative-path", required=True, help="path relative to tests_and_target_repos")
     ap.add_argument("--out", type=Path)
     ap.add_argument("--toolchain", default=os.environ.get("CREMA_RUST_TOOLCHAIN", "nightly-2024-11-21"))
+    ap.add_argument(
+        "--explain-unk-verbose", action="store_true",
+        help="print the full human-readable explanation for every UNKNOWN query (sidecars remain mandatory regardless)",
+    )
     args = ap.parse_args()
 
     root = args.root.resolve()
@@ -171,6 +177,7 @@ def main() -> int:
 
     rows = []
     counts = {"ff": 0, "unk": 0, "tt": 0}
+    unknown_explanations = []
     for query in queries:
         stdout_path = out / "queries" / f"{query.stem}.json"
         stderr_path = out / "queries" / f"{query.stem}.stderr.log"
@@ -184,12 +191,72 @@ def main() -> int:
             raise SystemExit(f"query {query.name} returned invalid result {result!r}")
         counts[result] += 1
         rows.append((query.stem, qcp.returncode, result))
-        print(f"{query.stem}={result}")
+        if result == "unk":
+            explain_path = out / "queries" / f"{query.stem}.explain.json"
+            try:
+                record = explain_unknown(
+                    checker=checker,
+                    artifact=annotated,
+                    query=query,
+                    result=result,
+                    explanation=explain_path,
+                    cwd=cqpl / "cqpl_checker",
+                    verbose=args.explain_unk_verbose,
+                )
+            except UnknownExplanationError as e:
+                raise SystemExit(f"query {query.name} returned unk but explanation generation failed: {e}") from e
+            assert record is not None
+            record.update({
+                "target": args.relative_path,
+                "artifact": str(annotated),
+                "explanation": explain_path.relative_to(out).as_posix(),
+            })
+            unknown_explanations.append(record)
+            print(
+                f"{query.stem}=unk "
+                f"explanation={record['explanation']} "
+                f"reasons={';'.join(record['reason_frontier'])} "
+                f"supporting_findings={record['supporting_findings']}"
+            )
+        else:
+            print(f"{query.stem}={result}")
+
+    if len(unknown_explanations) != counts["unk"]:
+        raise SystemExit(
+            f"UNK explanation closure failed: unk={counts['unk']} explanations={len(unknown_explanations)}"
+        )
 
     with (out / "query-results.tsv").open("w", encoding="utf-8", newline="") as f:
         w = csv.writer(f, delimiter="\t")
         w.writerow(["query", "rc", "result"])
         w.writerows(rows)
+
+    with (out / "unknown-explanations.tsv").open("w", encoding="utf-8", newline="") as f:
+        fields = [
+            "target", "artifact", "query", "result", "explanation",
+            "reason_frontier", "witnesses", "supporting_findings",
+            "supporting_finding_kinds", "supporting_finding_strengths",
+        ]
+        w = csv.DictWriter(f, delimiter="\t", fieldnames=fields)
+        w.writeheader()
+        for record in unknown_explanations:
+            row = dict(record)
+            for key in ["reason_frontier", "supporting_finding_kinds", "supporting_finding_strengths"]:
+                row[key] = ";".join(row[key])
+            w.writerow({key: row.get(key, "") for key in fields})
+
+    unknown_summary = {
+        "schema": "cqpl_unknown_explanations_v1",
+        "policy": "every_v2_unk_requires_valid_specific_explanation",
+        "target": args.relative_path,
+        "unknown_results": counts["unk"],
+        "explanations_generated": len(unknown_explanations),
+        "complete": len(unknown_explanations) == counts["unk"],
+        "reports": unknown_explanations,
+    }
+    (out / "unknown-explanations-summary.json").write_text(
+        json.dumps(unknown_summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
     summary = {
         "profile": "CREMA-CQPL-v6Q-r1c-one-target",

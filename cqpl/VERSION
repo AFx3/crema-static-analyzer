@@ -1,15 +1,1 @@
-CREMA-CQPL-v6R-r1
-status=explainability-observational-runtime-validated-freeze-candidate
-baseline_commit=bbca5f09096d77718624564e0aafff9d87a96e6e
-semantic_baseline=CREMA-CQPL-v6Q-r1c
-crema_semantics=byte-identical-to-v6Q-r1c-source-boundary
-frozen_queries=12-byte-identical
-explainability_schema=cqpl_explanation_v1
-uncertainty_taxonomy=cqpl_uncertainty_reasons_v1
-primary_toolchain=nightly-2024-11-21
-rustc=1.84.0-nightly (3fee0f12e 2024-11-20)
-validation_target=112-subject-result-identity+all-unk-frontiers+tt-witnesses
-runtime_validation=112-subjects-12-queries-1344-attempts-zero-result-mismatch
-runtime_result_counts=ff650-unk468-tt226
-runtime_evidence_sha256=f41117d1d2fc1838cc1ee830071b07673811765884c9d96e4229ebbd187247d4
-freeze_protocol_revision=r1a
+CREMA-CQPL-v6T-r1

@@ -637,6 +637,7 @@ mod tests {
             labels,
             semantic_labels: vec![],
             allocation_labels: vec![],
+            allocation_disposition: vec![],
             identity: None,
             event_identity: None,
                     allocation_post: None,
@@ -1030,6 +1031,7 @@ mod tests {
                         certainty: AllocationEventCertainty::MayAbstract,
                         deallocator_contract: None,
                     }],
+                    allocation_disposition: vec![],
                     identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default(),
                 },
                 AnnotatedNode {
@@ -1040,6 +1042,7 @@ mod tests {
                         certainty: AllocationEventCertainty::MayAbstract,
                         deallocator_contract: None,
                     }],
+                    allocation_disposition: vec![],
                     identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default(),
                 },
             ],
@@ -1062,6 +1065,7 @@ mod tests {
             allocations: vec![AbstractAllocation { id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None }],
             nodes: vec![AnnotatedNode {
                 id: "b0".into(), successors: vec![], labels: vec![], semantic_labels: vec![], allocation_labels: vec![],
+                allocation_disposition: vec![],
                 identity: None, event_identity: None,
                 allocation_post: Some(AbstractAllocationMemoryAnnotation {
                     cells: vec![AbstractAllocationCell { allocation: "A".into(), value: CellValue::Alloc }],
@@ -1095,7 +1099,7 @@ mod tests {
             capabilities: vec![], entry: "b0".into(),
             variables: vec![ProgramVariable { id: "Local(_1)".into(), language: ProgramLanguage::Rust, display: None, function: None }],
             allocations: vec![AbstractAllocation { id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None }],
-            nodes: vec![AnnotatedNode { id: "b0".into(), successors: vec![], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() }],
+            nodes: vec![AnnotatedNode { id: "b0".into(), successors: vec![], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() }],
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();
         let doc = parse_query_document(
@@ -1113,7 +1117,7 @@ mod tests {
             capabilities: vec![], entry: "b0".into(),
             variables: vec![ProgramVariable { id: "Local(_1)".into(), language: ProgramLanguage::Rust, display: None, function: None }],
             allocations: vec![],
-            nodes: vec![AnnotatedNode { id: "b0".into(), successors: vec![], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() }],
+            nodes: vec![AnnotatedNode { id: "b0".into(), successors: vec![], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() }],
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();
         let q = parse_query("exists_alloc a. drop_l(a)").unwrap();
@@ -1151,6 +1155,7 @@ mod tests {
                         if deallocator_family == "c_malloc" { "c" } else if deallocator_family == "rust_global" { "rust" } else { "unknown" },
                     )),
                 }],
+                allocation_disposition: vec![],
                 identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default(),
             }],
         };
@@ -1255,6 +1260,7 @@ mod tests {
                         callee_def_path: None,
                     }),
                 }],
+                allocation_disposition: vec![],
                 identity: None,
                 event_identity: None,
                 allocation_post: None,
@@ -1301,6 +1307,7 @@ mod tests {
                     "term:return".into(),
                 ],
                 allocation_labels: vec![],
+                allocation_disposition: vec![],
                 identity: Some(Default::default()),
                 event_identity: Some(Default::default()),
                 allocation_post: None,

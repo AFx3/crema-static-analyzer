@@ -38,8 +38,8 @@ use crate::structs::GlobalICFGOrdered;
 use crate::abstract_domain::{fixed_point_analysis, detect_mem_issues};
 use std::path::PathBuf;
 use crate::abstract_domain::set_entrypoint;
-use crate::cqpl_export::{export_cqpl_annotated_icfg, export_cqpl_annotated_icfg_with_identity};
-use crate::identity::fixed_point_identity_analysis;
+use crate::cqpl_export::{export_cqpl_annotated_icfg, export_cqpl_annotated_icfg_with_identity_and_disposition};
+use crate::identity::{fixed_point_disposition_identity_analysis, fixed_point_identity_analysis};
 use crate::cargo_project::{
     AnalysisMode, CargoBuildInvocation, CargoCliConfig, CargoTargetKind,
     discover_analysis_plan, isolated_cargo_target_dir, normalize_local_def_path_request, run_selected_target_with_cargo,
@@ -397,6 +397,8 @@ cannot claim whole-program C/FFI coverage. Files: {}",
     // remains byte-for-byte driven by abstract_state/taint_state in this slice.
     let allocation_identity_state =
         fixed_point_identity_analysis(&global_icfg, &selected_entry);
+    let allocation_disposition_identity_state =
+        fixed_point_disposition_identity_analysis(&global_icfg, &selected_entry);
 
     if let Some(path) = allocation_identity_out.as_ref() {
         let json = serde_json::to_string_pretty(&allocation_identity_state.to_dump())
@@ -417,10 +419,11 @@ cannot claim whole-program C/FFI coverage. Files: {}",
             &annotated_icfg_out,
         )
     } else {
-        export_cqpl_annotated_icfg_with_identity(
+        export_cqpl_annotated_icfg_with_identity_and_disposition(
             &global_icfg,
             &abstract_state,
             &allocation_identity_state,
+            &allocation_disposition_identity_state,
             &selected_entry,
             cqpl_schema_version,
             &annotated_icfg_out,
@@ -647,6 +650,8 @@ fn run_v6o_pipeline(
 
         let (abstract_state, taint_state) = fixed_point_analysis(&global_icfg);
         let allocation_identity_state = fixed_point_identity_analysis(&global_icfg, &selected_entry);
+        let allocation_disposition_identity_state =
+            fixed_point_disposition_identity_analysis(&global_icfg, &selected_entry);
 
         let (annotated_path, identity_path) = if plan.analysis_roots.len() == 1 {
             (
@@ -688,10 +693,11 @@ fn run_v6o_pipeline(
                 &annotated_path,
             )
         } else {
-            export_cqpl_annotated_icfg_with_identity(
+            export_cqpl_annotated_icfg_with_identity_and_disposition(
                 &global_icfg,
                 &abstract_state,
                 &allocation_identity_state,
+                &allocation_disposition_identity_state,
                 &selected_entry,
                 cqpl_schema_version,
                 &annotated_path,

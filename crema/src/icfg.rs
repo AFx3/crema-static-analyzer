@@ -18,7 +18,8 @@ use rustc_span::symbol::sym;
 use crate::structs::{MirStatement, MirTerminator, MirBasicBlock, MirRepresentation, SourceInfoData,
     LlvmRepresentation, LlvmFunction, LlvmJson, LlvmJsonNode, SvfStatement, LlvmEdge, IcfgEdge, DummyNode, GlobalICFGNode, GlobalICFGOrdered, MirCallArgument,
     RustFunctionMetadata, RustCallMetadata, TerminalNode, RustDropAllocatorEvidence, RustDropAllocatorEvidenceKind,
-    RustCallDeallocatorEvidence, RustCallDeallocatorEvidenceKind, RustHigherOrderCallEvidence,
+    RustCallDeallocatorEvidence, RustCallDeallocatorEvidenceKind, RustAllocationDispositionEvidence,
+    RustAllocationDispositionEvidenceKind, RustHigherOrderCallEvidence,
     RustHigherOrderCallEvidenceKind };
 use crate::utils::{unwind_action_to_string,compute_hash, load_ffi_functions};
 use crate::mir_semantics::mir_semantics_v2_enabled;
@@ -102,13 +103,114 @@ fn rust_call_deallocator_evidence<'tcx>(
         return None;
     }
     let parent = tcx.parent(def_id);
-    if tcx.item_name(parent).as_str() != "alloc" {
+    // `TyCtxt::item_name` is only valid for definitions that actually carry a
+    // name.  In particular, an `Impl` parent has no item name on the pinned
+    // compiler and asking for one can ICE rustc.  Prove the parent is a module
+    // before reading its name.
+    if !matches!(tcx.def_kind(parent), DefKind::Mod)
+        || tcx.item_name(parent).as_str() != "alloc"
+    {
         return None;
     }
     Some(RustCallDeallocatorEvidence {
         kind: RustCallDeallocatorEvidenceKind::GlobalDeallocApi,
         callee_def_path: tcx.def_path_str(def_id),
     })
+}
+
+/// v6S-r1: producer-certify ownership/disposition operations while rustc
+/// semantic identity and argument types are available.
+///
+/// This evidence is deliberately narrower than the historical textual transfer
+/// summaries.  Its purpose is observational provenance for future leak
+/// precision work; it MUST NOT change the truth value of the frozen v6R query
+/// set.
+///
+/// Box methods are accepted only when the associated item belongs to an
+/// inherent impl whose exact self ADT is rustc's `owned_box` lang item.  The
+/// rendered DefPath is stored only for auditability.
+///
+/// `mem::drop` is special-cased only for an exact core::mem::drop DefId whose
+/// first MIR argument type is a raw pointer.  Rust's Reference states that
+/// dropping a raw pointer has no effect on the lifecycle of the pointee, so
+/// this evidence certifies a *no-op on the pointee*, not a deallocation.
+///
+/// Official documentation:
+/// - Box::into_raw / from_raw / leak:
+///   https://doc.rust-lang.org/std/boxed/struct.Box.html
+/// - raw pointers: https://doc.rust-lang.org/reference/types/pointer.html#raw-pointers-const-and-mut
+/// - mem::drop: https://doc.rust-lang.org/std/mem/fn.drop.html
+/// - mem::forget: https://doc.rust-lang.org/std/mem/fn.forget.html
+fn rust_allocation_disposition_evidence<'tcx>(
+    def_id: DefId,
+    first_arg_ty: Option<ty::Ty<'tcx>>,
+    tcx: TyCtxt<'tcx>,
+) -> Option<RustAllocationDispositionEvidence> {
+    let item_symbol = tcx.item_name(def_id);
+    let item = item_symbol.as_str();
+
+    if matches!(item, "into_raw" | "from_raw" | "leak") {
+        let assoc_item = tcx.opt_associated_item(def_id)?;
+        let impl_id = assoc_item.impl_container(tcx)?;
+        if tcx.impl_trait_ref(impl_id).is_some() {
+            return None;
+        }
+        let self_ty = tcx.type_of(impl_id).instantiate_identity();
+        let TyKind::Adt(owner_def, _) = self_ty.kind() else {
+            return None;
+        };
+        if tcx.lang_items().owned_box() != Some(owner_def.did()) {
+            return None;
+        }
+        let kind = match item {
+            "into_raw" => RustAllocationDispositionEvidenceKind::BoxIntoRaw,
+            "from_raw" => RustAllocationDispositionEvidenceKind::BoxFromRaw,
+            "leak" => RustAllocationDispositionEvidenceKind::BoxLeak,
+            _ => unreachable!(),
+        };
+        return Some(RustAllocationDispositionEvidence {
+            kind,
+            callee_def_path: tcx.def_path_str(def_id),
+            owner_def_path: Some(tcx.def_path_str(owner_def.did())),
+        });
+    }
+
+    // Public std::mem::{drop,forget} resolve to core::mem items on the pinned
+    // toolchain.  We classify from DefId metadata, not from rendered call text.
+    let parent = tcx.parent(def_id);
+    if !def_id.is_local()
+        && tcx.crate_name(def_id.krate).as_str() == "core"
+        && matches!(tcx.def_kind(parent), DefKind::Mod)
+        && tcx.item_name(parent).as_str() == "mem"
+    {
+        match item {
+            "drop" => {
+                let arg_ty = first_arg_ty?;
+                if matches!(arg_ty.kind(), TyKind::RawPtr(..)) {
+                    return Some(RustAllocationDispositionEvidence {
+                        kind: RustAllocationDispositionEvidenceKind::MemDropRawPointer,
+                        callee_def_path: tcx.def_path_str(def_id),
+                        owner_def_path: None,
+                    });
+                }
+            }
+            "forget" => {
+                let arg_ty = first_arg_ty?;
+                if let TyKind::Adt(owner_def, _) = arg_ty.kind() {
+                    if tcx.lang_items().owned_box() == Some(owner_def.did()) {
+                        return Some(RustAllocationDispositionEvidence {
+                            kind: RustAllocationDispositionEvidenceKind::MemForgetOwnedBox,
+                            callee_def_path: tcx.def_path_str(def_id),
+                            owner_def_path: Some(tcx.def_path_str(owner_def.did())),
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    None
 }
 
 /// v6Q-r1: producer-certify bounded higher-order `Option` combinators while
@@ -576,7 +678,8 @@ impl MirExtractor {
                 // Constant function items carry an exact rustc DefId; record its
                 // canonical DefPath separately and resolve local calls from it.
                 let func_ty = func.ty(local_decls, tcx);
-                let (callee_def_path, callee_is_local, deallocator_evidence, higher_order_evidence) =
+                let first_arg_ty = args.first().map(|arg| arg.node.ty(local_decls, tcx));
+                let (callee_def_path, callee_is_local, deallocator_evidence, allocation_disposition_evidence, higher_order_evidence) =
                     match func_ty.kind() {
                         TyKind::FnDef(def_id, _) => {
                             (
@@ -584,13 +687,18 @@ impl MirExtractor {
                                 def_id.is_local(),
                                 rust_call_deallocator_evidence(*def_id, tcx),
                                 if mir_semantics_v2_enabled() {
+                                    rust_allocation_disposition_evidence(*def_id, first_arg_ty, tcx)
+                                } else {
+                                    None
+                                },
+                                if mir_semantics_v2_enabled() {
                                     rust_higher_order_call_evidence(*def_id, tcx)
                                 } else {
                                     None
                                 },
                             )
                         }
-                        _ => (None, false, None, None),
+                        _ => (None, false, None, None, None),
                     };
 
                 if let Some(evidence) = &higher_order_evidence {
@@ -600,6 +708,15 @@ impl MirExtractor {
                         evidence.callee_def_path,
                         evidence.owner_def_path,
                         evidence.callback_argument_indices,
+                    );
+                }
+
+                if let Some(evidence) = &allocation_disposition_evidence {
+                    eprintln!(
+                        "V6S_ALLOCATION_DISPOSITION_PRODUCER_EVIDENCE: kind={:?} callee={} owner={}",
+                        evidence.kind,
+                        evidence.callee_def_path,
+                        evidence.owner_def_path.as_deref().unwrap_or("<none>"),
                     );
                 }
 
@@ -645,6 +762,7 @@ impl MirExtractor {
                     function_called: format!("{:?}", func),
                     callee_def_path,
                     deallocator_evidence,
+                    allocation_disposition_evidence,
                     higher_order_evidence,
                     callee_is_local,
                     callback_def_paths: callback_paths.into_iter().collect(),

@@ -101,6 +101,45 @@ pub struct AllocationEventLabel {
     pub deallocator_contract: Option<AllocationContract>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AllocationDispositionKind {
+    BoxIntoRaw,
+    BoxFromRaw,
+    BoxLeak,
+    MemForgetOwnedBox,
+    RawPointerDropNoop,
+    ReturnEscape,
+    MayDeallocate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AllocationObligationEffect {
+    PreserveManualObligation,
+    RestoreRaiiObligation,
+    PreservePersistentObligation,
+    PreserveUnreclaimedObligation,
+    NoPointeeLifecycleEffect,
+    MayEscapeToCaller,
+    MayDischarge,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AllocationDispositionRecord {
+    pub allocation: String,
+    pub kind: AllocationDispositionKind,
+    pub certainty: AllocationEventCertainty,
+    pub obligation_effect: AllocationObligationEffect,
+    pub basis: String,
+    #[serde(default)]
+    pub source_variable: Option<String>,
+    #[serde(default)]
+    pub target_variable: Option<String>,
+    #[serde(default)]
+    pub callee_def_path: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AbstractAllocation {
     pub id: String,
@@ -200,6 +239,8 @@ pub struct AnnotatedNode {
     #[serde(default)]
     pub allocation_labels: Vec<AllocationEventLabel>,
     #[serde(default)]
+    pub allocation_disposition: Vec<AllocationDispositionRecord>,
+    #[serde(default)]
     pub identity: Option<NodeIdentityAnnotation>,
     #[serde(default)]
     pub event_identity: Option<NodeIdentityAnnotation>,
@@ -259,6 +300,40 @@ fn valid_structural_label(label: &str) -> bool {
     name.chars().all(|c| c == '_' || c.is_ascii_lowercase() || c.is_ascii_digit())
 }
 
+fn validate_allocation_disposition_record(record: &AllocationDispositionRecord) -> Result<(), String> {
+    use AllocationDispositionKind as K;
+    use AllocationObligationEffect as E;
+
+    let expected = match record.kind {
+        K::BoxIntoRaw => (E::PreserveManualObligation, "rustc_box_into_raw_v1", true),
+        K::BoxFromRaw => (E::RestoreRaiiObligation, "rustc_box_from_raw_v1", true),
+        K::BoxLeak => (E::PreservePersistentObligation, "rustc_box_leak_v1", true),
+        K::MemForgetOwnedBox => (E::PreserveUnreclaimedObligation, "rustc_mem_forget_owned_box_v1", true),
+        K::RawPointerDropNoop => (E::NoPointeeLifecycleEffect, "rustc_mem_drop_raw_pointer_v1", true),
+        K::ReturnEscape => (E::MayEscapeToCaller, "rust_return_identity_v1", false),
+        K::MayDeallocate => (E::MayDischarge, "allocation_drop_label_v1", false),
+    };
+    if record.obligation_effect != expected.0 || record.basis != expected.1 {
+        return Err(format!(
+            "allocation_disposition_v1 invalid tuple for {:?}: effect={:?} basis={}",
+            record.kind, record.obligation_effect, record.basis
+        ));
+    }
+    if expected.2 && record.callee_def_path.as_deref().map_or(true, str::is_empty) {
+        return Err(format!(
+            "allocation_disposition_v1 {:?} requires producer callee_def_path provenance",
+            record.kind
+        ));
+    }
+    if !expected.2 && record.callee_def_path.is_some() {
+        return Err(format!(
+            "allocation_disposition_v1 {:?} must not invent call provenance",
+            record.kind
+        ));
+    }
+    Ok(())
+}
+
 impl Kripke {
     pub fn from_annotated_icfg(input: AnnotatedIcfg) -> Result<Self, String> {
         if !matches!(input.schema_version, 1 | 2) {
@@ -272,6 +347,7 @@ impl Kripke {
         let has_allocation_contracts = capabilities.contains("allocation_contracts_v1");
         let has_allocation_contracts_v2 = capabilities.contains("allocation_contracts_v2");
         let has_allocation_state = capabilities.contains("allocation_state_v1");
+        let has_allocation_disposition = capabilities.contains("allocation_disposition_v1");
         if has_allocation_contracts && schema_version != 2 {
             return Err("allocation_contracts_v1 requires annotated ICFG schema v2".into());
         }
@@ -283,6 +359,9 @@ impl Kripke {
         }
         if has_allocation_state && schema_version != 2 {
             return Err("allocation_state_v1 requires annotated ICFG schema v2".into());
+        }
+        if has_allocation_disposition && schema_version != 2 {
+            return Err("allocation_disposition_v1 requires annotated ICFG schema v2".into());
         }
         let has_mir_semantic_labels = capabilities.contains("mir_semantic_labels_v1");
         if has_mir_semantic_labels && schema_version != 2 {
@@ -384,6 +463,33 @@ impl Kripke {
                     }
                 }
             }
+            if !has_allocation_disposition && !node.allocation_disposition.is_empty() {
+                return Err(format!(
+                    "node '{}' contains allocation disposition records without capability allocation_disposition_v1",
+                    node.id
+                ));
+            }
+            for record in &node.allocation_disposition {
+                if !allocations.contains_key(&record.allocation) {
+                    return Err(format!(
+                        "node '{}' disposition record references undeclared allocation '{}'",
+                        node.id, record.allocation
+                    ));
+                }
+                validate_allocation_disposition_record(record)?;
+                for variable in [record.source_variable.as_ref(), record.target_variable.as_ref()]
+                    .into_iter()
+                    .flatten()
+                {
+                    if !variables.contains_key(variable) {
+                        return Err(format!(
+                            "node '{}' disposition record references undeclared variable '{}'",
+                            node.id, variable
+                        ));
+                    }
+                }
+            }
+
             for (kind, identity) in [
                 ("identity", node.identity.as_ref()),
                 ("event_identity", node.event_identity.as_ref()),
@@ -817,6 +923,7 @@ mod tests {
                 labels: vec![EventLabel { predicate: EventKind::Drop, variable: "c::p".into() }],
                 semantic_labels: vec![],
                 allocation_labels: vec![],
+                allocation_disposition: vec![],
                 identity: None,
                 event_identity: None,
                     allocation_post: None,
@@ -847,6 +954,53 @@ mod tests {
         assert!(serde_json::from_str::<AllocationEventLabel>(raw).is_err());
     }
 
+
+    #[test]
+    fn v6s_allocation_disposition_accepts_certified_raw_pointer_drop_noop() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec!["allocation_disposition_v1".into()];
+        input.allocations = vec![AbstractAllocation {
+            id: "A".into(),
+            display: None,
+            site: None,
+            context: vec![],
+            allocator_contract: None,
+        }];
+        input.nodes[0].allocation_disposition = vec![AllocationDispositionRecord {
+            allocation: "A".into(),
+            kind: AllocationDispositionKind::RawPointerDropNoop,
+            certainty: AllocationEventCertainty::MayAbstract,
+            obligation_effect: AllocationObligationEffect::NoPointeeLifecycleEffect,
+            basis: "rustc_mem_drop_raw_pointer_v1".into(),
+            source_variable: Some("rust::x".into()),
+            target_variable: None,
+            callee_def_path: Some("core::mem::drop".into()),
+        }];
+        Kripke::from_annotated_icfg(input).unwrap();
+    }
+
+    #[test]
+    fn v6s_allocation_disposition_rejects_wrong_raw_pointer_drop_effect() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec!["allocation_disposition_v1".into()];
+        input.allocations = vec![AbstractAllocation {
+            id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None,
+        }];
+        input.nodes[0].allocation_disposition = vec![AllocationDispositionRecord {
+            allocation: "A".into(),
+            kind: AllocationDispositionKind::RawPointerDropNoop,
+            certainty: AllocationEventCertainty::MayAbstract,
+            obligation_effect: AllocationObligationEffect::MayDischarge,
+            basis: "rustc_mem_drop_raw_pointer_v1".into(),
+            source_variable: Some("rust::x".into()),
+            target_variable: None,
+            callee_def_path: Some("core::mem::drop".into()),
+        }];
+        assert!(Kripke::from_annotated_icfg(input).is_err());
+    }
+
     #[test]
     fn entry_projection_is_deterministic_and_reachable_only() {
         let mut input = base();
@@ -855,21 +1009,21 @@ mod tests {
             AnnotatedNode {
                 id: "rust::main::bb0".into(),
                 successors: vec!["rust::main::bb1".into()],
-                labels: vec![], semantic_labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None,
                     allocation_post: None,
                 pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
             },
             AnnotatedNode {
                 id: "rust::main::bb1".into(),
                 successors: vec![],
-                labels: vec![], semantic_labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None,
                     allocation_post: None,
                 pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
             },
             AnnotatedNode {
                 id: "rust::dead::bb0".into(),
                 successors: vec![],
-                labels: vec![], semantic_labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None,
                     allocation_post: None,
                 pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
             },
@@ -891,21 +1045,21 @@ mod tests {
             AnnotatedNode {
                 id: "rust::main::bb0".into(),
                 successors: vec!["dummyCall::rust::main::bb0".into()],
-                labels: vec![], semantic_labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None,
                     allocation_post: None,
                 pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
             },
             AnnotatedNode {
                 id: "dummyCall::rust::main::bb0".into(),
                 successors: vec!["rust::callee::bb0".into()],
-                labels: vec![], semantic_labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None,
                     allocation_post: None,
                 pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
             },
             AnnotatedNode {
                 id: "rust::callee::bb0".into(),
                 successors: vec![],
-                labels: vec![], semantic_labels: vec![], allocation_labels: vec![], identity: None, event_identity: None,
+                labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None,
                     allocation_post: None,
                 pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
             },
@@ -960,10 +1114,12 @@ mod tests {
                     labels: vec![EventLabel { predicate: EventKind::Read, variable: "rust::main::Local(_1)".into() }],
                     semantic_labels: vec![],
                     allocation_labels: vec![AllocationEventLabel { predicate: EventKind::Alloc, allocation: "A".into(), certainty: AllocationEventCertainty::MayAbstract, deallocator_contract: None }],
+                    allocation_disposition: vec![],
                     identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default(),
                 },
                 AnnotatedNode {
                     id: "rust::main::bb1".into(), successors: vec![], labels: vec![], semantic_labels: vec![], allocation_labels: vec![],
+                    allocation_disposition: vec![],
                     identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default(),
                 },
                 AnnotatedNode {
@@ -971,6 +1127,7 @@ mod tests {
                     labels: vec![EventLabel { predicate: EventKind::Read, variable: "rust::dead::Local(_1)".into() }],
                     semantic_labels: vec![],
                     allocation_labels: vec![AllocationEventLabel { predicate: EventKind::Alloc, allocation: "DEAD".into(), certainty: AllocationEventCertainty::MayAbstract, deallocator_contract: None }],
+                    allocation_disposition: vec![],
                     identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default(),
                 },
             ],
@@ -996,8 +1153,8 @@ mod tests {
             variables: vec![ProgramVariable { id: "rust::x".into(), language: ProgramLanguage::Rust, display: None, function: Some("main".into()) }],
             allocations: vec![],
             nodes: vec![
-                AnnotatedNode { id: "rust::main::bb0".into(), successors: vec!["rust::main::terminate".into()], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
-                AnnotatedNode { id: "rust::main::terminate".into(), successors: vec![], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
+                AnnotatedNode { id: "rust::main::bb0".into(), successors: vec!["rust::main::terminate".into()], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
+                AnnotatedNode { id: "rust::main::terminate".into(), successors: vec![], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
             ],
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();
@@ -1017,10 +1174,10 @@ mod tests {
             variables: vec![ProgramVariable { id: "v".into(), language: ProgramLanguage::Rust, display: None, function: None }],
             allocations: vec![],
             nodes: vec![
-                AnnotatedNode { id: "rust::main::bb0".into(), successors: vec!["dummyCall::x".into()], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
-                AnnotatedNode { id: "dummyCall::x".into(), successors: vec!["rust::callee::bb0".into()], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
-                AnnotatedNode { id: "rust::callee::bb0".into(), successors: vec!["rust::callee::bb1".into()], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
-                AnnotatedNode { id: "rust::callee::bb1".into(), successors: vec![], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
+                AnnotatedNode { id: "rust::main::bb0".into(), successors: vec!["dummyCall::x".into()], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
+                AnnotatedNode { id: "dummyCall::x".into(), successors: vec!["rust::callee::bb0".into()], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
+                AnnotatedNode { id: "rust::callee::bb0".into(), successors: vec!["rust::callee::bb1".into()], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
+                AnnotatedNode { id: "rust::callee::bb1".into(), successors: vec![], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
             ],
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();

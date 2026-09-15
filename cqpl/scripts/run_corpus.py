@@ -15,6 +15,7 @@ Schema 1 compatibility query set:
 from __future__ import annotations
 
 import argparse
+import csv
 import datetime as dt
 import hashlib
 import json
@@ -26,6 +27,8 @@ import subprocess
 import sys
 import time
 from typing import Any
+
+from unknown_explanations import UnknownExplanationError, explain_unknown
 
 QUERY_FILES = {
     1: {
@@ -193,6 +196,7 @@ def main() -> int:
     ap.add_argument("--build-timeout", type=float, default=600.0)
     ap.add_argument("--export-timeout", type=float, default=900.0)
     ap.add_argument("--query-timeout", type=float, default=180.0)
+    ap.add_argument("--explain-unk-verbose", action="store_true", help="print the full human-readable explanation for every schema-v2 UNKNOWN query")
     ap.add_argument("--list-targets", action="store_true")
     ap.add_argument("--require-discovered", type=int, default=110)
     ap.add_argument("--require-active", type=int, default=109)
@@ -297,6 +301,8 @@ def main() -> int:
 
     results: dict[str, Any] = {}
     failures = 0
+    unknown_explanations: list[dict[str, Any]] = []
+    explanation_failures: list[dict[str, str]] = []
     status_cols = ["key", "relative_path", "cargo_target", "build", "export", "schema"] + list(query_files)
     status_rows = ["\t".join(status_cols) + "\n"]
 
@@ -443,7 +449,48 @@ def main() -> int:
                 vals.append("ERR")
                 continue
             (tdir / f"{qname}.json").write_text(cp.stdout, encoding="utf-8")
-            item["queries"][qname] = {"exit": 0, "result": result, "elapsed_seconds": round(elapsed, 6)}
+            query_record = {"exit": 0, "result": result, "elapsed_seconds": round(elapsed, 6)}
+            if args.schema_version == 2 and result == "unk":
+                explain_path = tdir / f"{qpath.stem}.explain.json"
+                try:
+                    explanation = explain_unknown(
+                        checker=checker_bin,
+                        artifact=annotated,
+                        query=qpath,
+                        result=result,
+                        explanation=explain_path,
+                        timeout=None if args.query_timeout <= 0 else args.query_timeout,
+                        verbose=args.explain_unk_verbose,
+                    )
+                except UnknownExplanationError as e:
+                    query_failed = True
+                    query_record["explanation_error"] = str(e)
+                    explanation_failures.append({
+                        "target": key, "relative_path": rel, "query": qpath.stem, "error": str(e)
+                    })
+                    print(f"  {qname}=unk EXPLANATION_FAIL: {e}", flush=True)
+                else:
+                    assert explanation is not None
+                    query_record["explanation"] = explain_path.name
+                    query_record["reason_frontier"] = explanation["reason_frontier"]
+                    query_record["supporting_findings"] = explanation["supporting_findings"]
+                    query_record["supporting_finding_kinds"] = explanation["supporting_finding_kinds"]
+                    query_record["supporting_finding_strengths"] = explanation["supporting_finding_strengths"]
+                    explanation.update({
+                        "target": key,
+                        "relative_path": rel,
+                        "artifact": str(annotated),
+                        "query_slot": qname,
+                        "explanation": explain_path.relative_to(out).as_posix(),
+                    })
+                    unknown_explanations.append(explanation)
+                    print(
+                        f"  {qpath.stem}=unk explanation={explain_path.name} "
+                        f"reasons={';'.join(explanation['reason_frontier'])} "
+                        f"supporting_findings={explanation['supporting_findings']}",
+                        flush=True,
+                    )
+            item["queries"][qname] = query_record
             vals.append(result)
 
         if query_failed:
@@ -454,6 +501,44 @@ def main() -> int:
         results[key] = item
         status_rows.append("\t".join([key, rel, cargo_target or "-", "0", "0", "pass"] + vals) + "\n")
         print("  " + " ".join(f"{q}={v}" for q, v in zip(query_files, vals)), flush=True)
+
+    unknown_expected = 0
+    if args.schema_version == 2:
+        unknown_expected = sum(
+            1
+            for item in results.values()
+            for query in item.get("queries", {}).values()
+            if query.get("result") == "unk"
+        )
+    unknown_complete = (
+        len(unknown_explanations) == unknown_expected and not explanation_failures
+    )
+    with (out / "unknown-explanations.tsv").open("w", encoding="utf-8", newline="") as f:
+        fields = [
+            "target", "relative_path", "artifact", "query_slot", "query", "result",
+            "explanation", "reason_frontier", "witnesses", "supporting_findings",
+            "supporting_finding_kinds", "supporting_finding_strengths",
+        ]
+        w = csv.DictWriter(f, delimiter="\t", fieldnames=fields)
+        w.writeheader()
+        for record in unknown_explanations:
+            row = dict(record)
+            for key_ in ["reason_frontier", "supporting_finding_kinds", "supporting_finding_strengths"]:
+                row[key_] = ";".join(row[key_])
+            w.writerow({key_: row.get(key_, "") for key_ in fields})
+    unknown_summary = {
+        "schema": "cqpl_unknown_explanations_v1",
+        "policy": "every_v2_unk_requires_valid_specific_explanation",
+        "schema_version": args.schema_version,
+        "unknown_results": unknown_expected,
+        "explanations_generated": len(unknown_explanations),
+        "complete": unknown_complete,
+        "failures": explanation_failures,
+        "reports": unknown_explanations,
+    }
+    (out / "unknown-explanations-summary.json").write_text(
+        json.dumps(unknown_summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
     complete = sum(1 for x in results.values() if x.get("status") == "complete")
     aggregate = {
@@ -480,6 +565,8 @@ def main() -> int:
         f"active={len(selected)} complete={complete} failures={failures} skipped={len(skipped)}"
     )
     print(out)
+    if not unknown_complete:
+        return 5
     if failures or complete != len(selected):
         return 4
     return 0

@@ -274,6 +274,43 @@ pub struct RustCallDeallocatorEvidence {
     pub callee_def_path: String,
 }
 
+/// v6S-r1 producer-certified ownership/disposition evidence.
+///
+/// This evidence is observational: it records API/type facts while rustc DefId
+/// and argument types are still available.  It does not change the Phase-5
+/// CellValue transfer semantics or the truth value of historical CQPL queries.
+/// Consumers must not reconstruct these kinds from pretty-printed MIR strings.
+///
+/// Official Rust semantics used by the producer:
+/// - `Box::into_raw` consumes the Box and leaves cleanup responsibility to the
+///   caller: https://doc.rust-lang.org/std/boxed/struct.Box.html#method.into_raw
+/// - `Box::from_raw` reconstructs Box ownership; the Box destructor will drop T
+///   and free the allocation: https://doc.rust-lang.org/std/boxed/struct.Box.html#method.from_raw
+/// - dropping a raw pointer has no effect on the lifecycle of the pointee:
+///   https://doc.rust-lang.org/reference/types/pointer.html#raw-pointers-const-and-mut
+/// - `mem::forget` skips the destructor of the consumed value:
+///   https://doc.rust-lang.org/std/mem/fn.forget.html
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RustAllocationDispositionEvidenceKind {
+    BoxIntoRaw,
+    BoxFromRaw,
+    BoxLeak,
+    MemForgetOwnedBox,
+    MemDropRawPointer,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RustAllocationDispositionEvidence {
+    pub kind: RustAllocationDispositionEvidenceKind,
+    /// Audit-only canonical DefPath.  Classification is completed before this
+    /// string is serialized.
+    pub callee_def_path: String,
+    /// Exact rustc owner type when the evidence is tied to Box.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_def_path: Option<String>,
+}
+
 /// v6P-r1b producer-certified evidence for narrowly supported higher-order APIs.
 /// Consumers must not reconstruct this classification from pretty-printed MIR
 /// or from `tcx.def_path_str` rendering of inherent impl items.
@@ -360,6 +397,11 @@ pub enum MirTerminator {
         /// deallocator APIs. Historical ICFG JSON remains readable.
         #[serde(default)]
         deallocator_evidence: Option<RustCallDeallocatorEvidence>,
+        /// v6S-r1: producer-certified ownership/disposition observation.
+        /// This is deliberately separate from deallocation evidence: e.g.
+        /// `drop(*mut T)` is a raw-pointer value drop and does not free T.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        allocation_disposition_evidence: Option<RustAllocationDispositionEvidence>,
         /// v6P-r1b: producer-certified structural evidence for supported
         /// higher-order API contracts. Historical MIR JSON remains readable.
         #[serde(default, skip_serializing_if = "Option::is_none")]

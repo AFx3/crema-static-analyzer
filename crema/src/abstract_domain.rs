@@ -7,7 +7,7 @@ use crate::memory_events;
 use crate::mir_semantics::{mir_semantics_v2_enabled, rvalue_category};
 use std::collections::HashSet;
 use crate::structs::GlobalICFGNode;
-use crate::structs::{MirStatement, MirTerminator, MirBasicBlock};
+use crate::structs::{MirStatement, MirTerminator, MirBasicBlock, RustAllocationDispositionEvidenceKind};
 use crate::structs::LlvmJsonNode;
 use crate::structs::SvfStatement;
 use std::collections::VecDeque;
@@ -2912,7 +2912,7 @@ pub fn apply_mir_statement(mem: &AbstractMemory, taint: &mut TaintStateMap, stmt
 pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term: &MirTerminator) -> AbstractMemory {let mut new_mem = mem.clone();
 
     match term {
-        MirTerminator::Call {details, function_called, arguments, return_place, ..} => {
+        MirTerminator::Call {details, function_called, arguments, return_place, allocation_disposition_evidence, ..} => {
             // CStr::from_ptr creates a borrowed C-string view. It does not
             // retake ownership of the pointed allocation.
             if is_cstr_from_ptr_call(function_called) {
@@ -2989,10 +2989,27 @@ pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term:
 
             } else {
                 // default MIR call handling
-                let explicit_drop = is_explicit_mem_drop(function_called);
-                let raw_pointer_drop = is_raw_pointer_mem_drop(function_called);
+                let certified_raw_pointer_drop = allocation_disposition_evidence
+                    .as_ref()
+                    .is_some_and(|e| matches!(
+                        e.kind,
+                        RustAllocationDispositionEvidenceKind::MemDropRawPointer
+                    ));
+                let explicit_drop = is_explicit_mem_drop(function_called)
+                    || certified_raw_pointer_drop;
+                let raw_pointer_drop = is_raw_pointer_mem_drop(function_called)
+                    || certified_raw_pointer_drop;
 
-                let (ret_value, updated_mem) = transfer_call(&new_mem, details, return_place);
+                // A producer-certified raw-pointer drop is a pointee no-op even
+                // if pretty MIR spelling changes.  This guard is semantically
+                // equivalent to the historical textual branch on the frozen
+                // corpus, but prevents a future formatter change from turning
+                // `drop(*mut T)` into a heap deallocation.
+                let (ret_value, updated_mem) = if certified_raw_pointer_drop {
+                    (CellValue::BOXTIMES, new_mem.clone())
+                } else {
+                    transfer_call(&new_mem, details, return_place)
+                };
                 new_mem = updated_mem;
                 let full_ret_place = full_local_name(return_place);
 
@@ -4728,7 +4745,7 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                 }
 
 
-                if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return_place, ..}) = &mir_block.terminator {   
+                if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return_place, allocation_disposition_evidence, ..}) = &mir_block.terminator {
                     if let Some(reason) =
                         c_malloc_rust_allocator_contract_warning(function_called)
                     {
@@ -4841,8 +4858,15 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                     // Use exactly the same semantics as the transfer function:
                     //   drop(*mut T / *const T) -> no heap free
                     //   drop(tracked owning value) -> one Drop free
+                    let certified_raw_pointer_drop = allocation_disposition_evidence
+                        .as_ref()
+                        .is_some_and(|e| matches!(
+                            e.kind,
+                            RustAllocationDispositionEvidenceKind::MemDropRawPointer
+                        ));
                     if is_explicit_mem_drop(function_called)
                         && !is_raw_pointer_mem_drop(function_called)
+                        && !certified_raw_pointer_drop
                     {
                         if let Some(arg_struct) = arguments.get(0) {
                             let dropped_name = extract_arg_name(&arg_struct.arg);
@@ -6815,7 +6839,7 @@ mod phase4_std_memory_tests {
         TAINT_C_MALLOC_FAMILY
     };
     use std::collections::{BTreeMap, BTreeSet};
-    use crate::structs::{MirCallArgument, MirStatement, MirTerminator, SourceInfoData};
+    use crate::structs::{MirCallArgument, MirStatement, MirTerminator, SourceInfoData, RustAllocationDispositionEvidence, RustAllocationDispositionEvidenceKind};
 
     fn n(s: &str) -> String {
         s.to_string()
@@ -6969,6 +6993,7 @@ mod phase4_std_memory_tests {
             function_called: "std::ptr::mut_ptr::<impl *mut i32>::cast::<std::ffi::c_void>".to_string(),
             callee_def_path: None,
             deallocator_evidence: None,
+            allocation_disposition_evidence: None,
             higher_order_evidence: None,
             callee_is_local: false,
             callback_def_paths: Vec::new(),
@@ -7390,6 +7415,7 @@ mod phase4_std_memory_tests {
             function_called: "std::ffi::CStr::from_ptr::<'_>".to_string(),
             callee_def_path: None,
             deallocator_evidence: None,
+            allocation_disposition_evidence: None,
             higher_order_evidence: None,
             callee_is_local: false,
             callback_def_paths: Vec::new(),
@@ -7469,6 +7495,48 @@ mod phase4_std_memory_tests {
         assert_eq!(ret, CellValue::TOP);
         assert_eq!(mem2.get_cell_value(&n("Local(_1)")), CellValue::MV);
     }
+    #[test]
+    fn v6s_certified_raw_pointer_mem_drop_preserves_pointee_allocation() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&n("Local(_1)"), CellValue::MV);
+        let mut taint = TaintStateMap::default();
+        taint.entry(n("Local(_1)")).or_default().insert(TAINT_ASSIGN.to_string());
+
+        // Intentionally avoid a pretty-printed *mut type in function_called.
+        // v6S must rely on producer-certified rustc type evidence, not text.
+        let term = MirTerminator::Call {
+            details: "_0 = core::mem::drop::<opaque>(copy _1)".to_string(),
+            source_info: "<v6s-raw-drop-test>".to_string(),
+            function_called: "core::mem::drop::<opaque>".to_string(),
+            callee_def_path: Some("core::mem::drop".to_string()),
+            deallocator_evidence: None,
+            allocation_disposition_evidence: Some(RustAllocationDispositionEvidence {
+                kind: RustAllocationDispositionEvidenceKind::MemDropRawPointer,
+                callee_def_path: "core::mem::drop".to_string(),
+                owner_def_path: None,
+            }),
+            higher_order_evidence: None,
+            callee_is_local: false,
+            callback_def_paths: Vec::new(),
+            resolved_instance_callees: Vec::new(),
+            instance_dispatch_observed: false,
+            instance_dispatch_external: false,
+            instance_dispatch_unresolved: false,
+            arguments: vec![MirCallArgument {
+                arg: "Local(_1)".to_string(),
+                is_mutable: Some(false),
+            }],
+            return_place: "_0".to_string(),
+            return_target: Some("bb1".to_string()),
+            unwind_target: "continue".to_string(),
+        };
+
+        let after = apply_mir_terminator(&mem, &mut taint, &term);
+        assert_eq!(after.get_cell_value(&n("Local(_1)")), CellValue::MV);
+        assert_eq!(after.get_cell_value(&n("Local(_0)")), CellValue::BOXTIMES);
+        assert!(!taint.get("Local(_1)").is_some_and(|tags| tags.contains("free")));
+    }
+
 }
 
 #[cfg(test)]

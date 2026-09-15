@@ -1,11 +1,139 @@
 use crate::ast::{LabelPredicate, MayPredicate, PathFormula, PathQuantifier, QueryDocument, StateFormula, StructuralLabelKind};
-use crate::kripke::{AllocationEventCertainty, CellValue, EventKind};
+use crate::kripke::{
+    AllocationDispositionKind, AllocationEventCertainty, AllocationObligationEffect, CellValue, EventKind,
+};
 use crate::model_checker::{Binding, Env, ModelChecker};
 use crate::truth::Truth;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 pub const EXPLAINABILITY_TAXONOMY_VERSION: &str = "cqpl_uncertainty_reasons_v1";
+pub const ALLOCATION_OBLIGATION_DIAGNOSTICS_VERSION: &str = "allocation_obligation_diagnostics_v1";
+pub const MEMORY_ERROR_DIAGNOSTICS_VERSION: &str = "memory_error_diagnostics_v1";
+
+/// Read-only bug-supporting evidence that is intentionally separate from CQPL truth.
+///
+/// `reason_frontier` answers why a three-valued query is unknown. These findings
+/// answer the complementary diagnostic question: whether the already-annotated
+/// abstract model contains an ordered witness supporting the queried memory-error
+/// class despite that uncertainty. They never change `tt`/`ff`/`unk`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AllocationObligationFindingKind {
+    NormalReturnOpenManualObligation,
+    DropThenUseWithoutReallocation,
+    RepeatedDropWithoutReallocation,
+    AllocatorFamilyMismatch,
+    UnresolvedAllocatorContractCandidate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AllocationObligationFindingStrength {
+    StrongAbstractEvidence,
+    ObservationalCandidate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AllocationObligationEvidence {
+    ProducerCertifiedBoxIntoRaw,
+    NormalReturnReachable,
+    NoModeledDischargeOnWitnessPath,
+    NoInterveningCallAfterHandoff,
+    NonReturningDischargeObservedOffWitness,
+    MayAllocationEventObserved,
+    AllocationStateIncludesAllocated,
+    MayDeallocationObserved,
+    MayUseObserved,
+    OrderedDropBeforeUse,
+    TwoOrderedDropsObserved,
+    NoReallocationBetweenEvents,
+    KnownAllocatorFamily,
+    KnownDeallocatorFamily,
+    AllocatorFamiliesDiffer,
+    AllocatorFamilyUnresolved,
+    DeallocatorFamilyUnresolved,
+    ProducerCertifiedDeallocatorContract,
+}
+
+impl AllocationObligationFindingKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NormalReturnOpenManualObligation => "normal_return_open_manual_obligation",
+            Self::DropThenUseWithoutReallocation => "drop_then_use_without_reallocation",
+            Self::RepeatedDropWithoutReallocation => "repeated_drop_without_reallocation",
+            Self::AllocatorFamilyMismatch => "allocator_family_mismatch",
+            Self::UnresolvedAllocatorContractCandidate => "unresolved_allocator_contract_candidate",
+        }
+    }
+}
+
+impl AllocationObligationFindingStrength {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::StrongAbstractEvidence => "strong_abstract_evidence",
+            Self::ObservationalCandidate => "observational_candidate",
+        }
+    }
+}
+
+impl AllocationObligationEvidence {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ProducerCertifiedBoxIntoRaw => "producer_certified_box_into_raw",
+            Self::NormalReturnReachable => "normal_return_reachable",
+            Self::NoModeledDischargeOnWitnessPath => "no_modeled_discharge_on_witness_path",
+            Self::NoInterveningCallAfterHandoff => "no_intervening_call_after_handoff",
+            Self::NonReturningDischargeObservedOffWitness => "non_returning_discharge_observed_off_witness",
+            Self::MayAllocationEventObserved => "may_allocation_event_observed",
+            Self::AllocationStateIncludesAllocated => "allocation_state_includes_allocated",
+            Self::MayDeallocationObserved => "may_deallocation_observed",
+            Self::MayUseObserved => "may_use_observed",
+            Self::OrderedDropBeforeUse => "ordered_drop_before_use",
+            Self::TwoOrderedDropsObserved => "two_ordered_drops_observed",
+            Self::NoReallocationBetweenEvents => "no_reallocation_between_events",
+            Self::KnownAllocatorFamily => "known_allocator_family",
+            Self::KnownDeallocatorFamily => "known_deallocator_family",
+            Self::AllocatorFamiliesDiffer => "allocator_families_differ",
+            Self::AllocatorFamilyUnresolved => "allocator_family_unresolved",
+            Self::DeallocatorFamilyUnresolved => "deallocator_family_unresolved",
+            Self::ProducerCertifiedDeallocatorContract => "producer_certified_deallocator_contract",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AllocationObligationFinding {
+    pub taxonomy: &'static str,
+    pub kind: AllocationObligationFindingKind,
+    pub strength: AllocationObligationFindingStrength,
+    pub allocation: String,
+    pub query_result: &'static str,
+    pub witness_path: Vec<String>,
+    pub evidence: Vec<AllocationObligationEvidence>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub origin_node: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub handoff_node: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub return_node: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_drop_node: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub second_drop_node: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_node: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mismatch_node: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allocator_family: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deallocator_family: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub non_returning_discharge_nodes: Vec<String>,
+    pub summary: String,
+}
 
 /// Stable diagnostic vocabulary for CQPL v6R.
 ///
@@ -113,6 +241,11 @@ pub struct ExplanationReport {
     pub scope_note: &'static str,
     pub reason_frontier: Vec<UncertaintyReason>,
     pub reason_counts: BTreeMap<String, usize>,
+    /// Positive bug-supporting evidence is deliberately separate from the
+    /// uncertainty frontier.  An `unk` query may therefore still have a strong
+    /// ownership-obligation witness without being silently promoted to `tt`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub supporting_findings: Vec<AllocationObligationFinding>,
     pub witnesses: Vec<ExplanationWitness>,
     pub diagnostics: ExplanationDiagnostics,
 }
@@ -127,6 +260,118 @@ pub struct ExplanationDiagnostics {
     pub true_has_atomic_witness: bool,
     pub producer_provenance_capability_present: bool,
     pub reserved_reason_codes_not_inferred: Vec<UncertaintyReason>,
+}
+
+impl ExplanationReport {
+    /// Stable human-readable rendering for interactive UNKNOWN diagnosis.
+    ///
+    /// This is presentation-only: it renders the same read-only report that is
+    /// serialized by `--explain-json` and therefore cannot change CQPL truth.
+    pub fn render_unknown_verbose(&self, query_name: &str) -> String {
+        use std::fmt::Write as _;
+
+        let mut out = String::new();
+        let bar = "=".repeat(80);
+        let _ = writeln!(out, "{bar}");
+        let _ = writeln!(out, "QUERY: {query_name}");
+        let _ = writeln!(out, "{bar}");
+        let _ = writeln!(out, "truth: {}", self.result);
+        let _ = writeln!(out);
+        let _ = writeln!(out, "why unknown:");
+        for reason in &self.reason_frontier {
+            let _ = writeln!(out, "  - {}", reason.code());
+        }
+
+        let _ = writeln!(out);
+        let _ = writeln!(out, "supporting findings:");
+        if self.supporting_findings.is_empty() {
+            let _ = writeln!(out, "  <none>");
+            let _ = writeln!(out);
+            let _ = writeln!(out, "  interpretation:");
+            let _ = writeln!(out, "    No bug-specific supporting witness was certified beyond the uncertainty frontier. UNKNOWN therefore means insufficient abstract evidence for a definite verdict, not a positive finding by itself.");
+        }
+        for finding in &self.supporting_findings {
+            let _ = writeln!(out);
+            let _ = writeln!(out, "  kind       : {}", finding.kind.as_str());
+            let _ = writeln!(out, "  strength   : {}", finding.strength.as_str());
+            let _ = writeln!(out, "  allocation : {}", finding.allocation);
+            if let Some(node) = &finding.origin_node {
+                let _ = writeln!(out, "  origin     : {node}");
+            }
+            if let Some(node) = &finding.handoff_node {
+                let _ = writeln!(out, "  handoff    : {node}");
+            }
+            if let Some(node) = &finding.return_node {
+                let _ = writeln!(out, "  return     : {node}");
+            }
+            if let Some(node) = &finding.first_drop_node {
+                let _ = writeln!(out, "  first drop : {node}");
+            }
+            if let Some(node) = &finding.second_drop_node {
+                let _ = writeln!(out, "  second drop: {node}");
+            }
+            if let Some(node) = &finding.use_node {
+                let _ = writeln!(out, "  use        : {node}");
+            }
+            if let Some(node) = &finding.mismatch_node {
+                let _ = writeln!(out, "  mismatch   : {node}");
+            }
+            if let Some(family) = &finding.allocator_family {
+                let _ = writeln!(out, "  allocator  : {family}");
+            }
+            if let Some(family) = &finding.deallocator_family {
+                let _ = writeln!(out, "  deallocator: {family}");
+            }
+            let _ = writeln!(out, "  path:");
+            for node in &finding.witness_path {
+                let _ = writeln!(out, "    -> {node}");
+            }
+            let _ = writeln!(out, "  evidence:");
+            for evidence in &finding.evidence {
+                let _ = writeln!(out, "    - {}", evidence.as_str());
+            }
+            if !finding.non_returning_discharge_nodes.is_empty() {
+                let _ = writeln!(out, "  non-returning discharge nodes:");
+                for node in &finding.non_returning_discharge_nodes {
+                    let _ = writeln!(out, "    - {node}");
+                }
+            }
+            let _ = writeln!(out);
+            let _ = writeln!(out, "  interpretation:");
+            let _ = writeln!(out, "    {}", finding.summary);
+        }
+
+        let _ = writeln!(out);
+        let _ = writeln!(out, "uncertainty witnesses:");
+        if self.witnesses.is_empty() {
+            let _ = writeln!(out, "  <none>");
+        }
+        for (index, witness) in self.witnesses.iter().enumerate() {
+            let _ = writeln!(out, "  witness {}: truth={}", index + 1, witness.truth);
+            for atom in &witness.atomic_observations {
+                let reasons = atom
+                    .reasons
+                    .iter()
+                    .map(|reason| reason.code())
+                    .collect::<Vec<_>>()
+                    .join(",");
+                if reasons.is_empty() {
+                    let _ = writeln!(
+                        out,
+                        "     {} | {} = {}",
+                        atom.node, atom.atom, atom.truth
+                    );
+                } else {
+                    let _ = writeln!(
+                        out,
+                        "     {} | {} = {} | {}",
+                        atom.node, atom.atom, atom.truth, reasons
+                    );
+                }
+            }
+        }
+        out
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -326,6 +571,24 @@ impl<'a> ModelChecker<'a> {
             return Err("v6R explainability invariant violated: tt result has no atomic witness endpoint".into());
         }
 
+        let mut supporting_findings = Vec::new();
+        if formula_contains_negated_drop(&document.formula) {
+            supporting_findings.extend(self.allocation_obligation_findings(result));
+        }
+        if formula_is_use_after_free_shape(&document.formula) {
+            supporting_findings.extend(self.use_after_free_findings(result));
+        }
+        if formula_is_double_free_shape(&document.formula) {
+            supporting_findings.extend(self.double_free_findings(result));
+        }
+        if formula_uses_allocator_mismatch(&document.formula) {
+            supporting_findings.extend(self.allocator_mismatch_findings(result));
+        }
+        supporting_findings.sort_by(|a, b| {
+            (a.kind.as_str(), &a.allocation, &a.witness_path)
+                .cmp(&(b.kind.as_str(), &b.allocation, &b.witness_path))
+        });
+
         Ok(ExplanationReport {
             schema: "cqpl_explanation_v1",
             taxonomy: EXPLAINABILITY_TAXONOMY_VERSION,
@@ -334,6 +597,7 @@ impl<'a> ModelChecker<'a> {
             scope_note: "explanations are over the already-projected annotated abstract Kripke model; they do not assert a concrete execution",
             reason_frontier,
             reason_counts,
+            supporting_findings,
             diagnostics: ExplanationDiagnostics {
                 witnesses_requested: max_witnesses,
                 witnesses_emitted: witnesses.len(),
@@ -839,11 +1103,22 @@ impl<'a> ModelChecker<'a> {
                 if truth == Truth::Unknown && matching.iter().any(|label| label.certainty == AllocationEventCertainty::MayAbstract) {
                     reasons.insert(label_reason(predicate));
                 }
-                if matching.iter().any(|label| {
+                let unresolved_allocator_contract = predicate == LabelPredicate::AllocatorMismatch
+                    && self.k.allocations.get(allocation)
+                        .and_then(|a| a.allocator_contract.as_ref())
+                        .map(|contract| contract.family.as_str())
+                        .unwrap_or("unknown") == "unknown";
+                let unresolved_deallocator_contract = matching.iter().any(|label| {
                     label.deallocator_contract.as_ref().is_some_and(|contract| {
                         contract.family == "unknown" || contract.basis.as_deref() == Some("unresolved")
                     })
-                }) {
+                });
+                let missing_mismatch_deallocator_contract = predicate == LabelPredicate::AllocatorMismatch
+                    && matching.iter().any(|label| label.deallocator_contract.is_none());
+                if unresolved_allocator_contract
+                    || unresolved_deallocator_contract
+                    || missing_mismatch_deallocator_contract
+                {
                     reasons.insert(UncertaintyReason::UnresolvedContract);
                 }
                 if identity_component_is_merged(node, None, Some(allocation)) {
@@ -874,6 +1149,465 @@ impl<'a> ModelChecker<'a> {
             atomic_observations: trace.atoms,
             complete_dependency_trace: trace.complete,
         }
+    }
+
+    fn allocation_obligation_findings(&self, result: Truth) -> Vec<AllocationObligationFinding> {
+        if !self.k.capabilities.contains("allocation_disposition_v1")
+            || !self.k.capabilities.contains("mir_semantic_labels_v1")
+        {
+            return Vec::new();
+        }
+
+        let mut findings = Vec::new();
+        for (handoff_node, node) in &self.k.nodes {
+            for record in &node.allocation_disposition {
+                if record.kind != AllocationDispositionKind::BoxIntoRaw
+                    || record.obligation_effect != AllocationObligationEffect::PreserveManualObligation
+                {
+                    continue;
+                }
+
+                let allocation = record.allocation.clone();
+                let path = self.bfs_to(
+                    handoff_node,
+                    |candidate| self.is_normal_return_node(candidate),
+                    |candidate| !self.blocks_open_manual_obligation(candidate, &allocation),
+                );
+                let Some(witness_path) = path else { continue; };
+                let Some(return_node) = witness_path.last().cloned() else { continue; };
+
+                // Calls after the certified handoff can hide effects outside the
+                // current disposition vocabulary.  Preserve the finding, but
+                // downgrade it from strong evidence to an observational candidate.
+                let has_intervening_call = witness_path
+                    .iter()
+                    .skip(1)
+                    .take(witness_path.len().saturating_sub(2))
+                    .any(|node_id| {
+                        self.k.nodes.get(node_id).is_some_and(|n| {
+                            n.semantic_labels.iter().any(|label| label == "term:call")
+                        })
+                    });
+
+                let mut non_returning_discharge_nodes: Vec<String> = self.k.nodes
+                    .iter()
+                    .filter_map(|(node_id, candidate)| {
+                        let has_discharge = candidate.allocation_disposition.iter().any(|d| {
+                            d.allocation == allocation
+                                && matches!(d.obligation_effect,
+                                    AllocationObligationEffect::MayDischarge
+                                        | AllocationObligationEffect::RestoreRaiiObligation)
+                        }) || candidate.allocation_labels.iter().any(|label| {
+                            label.allocation == allocation && label.predicate == EventKind::Drop
+                        });
+                        if has_discharge
+                            && !witness_path.contains(node_id)
+                            && !self.can_reach_normal_return(node_id)
+                        {
+                            Some(node_id.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                non_returning_discharge_nodes.sort();
+                non_returning_discharge_nodes.dedup();
+
+                let strength = if has_intervening_call {
+                    AllocationObligationFindingStrength::ObservationalCandidate
+                } else {
+                    AllocationObligationFindingStrength::StrongAbstractEvidence
+                };
+                let mut evidence = vec![
+                    AllocationObligationEvidence::ProducerCertifiedBoxIntoRaw,
+                    AllocationObligationEvidence::NormalReturnReachable,
+                    AllocationObligationEvidence::NoModeledDischargeOnWitnessPath,
+                ];
+                if !has_intervening_call {
+                    evidence.push(AllocationObligationEvidence::NoInterveningCallAfterHandoff);
+                }
+                if !non_returning_discharge_nodes.is_empty() {
+                    evidence.push(AllocationObligationEvidence::NonReturningDischargeObservedOffWitness);
+                }
+
+                let summary = match strength {
+                    AllocationObligationFindingStrength::StrongAbstractEvidence => format!(
+                        "The abstract model contains a normal-return path after producer-certified Box::into_raw on which the manual deallocation obligation remains open and no modeled discharge or escape occurs. This is strong abstract evidence of a leak on normal completion; CQPL truth remains {} because this diagnostic does not alter three-valued query semantics.",
+                        result.as_str(),
+                    ),
+                    AllocationObligationFindingStrength::ObservationalCandidate => format!(
+                        "The abstract model contains a normal-return path after Box::into_raw with no modeled discharge, but the path contains an intervening call whose effects may be outside the current disposition vocabulary. This supports a leak candidate but is not strong enough to promote CQPL truth from {}.",
+                        result.as_str(),
+                    ),
+                };
+
+                findings.push(AllocationObligationFinding {
+                    taxonomy: ALLOCATION_OBLIGATION_DIAGNOSTICS_VERSION,
+                    kind: AllocationObligationFindingKind::NormalReturnOpenManualObligation,
+                    strength,
+                    allocation,
+                    query_result: result.as_str(),
+                    witness_path,
+                    evidence,
+                    origin_node: None,
+                    handoff_node: Some(handoff_node.clone()),
+                    return_node: Some(return_node),
+                    first_drop_node: None,
+                    second_drop_node: None,
+                    use_node: None,
+                    mismatch_node: None,
+                    allocator_family: None,
+                    deallocator_family: None,
+                    non_returning_discharge_nodes,
+                    summary,
+                });
+            }
+        }
+
+        findings.sort_by(|a, b| {
+            (&a.allocation, &a.handoff_node, &a.return_node)
+                .cmp(&(&b.allocation, &b.handoff_node, &b.return_node))
+        });
+        findings
+    }
+
+    fn use_after_free_findings(&self, result: Truth) -> Vec<AllocationObligationFinding> {
+        let mut findings = Vec::new();
+        for allocation in self.k.allocations.keys() {
+            for first_drop in self.k.nodes.keys().filter(|node_id| {
+                self.node_has_allocation_event(node_id, allocation, EventKind::Drop)
+            }) {
+                let Some((origin_path, origin_evidence)) = self.origin_path_to(allocation, first_drop) else {
+                    continue;
+                };
+
+                for successor in self.successors(first_drop) {
+                    let Some(suffix) = self.bfs_to(
+                        &successor,
+                        |candidate| self.node_has_use_event(candidate, allocation),
+                        |candidate| {
+                            self.node_has_use_event(candidate, allocation)
+                                || !self.node_has_allocation_event(candidate, allocation, EventKind::Alloc)
+                        },
+                    ) else {
+                        continue;
+                    };
+                    let Some(use_node) = suffix.last().cloned() else { continue; };
+
+                    let mut witness_path = origin_path.clone();
+                    witness_path.extend(suffix);
+                    let strength = if origin_evidence == AllocationObligationEvidence::MayAllocationEventObserved {
+                        AllocationObligationFindingStrength::StrongAbstractEvidence
+                    } else {
+                        AllocationObligationFindingStrength::ObservationalCandidate
+                    };
+                    let evidence = vec![
+                        origin_evidence,
+                        AllocationObligationEvidence::MayDeallocationObserved,
+                        AllocationObligationEvidence::MayUseObserved,
+                        AllocationObligationEvidence::OrderedDropBeforeUse,
+                        AllocationObligationEvidence::NoReallocationBetweenEvents,
+                    ];
+                    let summary = match strength {
+                        AllocationObligationFindingStrength::StrongAbstractEvidence => format!(
+                            "The abstract model contains an ordered witness for allocation {allocation}: a MAY deallocation is followed by a MAY use/read/write of the same AbstractAllocId, with no intervening re-allocation event. This is strong abstract evidence of a use-after-free pattern; CQPL truth remains {} because allocation/event identity is MAY rather than MUST.",
+                            result.as_str(),
+                        ),
+                        AllocationObligationFindingStrength::ObservationalCandidate => format!(
+                            "The abstract model contains an ordered drop-then-use witness for allocation {allocation}, but the allocation origin is supported only by allocation-state membership rather than an explicit allocation event. This is a use-after-free candidate; CQPL truth remains {}.",
+                            result.as_str(),
+                        ),
+                    };
+
+                    findings.push(AllocationObligationFinding {
+                        taxonomy: MEMORY_ERROR_DIAGNOSTICS_VERSION,
+                        kind: AllocationObligationFindingKind::DropThenUseWithoutReallocation,
+                        strength,
+                        allocation: allocation.clone(),
+                        query_result: result.as_str(),
+                        witness_path,
+                        evidence,
+                        origin_node: origin_path.first().cloned(),
+                        handoff_node: None,
+                        return_node: None,
+                        first_drop_node: Some(first_drop.clone()),
+                        second_drop_node: None,
+                        use_node: Some(use_node),
+                        mismatch_node: None,
+                        allocator_family: None,
+                        deallocator_family: None,
+                        non_returning_discharge_nodes: Vec::new(),
+                        summary,
+                    });
+                    break;
+                }
+            }
+        }
+        findings
+    }
+
+    fn double_free_findings(&self, result: Truth) -> Vec<AllocationObligationFinding> {
+        let mut findings = Vec::new();
+        for allocation in self.k.allocations.keys() {
+            for first_drop in self.k.nodes.keys().filter(|node_id| {
+                self.node_has_allocation_event(node_id, allocation, EventKind::Drop)
+            }) {
+                let Some((origin_path, origin_evidence)) = self.origin_path_to(allocation, first_drop) else {
+                    continue;
+                };
+
+                for successor in self.successors(first_drop) {
+                    let Some(suffix) = self.bfs_to(
+                        &successor,
+                        |candidate| self.node_has_allocation_event(candidate, allocation, EventKind::Drop),
+                        |candidate| {
+                            self.node_has_allocation_event(candidate, allocation, EventKind::Drop)
+                                || !self.node_has_allocation_event(candidate, allocation, EventKind::Alloc)
+                        },
+                    ) else {
+                        continue;
+                    };
+                    let Some(second_drop) = suffix.last().cloned() else { continue; };
+
+                    let mut witness_path = origin_path.clone();
+                    witness_path.extend(suffix);
+                    let strength = if origin_evidence == AllocationObligationEvidence::MayAllocationEventObserved {
+                        AllocationObligationFindingStrength::StrongAbstractEvidence
+                    } else {
+                        AllocationObligationFindingStrength::ObservationalCandidate
+                    };
+                    let evidence = vec![
+                        origin_evidence,
+                        AllocationObligationEvidence::MayDeallocationObserved,
+                        AllocationObligationEvidence::TwoOrderedDropsObserved,
+                        AllocationObligationEvidence::NoReallocationBetweenEvents,
+                    ];
+                    let summary = match strength {
+                        AllocationObligationFindingStrength::StrongAbstractEvidence => format!(
+                            "The abstract model contains two ordered MAY deallocation events for allocation {allocation}, with no intervening re-allocation event for the same AbstractAllocId. This is strong abstract evidence of a double-free pattern; CQPL truth remains {} because the allocation/drop facts are MAY rather than MUST.",
+                            result.as_str(),
+                        ),
+                        AllocationObligationFindingStrength::ObservationalCandidate => format!(
+                            "The abstract model contains two ordered drop events for allocation {allocation} without an intervening allocation event, but the allocation origin is supported only by allocation-state membership. This is a double-free candidate; CQPL truth remains {}.",
+                            result.as_str(),
+                        ),
+                    };
+
+                    findings.push(AllocationObligationFinding {
+                        taxonomy: MEMORY_ERROR_DIAGNOSTICS_VERSION,
+                        kind: AllocationObligationFindingKind::RepeatedDropWithoutReallocation,
+                        strength,
+                        allocation: allocation.clone(),
+                        query_result: result.as_str(),
+                        witness_path,
+                        evidence,
+                        origin_node: origin_path.first().cloned(),
+                        handoff_node: None,
+                        return_node: None,
+                        first_drop_node: Some(first_drop.clone()),
+                        second_drop_node: Some(second_drop),
+                        use_node: None,
+                        mismatch_node: None,
+                        allocator_family: None,
+                        deallocator_family: None,
+                        non_returning_discharge_nodes: Vec::new(),
+                        summary,
+                    });
+                    break;
+                }
+            }
+        }
+        findings
+    }
+
+    fn allocator_mismatch_findings(&self, result: Truth) -> Vec<AllocationObligationFinding> {
+        let mut findings = Vec::new();
+        for (allocation, abstract_allocation) in &self.k.allocations {
+            let allocator_family = abstract_allocation
+                .allocator_contract
+                .as_ref()
+                .map(|contract| contract.family.clone())
+                .unwrap_or_else(|| "unknown".into());
+
+            for (node_id, node) in &self.k.nodes {
+                for label in &node.allocation_labels {
+                    if label.allocation != *allocation || label.predicate != EventKind::Drop {
+                        continue;
+                    }
+                    let deallocator_family = label
+                        .deallocator_contract
+                        .as_ref()
+                        .map(|contract| contract.family.clone())
+                        .unwrap_or_else(|| "unknown".into());
+                    let allocator_known = allocator_family != "unknown";
+                    let deallocator_known = deallocator_family != "unknown";
+                    if !allocation_label_matches(self, allocation, LabelPredicate::AllocatorMismatch, label) {
+                        continue;
+                    }
+
+                    let Some((witness_path, origin_evidence)) = self.origin_path_to(allocation, node_id) else {
+                        continue;
+                    };
+                    let (kind, strength) = if allocator_known && deallocator_known {
+                        (
+                            AllocationObligationFindingKind::AllocatorFamilyMismatch,
+                            AllocationObligationFindingStrength::StrongAbstractEvidence,
+                        )
+                    } else {
+                        (
+                            AllocationObligationFindingKind::UnresolvedAllocatorContractCandidate,
+                            AllocationObligationFindingStrength::ObservationalCandidate,
+                        )
+                    };
+                    let mut evidence = vec![origin_evidence, AllocationObligationEvidence::MayDeallocationObserved];
+                    if allocator_known {
+                        evidence.push(AllocationObligationEvidence::KnownAllocatorFamily);
+                    } else {
+                        evidence.push(AllocationObligationEvidence::AllocatorFamilyUnresolved);
+                    }
+                    if deallocator_known {
+                        evidence.push(AllocationObligationEvidence::KnownDeallocatorFamily);
+                    } else {
+                        evidence.push(AllocationObligationEvidence::DeallocatorFamilyUnresolved);
+                    }
+                    if allocator_known && deallocator_known {
+                        evidence.push(AllocationObligationEvidence::AllocatorFamiliesDiffer);
+                    }
+                    if label.deallocator_contract.as_ref().and_then(|c| c.basis.as_deref()).is_some_and(|basis| basis != "unresolved") {
+                        evidence.push(AllocationObligationEvidence::ProducerCertifiedDeallocatorContract);
+                    }
+
+                    let summary = if allocator_known && deallocator_known {
+                        format!(
+                            "The abstract model associates allocation {allocation} with allocator family '{allocator_family}' and an ordered MAY deallocation at {node_id} with deallocator family '{deallocator_family}'. The families differ, which is strong abstract evidence of allocator-mismatch UB; CQPL truth remains {} because the allocation/deallocation relation is MAY rather than MUST.",
+                            result.as_str(),
+                        )
+                    } else {
+                        format!(
+                            "The allocator-mismatch predicate is supported only by an unresolved allocator contract for allocation {allocation}: allocator family='{allocator_family}', deallocator family='{deallocator_family}'. This is an observational mismatch candidate, not evidence that the families definitely differ; CQPL truth remains {}.",
+                            result.as_str(),
+                        )
+                    };
+
+                    findings.push(AllocationObligationFinding {
+                        taxonomy: MEMORY_ERROR_DIAGNOSTICS_VERSION,
+                        kind,
+                        strength,
+                        allocation: allocation.clone(),
+                        query_result: result.as_str(),
+                        witness_path: witness_path.clone(),
+                        evidence,
+                        origin_node: witness_path.first().cloned(),
+                        handoff_node: None,
+                        return_node: None,
+                        first_drop_node: None,
+                        second_drop_node: None,
+                        use_node: None,
+                        mismatch_node: Some(node_id.clone()),
+                        allocator_family: Some(allocator_family.clone()),
+                        deallocator_family: Some(deallocator_family),
+                        non_returning_discharge_nodes: Vec::new(),
+                        summary,
+                    });
+                }
+            }
+        }
+        findings
+    }
+
+    fn origin_path_to(
+        &self,
+        allocation: &str,
+        target: &str,
+    ) -> Option<(Vec<String>, AllocationObligationEvidence)> {
+        let mut candidates = Vec::new();
+        for node_id in self.k.nodes.keys() {
+            let Some(evidence) = self.allocation_origin_evidence(node_id, allocation) else {
+                continue;
+            };
+            let Some(path) = self.bfs_to(node_id, |candidate| candidate == target, |_| true) else {
+                continue;
+            };
+            candidates.push((path, evidence));
+        }
+        candidates.sort_by(|a, b| {
+            (a.0.len(), &a.0, a.1.as_str()).cmp(&(b.0.len(), &b.0, b.1.as_str()))
+        });
+        candidates.into_iter().next()
+    }
+
+    fn allocation_origin_evidence(
+        &self,
+        node_id: &str,
+        allocation: &str,
+    ) -> Option<AllocationObligationEvidence> {
+        let node = self.k.nodes.get(node_id)?;
+        if node.allocation_labels.iter().any(|label| {
+            label.allocation == allocation && label.predicate == EventKind::Alloc
+        }) {
+            return Some(AllocationObligationEvidence::MayAllocationEventObserved);
+        }
+        if node.allocation_post.as_ref().is_some_and(|post| {
+            CellValue::Alloc.leq(post.value_of(allocation))
+        }) {
+            return Some(AllocationObligationEvidence::AllocationStateIncludesAllocated);
+        }
+        None
+    }
+
+    fn node_has_allocation_event(
+        &self,
+        node_id: &str,
+        allocation: &str,
+        event: EventKind,
+    ) -> bool {
+        self.k.nodes.get(node_id).is_some_and(|node| {
+            node.allocation_labels.iter().any(|label| {
+                label.allocation == allocation && label.predicate == event
+            })
+        })
+    }
+
+    fn node_has_use_event(&self, node_id: &str, allocation: &str) -> bool {
+        self.k.nodes.get(node_id).is_some_and(|node| {
+            node.allocation_labels.iter().any(|label| {
+                label.allocation == allocation
+                    && matches!(label.predicate, EventKind::Use | EventKind::Read | EventKind::Write)
+            })
+        })
+    }
+
+    fn is_normal_return_node(&self, node_id: &str) -> bool {
+        self.k.nodes.get(node_id).is_some_and(|node| {
+            node.semantic_labels.iter().any(|label| label == "term:return")
+        })
+    }
+
+    fn can_reach_normal_return(&self, start: &str) -> bool {
+        self.bfs_to(start, |node| self.is_normal_return_node(node), |_| true)
+            .is_some()
+    }
+
+    fn blocks_open_manual_obligation(&self, node_id: &str, allocation: &str) -> bool {
+        let Some(node) = self.k.nodes.get(node_id) else { return true; };
+
+        if node.allocation_disposition.iter().any(|record| {
+            record.allocation == allocation
+                && matches!(record.obligation_effect,
+                    AllocationObligationEffect::RestoreRaiiObligation
+                        | AllocationObligationEffect::MayEscapeToCaller
+                        | AllocationObligationEffect::MayDischarge)
+        }) {
+            return true;
+        }
+        if node.allocation_labels.iter().any(|label| {
+            label.allocation == allocation && label.predicate == EventKind::Drop
+        }) {
+            return true;
+        }
+        node.allocation_post.as_ref().is_some_and(|post| {
+            post.value_of(allocation) == CellValue::Freed
+        })
     }
 
     fn successors(&self, node: &str) -> Vec<String> {
@@ -935,6 +1669,76 @@ impl<'a> ModelChecker<'a> {
             values.len() > 1
         })
     }
+}
+
+fn formula_contains_negated_drop(formula: &StateFormula) -> bool {
+    match formula {
+        StateFormula::Not(inner) => {
+            matches!(inner.as_ref(),
+                StateFormula::May { predicate: MayPredicate::Drop, .. }
+                    | StateFormula::Label { predicate: LabelPredicate::Drop, .. })
+                || formula_contains_negated_drop(inner)
+        }
+        StateFormula::And(a, b) | StateFormula::Or(a, b) => {
+            formula_contains_negated_drop(a) || formula_contains_negated_drop(b)
+        }
+        StateFormula::Exists { body, .. }
+        | StateFormula::ForAll { body, .. }
+        | StateFormula::ExistsAlloc { body, .. }
+        | StateFormula::ForAllAlloc { body, .. } => formula_contains_negated_drop(body),
+        StateFormula::Path { formula, .. } => match formula {
+            PathFormula::State(phi)
+            | PathFormula::Next(phi)
+            | PathFormula::Eventually(phi)
+            | PathFormula::Globally(phi) => formula_contains_negated_drop(phi),
+            PathFormula::Until(lhs, rhs) => {
+                formula_contains_negated_drop(lhs) || formula_contains_negated_drop(rhs)
+            }
+        },
+        StateFormula::May { .. }
+        | StateFormula::Label { .. }
+        | StateFormula::StructuralLabel { .. } => false,
+    }
+}
+
+fn formula_positive_label_count(formula: &StateFormula, predicate: LabelPredicate) -> usize {
+    fn visit(formula: &StateFormula, predicate: LabelPredicate, negated: bool) -> usize {
+        match formula {
+            StateFormula::Label { predicate: p, .. } => { if !negated && *p == predicate { 1 } else { 0 } },
+            StateFormula::Not(inner) => visit(inner, predicate, !negated),
+            StateFormula::And(a, b) | StateFormula::Or(a, b) => {
+                visit(a, predicate, negated) + visit(b, predicate, negated)
+            }
+            StateFormula::Exists { body, .. }
+            | StateFormula::ForAll { body, .. }
+            | StateFormula::ExistsAlloc { body, .. }
+            | StateFormula::ForAllAlloc { body, .. } => visit(body, predicate, negated),
+            StateFormula::Path { formula, .. } => match formula {
+                PathFormula::State(phi)
+                | PathFormula::Next(phi)
+                | PathFormula::Eventually(phi)
+                | PathFormula::Globally(phi) => visit(phi, predicate, negated),
+                PathFormula::Until(lhs, rhs) => {
+                    visit(lhs, predicate, negated) + visit(rhs, predicate, negated)
+                }
+            },
+            StateFormula::May { .. } | StateFormula::StructuralLabel { .. } => 0,
+        }
+    }
+    visit(formula, predicate, false)
+}
+
+fn formula_is_use_after_free_shape(formula: &StateFormula) -> bool {
+    formula_positive_label_count(formula, LabelPredicate::Drop) >= 1
+        && formula_positive_label_count(formula, LabelPredicate::Use) >= 1
+}
+
+fn formula_is_double_free_shape(formula: &StateFormula) -> bool {
+    formula_positive_label_count(formula, LabelPredicate::Drop) >= 2
+}
+
+fn formula_uses_allocator_mismatch(formula: &StateFormula) -> bool {
+    formula_positive_label_count(formula, LabelPredicate::AllocatorMismatch) >= 1
 }
 
 fn allocation_label_matches(
@@ -1035,9 +1839,10 @@ mod tests {
     use super::*;
     use crate::ast::{PathFormula, PathQuantifier, QueryDocument, StateFormula};
     use crate::kripke::{
-        AbstractAllocation, AbstractAllocationCell, AbstractAllocationMemoryAnnotation, AbstractMemoryAnnotation, AllocationEventLabel, AnnotatedIcfg, AnnotatedNode,
+        AbstractAllocation, AbstractAllocationCell, AbstractAllocationMemoryAnnotation, AbstractMemoryAnnotation, AllocationContract, AllocationDispositionRecord, AllocationEventLabel, AnnotatedIcfg, AnnotatedNode,
         Kripke, NodeIdentityAnnotation, ProgramLanguage, ProgramVariable,
     };
+    use crate::parser::parse_query_document;
     use std::collections::BTreeSet;
 
     fn one_allocation_graph() -> Kripke {
@@ -1069,6 +1874,7 @@ mod tests {
                     certainty: AllocationEventCertainty::MayAbstract,
                     deallocator_contract: None,
                 }],
+                allocation_disposition: vec![],
                 identity: Some(NodeIdentityAnnotation::default()),
                 event_identity: Some(NodeIdentityAnnotation::default()),
                 allocation_post: None,
@@ -1136,6 +1942,367 @@ mod tests {
         assert_eq!(report.result, "unk");
         assert!(report.reason_frontier.contains(&UncertaintyReason::MayAllocation));
         assert_eq!(report.witnesses[0].atomic_observations[0].detail["allocation_post_value"], "Alloc");
+    }
+
+    #[test]
+    fn unknown_leak_query_reports_strong_normal_return_open_obligation_finding() {
+        let mut k = one_allocation_graph();
+        k.capabilities.insert("allocation_state_v1".into());
+        k.capabilities.insert("allocation_disposition_v1".into());
+        k.capabilities.insert("mir_semantic_labels_v1".into());
+        {
+            let b0 = k.nodes.get_mut("b0").unwrap();
+            b0.successors = vec!["b1".into(), "cleanup".into()];
+            b0.allocation_post = Some(AbstractAllocationMemoryAnnotation {
+                cells: vec![AbstractAllocationCell { allocation: "A".into(), value: CellValue::Alloc }],
+            });
+            b0.allocation_disposition = vec![AllocationDispositionRecord {
+                allocation: "A".into(),
+                kind: AllocationDispositionKind::BoxIntoRaw,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::PreserveManualObligation,
+                basis: "rustc_box_into_raw_v1".into(),
+                source_variable: Some("rust::main::_1".into()),
+                target_variable: Some("rust::main::_2".into()),
+                callee_def_path: Some("std::boxed::Box::into_raw".into()),
+            }];
+        }
+        k.nodes.insert("b1".into(), AnnotatedNode {
+            id: "b1".into(), successors: vec![], labels: vec![],
+            semantic_labels: vec!["term:return".into()], allocation_labels: vec![],
+            allocation_disposition: vec![], identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()),
+            allocation_post: Some(AbstractAllocationMemoryAnnotation {
+                cells: vec![AbstractAllocationCell { allocation: "A".into(), value: CellValue::Mv }],
+            }),
+            pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        k.nodes.insert("cleanup".into(), AnnotatedNode {
+            id: "cleanup".into(), successors: vec!["resume".into()], labels: vec![],
+            semantic_labels: vec!["term:drop".into()], allocation_labels: vec![AllocationEventLabel {
+                predicate: EventKind::Drop, allocation: "A".into(),
+                certainty: AllocationEventCertainty::MayAbstract, deallocator_contract: None,
+            }],
+            allocation_disposition: vec![AllocationDispositionRecord {
+                allocation: "A".into(), kind: AllocationDispositionKind::MayDeallocate,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::MayDischarge,
+                basis: "allocation_drop_label_v1".into(), source_variable: None,
+                target_variable: None, callee_def_path: None,
+            }],
+            identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()),
+            allocation_post: None, pre: AbstractMemoryAnnotation::default(),
+            post: AbstractMemoryAnnotation::default(),
+        });
+        k.nodes.insert("resume".into(), AnnotatedNode {
+            id: "resume".into(), successors: vec![], labels: vec![],
+            semantic_labels: vec!["term:unwind_resume".into()], allocation_labels: vec![],
+            allocation_disposition: vec![], identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()), allocation_post: None,
+            pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+
+        let checker = ModelChecker::new(&k);
+        let formula = StateFormula::ExistsAlloc {
+            logic_var: "a".into(),
+            body: Box::new(StateFormula::And(
+                Box::new(StateFormula::May { predicate: MayPredicate::Alloc, logic_var: "a".into() }),
+                Box::new(StateFormula::Not(Box::new(StateFormula::May {
+                    predicate: MayPredicate::Drop, logic_var: "a".into(),
+                }))),
+            )),
+        };
+        let report = checker.explain_document(
+            &QueryDocument::new(BTreeSet::from(["allocation_state_v1".into()]), formula),
+            &Env::new(), 4,
+        ).unwrap();
+
+        assert_eq!(report.result, "unk");
+        assert_eq!(report.supporting_findings.len(), 1);
+        let finding = &report.supporting_findings[0];
+        assert_eq!(finding.kind, AllocationObligationFindingKind::NormalReturnOpenManualObligation);
+        assert_eq!(finding.strength, AllocationObligationFindingStrength::StrongAbstractEvidence);
+        assert_eq!(finding.witness_path, vec!["b0", "b1"]);
+        assert_eq!(finding.non_returning_discharge_nodes, vec!["cleanup"]);
+        assert!(finding.evidence.contains(&AllocationObligationEvidence::NoInterveningCallAfterHandoff));
+        assert!(finding.summary.contains("strong abstract evidence of a leak on normal completion"));
+
+        let rendered = report.render_unknown_verbose("leak_alloc_state");
+        assert!(rendered.contains("QUERY: leak_alloc_state"));
+        assert!(rendered.contains("truth: unk"));
+        assert!(rendered.contains("- MAY_ALLOCATION"));
+        assert!(rendered.contains("kind       : normal_return_open_manual_obligation"));
+        assert!(rendered.contains("strength   : strong_abstract_evidence"));
+        assert!(rendered.contains("-> b1"));
+        assert!(rendered.contains("producer_certified_box_into_raw"));
+        assert!(rendered.contains("uncertainty witnesses:"));
+    }
+
+    #[test]
+    fn restored_raii_obligation_blocks_normal_return_open_obligation_finding() {
+        let mut k = one_allocation_graph();
+        k.capabilities.insert("allocation_state_v1".into());
+        k.capabilities.insert("allocation_disposition_v1".into());
+        k.capabilities.insert("mir_semantic_labels_v1".into());
+        {
+            let b0 = k.nodes.get_mut("b0").unwrap();
+            b0.successors = vec!["b1".into()];
+            b0.allocation_post = Some(AbstractAllocationMemoryAnnotation {
+                cells: vec![AbstractAllocationCell { allocation: "A".into(), value: CellValue::Alloc }],
+            });
+            b0.allocation_disposition = vec![AllocationDispositionRecord {
+                allocation: "A".into(), kind: AllocationDispositionKind::BoxIntoRaw,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::PreserveManualObligation,
+                basis: "rustc_box_into_raw_v1".into(), source_variable: None,
+                target_variable: None, callee_def_path: Some("std::boxed::Box::into_raw".into()),
+            }];
+        }
+        k.nodes.insert("b1".into(), AnnotatedNode {
+            id: "b1".into(), successors: vec!["b2".into()], labels: vec![],
+            semantic_labels: vec!["term:call".into()], allocation_labels: vec![],
+            allocation_disposition: vec![AllocationDispositionRecord {
+                allocation: "A".into(), kind: AllocationDispositionKind::BoxFromRaw,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::RestoreRaiiObligation,
+                basis: "rustc_box_from_raw_v1".into(), source_variable: None,
+                target_variable: None, callee_def_path: Some("std::boxed::Box::from_raw".into()),
+            }],
+            identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()), allocation_post: None,
+            pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        k.nodes.insert("b2".into(), AnnotatedNode {
+            id: "b2".into(), successors: vec![], labels: vec![],
+            semantic_labels: vec!["term:return".into()], allocation_labels: vec![],
+            allocation_disposition: vec![], identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()), allocation_post: None,
+            pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+
+        let checker = ModelChecker::new(&k);
+        let formula = StateFormula::Not(Box::new(StateFormula::May {
+            predicate: MayPredicate::Drop, logic_var: "a".into(),
+        }));
+        let mut env = Env::new();
+        env.insert("a".into(), Binding::Allocation("A".into()));
+        let report = checker.explain_document(
+            &QueryDocument::new(BTreeSet::from(["allocation_state_v1".into()]), formula),
+            &env, 4,
+        ).unwrap();
+        assert!(report.supporting_findings.is_empty());
+    }
+
+    #[test]
+    fn unknown_uaf_query_reports_ordered_drop_then_use_finding() {
+        let mut k = one_allocation_graph();
+        k.nodes.get_mut("b0").unwrap().successors = vec!["drop1".into()];
+        k.nodes.insert("drop1".into(), AnnotatedNode {
+            id: "drop1".into(), successors: vec!["use1".into()], labels: vec![], semantic_labels: vec![],
+            allocation_labels: vec![AllocationEventLabel {
+                predicate: EventKind::Drop, allocation: "A".into(),
+                certainty: AllocationEventCertainty::MayAbstract, deallocator_contract: None,
+            }],
+            allocation_disposition: vec![], identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()), allocation_post: None,
+            pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        k.nodes.insert("use1".into(), AnnotatedNode {
+            id: "use1".into(), successors: vec![], labels: vec![], semantic_labels: vec![],
+            allocation_labels: vec![AllocationEventLabel {
+                predicate: EventKind::Read, allocation: "A".into(),
+                certainty: AllocationEventCertainty::MayAbstract, deallocator_contract: None,
+            }],
+            allocation_disposition: vec![], identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()), allocation_post: None,
+            pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+
+        let doc = parse_query_document(
+            "exists_alloc a. EF (alloc_l(a) && EX EF (drop_l(a) && EX E[(!alloc_l(a)) U use_l(a)]))"
+        ).unwrap();
+        let report = ModelChecker::new(&k).explain_document(&doc, &Env::new(), 8).unwrap();
+        assert_eq!(report.result, "unk");
+        let finding = report.supporting_findings.iter()
+            .find(|f| f.kind == AllocationObligationFindingKind::DropThenUseWithoutReallocation)
+            .expect("UAF supporting finding");
+        assert_eq!(finding.strength, AllocationObligationFindingStrength::StrongAbstractEvidence);
+        assert_eq!(finding.first_drop_node.as_deref(), Some("drop1"));
+        assert_eq!(finding.use_node.as_deref(), Some("use1"));
+        assert_eq!(finding.witness_path, vec!["b0", "drop1", "use1"]);
+        assert!(finding.evidence.contains(&AllocationObligationEvidence::NoReallocationBetweenEvents));
+        assert!(finding.summary.contains("strong abstract evidence of a use-after-free pattern"));
+        let rendered = report.render_unknown_verbose("use_after_free_alloc");
+        assert!(rendered.contains("kind       : drop_then_use_without_reallocation"));
+        assert!(rendered.contains("first drop : drop1"));
+        assert!(rendered.contains("use        : use1"));
+        assert!(rendered.contains("ordered_drop_before_use"));
+    }
+
+    #[test]
+    fn unknown_double_free_query_reports_two_ordered_drops() {
+        let mut k = one_allocation_graph();
+        k.nodes.get_mut("b0").unwrap().successors = vec!["drop1".into()];
+        for (id, successors) in [("drop1", vec!["drop2".into()]), ("drop2", Vec::new())] {
+            k.nodes.insert(id.into(), AnnotatedNode {
+                id: id.into(), successors, labels: vec![], semantic_labels: vec![],
+                allocation_labels: vec![AllocationEventLabel {
+                    predicate: EventKind::Drop, allocation: "A".into(),
+                    certainty: AllocationEventCertainty::MayAbstract, deallocator_contract: None,
+                }],
+                allocation_disposition: vec![], identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()), allocation_post: None,
+                pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+            });
+        }
+
+        let doc = parse_query_document(
+            "exists_alloc a. EF (alloc_l(a) && EX EF (drop_l(a) && EX E[(!alloc_l(a)) U drop_l(a)]))"
+        ).unwrap();
+        let report = ModelChecker::new(&k).explain_document(&doc, &Env::new(), 8).unwrap();
+        assert_eq!(report.result, "unk");
+        let finding = report.supporting_findings.iter()
+            .find(|f| f.kind == AllocationObligationFindingKind::RepeatedDropWithoutReallocation)
+            .expect("double-free supporting finding");
+        assert_eq!(finding.strength, AllocationObligationFindingStrength::StrongAbstractEvidence);
+        assert_eq!(finding.first_drop_node.as_deref(), Some("drop1"));
+        assert_eq!(finding.second_drop_node.as_deref(), Some("drop2"));
+        assert_eq!(finding.witness_path, vec!["b0", "drop1", "drop2"]);
+        assert!(finding.evidence.contains(&AllocationObligationEvidence::TwoOrderedDropsObserved));
+        let rendered = report.render_unknown_verbose("double_free_alloc");
+        assert!(rendered.contains("kind       : repeated_drop_without_reallocation"));
+        assert!(rendered.contains("first drop : drop1"));
+        assert!(rendered.contains("second drop: drop2"));
+    }
+
+    #[test]
+    fn unknown_allocator_mismatch_reports_known_family_difference() {
+        let mut k = one_allocation_graph();
+        k.capabilities.insert("allocation_contracts_v1".into());
+        k.allocations.get_mut("A").unwrap().allocator_contract = Some(AllocationContract {
+            family: "c_malloc".into(), operation: "malloc".into(), language: "c".into(),
+            basis: None, owner_def_path: None, allocator_def_path: None, callee_def_path: None,
+        });
+        k.nodes.get_mut("b0").unwrap().successors = vec!["free".into()];
+        k.nodes.insert("free".into(), AnnotatedNode {
+            id: "free".into(), successors: vec![], labels: vec![], semantic_labels: vec![],
+            allocation_labels: vec![AllocationEventLabel {
+                predicate: EventKind::Drop, allocation: "A".into(),
+                certainty: AllocationEventCertainty::MayAbstract,
+                deallocator_contract: Some(AllocationContract {
+                    family: "rust_global".into(), operation: "drop".into(), language: "rust".into(),
+                    basis: None, owner_def_path: None, allocator_def_path: None, callee_def_path: None,
+                }),
+            }],
+            allocation_disposition: vec![], identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()), allocation_post: None,
+            pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+
+        let doc = parse_query_document(
+            "requires allocation_contracts_v1; exists_alloc a. EF (alloc_l(a) && EX EF allocator_mismatch_l(a))"
+        ).unwrap();
+        let report = ModelChecker::new(&k).explain_document(&doc, &Env::new(), 8).unwrap();
+        assert_eq!(report.result, "unk");
+        let finding = report.supporting_findings.iter()
+            .find(|f| f.kind == AllocationObligationFindingKind::AllocatorFamilyMismatch)
+            .expect("allocator mismatch supporting finding");
+        assert_eq!(finding.strength, AllocationObligationFindingStrength::StrongAbstractEvidence);
+        assert_eq!(finding.mismatch_node.as_deref(), Some("free"));
+        assert_eq!(finding.allocator_family.as_deref(), Some("c_malloc"));
+        assert_eq!(finding.deallocator_family.as_deref(), Some("rust_global"));
+        assert!(finding.evidence.contains(&AllocationObligationEvidence::AllocatorFamiliesDiffer));
+        let rendered = report.render_unknown_verbose("allocator_mismatch_ub");
+        assert!(rendered.contains("kind       : allocator_family_mismatch"));
+        assert!(rendered.contains("allocator  : c_malloc"));
+        assert!(rendered.contains("deallocator: rust_global"));
+    }
+
+    #[test]
+    fn unresolved_allocator_contract_is_candidate_not_proven_mismatch() {
+        let mut k = one_allocation_graph();
+        k.capabilities.insert("allocation_contracts_v1".into());
+        k.allocations.get_mut("A").unwrap().allocator_contract = Some(AllocationContract {
+            family: "unknown".into(), operation: "unknown".into(), language: "unknown".into(),
+            basis: None, owner_def_path: None, allocator_def_path: None, callee_def_path: None,
+        });
+        k.nodes.get_mut("b0").unwrap().successors = vec!["free".into()];
+        k.nodes.insert("free".into(), AnnotatedNode {
+            id: "free".into(), successors: vec![], labels: vec![], semantic_labels: vec![],
+            allocation_labels: vec![AllocationEventLabel {
+                predicate: EventKind::Drop, allocation: "A".into(),
+                certainty: AllocationEventCertainty::MayAbstract,
+                deallocator_contract: Some(AllocationContract {
+                    family: "c_malloc".into(), operation: "free".into(), language: "c".into(),
+                    basis: None, owner_def_path: None, allocator_def_path: None, callee_def_path: None,
+                }),
+            }],
+            allocation_disposition: vec![], identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()), allocation_post: None,
+            pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        let doc = parse_query_document(
+            "requires allocation_contracts_v1; exists_alloc a. EF (alloc_l(a) && EX EF allocator_mismatch_l(a))"
+        ).unwrap();
+        let report = ModelChecker::new(&k).explain_document(&doc, &Env::new(), 8).unwrap();
+        let finding = report.supporting_findings.iter()
+            .find(|f| f.kind == AllocationObligationFindingKind::UnresolvedAllocatorContractCandidate)
+            .expect("unresolved-contract candidate");
+        assert_eq!(finding.strength, AllocationObligationFindingStrength::ObservationalCandidate);
+        assert!(finding.evidence.contains(&AllocationObligationEvidence::AllocatorFamilyUnresolved));
+        assert!(!finding.evidence.contains(&AllocationObligationEvidence::AllocatorFamiliesDiffer));
+        assert!(finding.summary.contains("not evidence that the families definitely differ"));
+    }
+
+    #[test]
+    fn reallocation_between_drop_and_use_blocks_strong_uaf_finding() {
+        let mut k = one_allocation_graph();
+        k.nodes.get_mut("b0").unwrap().successors = vec!["drop1".into()];
+        for (id, successors, predicate) in [
+            ("drop1", vec!["realloc".into()], EventKind::Drop),
+            ("realloc", vec!["use1".into()], EventKind::Alloc),
+            ("use1", Vec::new(), EventKind::Read),
+        ] {
+            k.nodes.insert(id.into(), AnnotatedNode {
+                id: id.into(), successors, labels: vec![], semantic_labels: vec![],
+                allocation_labels: vec![AllocationEventLabel {
+                    predicate, allocation: "A".into(),
+                    certainty: AllocationEventCertainty::MayAbstract, deallocator_contract: None,
+                }],
+                allocation_disposition: vec![], identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()), allocation_post: None,
+                pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+            });
+        }
+        let findings = ModelChecker::new(&k).use_after_free_findings(Truth::Unknown);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
+    fn same_allocator_family_does_not_emit_mismatch_finding() {
+        let mut k = one_allocation_graph();
+        k.allocations.get_mut("A").unwrap().allocator_contract = Some(AllocationContract {
+            family: "c_malloc".into(), operation: "malloc".into(), language: "c".into(),
+            basis: None, owner_def_path: None, allocator_def_path: None, callee_def_path: None,
+        });
+        k.nodes.get_mut("b0").unwrap().successors = vec!["free".into()];
+        k.nodes.insert("free".into(), AnnotatedNode {
+            id: "free".into(), successors: vec![], labels: vec![], semantic_labels: vec![],
+            allocation_labels: vec![AllocationEventLabel {
+                predicate: EventKind::Drop, allocation: "A".into(),
+                certainty: AllocationEventCertainty::MayAbstract,
+                deallocator_contract: Some(AllocationContract {
+                    family: "c_malloc".into(), operation: "free".into(), language: "c".into(),
+                    basis: None, owner_def_path: None, allocator_def_path: None, callee_def_path: None,
+                }),
+            }],
+            allocation_disposition: vec![], identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()), allocation_post: None,
+            pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        let findings = ModelChecker::new(&k).allocator_mismatch_findings(Truth::Unknown);
+        assert!(findings.is_empty());
     }
 
     #[test]
