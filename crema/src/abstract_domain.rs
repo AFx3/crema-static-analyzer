@@ -5,6 +5,7 @@ use log::debug;
 use crate::utils::load_ffi_functions; // load_ffi_functions in utils.rs
 use crate::memory_events;
 use crate::mir_semantics::{mir_semantics_v2_enabled, rvalue_category};
+use crate::panic_unwind::{edge_flow_kind, panic_unwind_lifecycle_v1_enabled, EdgeFlowKind};
 use std::collections::HashSet;
 use crate::structs::GlobalICFGNode;
 use crate::structs::{MirStatement, MirTerminator, MirBasicBlock, RustAllocationDispositionEvidenceKind};
@@ -13,7 +14,7 @@ use crate::structs::SvfStatement;
 use std::collections::VecDeque;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use crate::structs::{GlobalICFGOrdered,DummyNode,RustCallMetadata};
+use crate::structs::{GlobalICFGOrdered,DummyNode,RustCallMetadata,IcfgEdge};
 use std::cell::RefCell;
 pub type MultiSet = HashMap<Name, usize>;
 use std::collections::BTreeMap;
@@ -1950,11 +1951,122 @@ pub fn process_mir_basic_block(block: &MirBasicBlock, init_mem: &AbstractMemory,
     for stmt in &block.statements {
         current_mem = apply_mir_statement_with_extensions(&current_mem, &mut current_taint, stmt);
     }
-    if let Some(term) = &block.terminator {
-        current_mem = apply_mir_terminator_with_extensions(&current_mem, &mut current_taint, term);
+
+    // A3 panic/unwind profile: terminator effects are edge-sensitive.  Applying
+    // them here would collapse the normal and unwind continuations back into
+    // one post-state, which is precisely the unsoundness this profile removes.
+    // The frozen/default profile keeps the historical node-local transfer.
+    if !panic_unwind_lifecycle_v1_enabled() {
+        if let Some(term) = &block.terminator {
+            current_mem = apply_mir_terminator_with_extensions(&current_mem, &mut current_taint, term);
+        }
     }
     (current_mem, current_taint)
+}
 
+/// Conservative unwind-side effect for a MIR call whose body is not represented
+/// on the current edge.  A call that unwinds does not assign its destination,
+/// while memory reachable through its arguments may have been partially
+/// mutated/dropped before the panic.  CellValue has no partial-lifecycle state,
+/// so TOP is the sound projection until a richer lifecycle domain is added.
+fn apply_call_unwind_effect(
+    mem: &AbstractMemory,
+    taint: &mut TaintStateMap,
+    arguments: &[crate::structs::MirCallArgument],
+    return_place: &str,
+) -> AbstractMemory {
+    let mut out = mem.clone();
+
+    if !return_place.trim().is_empty() {
+        let ret = full_local_name(return_place);
+        out.assign_local_value(&ret, CellValue::BOTTOM);
+        taint.remove(&ret);
+    }
+
+    for arg in arguments {
+        let raw = extract_arg_name(&arg.arg);
+        if raw.is_empty() {
+            continue;
+        }
+        let name = full_local_name(&raw);
+        if out.get_allocation(&name).is_some() {
+            out.set_cell_value(&name, CellValue::TOP);
+        }
+        taint
+            .entry(name)
+            .or_default()
+            .insert("unwind_may_effect".to_string());
+    }
+
+    out
+}
+
+/// Edge-sensitive MIR terminator transfer used only by
+/// `panic_unwind_lifecycle_v1`.
+///
+/// Normal edges preserve the existing transfer semantics.  Unwind edges do
+/// *not* reuse the normal post-state: calls suppress return-place assignment,
+/// Drops become partial/unknown rather than definitely FREED, and assertions
+/// leave memory unchanged because the panic occurs before their success
+/// continuation.
+fn apply_mir_terminator_for_edge_enabled(
+    mem: &AbstractMemory,
+    taint: &mut TaintStateMap,
+    term: &MirTerminator,
+    edge: &IcfgEdge,
+) -> AbstractMemory {
+    // Entering a represented callee is neither a normal *return* nor an unwind
+    // of the Call terminator.  The callee body owns its effects and the
+    // DummyRet node maps `_0` into the caller return place on successful return.
+    // Applying the Call transfer here would manufacture a return value before
+    // the callee executes.  The same rule applies to represented FFI bodies.
+    if matches!(
+        edge.label.as_deref(),
+        Some("Rust Call -> dummyCall")
+            | Some("Higher-order callback -> dummyCall")
+            | Some("FFI Call")
+    ) {
+        return mem.clone();
+    }
+
+    match edge_flow_kind(edge) {
+        EdgeFlowKind::Normal => apply_mir_terminator_with_extensions(mem, taint, term),
+        EdgeFlowKind::Unwind => match term {
+            MirTerminator::Call { arguments, return_place, .. } => {
+                apply_call_unwind_effect(mem, taint, arguments, return_place)
+            }
+            MirTerminator::Drop { dropped_value, .. } => {
+                let mut out = mem.clone();
+                let dropped = full_local_name(dropped_value);
+                if out.get_allocation(&dropped).is_some() {
+                    out.set_cell_value(&dropped, CellValue::TOP);
+                }
+                taint
+                    .entry(dropped)
+                    .or_default()
+                    .insert("unwind_partial_drop".to_string());
+                out
+            }
+            MirTerminator::Assert { .. } => mem.clone(),
+            MirTerminator::UnwindResume { .. } => mem.clone(),
+            MirTerminator::InlineAsm { .. } => widen_all_tracked_to_top(mem),
+            // Defensive fallback: an edge classified as unwind for a future
+            // terminator kind must not silently acquire normal-return effects.
+            _ => widen_all_tracked_to_top(mem),
+        },
+    }
+}
+
+pub fn apply_mir_terminator_for_edge_with_extensions(
+    mem: &AbstractMemory,
+    taint: &mut TaintStateMap,
+    term: &MirTerminator,
+    edge: &IcfgEdge,
+) -> AbstractMemory {
+    if !panic_unwind_lifecycle_v1_enabled() {
+        return apply_mir_terminator_with_extensions(mem, taint, term);
+    }
+    apply_mir_terminator_for_edge_enabled(mem, taint, term, edge)
 }
 
 // ----------------------------------------------------------------------
@@ -3761,8 +3873,13 @@ fn bind_internal_actuals(
 pub fn fixed_point_analysis(icfg: &GlobalICFGOrdered) -> (AbstractState, TaintState) {
 
     let mut succs_map: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut outgoing_edges: BTreeMap<String, Vec<IcfgEdge>> = BTreeMap::new();
     let mut edge_transfer_only: BTreeSet<(String, String)> = BTreeSet::new();
     for edge in &icfg.icfg_edges {
+        outgoing_edges
+            .entry(edge.source.clone())
+            .or_default()
+            .push(edge.clone());
         succs_map
             .entry(edge.source.clone())
             .or_default()
@@ -3814,12 +3931,55 @@ pub fn fixed_point_analysis(icfg: &GlobalICFGOrdered) -> (AbstractState, TaintSt
         let curr_mem   = abs_state.get(&current).unwrap_or_default();
         let curr_taint = taint_state.get(&current).cloned().unwrap_or_default();
 
-        // 2.a) intraprocedural
-        if let Some(succs) = succs_map.get(&current) {
+        // 2.a) intraprocedural / summary edges.  The frozen profile keeps the
+        // historical successor-deduplicated traversal exactly.  The A3 profile
+        // switches to edge-level traversal because normal and unwind edges from
+        // the same MIR block can carry different post-states.
+        if panic_unwind_lifecycle_v1_enabled() {
+            if let Some(edges) = outgoing_edges.get(&current) {
+                for edge in edges {
+                    let succ = &edge.destination;
+                    if edge_transfer_only.contains(&(current.clone(), succ.clone())) {
+                        continue;
+                    }
+
+                    let mut edge_mem = curr_mem.clone();
+                    let mut edge_taint = curr_taint.clone();
+                    if let GlobalICFGNode::Mir(source_bb) = get_node_by_id(icfg, &current) {
+                        if let Some(term) = source_bb.terminator.as_ref() {
+                            edge_mem = apply_mir_terminator_for_edge_with_extensions(
+                                &edge_mem,
+                                &mut edge_taint,
+                                term,
+                                edge,
+                            );
+                        }
+                    }
+
+                    let node = get_node_by_id(icfg, succ);
+                    let (new_mem, new_taint) = transfer_function(
+                        succ,
+                        &node,
+                        &edge_mem,
+                        &edge_taint,
+                    );
+
+                    let old_mem   = abs_state.get(succ).unwrap_or_default();
+                    let old_taint = taint_state.get(succ).cloned().unwrap_or_default();
+                    let joined_mem = old_mem.union(&new_mem);
+                    let joined_taint = join_taint_maps(&old_taint, &new_taint, &joined_mem);
+                    let first = !abs_state.state_map.contains_key(succ) && !taint_state.contains_key(succ);
+                    if first || joined_mem != old_mem || joined_taint != old_taint {
+                        abs_state.insert(succ.clone(), joined_mem);
+                        taint_state.insert(succ.clone(), joined_taint);
+                        worklist.insert(succ.clone());
+                    }
+                }
+            }
+        } else if let Some(succs) = succs_map.get(&current) {
+            // Frozen v6O/v6N traversal: do not alter ordering or duplicate-edge
+            // behavior when the A3 profile is disabled.
             for succ in succs {
-                // Canonical interprocedural edges are real graph edges, but
-                // require edge-specific actual/formal or return transfer.  Do
-                // not also apply the generic node transfer on those edges.
                 if edge_transfer_only.contains(&(current.clone(), succ.clone())) {
                     continue;
                 }
@@ -3828,11 +3988,8 @@ pub fn fixed_point_analysis(icfg: &GlobalICFGOrdered) -> (AbstractState, TaintSt
 
                 let old_mem   = abs_state.get(succ).unwrap_or_default();
                 let old_taint = taint_state.get(succ).cloned().unwrap_or_default();
-
                 let joined_mem = old_mem.union(&new_mem);
-                let joined_taint =
-                    join_taint_maps(&old_taint, &new_taint, &joined_mem);
-
+                let joined_taint = join_taint_maps(&old_taint, &new_taint, &joined_mem);
                 let first = !abs_state.state_map.contains_key(succ) && !taint_state.contains_key(succ);
                 if first || joined_mem != old_mem || joined_taint != old_taint {
                     abs_state.insert(succ.clone(), joined_mem);
@@ -4117,6 +4274,57 @@ mod phase6b_interprocedural_protocol_tests {
             BTreeSet::from(["Local(_4)".to_string()])
         );
         assert!(captures[0].stack_ref_targets.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod panic_unwind_lifecycle_v1_tests {
+    use super::*;
+
+    fn edge(label: &str, destination: &str) -> IcfgEdge {
+        IcfgEdge {
+            source: "rust::main::bb0".to_string(),
+            destination: destination.to_string(),
+            label: Some(label.to_string()),
+            source_label: None,
+            destination_label: None,
+        }
+    }
+
+    #[test]
+    fn drop_normal_and_unwind_have_distinct_post_states() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&"Local(_1)".to_string(), CellValue::ALLOC);
+        let term = MirTerminator::Drop {
+            details: "drop(_1) -> [return: bb1, unwind: bb2]".to_string(),
+            source_info: "test.rs:1:1:1:1 (#0)".to_string(),
+            return_target: "bb1".to_string(),
+            unwind_target: "cleanup(bb2)".to_string(),
+            dropped_value: "_1".to_string(),
+            is_mutable: true,
+            deallocator_evidence: None,
+        };
+
+        let mut normal_taint = TaintStateMap::new();
+        let normal = apply_mir_terminator_for_edge_enabled(
+            &mem,
+            &mut normal_taint,
+            &term,
+            &edge("Drop return", "rust::main::bb1"),
+        );
+        assert_eq!(normal.get_cell_value(&"Local(_1)".to_string()), CellValue::FREED);
+
+        let mut unwind_taint = TaintStateMap::new();
+        let unwind = apply_mir_terminator_for_edge_enabled(
+            &mem,
+            &mut unwind_taint,
+            &term,
+            &edge("Drop unwind", "rust::main::bb2"),
+        );
+        assert_eq!(unwind.get_cell_value(&"Local(_1)".to_string()), CellValue::TOP);
+        assert!(unwind_taint
+            .get("Local(_1)")
+            .is_some_and(|tags| tags.contains("unwind_partial_drop")));
     }
 }
 
@@ -4709,13 +4917,14 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                         // Preserve the existing unwind policy: a Drop block
                         // reached through an unwind edge is not counted as a
                         // normal-path deallocation.
-                        let skip_drop = icfg.icfg_edges.iter().any(|e| {
-                            e.destination == node_id
-                                && matches!(
-                                    e.label.as_deref(),
-                                    Some(label) if label.contains("unwind")
-                                )
-                        });
+                        let skip_drop = !panic_unwind_lifecycle_v1_enabled()
+                            && icfg.icfg_edges.iter().any(|e| {
+                                e.destination == node_id
+                                    && matches!(
+                                        e.label.as_deref(),
+                                        Some(label) if label.contains("unwind")
+                                    )
+                            });
 
                         if skip_drop {
                             println!(

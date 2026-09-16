@@ -194,12 +194,16 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     let has_allocation_disposition = capabilities.contains("allocation_disposition_v1");
     let has_mir_semantic_labels = capabilities.contains("mir_semantic_labels_v1");
     let has_mir_semantics_v2 = capabilities.contains("mir_semantics_v2");
+    let has_panic_unwind_lifecycle_v1 = capabilities.contains("panic_unwind_lifecycle_v1");
 
     if has_allocation_contracts_v2 && !has_allocation_contracts {
         return Err("allocation_contracts_v2 refines allocation_contracts_v1; the artifact must declare both capabilities".into());
     }
     if has_mir_semantics_v2 && !has_mir_semantic_labels {
         return Err("mir_semantics_v2 requires mir_semantic_labels_v1 so the active transfer profile remains auditable".into());
+    }
+    if has_panic_unwind_lifecycle_v1 && (schema_version != 2 || !has_mir_semantics_v2) {
+        return Err("panic_unwind_lifecycle_v1 requires schema v2 and mir_semantics_v2".into());
     }
 
     if has_allocation_disposition && schema_version != 2 {
@@ -611,6 +615,22 @@ mod tests {
         value["nodes"][0]["allocation_labels"][0]["deallocator_contract"]["family"] = json!("c_malloc");
         let err = validate_boundary_requirements(&value).unwrap_err();
         assert!(err.contains("requires family=rust_global"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn panic_unwind_cli_guard_requires_mir_v2() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["panic_unwind_lifecycle_v1"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("panic_unwind_lifecycle_v1"), "unexpected error: {err}");
+
+        value["capabilities"] = json!([
+            "mir_semantic_labels_v1",
+            "mir_semantics_v2",
+            "panic_unwind_lifecycle_v1"
+        ]);
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        assert!(validate_boundary_requirements(&value).is_ok());
     }
 
 }

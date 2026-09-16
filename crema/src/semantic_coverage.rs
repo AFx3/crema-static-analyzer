@@ -1,6 +1,7 @@
 use crate::abstract_domain::{classify_mir_statement_coverage, classify_mir_statement_coverage_v2, has_explicit_rust_call_summary};
 use crate::cargo_project::CargoAnalysisPlan;
 use crate::mir_semantics::{mir_semantics_v2_enabled, rvalue_category};
+use crate::panic_unwind::panic_unwind_lifecycle_v1_enabled;
 use crate::structs::{GlobalICFGNode, GlobalICFGOrdered, MirTerminator};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -264,15 +265,20 @@ pub fn collect_root_coverage(
 impl SemanticCoverageBundle {
     pub fn new(plan: &CargoAnalysisPlan, roots: Vec<RootCoverageReport>) -> Self {
         let v2 = mir_semantics_v2_enabled();
+        let panic_unwind = panic_unwind_lifecycle_v1_enabled();
         Self {
             schema_version: if v2 { 3 } else { 2 },
-            semantics: if v2 {
+            semantics: if panic_unwind {
+                "observational_coverage_of_a3_panic_unwind_lifecycle_v1_over_mir_semantics_v2".to_string()
+            } else if v2 {
                 "observational_coverage_of_v6P_r1d_sound_mir_semantics_v2_extension".to_string()
             } else {
                 "observational_coverage_of_existing_v6N_transfer_functions".to_string()
             },
             telemetry_only: true,
-            transfer_profile: if v2 {
+            transfer_profile: if panic_unwind {
+                "panic_unwind_lifecycle_v1_edge_sensitive_over_mir_semantics_v2".to_string()
+            } else if v2 {
                 "mir_semantics_v2_sound_r1d_over_v6O".to_string()
             } else {
                 "legacy_v6O".to_string()

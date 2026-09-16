@@ -367,8 +367,14 @@ impl Kripke {
         if has_mir_semantic_labels && schema_version != 2 {
             return Err("mir_semantic_labels_v1 requires annotated ICFG schema v2".into());
         }
-        if capabilities.contains("mir_semantics_v2") && !has_mir_semantic_labels {
+        let has_mir_semantics_v2 = capabilities.contains("mir_semantics_v2");
+        if has_mir_semantics_v2 && !has_mir_semantic_labels {
             return Err("mir_semantics_v2 requires mir_semantic_labels_v1 so the active transfer profile is auditable".into());
+        }
+        if capabilities.contains("panic_unwind_lifecycle_v1")
+            && (schema_version != 2 || !has_mir_semantics_v2)
+        {
+            return Err("panic_unwind_lifecycle_v1 requires schema v2 and mir_semantics_v2".into());
         }
 
         let mut variables = BTreeMap::new();
@@ -1326,6 +1332,15 @@ mod tests {
             callee_def_path: None,
         };
         Kripke::from_annotated_icfg(v2_contract_test_input(contract)).unwrap();
+    }
+
+    #[test]
+    fn panic_unwind_capability_requires_mir_v2() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec!["panic_unwind_lifecycle_v1".into()];
+        let err = Kripke::from_annotated_icfg(input).unwrap_err();
+        assert!(err.contains("panic_unwind_lifecycle_v1"), "unexpected error: {err}");
     }
 
 }

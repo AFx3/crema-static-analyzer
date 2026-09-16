@@ -23,6 +23,7 @@ mod memory_events;
 mod cargo_project;
 mod semantic_coverage;
 mod mir_semantics;
+mod panic_unwind;
 
 use cargo_metadata::{MetadataCommand, Target};
 use icfg::MirExtractor;
@@ -48,6 +49,7 @@ use crate::cargo_project::{
 };
 use crate::semantic_coverage::{collect_root_coverage, SemanticCoverageBundle};
 use crate::mir_semantics::set_mir_semantics_v2_enabled;
+use crate::panic_unwind::set_panic_unwind_lifecycle_v1_enabled;
 use serde_json::json;
 
 static GLOBAL_ICFG_JSON: &str = "global_icfg.json";
@@ -108,7 +110,7 @@ fn main() {
 [--analysis-mode <application|library|workspace>] [-p|--package <name>] \
 [--cargo-kind <bin|lib|example|test|bench>] [--api-root <def-path>]... \
 [--features <a,b>] [--all-features] [--no-default-features] [--target-triple <triple>] \
-[--analysis-out-dir <dir>] [--cargo-plan-out <path>] [--semantic-coverage-out <path>] [--mir-semantics-v2]"
+[--analysis-out-dir <dir>] [--cargo-plan-out <path>] [--semantic-coverage-out <path>] [--mir-semantics-v2] [--panic-unwind-lifecycle-v1]"
         );
         exit(1);
     }
@@ -138,6 +140,8 @@ fn main() {
     let mut semantic_coverage_out: Option<PathBuf> = None;
     // v6P opt-in extension profile. The frozen v6O/v6N semantics remain the default.
     let mut mir_semantics_v2 = false;
+    // A3 opt-in: edge-sensitive panic/unwind lifecycle semantics.
+    let mut panic_unwind_lifecycle_v1 = false;
     let mut idx = 2;
     while idx < args.len() {
         match args[idx].as_str() {
@@ -243,6 +247,10 @@ fn main() {
                 mir_semantics_v2 = true;
                 idx += 1;
             }
+            "--panic-unwind-lifecycle-v1" => {
+                panic_unwind_lifecycle_v1 = true;
+                idx += 1;
+            }
             other => {
                 eprintln!("Unknown flag: {}", other);
                 exit(1);
@@ -251,12 +259,20 @@ fn main() {
     }
 
     set_mir_semantics_v2_enabled(mir_semantics_v2);
+    set_panic_unwind_lifecycle_v1_enabled(panic_unwind_lifecycle_v1);
     if mir_semantics_v2 && cqpl_schema_version != 2 {
         eprintln!("--mir-semantics-v2 requires --cqpl-schema-version 2 so structural MIR labels are capability-gated");
         exit(1);
     }
     if mir_semantics_v2 {
         println!("mir_semantics_profile=v2-extension-over-v6O");
+    }
+    if panic_unwind_lifecycle_v1 && (!mir_semantics_v2 || cqpl_schema_version != 2) {
+        eprintln!("--panic-unwind-lifecycle-v1 requires --mir-semantics-v2 and --cqpl-schema-version 2");
+        exit(1);
+    }
+    if panic_unwind_lifecycle_v1 {
+        println!("panic_unwind_lifecycle_profile=v1-edge-sensitive");
     }
 
     let cargo_toml_path = project_path.join("Cargo.toml");

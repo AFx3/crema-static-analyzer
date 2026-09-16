@@ -66,6 +66,10 @@ def main() -> int:
         "--explain-unk-verbose", action="store_true",
         help="print the full human-readable explanation for every UNKNOWN query (sidecars remain mandatory regardless)",
     )
+    ap.add_argument(
+        "--panic-unwind-lifecycle-v1", action="store_true",
+        help="enable CREMA A3 edge-sensitive panic/unwind lifecycle semantics and require the exported capability",
+    )
     args = ap.parse_args()
 
     root = args.root.resolve()
@@ -140,6 +144,8 @@ def main() -> int:
         "--allocation-identity-out", str(identity),
         "--mir-semantics-v2",
     ]
+    if args.panic_unwind_lifecycle_v1:
+        cmd.append("--panic-unwind-lifecycle-v1")
     (out / "crema-command.txt").write_text(" ".join(json.dumps(x) for x in cmd) + "\n", encoding="utf-8")
     with (out / "crema-export.log").open("w", encoding="utf-8") as log:
         cp = run(cmd, cwd=crema, stdout=log, stderr=subprocess.STDOUT)
@@ -167,7 +173,10 @@ def main() -> int:
     if graph.get("schema_version") != 2:
         raise SystemExit(f"unexpected schema_version={graph.get('schema_version')}")
     caps = set(graph.get("capabilities", []))
-    missing = REQUIRED_CAPS - caps
+    required_caps = set(REQUIRED_CAPS)
+    if args.panic_unwind_lifecycle_v1:
+        required_caps.add("panic_unwind_lifecycle_v1")
+    missing = required_caps - caps
     if missing:
         raise SystemExit(f"artifact missing required capabilities: {sorted(missing)}")
 

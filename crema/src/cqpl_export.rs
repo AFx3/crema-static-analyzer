@@ -1,6 +1,7 @@
 use crate::abstract_domain::{AbstractMemory, AbstractState, CellValue, Name};
 use crate::identity::{AllocationIdentityMemory, AllocationIdentityState};
 use crate::mir_semantics::{mir_semantics_v2_enabled, semantic_labels_for_block};
+use crate::panic_unwind::panic_unwind_lifecycle_v1_enabled;
 use crate::memory_events;
 use crate::structs::{
     AbstractAllocId, AllocationSiteId, GlobalICFGNode, GlobalICFGOrdered, MirTerminator,
@@ -552,6 +553,9 @@ fn export_cqpl_annotated_icfg_versioned(
             if mir_semantics_v2_enabled() {
                 caps.push("mir_semantic_labels_v1");
                 caps.push("mir_semantics_v2");
+            }
+            if panic_unwind_lifecycle_v1_enabled() {
+                caps.push("panic_unwind_lifecycle_v1");
             }
             Some(caps)
         } else {

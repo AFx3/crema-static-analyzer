@@ -60,3 +60,20 @@ Those belong to B1.2/B1.3.
 B1.2 materializes exact vulnerable/fixed revisions, hashes the source trees,
 records toolchain/features/entrypoints, and admits only pairs whose provenance
 and build identity are complete.
+
+## B1.3 / A3 panic-unwind differential
+
+The A3 experimental runner analyzes the admitted vulnerable/fixed reproducer
+harnesses and enables CREMA `panic_unwind_lifecycle_v1`. Under A3, CREMA imports
+reachable dependency MIR when rustc makes it available. The runner requires the
+`aligned_box::...::realloc_with_default` body to appear in both ICFGs before it
+interprets any CQPL differential.
+
+```bash
+python3 cqpl/benchmarks/rustsec_memory_safety_v1/run_b1_3_panic_unwind_case.py \
+  --root "$PWD" \
+  --case-id rustsec_2026_0282_aligned_box_realloc_panic
+```
+
+Interpretation order is strict: runtime oracle -> distinct symbolic inputs ->
+capability gate -> CQPL differential.

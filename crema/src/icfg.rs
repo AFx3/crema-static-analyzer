@@ -23,6 +23,7 @@ use crate::structs::{MirStatement, MirTerminator, MirBasicBlock, MirRepresentati
     RustHigherOrderCallEvidenceKind };
 use crate::utils::{unwind_action_to_string,compute_hash, load_ffi_functions};
 use crate::mir_semantics::mir_semantics_v2_enabled;
+use crate::panic_unwind::panic_unwind_lifecycle_v1_enabled;
 
 
 /// v6N-r1: prove the allocator family of a generic MIR `Drop` from rustc's
@@ -871,10 +872,22 @@ impl MirExtractor {
 
 #[derive(Debug, Clone, Default)]
 struct ConcreteCallDispatch {
+    // Historical field name retained: under the A3 profile this set also
+    // contains external DefPaths whose MIR is available and imported into the
+    // represented function domain.
     local_callees: BTreeSet<String>,
     observed: bool,
     has_external: bool,
     unresolved: bool,
+}
+
+#[derive(Debug, Clone, Default)]
+struct ReachableInstanceDispatch {
+    calls: BTreeMap<(String, usize), ConcreteCallDispatch>,
+    /// External dependency bodies admitted only when rustc proves MIR is
+    /// available in crate metadata. Keyed by canonical DefPath for stable
+    /// serialization/lookup; DefId is used only inside this rustc session.
+    external_mir_bodies: BTreeMap<String, DefId>,
 }
 
 /// Resolve reachable generic/trait calls in a monomorphic rustc context.
@@ -887,7 +900,8 @@ struct ConcreteCallDispatch {
 fn resolve_reachable_instance_dispatch<'tcx>(
     tcx: TyCtxt<'tcx>,
     requested_entry: &str,
-) -> Result<BTreeMap<(String, usize), ConcreteCallDispatch>, String> {
+    include_external_mir: bool,
+) -> Result<ReachableInstanceDispatch, String> {
     let normalized = requested_entry
         .strip_prefix("rust::")
         .unwrap_or(requested_entry)
@@ -920,7 +934,7 @@ fn resolve_reachable_instance_dispatch<'tcx>(
             requested_entry,
             candidates.len()
         );
-        return Ok(BTreeMap::new());
+        return Ok(ReachableInstanceDispatch::default());
     }
 
     let entry_def = candidates[0].to_def_id();
@@ -940,11 +954,14 @@ fn resolve_reachable_instance_dispatch<'tcx>(
             requested_entry,
             tcx.def_path_str(entry_def)
         );
-        return Ok(resolve_parametric_generic_entry_dispatch(
-            tcx,
-            entry_def,
-            &local_body_paths,
-        ));
+        return Ok(ReachableInstanceDispatch {
+            calls: resolve_parametric_generic_entry_dispatch(
+                tcx,
+                entry_def,
+                &local_body_paths,
+            ),
+            external_mir_bodies: BTreeMap::new(),
+        });
     }
     let entry = ty::Instance::mono(tcx, entry_def);
     // Every caller carried by this worklist is a concrete rustc Instance.
@@ -961,20 +978,23 @@ fn resolve_reachable_instance_dispatch<'tcx>(
     // hash/ordering surrogate for rustc's unstable internal type.
     let mut seen: Vec<ty::Instance<'tcx>> = Vec::new();
     let mut out: BTreeMap<(String, usize), ConcreteCallDispatch> = BTreeMap::new();
+    let mut external_mir_bodies: BTreeMap<String, DefId> = BTreeMap::new();
 
     while let Some(caller) = worklist.pop_front() {
         if seen.contains(&caller) {
             continue;
         }
         seen.push(caller);
-        if !caller.def_id().is_local() {
+        let caller_def = caller.def_id();
+        let caller_path = tcx.def_path_str(caller_def);
+        if caller_def.is_local() {
+            if !local_body_paths.contains(&caller_path) {
+                continue;
+            }
+        } else if !include_external_mir || !tcx.is_mir_available(caller_def) {
             continue;
         }
-        let caller_path = tcx.def_path_str(caller.def_id());
-        if !local_body_paths.contains(&caller_path) {
-            continue;
-        }
-        let body = tcx.optimized_mir(caller.def_id());
+        let body = tcx.optimized_mir(caller_def);
         for (bb, data) in body.basic_blocks.iter_enumerated() {
             let Some(term) = data.terminator.as_ref() else { continue; };
             let TerminatorKind::Call { func, .. } = &term.kind else { continue; };
@@ -1013,6 +1033,13 @@ fn resolve_reachable_instance_dispatch<'tcx>(
                             // body cannot be silently summarized as if complete.
                             dispatch.unresolved = true;
                         }
+                    } else if include_external_mir && tcx.is_mir_available(callee.def_id()) {
+                        let callee_path = tcx.def_path_str(callee.def_id());
+                        dispatch.local_callees.insert(callee_path.clone());
+                        external_mir_bodies
+                            .entry(callee_path)
+                            .or_insert(callee.def_id());
+                        worklist.push_back(callee);
                     } else {
                         dispatch.has_external = true;
                     }
@@ -1021,7 +1048,10 @@ fn resolve_reachable_instance_dispatch<'tcx>(
             }
         }
     }
-    Ok(out)
+    Ok(ReachableInstanceDispatch {
+        calls: out,
+        external_mir_bodies,
+    })
 }
 
 /// Traverse a generic entry without inventing monomorphization arguments.
@@ -1316,6 +1346,39 @@ fn return_nodes_for(function: &str, functions: &BTreeMap<String, Vec<MirBasicBlo
     out
 }
 
+/// MIR nodes through which an exception leaves `function` and must continue in
+/// the caller.  This is deliberately distinct from normal `Return`: unwind can
+/// leave through an explicit `UnwindResume`, or directly from a potentially
+/// panicking terminator whose rustc unwind action is `Continue`.
+fn unwind_exit_nodes_for(
+    function: &str,
+    functions: &BTreeMap<String, Vec<MirBasicBlock>>,
+) -> Vec<String> {
+    let mut out: Vec<String> = functions
+        .get(function)
+        .into_iter()
+        .flat_map(|blocks| blocks.iter())
+        .filter(|block| {
+            match block.terminator.as_ref() {
+                Some(MirTerminator::UnwindResume { .. }) => true,
+                Some(MirTerminator::Call { unwind_target, .. })
+                | Some(MirTerminator::Drop { unwind_target, .. })
+                | Some(MirTerminator::Assert { unwind_target, .. }) => {
+                    extract_target(unwind_target) == "continue"
+                }
+                Some(MirTerminator::InlineAsm { unwind_target: Some(unwind_target), .. }) => {
+                    extract_target(unwind_target) == "continue"
+                }
+                _ => false,
+            }
+        })
+        .map(|block| format!("rust::{function}::bb{}", block.block_id))
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
 /// Materialize rustc unwind-terminate destinations as explicit maximal states.
 /// A dangling edge is not a transition relation over the serialized node domain;
 /// dropping it at CQPL export time would also erase a concrete maximal path.
@@ -1428,13 +1491,18 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
         }
 
         // --- 1. build concrete rustc Instance dispatch from the selected entry ---
-        let concrete_dispatch = match resolve_reachable_instance_dispatch(tcx, &self.instance_entry_hint) {
+        let reachable_dispatch = match resolve_reachable_instance_dispatch(
+            tcx,
+            &self.instance_entry_hint,
+            panic_unwind_lifecycle_v1_enabled(),
+        ) {
             Ok(dispatch) => dispatch,
             Err(boundary) => {
                 self.instance_dispatch_boundary = Some(boundary);
-                BTreeMap::new()
+                ReachableInstanceDispatch::default()
             }
         };
+        let concrete_dispatch = &reachable_dispatch.calls;
 
         // --- 2. costruisco la MIR per ogni funzione ---
         for def_id in tcx.hir().body_owners() {
@@ -1510,6 +1578,73 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                 .insert(function_name.clone(), body.arg_count);
             self.mir_representation.functions.insert(function_name, function_blocks);
         }
+        // --- A3: import reachable external dependency MIR when rustc metadata
+        // explicitly reports it as available.  This is opt-in so the frozen
+        // corpus boundary remains unchanged. Generic dependency functions are
+        // the primary target: rustc must encode their MIR for downstream
+        // monomorphization.
+        if panic_unwind_lifecycle_v1_enabled() {
+            for (function_name, def_id) in &reachable_dispatch.external_mir_bodies {
+                if self.mir_representation.functions.contains_key(function_name) {
+                    continue;
+                }
+                if !tcx.is_mir_available(*def_id) {
+                    continue;
+                }
+                match tcx.def_kind(*def_id) {
+                    DefKind::Fn | DefKind::AssocFn | DefKind::Closure => {}
+                    _ => continue,
+                }
+
+                let body = tcx.optimized_mir(*def_id);
+                let mut function_blocks = Vec::new();
+                for (bb, data) in body.basic_blocks.iter_enumerated() {
+                    for stmt in &data.statements {
+                        if let StatementKind::Assign(assign) = &stmt.kind {
+                            let (place, _) = &**assign;
+                            if place.projection.is_empty() {
+                                let place_ty = body.local_decls[place.local].ty;
+                                if let TyKind::Closure(closure_def, _) = place_ty.kind() {
+                                    let (desc, is_mut) = self.describe_place(place, &body.local_decls);
+                                    self.closure_bindings
+                                        .entry(tcx.def_path_str(*closure_def))
+                                        .or_insert(MirCallArgument { arg: desc, is_mutable: Some(is_mut) });
+                                }
+                            }
+                        }
+                    }
+
+                    let mut terminator = self.convert_terminator(&data.terminator, &body.local_decls, tcx);
+                    if let Some(MirTerminator::Call {
+                        resolved_instance_callees,
+                        instance_dispatch_observed,
+                        instance_dispatch_external,
+                        instance_dispatch_unresolved,
+                        ..
+                    }) = terminator.as_mut() {
+                        if let Some(dispatch) = concrete_dispatch.get(&(function_name.clone(), bb.index())) {
+                            *resolved_instance_callees = dispatch.local_callees.iter().cloned().collect();
+                            *instance_dispatch_observed = dispatch.observed;
+                            *instance_dispatch_external = dispatch.has_external;
+                            *instance_dispatch_unresolved = dispatch.unresolved;
+                        }
+                    }
+                    function_blocks.push(MirBasicBlock {
+                        block_id: bb.index(),
+                        statements: data.statements.iter()
+                            .map(|stmt| self.convert_statement(stmt, &body.local_decls))
+                            .collect(),
+                        terminator,
+                    });
+                }
+                self.rust_function_arg_counts.insert(function_name.clone(), body.arg_count);
+                self.mir_representation
+                    .functions
+                    .insert(function_name.clone(), function_blocks);
+                println!("A3_EXTERNAL_MIR_IMPORTED: {}", function_name);
+            }
+        }
+
         // --- 2. LOAD LLVM IR (SVF) from this CREMA invocation only ---
         match load_all_llvm_json(&self.llvm_output_dir) {
             Ok(parsed) => self.llvm_representation = Some(parsed),
@@ -1906,15 +2041,45 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
 
                             let effective_unwind = extract_target(unwind_target);
                             if effective_unwind != "unreachable" && effective_unwind != "continue" {
-                                let src = format!("rust::{}::bb{}", rust_func, block.block_id);
                                 let dst = format!("rust::{}::{}", rust_func, effective_unwind);
-                                icfg_edges.push(IcfgEdge {
-                                    source: src,
-                                    destination: dst,
-                                    label: Some("Call unwind".to_string()),
-                                    source_label: Some(format!("Mir bb{}", block.block_id)),
-                                    destination_label: None,
-                                });
+
+                                // A3: once a Rust callee body is represented completely,
+                                // exceptional control returns from the callee's unwind exits,
+                                // not directly from the caller callsite.  Keeping the old
+                                // callsite->cleanup edge here would join an imprecise summary
+                                // with the callee state and erase exactly the partial lifecycle
+                                // information this capability is intended to preserve.
+                                if panic_unwind_lifecycle_v1_enabled()
+                                    && !resolved_targets.is_empty()
+                                    && !need_summary
+                                {
+                                    for (callee, _) in &resolved_targets {
+                                        for unwind_exit in unwind_exit_nodes_for(
+                                            callee,
+                                            &self.mir_representation.functions,
+                                        ) {
+                                            icfg_edges.push(IcfgEdge {
+                                                source: unwind_exit,
+                                                destination: dst.clone(),
+                                                label: Some("Rust unwind propagate".to_string()),
+                                                source_label: Some(format!(
+                                                    "callee={} caller_bb={}",
+                                                    callee, block.block_id
+                                                )),
+                                                destination_label: None,
+                                            });
+                                        }
+                                    }
+                                } else {
+                                    let src = format!("rust::{}::bb{}", rust_func, block.block_id);
+                                    icfg_edges.push(IcfgEdge {
+                                        source: src,
+                                        destination: dst,
+                                        label: Some("Call unwind".to_string()),
+                                        source_label: Some(format!("Mir bb{}", block.block_id)),
+                                        destination_label: None,
+                                    });
+                                }
                             }
                         }
                     }

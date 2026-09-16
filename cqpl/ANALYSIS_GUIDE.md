@@ -405,3 +405,38 @@ supporting findings:
 ```
 
 Questi esempi non autorizzano una reinterpretazione dei truth values. Il report spiega l'evidenza disponibile nel modello astratto; `unk` resta `unk`. Inoltre il nome del fixture indica l'intento del test, non un oracle esclusivo: una crate UAF può esporre anche candidate DF/allocator-mismatch sotto l'astrazione corrente. Valutare sempre `kind`, `strength`, frontier e witness della query specifica. Per gli output completi, il cross-check con le formule v2 e gli esempi leak/DF/no-finding vedi [EXPLAINABILITY_GUIDE.md](EXPLAINABILITY_GUIDE.md).
+
+## A3: panic/unwind lifecycle v1 (opt-in)
+
+CREMA's A3 profile separates normal and unwind post-states for fallible MIR
+terminators. It is intentionally opt-in and requires schema v2 plus the MIR-v2
+profile:
+
+```bash
+cargo +nightly-2024-11-21 run --manifest-path crema/Cargo.toml -- TARGET \
+  --only-icfg-annotated \
+  --cqpl-schema-version 2 \
+  --annotated-icfg-out annotated_icfg_v2.json \
+  --allocation-identity-out allocation_identity.json \
+  --mir-semantics-v2 \
+  --panic-unwind-lifecycle-v1
+```
+
+The exported artifact must contain `panic_unwind_lifecycle_v1` in
+`capabilities`.
+
+For the B1.3 `aligned_box` case, analyze the admitted reproducer harness with
+the A3 profile. A3 asks rustc for reachable dependency MIR and imports it when
+`is_mir_available` holds, so the caller cleanup chain and the vulnerable/fixed
+`aligned_box` body are represented in one ICFG. The runner fails closed if the
+`realloc_with_default` dependency body is still absent:
+
+```bash
+python3 cqpl/benchmarks/rustsec_memory_safety_v1/run_b1_3_panic_unwind_case.py \
+  --root "$PWD" \
+  --case-id rustsec_2026_0282_aligned_box_realloc_panic
+```
+
+The runner fails before query interpretation if either dependency MIR is absent
+or vulnerable and fixed annotated ICFGs are byte-identical. This gate separates
+an input/materialization gap from a genuine unwind semantic gap.
