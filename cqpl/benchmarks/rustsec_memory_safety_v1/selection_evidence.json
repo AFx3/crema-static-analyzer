@@ -1,0 +1,465 @@
+{
+  "accuracy_ready": false,
+  "benchmark_id": "rustsec_memory_safety_v1",
+  "cases": [
+    {
+      "advisory": "RUSTSEC-2026-0282",
+      "affected_function": "aligned_box::AlignedBox::realloc_with_default",
+      "bug_family": "panic_unwind_memory_safety",
+      "candidate_reason": "Recent patched safe-Rust double-free/UAF with explicit panic boundary; strong test of unwind-sensitive lifecycle modeling.",
+      "case_id": "rustsec_2026_0282_aligned_box_realloc_panic",
+      "crate": "aligned_box",
+      "expected_capabilities": [
+        [
+          "allocation_state_v1",
+          "Tracks allocation/drop lifecycle facts.",
+          "present"
+        ],
+        [
+          "allocation_disposition_v1",
+          "Tracks deallocation/obligation dispositions.",
+          "present"
+        ],
+        [
+          "panic_unwind_lifecycle_v1",
+          "Needs commit-before-drop ordering across unwind.",
+          "research_gap_hypothesis"
+        ]
+      ],
+      "ffi_dependent": false,
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0282.html",
+      "issued": "2026-09-09",
+      "panic_dependent": true,
+      "patched_range": ">=0.3.1",
+      "references": [
+        "https://github.com/michaellass/aligned_box/pull/6"
+      ],
+      "title": "Double free in AlignedBox::realloc_with_default when Drop panics",
+      "vulnerable_range": "<0.3.1"
+    },
+    {
+      "advisory": "RUSTSEC-2026-0274",
+      "affected_function": "rtrb::chunks::ReadChunk::commit; rtrb::chunks::ReadChunk::commit_all",
+      "bug_family": "panic_unwind_memory_safety",
+      "candidate_reason": "Patched double-free/UAF where element drops precede head advancement; directly isolates metadata-commit ordering under unwind.",
+      "case_id": "rustsec_2026_0274_rtrb_readchunk_commit_panic",
+      "crate": "rtrb",
+      "expected_capabilities": [
+        [
+          "allocation_state_v1",
+          "Needed for repeated-drop lifecycle evidence.",
+          "present"
+        ],
+        [
+          "allocation_disposition_v1",
+          "Needed for deallocation disposition evidence.",
+          "present"
+        ],
+        [
+          "panic_unwind_lifecycle_v1",
+          "Head advancement is skipped on unwind.",
+          "research_gap_hypothesis"
+        ]
+      ],
+      "ffi_dependent": false,
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0274.html",
+      "issued": "2026-09-01",
+      "panic_dependent": true,
+      "patched_range": "^0.3.5 or >=0.4.0",
+      "references": [
+        "https://github.com/mgeier/rtrb/issues/185"
+      ],
+      "title": "Double free / use-after-free in ReadChunk::commit on panicking Drop",
+      "vulnerable_range": "<0.3.5"
+    },
+    {
+      "advisory": "RUSTSEC-2026-0272",
+      "affected_function": "stack_dst::Stack::pop; stack_dst::Fifo::pop_front; stack_dst::Value::replace_stable",
+      "bug_family": "panic_unwind_memory_safety",
+      "candidate_reason": "Three patched removal/replacement paths with the same causal pattern; useful for testing whether one abstraction generalizes across APIs.",
+      "case_id": "rustsec_2026_0272_stack_dst_pop_panic",
+      "crate": "stack_dst",
+      "expected_capabilities": [
+        [
+          "allocation_state_v1",
+          "Repeated drop is a lifecycle property.",
+          "present"
+        ],
+        [
+          "panic_unwind_lifecycle_v1",
+          "Metadata commit is skipped after panicking Drop.",
+          "research_gap_hypothesis"
+        ]
+      ],
+      "ffi_dependent": false,
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0272.html",
+      "issued": "2026-08-31",
+      "panic_dependent": true,
+      "patched_range": ">=0.8.2",
+      "references": [
+        "https://github.com/thepowersgang/stack_dst-rs/issues/16"
+      ],
+      "title": "Panic-safety UAF/double-free in Stack/Fifo/Value removal paths",
+      "vulnerable_range": "<0.8.2"
+    },
+    {
+      "advisory": "RUSTSEC-2026-0267",
+      "affected_function": "stable_vec::BitVecCore::clear",
+      "bug_family": "panic_unwind_memory_safety",
+      "candidate_reason": "Patched safe-Rust double-free/UAF caused by clearing occupancy metadata after drop; compact representative panic-safety case.",
+      "case_id": "rustsec_2026_0267_stable_vec_clear_panic",
+      "crate": "stable-vec",
+      "expected_capabilities": [
+        [
+          "allocation_state_v1",
+          "Can represent drop/re-drop lifecycle facts.",
+          "present"
+        ],
+        [
+          "panic_unwind_lifecycle_v1",
+          "Must model stale occupancy after unwind.",
+          "research_gap_hypothesis"
+        ]
+      ],
+      "ffi_dependent": false,
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0267.html",
+      "issued": "2026-08-24",
+      "panic_dependent": true,
+      "patched_range": ">=0.4.3",
+      "references": [
+        "https://github.com/LukasKalbertodt/stable-vec/pull/51"
+      ],
+      "title": "Panic-safety double-free/UAF in BitVecCore::clear",
+      "vulnerable_range": "<0.4.3"
+    },
+    {
+      "advisory": "RUSTSEC-2026-0253",
+      "affected_function": "lru::LruCache::pop",
+      "bug_family": "panic_unwind_memory_safety",
+      "candidate_reason": "Patched UAF/double-free pattern in a pointer-linked container; tests stale internal links after a panicking key Drop.",
+      "case_id": "rustsec_2026_0253_lru_pop_panic",
+      "crate": "lru",
+      "expected_capabilities": [
+        [
+          "allocation_state_v1",
+          "Provides allocation/drop lifecycle state.",
+          "present"
+        ],
+        [
+          "pointer_validity_v1",
+          "Dangling internal list pointers are central.",
+          "research_gap_hypothesis"
+        ],
+        [
+          "panic_unwind_lifecycle_v1",
+          "detach is skipped on unwind.",
+          "research_gap_hypothesis"
+        ]
+      ],
+      "ffi_dependent": false,
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0253.html",
+      "issued": "2026-08-11",
+      "panic_dependent": true,
+      "patched_range": ">=0.18.2",
+      "references": [
+        "https://github.com/jeromefroe/lru-rs/pull/238"
+      ],
+      "title": "Potential UAF due to lack of panic safety in LruCache::pop",
+      "vulnerable_range": "<0.18.2 (lower bound not stated by advisory)"
+    },
+    {
+      "advisory": "RUSTSEC-2026-0233",
+      "affected_function": "rkyv::ArchivedString::deserialize (reachable via rkyv::from_bytes)",
+      "bug_family": "use_after_free",
+      "candidate_reason": "Non-panic UAF through safe checked deserialization; separates pointer-validity and validation gaps from lifecycle-only failures.",
+      "case_id": "rustsec_2026_0233_rkyv_deserialize_uaf",
+      "crate": "rkyv",
+      "expected_capabilities": [
+        [
+          "pointer_validity_v1",
+          "Invalid archived pointer is the causal fact.",
+          "research_gap_hypothesis"
+        ],
+        [
+          "memory_initialization_v1",
+          "Useful to separate invalid/initialized storage states.",
+          "research_gap_hypothesis"
+        ]
+      ],
+      "ffi_dependent": false,
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0233.html",
+      "issued": "2026-08-04",
+      "panic_dependent": false,
+      "patched_range": ">=0.8.17",
+      "references": [
+        "https://github.com/rkyv/rkyv/issues/666",
+        "https://github.com/rkyv/rkyv/commit/3c9d07fbff5949261bef38d00ab160b129bd9d3a",
+        "https://github.com/rkyv/rkyv/commit/107772907c4e839fa67900385f0d4814e7d15e42"
+      ],
+      "title": "Crafted archives can cause UAF during deserialization",
+      "vulnerable_range": ">=0.8.0-rc.1, <0.8.17"
+    },
+    {
+      "advisory": "RUSTSEC-2026-0205",
+      "affected_function": "scc::Array::insert",
+      "bug_family": "panic_unwind_memory_safety",
+      "candidate_reason": "Direct mem::forget/ManuallyDrop migration case with a panicking comparator; high relevance to CREMA's existing forget/disposition semantics.",
+      "case_id": "rustsec_2026_0205_scc_array_insert_panic",
+      "crate": "scc",
+      "expected_capabilities": [
+        [
+          "library_effects_v1",
+          "Existing mem::forget migration semantics are relevant.",
+          "present_but_insufficient"
+        ],
+        [
+          "panic_unwind_lifecycle_v1",
+          "Forget is skipped when comparison panics.",
+          "research_gap_hypothesis"
+        ]
+      ],
+      "ffi_dependent": false,
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0205.html",
+      "issued": "2026-07-07",
+      "panic_dependent": true,
+      "patched_range": ">=3.8.4",
+      "references": [
+        "https://codeberg.org/wvwwvwwv/scalable-concurrent-containers/issues/232"
+      ],
+      "title": "Array::insert exception-safety bug can double free",
+      "vulnerable_range": "<3.8.4 (lower bound not stated by advisory)"
+    },
+    {
+      "advisory": "RUSTSEC-2026-0152",
+      "affected_function": "oneringbuf::IntoRef::into_ref; DroppableRef::clone/drop",
+      "bug_family": "raw_ownership_lifecycle",
+      "candidate_reason": "Box::into_raw/Box::from_raw ownership protocol violated by cloning a raw-owner handle; directly relevant to A2's migrated raw ownership dispositions.",
+      "case_id": "rustsec_2026_0152_oneringbuf_droppableref_uaf",
+      "crate": "oneringbuf",
+      "expected_capabilities": [
+        [
+          "library_effects_v1",
+          "Box raw ownership transitions are already represented.",
+          "present_but_insufficient"
+        ],
+        [
+          "allocation_disposition_v1",
+          "Ownership obligation movement is central.",
+          "present"
+        ],
+        [
+          "pointer_validity_v1",
+          "Remaining clones become dangling after reclamation.",
+          "research_gap_hypothesis"
+        ]
+      ],
+      "ffi_dependent": false,
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0152.html",
+      "issued": "2026-06-01",
+      "panic_dependent": false,
+      "patched_range": ">=0.8.0",
+      "references": [
+        "https://github.com/skilvingr/rust-oneringbuf/commit/643a24b30914068416dff9021a069c12c865a316"
+      ],
+      "title": "Use-after-free through cloned DroppableRef raw ownership handles",
+      "vulnerable_range": "<0.8.0 (lower bound not stated by advisory)"
+    },
+    {
+      "advisory": "RUSTSEC-2026-0143",
+      "affected_function": "oneringbuf::VmemStorage::new",
+      "bug_family": "double_free",
+      "candidate_reason": "Deterministic double-free caused by bit-copying owning values and then dropping both copies; tests memory initialization/ownership duplication outside panic paths.",
+      "case_id": "rustsec_2026_0143_oneringbuf_vmem_double_free",
+      "crate": "oneringbuf",
+      "expected_capabilities": [
+        [
+          "allocation_state_v1",
+          "Repeated deallocation is directly relevant.",
+          "present"
+        ],
+        [
+          "memory_initialization_v1",
+          "Bitwise duplication of initialized owning values matters.",
+          "research_gap_hypothesis"
+        ],
+        [
+          "pointer_validity_v1",
+          "Copied owners alias the same heap allocations.",
+          "research_gap_hypothesis"
+        ]
+      ],
+      "ffi_dependent": false,
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0143.html",
+      "issued": "2026-05-14",
+      "panic_dependent": false,
+      "patched_range": ">=0.7.1",
+      "references": [
+        "https://github.com/skilvingr/rust-oneringbuf/pull/3"
+      ],
+      "title": "Double-free in vmem storage reachable from safe Rust",
+      "vulnerable_range": "<0.7.1"
+    },
+    {
+      "advisory": "RUSTSEC-2026-0122",
+      "affected_function": "rkyv::InlineVec::clear; rkyv::SerVec::clear",
+      "bug_family": "panic_unwind_memory_safety",
+      "candidate_reason": "Clear panic-safety pair with explicit fixed release and repeated drop on stale len; useful cross-crate replication of the same causal class.",
+      "case_id": "rustsec_2026_0122_rkyv_clear_panic",
+      "crate": "rkyv",
+      "expected_capabilities": [
+        [
+          "allocation_state_v1",
+          "Repeated drop/deallocation is relevant.",
+          "present"
+        ],
+        [
+          "panic_unwind_lifecycle_v1",
+          "len update occurs after fallible Drop loop.",
+          "research_gap_hypothesis"
+        ]
+      ],
+      "ffi_dependent": false,
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0122.html",
+      "issued": "2026-05-11",
+      "panic_dependent": true,
+      "patched_range": ">=0.8.16",
+      "references": [
+        "https://github.com/rkyv/rkyv/commit/5828cf5c27b664eb4432c4a93d4769e12e5e42fb"
+      ],
+      "title": "Potential UAF from panic-unsafe InlineVec::clear and SerVec::clear",
+      "vulnerable_range": ">=0.8.0, <0.8.16"
+    },
+    {
+      "advisory": "RUSTSEC-2025-0022",
+      "affected_function": "openssl::md::Md::fetch; openssl::cipher::Cipher::fetch",
+      "bug_family": "use_after_free",
+      "candidate_reason": "FFI-adjacent CString lifetime UAF with a patched release boundary; high-value case for Rust/C boundary semantics.",
+      "case_id": "rustsec_2025_0022_openssl_fetch_cstring_uaf",
+      "crate": "openssl",
+      "expected_capabilities": [
+        [
+          "library_effects_v1",
+          "CString/foreign-call lifetime effects are not yet modeled.",
+          "present_but_insufficient"
+        ],
+        [
+          "pointer_validity_v1",
+          "Foreign call observes a freed CString buffer.",
+          "research_gap_hypothesis"
+        ]
+      ],
+      "ffi_dependent": true,
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2025-0022.html",
+      "issued": "2025-04-04",
+      "panic_dependent": false,
+      "patched_range": ">=0.10.72",
+      "references": [
+        "https://github.com/sfackler/rust-openssl/pull/2390"
+      ],
+      "title": "Use-after-free in Md::fetch and Cipher::fetch",
+      "vulnerable_range": ">=0.10.39, <0.10.72"
+    },
+    {
+      "advisory": "RUSTSEC-2025-0054",
+      "affected_function": "array_queue::ArrayQueue::push_front",
+      "bug_family": "invalid_deallocation",
+      "candidate_reason": "Panic leaves metadata pointing at uninitialized storage which is later dropped; deliberately probes initialization rather than only double-free.",
+      "case_id": "rustsec_2025_0054_array_queue_push_front_panic",
+      "crate": "array-queue",
+      "expected_capabilities": [
+        [
+          "memory_initialization_v1",
+          "Initialized/uninitialized slot state is essential.",
+          "research_gap_hypothesis"
+        ],
+        [
+          "panic_unwind_lifecycle_v1",
+          "Clone panic interrupts slot initialization.",
+          "research_gap_hypothesis"
+        ]
+      ],
+      "ffi_dependent": false,
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2025-0054.html",
+      "issued": "2025-09-01",
+      "panic_dependent": true,
+      "patched_range": ">=0.4.0",
+      "references": [
+        "https://github.com/raviqqe/array-queue/issues/3"
+      ],
+      "title": "ArrayQueue::push_front is not panic-safe",
+      "vulnerable_range": ">=0.3.0, <=0.3.3"
+    },
+    {
+      "advisory": "RUSTSEC-2023-0078",
+      "affected_function": "tracing::instrument::Instrumented::into_inner",
+      "bug_family": "use_after_free",
+      "candidate_reason": "mem::forget-based stack pointer validity bug fixed with ManuallyDrop; distinguishes pointer validity from heap allocation lifecycle.",
+      "case_id": "rustsec_2023_0078_tracing_into_inner_forget_uaf",
+      "crate": "tracing",
+      "expected_capabilities": [
+        [
+          "library_effects_v1",
+          "mem::forget semantics are partially represented.",
+          "present_but_insufficient"
+        ],
+        [
+          "pointer_validity_v1",
+          "Validity of pointers into forgotten stack storage is central.",
+          "research_gap_hypothesis"
+        ]
+      ],
+      "ffi_dependent": false,
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2023-0078.html",
+      "issued": "2024-01-13",
+      "panic_dependent": false,
+      "patched_range": ">=0.1.40",
+      "references": [
+        "https://github.com/tokio-rs/tracing/pull/2765"
+      ],
+      "title": "Potential stack use-after-free in Instrumented::into_inner",
+      "vulnerable_range": ">=0.1.38, <0.1.40"
+    },
+    {
+      "advisory": "RUSTSEC-2025-0170",
+      "affected_function": "hugepage_rs::dealloc",
+      "bug_family": "invalid_deallocation",
+      "candidate_reason": "Explicit invalid-pointer/wrong-layout deallocation through a safe wrapper; direct benchmark pressure on allocator/layout contracts.",
+      "case_id": "rustsec_2025_0170_hugepage_invalid_dealloc",
+      "crate": "hugepage-rs",
+      "expected_capabilities": [
+        [
+          "allocation_layout_v1",
+          "Correct Layout identity is a ground-truth precondition.",
+          "research_gap_hypothesis"
+        ],
+        [
+          "library_effects_v1",
+          "Allocator/deallocator library contracts are not yet active.",
+          "present_but_insufficient"
+        ],
+        [
+          "pointer_validity_v1",
+          "Pointer must denote a live block from the matching allocator.",
+          "research_gap_hypothesis"
+        ]
+      ],
+      "ffi_dependent": false,
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2025-0170.html",
+      "issued": "2026-08-12",
+      "panic_dependent": false,
+      "patched_range": ">=0.1.1",
+      "references": [
+        "https://github.com/cppcoffee/hugepage-rs/issues/5",
+        "https://github.com/cppcoffee/hugepage-rs/pull/6",
+        "https://github.com/cppcoffee/hugepage-rs/commit/2b30bdf227f39b1c9ed7af16ea0cc3957f88da18"
+      ],
+      "title": "hugepage_rs::dealloc may allow invalid memory deallocation from safe code",
+      "vulnerable_range": "<=0.1.0"
+    }
+  ],
+  "gate": "B1.1",
+  "retrieved_at_utc": "2026-09-16",
+  "schema_version": "rustsec_selection_evidence_v1",
+  "scientific_status": "candidate_selection_only",
+  "source_policy": "Primary ground-truth source is the official RustSec advisory page. Upstream issue/PR/commit references are retained as secondary provenance. Only advisories with an explicit patched release boundary are selected."
+}

@@ -1,30 +1,62 @@
-# RustSec memory-safety benchmark v1
+# RustSec memory-safety benchmark v1 — Gate B1.1
 
-Gate B1 status: **scaffold only**.
+Status: **candidate selection only**.
 
-This benchmark is intended to establish external vulnerable/fixed ground truth.
+B1.1 selects a provenance-complete advisory-level candidate set. It does not
+yet materialize vulnerable/fixed source trees and therefore does not admit any
+case into precision/recall statistics.
 
-B1 contains no admitted cases and therefore makes no precision/recall claim.
+## Scientific purpose
 
-## Required separation
+The selected set is intentionally heterogeneous:
 
-For every future admitted case record independently:
+- panic/unwind double-free and use-after-free;
+- raw ownership lifecycle errors;
+- invalid deallocation / layout errors;
+- pointer-validity errors;
+- an FFI-adjacent CString lifetime error.
+
+The purpose is to learn which failures are:
+
+1. representable in the current abstract state;
+2. expressible by the frozen 12 CQPL queries;
+3. blocked by missing library semantics;
+4. blocked by missing abstract domains.
+
+## B1.1 invariants
 
 ```text
-representability
-query expressibility
-detection
+candidate cases = 14
+admitted cases  = 0
+subjects rows   = 0
+accuracy_ready  = NO
 ```
 
-A real bug that is not representable is not silently conflated with a checker
-failure.
+The 14 cases are generated deterministically from `selection_evidence.json`.
 
-## Pair invariant
+Every selected advisory has:
 
-Vulnerable and fixed revisions must use the same, documented analysis
-configuration whenever technically possible.
+- an official RustSec advisory page;
+- an explicit patched release boundary;
+- at least one affected function / operation;
+- secondary upstream provenance when RustSec publishes it.
 
-## Initial target size
+## Deliberate non-claims
 
-Gate B1.1 should admit 10–20 provenance-complete vulnerable/fixed pairs before
-any ecosystem-scale scan is attempted.
+B1.1 does not claim:
+
+- source-pair materialization;
+- compilability under the CREMA pinned toolchain;
+- trigger reproducibility;
+- representability;
+- CQPL expressibility;
+- true positive / false negative status;
+- precision or recall.
+
+Those belong to B1.2/B1.3.
+
+## Next gate after B1.1
+
+B1.2 materializes exact vulnerable/fixed revisions, hashes the source trees,
+records toolchain/features/entrypoints, and admits only pairs whose provenance
+and build identity are complete.

@@ -1,6 +1,245 @@
 {
   "benchmark_id": "rustsec_memory_safety_v1",
-  "cases": [],
+  "cases": [
+    {
+      "advisory": "RUSTSEC-2023-0078",
+      "affected_function": "tracing::instrument::Instrumented::into_inner",
+      "bug_family": "use_after_free",
+      "case_id": "rustsec_2023_0078_tracing_into_inner_forget_uaf",
+      "crate": "tracing",
+      "ffi_dependent": false,
+      "fixed": {
+        "version_or_commit": ">=0.1.40"
+      },
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2023-0078.html",
+      "panic_dependent": false,
+      "status": "candidate",
+      "vulnerable": {
+        "version_or_commit": ">=0.1.38, <0.1.40"
+      }
+    },
+    {
+      "advisory": "RUSTSEC-2025-0022",
+      "affected_function": "openssl::md::Md::fetch; openssl::cipher::Cipher::fetch",
+      "bug_family": "use_after_free",
+      "case_id": "rustsec_2025_0022_openssl_fetch_cstring_uaf",
+      "crate": "openssl",
+      "ffi_dependent": true,
+      "fixed": {
+        "version_or_commit": ">=0.10.72"
+      },
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2025-0022.html",
+      "panic_dependent": false,
+      "status": "candidate",
+      "vulnerable": {
+        "version_or_commit": ">=0.10.39, <0.10.72"
+      }
+    },
+    {
+      "advisory": "RUSTSEC-2025-0054",
+      "affected_function": "array_queue::ArrayQueue::push_front",
+      "bug_family": "invalid_deallocation",
+      "case_id": "rustsec_2025_0054_array_queue_push_front_panic",
+      "crate": "array-queue",
+      "ffi_dependent": false,
+      "fixed": {
+        "version_or_commit": ">=0.4.0"
+      },
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2025-0054.html",
+      "panic_dependent": true,
+      "status": "candidate",
+      "vulnerable": {
+        "version_or_commit": ">=0.3.0, <=0.3.3"
+      }
+    },
+    {
+      "advisory": "RUSTSEC-2025-0170",
+      "affected_function": "hugepage_rs::dealloc",
+      "bug_family": "invalid_deallocation",
+      "case_id": "rustsec_2025_0170_hugepage_invalid_dealloc",
+      "crate": "hugepage-rs",
+      "ffi_dependent": false,
+      "fixed": {
+        "version_or_commit": ">=0.1.1"
+      },
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2025-0170.html",
+      "panic_dependent": false,
+      "status": "candidate",
+      "vulnerable": {
+        "version_or_commit": "<=0.1.0"
+      }
+    },
+    {
+      "advisory": "RUSTSEC-2026-0122",
+      "affected_function": "rkyv::InlineVec::clear; rkyv::SerVec::clear",
+      "bug_family": "panic_unwind_memory_safety",
+      "case_id": "rustsec_2026_0122_rkyv_clear_panic",
+      "crate": "rkyv",
+      "ffi_dependent": false,
+      "fixed": {
+        "version_or_commit": ">=0.8.16"
+      },
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0122.html",
+      "panic_dependent": true,
+      "status": "candidate",
+      "vulnerable": {
+        "version_or_commit": ">=0.8.0, <0.8.16"
+      }
+    },
+    {
+      "advisory": "RUSTSEC-2026-0143",
+      "affected_function": "oneringbuf::VmemStorage::new",
+      "bug_family": "double_free",
+      "case_id": "rustsec_2026_0143_oneringbuf_vmem_double_free",
+      "crate": "oneringbuf",
+      "ffi_dependent": false,
+      "fixed": {
+        "version_or_commit": ">=0.7.1"
+      },
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0143.html",
+      "panic_dependent": false,
+      "status": "candidate",
+      "vulnerable": {
+        "version_or_commit": "<0.7.1"
+      }
+    },
+    {
+      "advisory": "RUSTSEC-2026-0152",
+      "affected_function": "oneringbuf::IntoRef::into_ref; DroppableRef::clone/drop",
+      "bug_family": "raw_ownership_lifecycle",
+      "case_id": "rustsec_2026_0152_oneringbuf_droppableref_uaf",
+      "crate": "oneringbuf",
+      "ffi_dependent": false,
+      "fixed": {
+        "version_or_commit": ">=0.8.0"
+      },
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0152.html",
+      "panic_dependent": false,
+      "status": "candidate",
+      "vulnerable": {
+        "version_or_commit": "<0.8.0 (lower bound not stated by advisory)"
+      }
+    },
+    {
+      "advisory": "RUSTSEC-2026-0205",
+      "affected_function": "scc::Array::insert",
+      "bug_family": "panic_unwind_memory_safety",
+      "case_id": "rustsec_2026_0205_scc_array_insert_panic",
+      "crate": "scc",
+      "ffi_dependent": false,
+      "fixed": {
+        "version_or_commit": ">=3.8.4"
+      },
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0205.html",
+      "panic_dependent": true,
+      "status": "candidate",
+      "vulnerable": {
+        "version_or_commit": "<3.8.4 (lower bound not stated by advisory)"
+      }
+    },
+    {
+      "advisory": "RUSTSEC-2026-0233",
+      "affected_function": "rkyv::ArchivedString::deserialize (reachable via rkyv::from_bytes)",
+      "bug_family": "use_after_free",
+      "case_id": "rustsec_2026_0233_rkyv_deserialize_uaf",
+      "crate": "rkyv",
+      "ffi_dependent": false,
+      "fixed": {
+        "version_or_commit": ">=0.8.17"
+      },
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0233.html",
+      "panic_dependent": false,
+      "status": "candidate",
+      "vulnerable": {
+        "version_or_commit": ">=0.8.0-rc.1, <0.8.17"
+      }
+    },
+    {
+      "advisory": "RUSTSEC-2026-0253",
+      "affected_function": "lru::LruCache::pop",
+      "bug_family": "panic_unwind_memory_safety",
+      "case_id": "rustsec_2026_0253_lru_pop_panic",
+      "crate": "lru",
+      "ffi_dependent": false,
+      "fixed": {
+        "version_or_commit": ">=0.18.2"
+      },
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0253.html",
+      "panic_dependent": true,
+      "status": "candidate",
+      "vulnerable": {
+        "version_or_commit": "<0.18.2 (lower bound not stated by advisory)"
+      }
+    },
+    {
+      "advisory": "RUSTSEC-2026-0267",
+      "affected_function": "stable_vec::BitVecCore::clear",
+      "bug_family": "panic_unwind_memory_safety",
+      "case_id": "rustsec_2026_0267_stable_vec_clear_panic",
+      "crate": "stable-vec",
+      "ffi_dependent": false,
+      "fixed": {
+        "version_or_commit": ">=0.4.3"
+      },
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0267.html",
+      "panic_dependent": true,
+      "status": "candidate",
+      "vulnerable": {
+        "version_or_commit": "<0.4.3"
+      }
+    },
+    {
+      "advisory": "RUSTSEC-2026-0272",
+      "affected_function": "stack_dst::Stack::pop; stack_dst::Fifo::pop_front; stack_dst::Value::replace_stable",
+      "bug_family": "panic_unwind_memory_safety",
+      "case_id": "rustsec_2026_0272_stack_dst_pop_panic",
+      "crate": "stack_dst",
+      "ffi_dependent": false,
+      "fixed": {
+        "version_or_commit": ">=0.8.2"
+      },
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0272.html",
+      "panic_dependent": true,
+      "status": "candidate",
+      "vulnerable": {
+        "version_or_commit": "<0.8.2"
+      }
+    },
+    {
+      "advisory": "RUSTSEC-2026-0274",
+      "affected_function": "rtrb::chunks::ReadChunk::commit; rtrb::chunks::ReadChunk::commit_all",
+      "bug_family": "panic_unwind_memory_safety",
+      "case_id": "rustsec_2026_0274_rtrb_readchunk_commit_panic",
+      "crate": "rtrb",
+      "ffi_dependent": false,
+      "fixed": {
+        "version_or_commit": "^0.3.5 or >=0.4.0"
+      },
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0274.html",
+      "panic_dependent": true,
+      "status": "candidate",
+      "vulnerable": {
+        "version_or_commit": "<0.3.5"
+      }
+    },
+    {
+      "advisory": "RUSTSEC-2026-0282",
+      "affected_function": "aligned_box::AlignedBox::realloc_with_default",
+      "bug_family": "panic_unwind_memory_safety",
+      "case_id": "rustsec_2026_0282_aligned_box_realloc_panic",
+      "crate": "aligned_box",
+      "ffi_dependent": false,
+      "fixed": {
+        "version_or_commit": ">=0.3.1"
+      },
+      "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0282.html",
+      "panic_dependent": true,
+      "status": "candidate",
+      "vulnerable": {
+        "version_or_commit": "<0.3.1"
+      }
+    }
+  ],
   "schema_version": "rustsec_ground_truth_v1",
-  "status": "scaffold"
+  "status": "candidate_set"
 }

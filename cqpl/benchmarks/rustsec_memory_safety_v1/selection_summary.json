@@ -1,0 +1,17 @@
+{
+  "accuracy_ready": false,
+  "admitted_cases": 0,
+  "bug_family_counts": {
+    "double_free": 1,
+    "invalid_deallocation": 2,
+    "panic_unwind_memory_safety": 7,
+    "raw_ownership_lifecycle": 1,
+    "use_after_free": 3
+  },
+  "candidate_cases": 14,
+  "ffi_dependent_cases": 1,
+  "gate": "B1.1",
+  "panic_dependent_cases": 8,
+  "subject_rows": 0,
+  "unique_crates": 12
+}
