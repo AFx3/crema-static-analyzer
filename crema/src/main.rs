@@ -17,6 +17,7 @@ mod icfg;
 mod dumpdot;         
 mod abstract_domain; 
 mod cqpl_export;
+mod library_effects_v1;
 mod identity;
 mod memory_events;
 mod cargo_project;

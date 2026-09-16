@@ -1,0 +1,96 @@
+{
+  "$id": "https://crema.local/schema/rustsec_case_v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "advisory": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "affected_function": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "bug_family": {
+      "enum": [
+        "use_after_free",
+        "double_free",
+        "invalid_deallocation",
+        "allocator_mismatch",
+        "memory_leak",
+        "raw_ownership_lifecycle",
+        "panic_unwind_memory_safety",
+        "other_memory_safety"
+      ]
+    },
+    "case_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "crate": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "exclusion_reason": {
+      "type": "string"
+    },
+    "ffi_dependent": {
+      "type": "boolean"
+    },
+    "fixed": {
+      "additionalProperties": false,
+      "properties": {
+        "version_or_commit": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "version_or_commit"
+      ],
+      "type": "object"
+    },
+    "ground_truth_source": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "panic_dependent": {
+      "type": "boolean"
+    },
+    "status": {
+      "enum": [
+        "candidate",
+        "admitted",
+        "excluded"
+      ]
+    },
+    "vulnerable": {
+      "additionalProperties": false,
+      "properties": {
+        "version_or_commit": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "version_or_commit"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "case_id",
+    "advisory",
+    "crate",
+    "vulnerable",
+    "fixed",
+    "bug_family",
+    "affected_function",
+    "ground_truth_source",
+    "panic_dependent",
+    "ffi_dependent",
+    "status"
+  ],
+  "title": "CREMA RustSec vulnerable/fixed case",
+  "type": "object"
+}

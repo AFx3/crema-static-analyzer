@@ -1,0 +1,6 @@
+{
+  "benchmark_id": "rustsec_memory_safety_v1",
+  "cases": [],
+  "schema_version": "rustsec_ground_truth_v1",
+  "status": "scaffold"
+}

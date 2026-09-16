@@ -1,0 +1,145 @@
+{
+  "capability": "library_effects_v1",
+  "registry_id": "rust_std_v1",
+  "schema_version": "library_effect_v1",
+  "status": "candidate",
+  "summaries": [
+    {
+      "certainty": "may_abstract",
+      "language": "rust",
+      "legacy_projection": {
+        "allocation_disposition_kind": "box_into_raw",
+        "basis": "rustc_box_into_raw_v1",
+        "obligation_effect": "preserve_manual_obligation",
+        "target_variable": "return"
+      },
+      "matcher": {
+        "kind": "producer_evidence_kind",
+        "value": "box_into_raw"
+      },
+      "normal_return_effects": [
+        {
+          "from": "arg0",
+          "kind": "ownership_transfer",
+          "note": "A2 metadata only; legacy node-level disposition projection",
+          "to": "return"
+        }
+      ],
+      "preconditions": [],
+      "provenance": {
+        "basis": "rustc_producer_certified_allocation_disposition",
+        "source": "RustAllocationDispositionEvidenceKind::BoxIntoRaw"
+      },
+      "summary_id": "rust_box_into_raw_v1",
+      "unwind_effects": []
+    },
+    {
+      "certainty": "may_abstract",
+      "language": "rust",
+      "legacy_projection": {
+        "allocation_disposition_kind": "box_from_raw",
+        "basis": "rustc_box_from_raw_v1",
+        "obligation_effect": "restore_raii_obligation",
+        "target_variable": "return"
+      },
+      "matcher": {
+        "kind": "producer_evidence_kind",
+        "value": "box_from_raw"
+      },
+      "normal_return_effects": [
+        {
+          "from": "arg0",
+          "kind": "ownership_reclaim",
+          "note": "A2 metadata only; legacy node-level disposition projection",
+          "to": "return"
+        }
+      ],
+      "preconditions": [],
+      "provenance": {
+        "basis": "rustc_producer_certified_allocation_disposition",
+        "source": "RustAllocationDispositionEvidenceKind::BoxFromRaw"
+      },
+      "summary_id": "rust_box_from_raw_v1",
+      "unwind_effects": []
+    },
+    {
+      "certainty": "may_abstract",
+      "language": "rust",
+      "legacy_projection": {
+        "allocation_disposition_kind": "box_leak",
+        "basis": "rustc_box_leak_v1",
+        "obligation_effect": "preserve_persistent_obligation",
+        "target_variable": "return"
+      },
+      "matcher": {
+        "kind": "producer_evidence_kind",
+        "value": "box_leak"
+      },
+      "normal_return_effects": [
+        {
+          "from": "arg0",
+          "kind": "escape",
+          "note": "A2 metadata only; persistent-obligation projection",
+          "to": "return"
+        }
+      ],
+      "preconditions": [],
+      "provenance": {
+        "basis": "rustc_producer_certified_allocation_disposition",
+        "source": "RustAllocationDispositionEvidenceKind::BoxLeak"
+      },
+      "summary_id": "rust_box_leak_v1",
+      "unwind_effects": []
+    },
+    {
+      "certainty": "may_abstract",
+      "language": "rust",
+      "legacy_projection": {
+        "allocation_disposition_kind": "mem_forget_owned_box",
+        "basis": "rustc_mem_forget_owned_box_v1",
+        "obligation_effect": "preserve_unreclaimed_obligation",
+        "target_variable": "none"
+      },
+      "matcher": {
+        "kind": "producer_evidence_kind",
+        "value": "mem_forget_owned_box"
+      },
+      "normal_return_effects": [
+        {
+          "allocation": "pointee(arg0)",
+          "kind": "forget",
+          "note": "A2 metadata only; producer already certifies Box argument"
+        }
+      ],
+      "preconditions": [],
+      "provenance": {
+        "basis": "rustc_producer_certified_allocation_disposition",
+        "source": "RustAllocationDispositionEvidenceKind::MemForgetOwnedBox"
+      },
+      "summary_id": "rust_mem_forget_owned_box_v1",
+      "unwind_effects": []
+    },
+    {
+      "certainty": "may_abstract",
+      "language": "rust",
+      "legacy_projection": {
+        "allocation_disposition_kind": "raw_pointer_drop_noop",
+        "basis": "rustc_mem_drop_raw_pointer_v1",
+        "obligation_effect": "no_pointee_lifecycle_effect",
+        "target_variable": "none"
+      },
+      "matcher": {
+        "kind": "producer_evidence_kind",
+        "value": "mem_drop_raw_pointer"
+      },
+      "normal_return_effects": [],
+      "preconditions": [],
+      "provenance": {
+        "basis": "rustc_producer_certified_allocation_disposition",
+        "source": "RustAllocationDispositionEvidenceKind::MemDropRawPointer"
+      },
+      "summary_id": "rust_mem_drop_raw_pointer_v1",
+      "unwind_effects": []
+    }
+  ]
+}

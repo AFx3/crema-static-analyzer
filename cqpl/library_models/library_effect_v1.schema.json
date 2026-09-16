@@ -1,0 +1,237 @@
+{
+  "$defs": {
+    "effect": {
+      "additionalProperties": false,
+      "properties": {
+        "allocation": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "allocator_family": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "from": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "alloc",
+            "dealloc",
+            "realloc",
+            "ownership_transfer",
+            "ownership_reclaim",
+            "escape",
+            "forget",
+            "read",
+            "write",
+            "initialize",
+            "invalidate"
+          ]
+        },
+        "note": {
+          "type": "string"
+        },
+        "to": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "legacy_projection": {
+      "additionalProperties": false,
+      "properties": {
+        "allocation_disposition_kind": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "basis": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "obligation_effect": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "target_variable": {
+          "enum": [
+            "return",
+            "none"
+          ]
+        }
+      },
+      "required": [
+        "allocation_disposition_kind",
+        "obligation_effect",
+        "basis",
+        "target_variable"
+      ],
+      "type": "object"
+    },
+    "matcher": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "producer_evidence_kind",
+            "exact_def_path",
+            "def_path_suffix",
+            "symbol_exact"
+          ]
+        },
+        "value": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "type": "object"
+    },
+    "provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "source": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "basis",
+        "source"
+      ],
+      "type": "object"
+    },
+    "summary": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "not": {
+              "required": [
+                "legacy_projection"
+              ]
+            }
+          },
+          "if": {
+            "properties": {
+              "matcher": {
+                "properties": {
+                  "kind": {
+                    "const": "producer_evidence_kind"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "legacy_projection"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "certainty": {
+          "const": "may_abstract"
+        },
+        "language": {
+          "enum": [
+            "rust",
+            "c"
+          ]
+        },
+        "legacy_projection": {
+          "$ref": "#/$defs/legacy_projection"
+        },
+        "matcher": {
+          "$ref": "#/$defs/matcher"
+        },
+        "normal_return_effects": {
+          "items": {
+            "$ref": "#/$defs/effect"
+          },
+          "type": "array"
+        },
+        "preconditions": {
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "summary_id": {
+          "pattern": "^[a-z0-9][a-z0-9_\\-]*$",
+          "type": "string"
+        },
+        "unwind_effects": {
+          "items": {
+            "$ref": "#/$defs/effect"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "summary_id",
+        "language",
+        "matcher",
+        "preconditions",
+        "normal_return_effects",
+        "unwind_effects",
+        "certainty",
+        "provenance"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://crema.local/schema/library_effect_v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "capability": {
+      "const": "library_effects_v1"
+    },
+    "registry_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "library_effect_v1"
+    },
+    "status": {
+      "enum": [
+        "scaffold",
+        "candidate",
+        "validated"
+      ]
+    },
+    "summaries": {
+      "items": {
+        "$ref": "#/$defs/summary"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "capability",
+    "registry_id",
+    "status",
+    "summaries"
+  ],
+  "title": "CREMA library_effects_v1 registry",
+  "type": "object"
+}

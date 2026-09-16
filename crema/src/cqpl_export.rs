@@ -787,38 +787,18 @@ fn allocation_disposition_for_node(
                 .and_then(|local| identity_var_for_event(node_id, node, local))
                 .map(|v| v.canonical_string());
 
-            let (kind, obligation_effect, basis, target_variable) = match evidence.kind {
-                RustAllocationDispositionEvidenceKind::BoxIntoRaw => (
-                    "box_into_raw",
-                    "preserve_manual_obligation",
-                    "rustc_box_into_raw_v1",
-                    return_variable.clone(),
-                ),
-                RustAllocationDispositionEvidenceKind::BoxFromRaw => (
-                    "box_from_raw",
-                    "restore_raii_obligation",
-                    "rustc_box_from_raw_v1",
-                    return_variable.clone(),
-                ),
-                RustAllocationDispositionEvidenceKind::BoxLeak => (
-                    "box_leak",
-                    "preserve_persistent_obligation",
-                    "rustc_box_leak_v1",
-                    return_variable.clone(),
-                ),
-                RustAllocationDispositionEvidenceKind::MemForgetOwnedBox => (
-                    "mem_forget_owned_box",
-                    "preserve_unreclaimed_obligation",
-                    "rustc_mem_forget_owned_box_v1",
-                    None,
-                ),
-                RustAllocationDispositionEvidenceKind::MemDropRawPointer => (
-                    "raw_pointer_drop_noop",
-                    "no_pointee_lifecycle_effect",
-                    "rustc_mem_drop_raw_pointer_v1",
-                    None,
-                ),
+            // v6U-A2 migration-only projection from producer-certified evidence.
+            let projection =
+                crate::library_effects_v1::allocation_disposition_projection_for_evidence(
+                    &evidence.kind,
+                );
+            let target_variable = match projection.target_variable {
+                crate::library_effects_v1::LegacyTargetVariable::Return => return_variable.clone(),
+                crate::library_effects_v1::LegacyTargetVariable::None => None,
             };
+            let kind = projection.kind;
+            let obligation_effect = projection.obligation_effect;
+            let basis = projection.basis;
 
             for allocation in allocations {
                 out.insert(AllocationDispositionRecord {
