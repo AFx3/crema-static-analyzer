@@ -2451,6 +2451,7 @@ mod tests {
 
     fn one_allocation_graph() -> Kripke {
         Kripke::from_annotated_icfg(AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 2,
             entry: "b0".into(),
             capabilities: vec![],

@@ -92,6 +92,22 @@ pub struct AllocationContract {
     pub callee_def_path: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExternalDeallocationEffectStatus {
+    CertifiedAbsent,
+    ObservedMayDeallocate,
+    Unresolved,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalDeallocationEffectRecord {
+    pub node: String,
+    pub callee: String,
+    pub status: ExternalDeallocationEffectStatus,
+    pub basis: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AllocationEventLabel {
     pub predicate: EventKind,
@@ -385,6 +401,10 @@ pub struct AnnotatedIcfg {
     /// Canonical abstract-allocation quantifier domain introduced by schema v2.
     #[serde(default)]
     pub allocations: Vec<AbstractAllocation>,
+    /// Bcontract-ND1 external-call deallocation-effect evidence. Absence is
+    /// never interpreted as a negative certificate.
+    #[serde(default)]
+    pub external_deallocation_effects: Vec<ExternalDeallocationEffectRecord>,
     pub nodes: Vec<AnnotatedNode>,
 }
 
@@ -396,6 +416,7 @@ pub struct Kripke {
     pub variables: BTreeMap<String, ProgramVariable>,
     pub allocations: BTreeMap<String, AbstractAllocation>,
     pub nodes: BTreeMap<String, AnnotatedNode>,
+    pub external_deallocation_effects: BTreeMap<String, ExternalDeallocationEffectRecord>,
     pub panic_lifecycle: PanicLifecycleOverlay,
 }
 
@@ -494,6 +515,7 @@ impl Kripke {
         let has_allocation_state = capabilities.contains("allocation_state_v1");
         let has_allocation_disposition = capabilities.contains("allocation_disposition_v1");
         let has_allocation_disposition_v2 = capabilities.contains("allocation_disposition_v2");
+        let has_external_deallocation_effects = capabilities.contains("external_deallocation_effects_v1");
         if has_allocation_contracts && schema_version != 2 {
             return Err("allocation_contracts_v1 requires annotated ICFG schema v2".into());
         }
@@ -517,6 +539,9 @@ impl Kripke {
                 "allocation_disposition_v2 refines allocation_disposition_v1 and requires both artifact capabilities"
                     .into(),
             );
+        }
+        if has_external_deallocation_effects && schema_version != 2 {
+            return Err("external_deallocation_effects_v1 requires annotated ICFG schema v2".into());
         }
         let has_mir_semantic_labels = capabilities.contains("mir_semantic_labels_v1");
         if has_mir_semantic_labels && schema_version != 2 {
@@ -686,6 +711,26 @@ impl Kripke {
             }
         }
 
+        if !has_external_deallocation_effects && !input.external_deallocation_effects.is_empty() {
+            return Err("external deallocation-effect records require capability external_deallocation_effects_v1".into());
+        }
+        let mut external_deallocation_effects = BTreeMap::new();
+        for record in input.external_deallocation_effects {
+            if !nodes.contains_key(&record.node) {
+                return Err(format!("external deallocation-effect record references unknown node '{}'", record.node));
+            }
+            if !record.node.starts_with("dummyCall::") {
+                return Err(format!("external deallocation-effect record must reference a dummyCall node, got '{}'", record.node));
+            }
+            if record.callee.is_empty() {
+                return Err("external deallocation-effect record has empty callee".into());
+            }
+            validate_external_deallocation_effect(&record)?;
+            if external_deallocation_effects.insert(record.node.clone(), record).is_some() {
+                return Err("duplicate external deallocation-effect record for node".into());
+            }
+        }
+
         if has_panic_lifecycle_state {
             for node_id in nodes.keys() {
                 if !panic_lifecycle.contains_key(node_id) {
@@ -731,7 +776,7 @@ impl Kripke {
 
         Ok(Self {
             schema_version, entry: input.entry, capabilities, variables, allocations, nodes,
-            panic_lifecycle,
+            external_deallocation_effects, panic_lifecycle,
         })
     }
 
@@ -861,6 +906,13 @@ impl Kripke {
             .map(|(id, value)| (id.clone(), value.clone()))
             .collect();
 
+        let external_deallocation_effects = self
+            .external_deallocation_effects
+            .iter()
+            .filter(|(node, _)| retained.contains(*node))
+            .map(|(node, record)| (node.clone(), record.clone()))
+            .collect();
+
         Ok(Self {
             schema_version: self.schema_version,
             entry,
@@ -868,12 +920,20 @@ impl Kripke {
             variables,
             allocations,
             nodes,
+            external_deallocation_effects,
             panic_lifecycle,
         })
     }
 
     pub fn variable_ids(&self) -> impl Iterator<Item = &String> { self.variables.keys() }
     pub fn allocation_ids(&self) -> impl Iterator<Item = &String> { self.allocations.keys() }
+
+    pub fn external_deallocation_effect_at(
+        &self,
+        node_id: &str,
+    ) -> Option<&ExternalDeallocationEffectRecord> {
+        self.external_deallocation_effects.get(node_id)
+    }
 
     /// Alias component at this concrete program point in the abstract Kripke.
     /// Labels are associated with execution of the block, so both pre and post
@@ -1011,6 +1071,30 @@ impl Kripke {
         }
         acc
     }
+}
+
+fn validate_external_deallocation_effect(
+    record: &ExternalDeallocationEffectRecord,
+) -> Result<(), String> {
+    let ok = match record.status {
+        ExternalDeallocationEffectStatus::CertifiedAbsent => {
+            record.basis == "svf_leaf_no_call_deallocation_v1"
+        }
+        ExternalDeallocationEffectStatus::ObservedMayDeallocate => {
+            record.basis == "structural_c_free_v1"
+        }
+        ExternalDeallocationEffectStatus::Unresolved => matches!(
+            record.basis.as_str(),
+            "svf_call_effect_unresolved_v1" | "svf_body_unavailable_v1"
+        ),
+    };
+    if !ok {
+        return Err(format!(
+            "invalid external deallocation-effect tuple: status={:?} basis={}",
+            record.status, record.basis
+        ));
+    }
+    Ok(())
 }
 
 fn validate_allocation_memory(
@@ -1169,6 +1253,7 @@ mod tests {
                 ProgramVariable { id: "c::p".into(), language: ProgramLanguage::C, display: None, function: None },
             ],
             allocations: vec![],
+            external_deallocation_effects: vec![],
             nodes: vec![AnnotatedNode {
                 id: "b0".into(), successors: vec![],
                 labels: vec![EventLabel { predicate: EventKind::Drop, variable: "c::p".into() }],
@@ -1442,6 +1527,7 @@ mod tests {
                 AbstractAllocation { id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None },
                 AbstractAllocation { id: "DEAD".into(), display: None, site: None, context: vec![], allocator_contract: None },
             ],
+            external_deallocation_effects: vec![],
             nodes: vec![
                 AnnotatedNode {
                     id: "rust::main::bb0".into(), successors: vec!["rust::main::bb1".into()],
@@ -1486,6 +1572,7 @@ mod tests {
             entry: "rust::main::bb0".into(),
             variables: vec![ProgramVariable { id: "rust::x".into(), language: ProgramLanguage::Rust, display: None, function: Some("main".into()) }],
             allocations: vec![],
+            external_deallocation_effects: vec![],
             nodes: vec![
                 AnnotatedNode { id: "rust::main::bb0".into(), successors: vec!["rust::main::terminate".into()], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
                 AnnotatedNode { id: "rust::main::terminate".into(), successors: vec![], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
@@ -1507,6 +1594,7 @@ mod tests {
             entry: "rust::main::bb0".into(),
             variables: vec![ProgramVariable { id: "v".into(), language: ProgramLanguage::Rust, display: None, function: None }],
             allocations: vec![],
+            external_deallocation_effects: vec![],
             nodes: vec![
                 AnnotatedNode { id: "rust::main::bb0".into(), successors: vec!["dummyCall::x".into()], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
                 AnnotatedNode { id: "dummyCall::x".into(), successors: vec!["rust::callee::bb0".into()], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
@@ -1801,6 +1889,43 @@ mod tests {
             projected.allocation_may_hold("rust::main::bb1", "A", MayPredicate::RepeatDrop),
             Truth::Unknown
         );
+    }
+
+    #[test]
+    fn bcontract_nd1_accepts_closed_leaf_negative_certificate() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec!["external_deallocation_effects_v1".into()];
+        input.nodes[0].id = "dummyCall::x".into();
+        input.entry = "dummyCall::x".into();
+        input.external_deallocation_effects = vec![ExternalDeallocationEffectRecord {
+            node: "dummyCall::x".into(),
+            callee: "touch_second".into(),
+            status: ExternalDeallocationEffectStatus::CertifiedAbsent,
+            basis: "svf_leaf_no_call_deallocation_v1".into(),
+        }];
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        assert_eq!(
+            k.external_deallocation_effect_at("dummyCall::x").unwrap().status,
+            ExternalDeallocationEffectStatus::CertifiedAbsent
+        );
+    }
+
+    #[test]
+    fn bcontract_nd1_rejects_invalid_negative_certificate_basis() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec!["external_deallocation_effects_v1".into()];
+        input.nodes[0].id = "dummyCall::x".into();
+        input.entry = "dummyCall::x".into();
+        input.external_deallocation_effects = vec![ExternalDeallocationEffectRecord {
+            node: "dummyCall::x".into(),
+            callee: "touch_second".into(),
+            status: ExternalDeallocationEffectStatus::CertifiedAbsent,
+            basis: "unresolved".into(),
+        }];
+        let err = Kripke::from_annotated_icfg(input).unwrap_err();
+        assert!(err.contains("invalid external deallocation-effect tuple"));
     }
 
 }

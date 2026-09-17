@@ -704,6 +704,7 @@ mod tests {
     #[test]
     fn quantifier_domain_includes_c_variables() {
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             entry: "c0".into(),
@@ -723,6 +724,7 @@ mod tests {
     #[test]
     fn explicit_binding_can_bind_a_logic_variable_to_c_program_variable() {
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             entry: "c0".into(),
@@ -743,6 +745,7 @@ mod tests {
     #[test]
     fn top_makes_all_supported_may_atoms_unknown_not_true() {
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             entry: "b0".into(),
@@ -765,6 +768,7 @@ mod tests {
     #[test]
     fn strong_next_is_false_at_terminal_nodes() {
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             entry: "b0".into(), variables: vec![var("rust::x", ProgramLanguage::Rust)],
@@ -785,6 +789,7 @@ mod tests {
     #[test]
     fn global_at_terminal_checks_current_position_only() {
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             entry: "b0".into(), variables: vec![var("rust::x", ProgramLanguage::Rust)],
@@ -810,6 +815,7 @@ mod tests {
         // The implementation may short-circuit the suffix, but the expected
         // truth value is a semantic property, not a performance assumption.
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             entry: "b0".into(),
@@ -840,6 +846,7 @@ mod tests {
     #[test]
     fn theoretical_uaf_query_is_unknown_on_cross_language_may_witness() {
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             entry: "b0".into(),
@@ -880,6 +887,7 @@ mod tests {
         // b0 branches to b1 (use) and b2 (no use). EF sees the witness path;
         // AF is refuted by the maximal path ending in b2.
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             entry: "b0".into(),
@@ -904,6 +912,7 @@ mod tests {
         // reaches a terminal state that does not. Hence EG=tt and AG=ff.
         let use_x = || EventLabel { predicate: EventKind::Read, variable: "rust::x".into() };
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             entry: "b0".into(),
@@ -927,6 +936,7 @@ mod tests {
         // b0 carries alloc_l(x). One branch reaches drop_l(x); the other ends
         // without a drop. E[alloc_l U drop_l] has a witness; A[...] is refuted.
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             entry: "b0".into(),
@@ -950,6 +960,7 @@ mod tests {
         // The only allocation witness is abstract (ALLOC <= TOP), so EF alloc
         // must remain unk rather than being promoted to tt or refuted to ff.
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             entry: "b0".into(),
@@ -970,6 +981,7 @@ mod tests {
         // Only the Rust variable is used. The implementation quantifier domain
         // contains both Rust and C variables, so exists is tt and forall is ff.
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             entry: "b0".into(),
@@ -989,6 +1001,7 @@ mod tests {
     #[test]
     fn c_free_label_satisfies_rust_alias_drop_label_at_same_program_point() {
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             entry: "b0".into(),
@@ -1009,6 +1022,7 @@ mod tests {
     #[test]
     fn existential_candidate_pruning_preserves_refutation_when_required_alloc_is_absent() {
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             entry: "b0".into(),
@@ -1036,6 +1050,7 @@ mod tests {
     #[test]
     fn existential_candidate_pruning_is_not_applied_through_negation_or_disjunction() {
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             entry: "b0".into(),
@@ -1067,6 +1082,7 @@ mod tests {
         };
 
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 2,
             capabilities: vec![],
             entry: "b0".into(),
@@ -1114,6 +1130,7 @@ mod tests {
             AnnotatedIcfg, AnnotatedNode, ProgramLanguage, ProgramVariable,
         };
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 2,
             capabilities: vec!["allocation_state_v1".into()], entry: "b0".into(),
             variables: vec![ProgramVariable { id: "Local(_1)".into(), language: ProgramLanguage::Rust, display: None, function: None }],
@@ -1150,6 +1167,7 @@ mod tests {
     fn allocation_state_query_requires_artifact_capability() {
         use crate::kripke::{AbstractAllocation, AnnotatedIcfg, AnnotatedNode, ProgramLanguage, ProgramVariable};
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 2,
             capabilities: vec![], entry: "b0".into(),
             variables: vec![ProgramVariable { id: "Local(_1)".into(), language: ProgramLanguage::Rust, display: None, function: None }],
@@ -1168,6 +1186,7 @@ mod tests {
     fn allocation_quantifier_requires_schema_v2() {
         use crate::kripke::{AnnotatedIcfg, AnnotatedNode, ProgramLanguage, ProgramVariable};
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 1,
             capabilities: vec![], entry: "b0".into(),
             variables: vec![ProgramVariable { id: "Local(_1)".into(), language: ProgramLanguage::Rust, display: None, function: None }],
@@ -1186,6 +1205,7 @@ mod tests {
 
     fn mismatch_fixture(allocator_family: &str, deallocator_family: &str) -> Kripke {
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 2,
             capabilities: vec!["allocation_contracts_v1".into()],
             entry: "b0".into(),
@@ -1232,6 +1252,7 @@ mod tests {
     #[test]
     fn allocator_mismatch_query_requires_artifact_capability() {
         let mut input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 2, capabilities: vec![], entry: "b0".into(),
             variables: vec![var("v", ProgramLanguage::Rust)], allocations: vec![],
             nodes: vec![node("b0", &[], vec![], Default::default(), Default::default())],
@@ -1284,6 +1305,7 @@ mod tests {
     #[test]
     fn allocator_mismatch_query_accepts_allocation_contracts_v2_requirement() {
         let mut input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 2,
             capabilities: vec!["allocation_contracts_v1".into(), "allocation_contracts_v2".into()],
             entry: "b0".into(),
@@ -1342,6 +1364,7 @@ mod tests {
     #[test]
     fn structural_mir_labels_are_capability_gated_and_queryable() {
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 2,
             capabilities: vec!["mir_semantic_labels_v1".into(), "mir_semantics_v2".into()],
             entry: "b0".into(),
@@ -1386,6 +1409,7 @@ mod tests {
 
     fn lifecycle_query_input(coverage: crate::kripke::PanicLifecycleCoverage) -> (AnnotatedIcfg, crate::kripke::PanicLifecycleOverlay) {
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 2,
             capabilities: vec![
                 "mir_semantic_labels_v1".into(),
@@ -1454,6 +1478,7 @@ mod tests {
     #[test]
     fn repeat_drop_requires_explicit_capability_declaration() {
         let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
             schema_version: 2, capabilities: vec![], entry: "b0".into(),
             variables: vec![ProgramVariable {
                 id: "rust::x".into(), language: ProgramLanguage::Rust, display: None, function: None,

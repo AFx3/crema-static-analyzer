@@ -36,6 +36,11 @@ struct AnnotatedIcfg {
     variables: Vec<ProgramVariable>,
     #[serde(skip_serializing_if = "Option::is_none")]
     allocations: Option<Vec<AbstractAllocationRecord>>,
+    /// Bcontract-ND1: producer-side negative/positive deallocation-effect
+    /// certificates for external C call boundaries. Absence of a record is
+    /// never interpreted as proof of absence.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    external_deallocation_effects: Option<Vec<ExternalDeallocationEffectRecord>>,
     nodes: Vec<AnnotatedNode>,
 }
 
@@ -79,6 +84,18 @@ struct AllocationContract {
     /// Audit-only provenance for producer-classified explicit Rust calls.
     #[serde(skip_serializing_if = "Option::is_none")]
     callee_def_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct ExternalDeallocationEffectRecord {
+    /// Dummy-call program point carrying the external-call boundary.
+    node: String,
+    /// Canonical C function name resolved by the existing Rust->SVF bridge.
+    callee: String,
+    /// Closed ND1 vocabulary: certified_absent | observed_may_deallocate | unresolved.
+    status: &'static str,
+    /// Closed producer-evidence basis validated by the CQPL checker.
+    basis: &'static str,
 }
 
 impl AllocationContract {
@@ -592,6 +609,11 @@ fn export_cqpl_annotated_icfg_versioned(
     } else {
         None
     };
+    let external_deallocation_effects = if schema_version == 2 {
+        Some(external_deallocation_effect_records(icfg))
+    } else {
+        None
+    };
 
     let output = AnnotatedIcfg {
         schema_version,
@@ -607,6 +629,11 @@ fn export_cqpl_annotated_icfg_versioned(
                 // backward-compatible base semantics and advertise the
                 // additive closed refinement explicitly as v2.
                 "allocation_disposition_v2",
+                // Bcontract-ND1: explicit external-call deallocation-effect
+                // evidence.  `certified_absent` is emitted only for a closed
+                // SVF leaf body with no call nodes; all other uncertain cases
+                // remain explicitly unresolved.
+                "external_deallocation_effects_v1",
             ];
             if mir_semantics_v2_enabled() {
                 caps.push("mir_semantic_labels_v1");
@@ -623,6 +650,7 @@ fn export_cqpl_annotated_icfg_versioned(
         },
         variables,
         allocations,
+        external_deallocation_effects,
         nodes,
     };
 
@@ -1044,6 +1072,81 @@ fn deallocator_contract(
             "unknown", "unknown", "unknown", "unresolved",
         ),
     }
+}
+
+/// Bcontract-ND1 producer classifier over the already materialized SVF body.
+///
+/// This is deliberately narrow and fail-closed.  We certify absence only for a
+/// body-backed C function with *no* SVF FunCallBlock at all.  A direct `@free`
+/// call is positive evidence of MAY deallocation.  Any other call, missing body,
+/// indirect/opaque call, or wrapper is unresolved in v1.  Therefore the
+/// certificate never turns "not observed" into "proved absent" except for a
+/// closed leaf body.
+fn classify_external_deallocation_effect(
+    nodes: &[crate::structs::LlvmJsonNode],
+) -> (&'static str, &'static str) {
+    let has_body = nodes.iter().any(|node| {
+        node.basic_block_name.is_some() || node.basic_block_info.is_some()
+    });
+    if !has_body {
+        return ("unresolved", "svf_body_unavailable_v1");
+    }
+
+    let calls = nodes
+        .iter()
+        .filter(|node| node.node_kind_string == "FunCallBlock")
+        .collect::<Vec<_>>();
+    if calls.iter().any(|node| node.info.contains("@free(")) {
+        return ("observed_may_deallocate", "structural_c_free_v1");
+    }
+    if calls.is_empty() {
+        return ("certified_absent", "svf_leaf_no_call_deallocation_v1");
+    }
+    ("unresolved", "svf_call_effect_unresolved_v1")
+}
+
+fn external_deallocation_effect_records(
+    icfg: &GlobalICFGOrdered,
+) -> Vec<ExternalDeallocationEffectRecord> {
+    let mut out = BTreeSet::new();
+
+    for (node_id, node) in &icfg.ordered_nodes {
+        let GlobalICFGNode::DummyCall(dummy) = node else { continue; };
+        if dummy.is_internal != Some(false) {
+            continue;
+        }
+        let Some(rest) = dummy.outgoing_edge.strip_prefix("llvm::") else { continue; };
+        let Some((callee, after_node)) = rest.split_once("::node") else { continue; };
+        let Some((_, suffix)) = after_node.split_once("::rust::") else { continue; };
+        let callsite = format!("rust::{suffix}");
+        let prefix = format!("llvm::{callee}::node");
+        let suffix = format!("::{callsite}");
+
+        let body_nodes = icfg
+            .ordered_nodes
+            .iter()
+            .filter_map(|(candidate_id, candidate)| {
+                if !candidate_id.starts_with(&prefix) || !candidate_id.ends_with(&suffix) {
+                    return None;
+                }
+                match candidate {
+                    GlobalICFGNode::Llvm(llvm)
+                        if llvm.function_name.as_deref() == Some(callee) => Some(llvm.clone()),
+                    _ => None,
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let (status, basis) = classify_external_deallocation_effect(&body_nodes);
+        out.insert(ExternalDeallocationEffectRecord {
+            node: node_id.clone(),
+            callee: callee.to_string(),
+            status,
+            basis,
+        });
+    }
+
+    out.into_iter().collect()
 }
 
 /// Compute the node set reachable from one explicit ICFG entry.
@@ -2994,6 +3097,75 @@ mod tests {
         let lifted = allocation_memory_annotation(node_id, &node, &post, &identity);
         assert_eq!(lifted.cells.len(), 1);
         assert_eq!(lifted.cells[0].value, "TOP");
+    }
+
+    #[test]
+    fn bcontract_nd1_leaf_body_certifies_no_deallocation() {
+        let node = crate::structs::LlvmJsonNode {
+            node_id: 1,
+            node_type: false,
+            info: "IntraBlock".into(),
+            node_kind_string: "IntraBlock".into(),
+            node_kind: 0,
+            node_source_loc: String::new(),
+            function_name: Some("touch_second".into()),
+            basic_block: None,
+            basic_block_name: Some("entry".into()),
+            basic_block_info: Some("entry".into()),
+            svf_statements: vec![],
+            incoming_edges: vec![],
+            outgoing_edges: vec![],
+        };
+        assert_eq!(
+            classify_external_deallocation_effect(&[node]),
+            ("certified_absent", "svf_leaf_no_call_deallocation_v1")
+        );
+    }
+
+    #[test]
+    fn bcontract_nd1_direct_free_is_positive_may_deallocation() {
+        let node = crate::structs::LlvmJsonNode {
+            node_id: 2,
+            node_type: false,
+            info: "call void @free(ptr %p)".into(),
+            node_kind_string: "FunCallBlock".into(),
+            node_kind: 0,
+            node_source_loc: String::new(),
+            function_name: Some("free_second".into()),
+            basic_block: None,
+            basic_block_name: Some("entry".into()),
+            basic_block_info: Some("entry".into()),
+            svf_statements: vec![],
+            incoming_edges: vec![],
+            outgoing_edges: vec![],
+        };
+        assert_eq!(
+            classify_external_deallocation_effect(&[node]),
+            ("observed_may_deallocate", "structural_c_free_v1")
+        );
+    }
+
+    #[test]
+    fn bcontract_nd1_other_call_remains_unresolved() {
+        let node = crate::structs::LlvmJsonNode {
+            node_id: 3,
+            node_type: false,
+            info: "call void @helper(ptr %p)".into(),
+            node_kind_string: "FunCallBlock".into(),
+            node_kind: 0,
+            node_source_loc: String::new(),
+            function_name: Some("wrapper".into()),
+            basic_block: None,
+            basic_block_name: Some("entry".into()),
+            basic_block_info: Some("entry".into()),
+            svf_statements: vec![],
+            incoming_edges: vec![],
+            outgoing_edges: vec![],
+        };
+        assert_eq!(
+            classify_external_deallocation_effect(&[node]),
+            ("unresolved", "svf_call_effect_unresolved_v1")
+        );
     }
 
 }

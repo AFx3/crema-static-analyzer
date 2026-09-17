@@ -46,6 +46,12 @@
         "minLength": 1
       },
       "uniqueItems": true
+    },
+    "external_deallocation_effects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/externalDeallocationEffectRecord"
+      }
     }
   },
   "$defs": {
@@ -987,6 +993,41 @@
         "callee_def_path": {
           "type": "string",
           "minLength": 1
+        }
+      }
+    },
+    "externalDeallocationEffectRecord": {
+      "type": "object",
+      "required": [
+        "node",
+        "callee",
+        "status",
+        "basis"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "callee": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "certified_absent",
+            "observed_may_deallocate",
+            "unresolved"
+          ]
+        },
+        "basis": {
+          "enum": [
+            "svf_leaf_no_call_deallocation_v1",
+            "structural_c_free_v1",
+            "svf_call_effect_unresolved_v1",
+            "svf_body_unavailable_v1"
+          ]
         }
       }
     }
