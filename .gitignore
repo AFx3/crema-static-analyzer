@@ -17,3 +17,6 @@ cargo_project_test/
 rustc_mir_callback/
 SVF-example/output/
 SVF-example/callgraph_initial.dot.dot
+
+# Experimental Cargo build outputs
+test_and_target_repos_experimental/**/target/
