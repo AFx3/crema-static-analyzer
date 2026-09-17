@@ -642,6 +642,10 @@ pub struct LlvmEdge {
 pub struct LlvmJson {
     pub nodes: Vec<LlvmJsonNode>, // list of nodes in the JSON structure
     pub edges: Vec<LlvmEdge>, // list of edges in the JSON structure
+    /// Bmulti producer certificate: SVF formal ArgVal VarIDs in declaration
+    /// order. Historical SVF artifacts omit this field and remain readable.
+    #[serde(default)]
+    pub formal_param_var_ids: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -649,6 +653,10 @@ pub struct LlvmFunction {
     pub function_name: String,
     //pub basic_blocks: Vec<LlvmBasicBlock>,
     pub nodes: Vec<LlvmJsonNode>,
+    /// Certified positional formal parameters copied from the per-function
+    /// SVF artifact. Empty means legacy artifact / no Bmulti certificate.
+    #[serde(default)]
+    pub formal_param_var_ids: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -689,14 +697,29 @@ pub struct TerminalNode {
 }
 
 // a dummy node with extra fields
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DummyArgumentBinding {
+    /// Zero-based source-language argument position.
+    pub arg_index: usize,
+    /// MIR actual argument spelling at this exact Rust callsite.
+    pub mir_var: String,
+    /// Callsite-scoped SVF formal VarID spelling (`<id>@rust::<...>::bbN`).
+    pub llvm_var: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DummyNode {
     pub dummy_node_name: String,
     pub incoming_edge: String,
     pub outgoing_edge: String,
     pub id: String,
+    /// Legacy first-argument bridge retained for historical artifacts.
     pub mir_var: Option<String>,
     pub llvm_var: Option<String>,
+    /// Bmulti positional bridge. Non-empty only when the SVF producer emitted
+    /// an exact formal-parameter certificate matching MIR arity.
+    #[serde(default)]
+    pub argument_bindings: Vec<DummyArgumentBinding>,
     pub is_internal: Option<bool>,
 }
 

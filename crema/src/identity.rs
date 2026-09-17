@@ -1000,13 +1000,31 @@ fn transfer_external_dummy_call_identity(
     }
 
     let mut out = input.clone();
-    let (Some(mir_var), Some(llvm_var)) = (&dummy.mir_var, &dummy.llvm_var) else {
-        return out;
-    };
     let Some(caller_function) = rust_function_from_node(&dummy.incoming_edge) else {
         return out;
     };
     let Some((c_function, callsite)) = llvm_scope_from_node_id(&dummy.outgoing_edge) else {
+        return out;
+    };
+
+    if !dummy.argument_bindings.is_empty() {
+        for binding in &dummy.argument_bindings {
+            let Some(source) = local(caller_function, &binding.mir_var) else {
+                continue;
+            };
+            let Some(destination) =
+                c_var_from_dummy_text(&c_function, &binding.llvm_var, &callsite)
+            else {
+                continue;
+            };
+            // MAY-copy one certified positional pair only. Different arguments
+            // and different replicated callsites remain distinct ProgramVarIds.
+            copy_binding(&mut out, &source, destination);
+        }
+        return out;
+    }
+
+    let (Some(mir_var), Some(llvm_var)) = (&dummy.mir_var, &dummy.llvm_var) else {
         return out;
     };
     let Some(source) = local(caller_function, mir_var) else { return out; };
@@ -2128,6 +2146,7 @@ mod tests {
                 id: format!("test::{id}"),
                 mir_var: None,
                 llvm_var: None,
+                argument_bindings: Vec::new(),
                 is_internal: Some(true),
             }),
         )
@@ -2147,6 +2166,7 @@ mod tests {
                 id: format!("test::{id}"),
                 mir_var: None,
                 llvm_var: None,
+                argument_bindings: Vec::new(),
                 is_internal: Some(true),
             }),
         )
@@ -3210,6 +3230,84 @@ mod tests {
     }
 
     #[test]
+    fn bmulti_external_dummy_call_maps_each_actual_to_same_index_formal_only() {
+        use crate::structs::DummyArgumentBinding;
+
+        let mut input = AllocationIdentityMemory::default();
+        let a = AbstractAllocId::new(
+            AllocationSiteId::Synthetic { scope: "test".into(), label: "A".into() },
+            Vec::new(),
+        );
+        let b = AbstractAllocId::new(
+            AllocationSiteId::Synthetic { scope: "test".into(), label: "B".into() },
+            Vec::new(),
+        );
+        input.assign_points_to(ProgramVarId::rust("main", "_1").unwrap(), [a.clone()].into());
+        input.assign_points_to(ProgramVarId::rust("main", "_2").unwrap(), [b.clone()].into());
+
+        let dummy = DummyNode {
+            dummy_node_name: "dummyCall".into(),
+            incoming_edge: "rust::main::bb5".into(),
+            outgoing_edge: "llvm::free_second::node1::rust::main::bb5".into(),
+            id: "bmulti".into(),
+            mir_var: Some("_1".into()),
+            llvm_var: Some("7@rust::main::bb5".into()),
+            argument_bindings: vec![
+                DummyArgumentBinding { arg_index: 0, mir_var: "_1".into(), llvm_var: "7@rust::main::bb5".into() },
+                DummyArgumentBinding { arg_index: 1, mir_var: "_2".into(), llvm_var: "9@rust::main::bb5".into() },
+            ],
+            is_internal: Some(false),
+        };
+
+        let out = transfer_external_dummy_call_identity(&dummy, &input);
+        let f0 = c_var("free_second", 7, "rust::main::bb5");
+        let f1 = c_var("free_second", 9, "rust::main::bb5");
+        assert_eq!(out.points_to(&f0), [a.clone()].into());
+        assert_eq!(out.points_to(&f1), [b.clone()].into());
+        assert!(!out.points_to(&f0).contains(&b));
+        assert!(!out.points_to(&f1).contains(&a));
+    }
+
+    #[test]
+    fn bmulti_same_callee_two_callsites_do_not_cross_contaminate() {
+        use crate::structs::DummyArgumentBinding;
+
+        let mut input = AllocationIdentityMemory::default();
+        for (raw, label) in [("_1","A"),("_2","B"),("_3","C"),("_4","D")] {
+            let id = AbstractAllocId::new(
+                AllocationSiteId::Synthetic { scope: "test".into(), label: label.into() },
+                Vec::new(),
+            );
+            input.assign_points_to(ProgramVarId::rust("main", raw).unwrap(), [id].into());
+        }
+
+        let make = |bb: usize, x: &str, y: &str| DummyNode {
+            dummy_node_name: "dummyCall".into(),
+            incoming_edge: format!("rust::main::bb{bb}"),
+            outgoing_edge: format!("llvm::free_second::node1::rust::main::bb{bb}"),
+            id: format!("call{bb}"),
+            mir_var: Some(x.into()),
+            llvm_var: Some(format!("7@rust::main::bb{bb}")),
+            argument_bindings: vec![
+                DummyArgumentBinding { arg_index: 0, mir_var: x.into(), llvm_var: format!("7@rust::main::bb{bb}") },
+                DummyArgumentBinding { arg_index: 1, mir_var: y.into(), llvm_var: format!("9@rust::main::bb{bb}") },
+            ],
+            is_internal: Some(false),
+        };
+
+        let out1 = transfer_external_dummy_call_identity(&make(5, "_1", "_2"), &input);
+        let out2 = transfer_external_dummy_call_identity(&make(9, "_4", "_3"), &out1);
+        let b = input.points_to(&ProgramVarId::rust("main", "_2").unwrap());
+        let c = input.points_to(&ProgramVarId::rust("main", "_3").unwrap());
+        assert_eq!(out2.points_to(&c_var("free_second", 9, "rust::main::bb5")), b);
+        assert_eq!(out2.points_to(&c_var("free_second", 9, "rust::main::bb9")), c);
+        assert_ne!(
+            out2.points_to(&c_var("free_second", 9, "rust::main::bb5")),
+            out2.points_to(&c_var("free_second", 9, "rust::main::bb9")),
+        );
+    }
+
+    #[test]
     fn phase6e_c_program_var_identity_is_callsite_scoped() {
         let a = ProgramVarId::c("cast", 36, Some("rust::main::bb1".to_string()));
         let b = ProgramVarId::c("cast", 36, Some("rust::main::bb2".to_string()));
@@ -3230,6 +3328,7 @@ mod tests {
             id: "ffi-call".to_string(),
             mir_var: Some("Local(_2) [mutable]".to_string()),
             llvm_var: Some("36@rust::main::bb2".to_string()),
+            argument_bindings: Vec::new(),
             is_internal: Some(false),
         };
 
@@ -3294,6 +3393,7 @@ mod tests {
                         id: "dc".to_string(),
                         mir_var: None,
                         llvm_var: None,
+                        argument_bindings: Vec::new(),
                         is_internal: Some(false),
                     }),
                 ),
@@ -3328,6 +3428,7 @@ mod tests {
                         id: "dr".to_string(),
                         mir_var: Some("_1".to_string()),
                         llvm_var: Some("6@rust::main::bb0".to_string()),
+                        argument_bindings: Vec::new(),
                         is_internal: Some(false),
                     }),
                 ),

@@ -879,6 +879,7 @@ pub fn get_node_by_id(icfg: &GlobalICFGOrdered, id: &String) -> GlobalICFGNode {
         id: id.clone(),
         mir_var: None,
         llvm_var: None,
+        argument_bindings: Vec::new(),
         is_internal: None,
     })
 }
@@ -3685,15 +3686,33 @@ pub fn transfer_dummycall_node(dummycall_node: &DummyNode, in_mem: &AbstractMemo
     let mut current_mem   = in_mem.clone();
     let mut current_taint = in_taint.clone();
 
-    if let (Some(mir_var), Some(llvm_var)) = (&dummycall_node.mir_var, &dummycall_node.llvm_var) {
+    let positional = &dummycall_node.argument_bindings;
+    if !positional.is_empty() {
+        for binding in positional {
+            let full_mir = full_local_name(&binding.mir_var);
+            let full_llvm = binding.llvm_var.clone();
+
+            // Each positional pair is joined independently. There is no
+            // cross-argument equivalence closure.
+            current_mem.propagate_cell_value(&full_mir, &full_llvm);
+            current_mem.propagate_cell_value(&full_llvm, &full_mir);
+
+            let taint_mir = current_taint.get(&full_mir).cloned().unwrap_or_default();
+            let taint_llvm = current_taint.get(&full_llvm).cloned().unwrap_or_default();
+            let joined = taint_mir.union(&taint_llvm).cloned().collect::<HashSet<_>>();
+            current_taint.insert(full_mir.clone(), joined.clone());
+            current_taint.insert(full_llvm, joined);
+        }
+    } else if let (Some(mir_var), Some(llvm_var)) =
+        (&dummycall_node.mir_var, &dummycall_node.llvm_var)
+    {
+        // Historical single-argument artifacts.
         let full_mir  = full_local_name(mir_var);
         let full_llvm = llvm_var.to_string();
 
-        // unify allocations: merge the cell values (and allocation sets)
         current_mem.propagate_cell_value(&full_mir, &full_llvm);
         current_mem.propagate_cell_value(&full_llvm, &full_mir);
 
-        // unify taint: combine any taint tags on both sides
         let taint_mir  = current_taint.get(&full_mir).cloned().unwrap_or_default();
         let taint_llvm = current_taint.get(&full_llvm).cloned().unwrap_or_default();
         let joined     = taint_mir.union(&taint_llvm).cloned().collect::<HashSet<_>>();
@@ -6826,6 +6845,7 @@ mod phase5_c_origin_ffi_tests {
             id: "test".to_string(),
             mir_var: Some("Local(_7) [mutable]".to_string()),
             llvm_var: Some("6@rust::main::bb4".to_string()),
+            argument_bindings: Vec::new(),
             is_internal: Some(false),
         };
 
@@ -7008,6 +7028,7 @@ mod phase5_c_origin_ffi_tests {
             id: "test-negative".to_string(),
             mir_var: Some("Local(_7) [mutable]".to_string()),
             llvm_var: Some("6@rust::main::bb4".to_string()),
+            argument_bindings: Vec::new(),
             is_internal: Some(false),
         };
 

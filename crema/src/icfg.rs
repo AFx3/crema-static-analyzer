@@ -16,7 +16,7 @@ use rustc_middle::ty::{self, TyCtxt, TyKind};
 use rustc_span::symbol::sym;
 
 use crate::structs::{MirStatement, MirTerminator, MirBasicBlock, MirRepresentation, SourceInfoData,
-    LlvmRepresentation, LlvmFunction, LlvmJson, LlvmJsonNode, SvfStatement, LlvmEdge, IcfgEdge, DummyNode, GlobalICFGNode, GlobalICFGOrdered, MirCallArgument,
+    LlvmRepresentation, LlvmFunction, LlvmJson, LlvmJsonNode, SvfStatement, LlvmEdge, IcfgEdge, DummyArgumentBinding, DummyNode, GlobalICFGNode, GlobalICFGOrdered, MirCallArgument,
     RustFunctionMetadata, RustCallMetadata, TerminalNode, RustDropAllocatorEvidence, RustDropAllocatorEvidenceKind,
     RustCallDeallocatorEvidence, RustCallDeallocatorEvidenceKind, RustAllocationDispositionEvidence,
     RustAllocationDispositionEvidenceKind, RustHigherOrderCallEvidence,
@@ -501,13 +501,24 @@ Depending on the platform and situation this may cause a non-unwindable panic or
 Cleanup(BasicBlock)
 Cleanups to be done.
 */
-/// Empirical bridge for the currently supported single-relevant-parameter
-/// FFI wrappers.
-///
-/// In the pinned SVF JSON, a pointer formal appears at FunEntry as a StoreStmt
-/// whose rhs VarID is the incoming pointer value and whose lhs is its stack
-/// slot.  We intentionally do not guess beyond this evidence.  General
-/// multi-parameter mapping is deferred to a later phase.
+/// Bmulti positional bridge. Return the producer-certified formal SVF VarIDs
+/// in declaration order only when the certificate is complete for this call
+/// arity. Partial positional information is rejected fail-closed: mixing
+/// certified and guessed positions would be unsound.
+fn svf_certified_formal_param_var_ids(
+    function: &LlvmFunction,
+    actual_count: usize,
+) -> Option<&[usize]> {
+    if function.formal_param_var_ids.len() == actual_count {
+        Some(function.formal_param_var_ids.as_slice())
+    } else {
+        None
+    }
+}
+
+/// Legacy fallback for historical SVF artifacts that predate Bmulti. It
+/// recovers only the first relevant formal from structured spill evidence and
+/// never guesses positions 1..N.
 fn svf_first_formal_param_var_id(function: &LlvmFunction) -> Option<usize> {
     // Real SVF output from the pinned producer does not guarantee that the
     // parameter-spill StoreStmt is attached to FunEntryBlock.  Clang/SVF can
@@ -515,8 +526,8 @@ fn svf_first_formal_param_var_id(function: &LlvmFunction) -> Option<usize> {
     // first supported formal from structured SVF statements across the whole
     // function: a StoreStmt whose lhs is a stack object created by AddrStmt.
     //
-    // Phase 5 deliberately supports only the first relevant formal.  General
-    // argument-index -> formal mapping remains future work.
+    // This path is compatibility-only and deliberately supports only the
+    // first relevant formal. Bmulti positions require the producer certificate.
     let stack_slots: HashSet<usize> = function
         .nodes
         .iter()
@@ -2763,11 +2774,38 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                         call_suffix
                                     );
 
-                                    let llvm_var = if mir_arg.is_some() {
+                                    let certified_bindings =
+                                        svf_certified_formal_param_var_ids(
+                                            &llvm_func,
+                                            arguments.len(),
+                                        )
+                                        .map(|formals| {
+                                            arguments
+                                                .iter()
+                                                .zip(formals.iter().copied())
+                                                .enumerate()
+                                                .map(|(arg_index, (actual, formal))| {
+                                                    DummyArgumentBinding {
+                                                        arg_index,
+                                                        mir_var: actual.arg.clone(),
+                                                        llvm_var: format!(
+                                                            "{}@{}",
+                                                            formal, call_suffix
+                                                        ),
+                                                    }
+                                                })
+                                                .collect::<Vec<_>>()
+                                        })
+                                        .unwrap_or_default();
+
+                                    // Backward compatibility: historical SVF artifacts have
+                                    // no positional certificate. Keep the frozen first-formal
+                                    // bridge in that case, but never guess positions 1..N.
+                                    let llvm_var = if let Some(first) = certified_bindings.first() {
+                                        Some(first.llvm_var.clone())
+                                    } else if mir_arg.is_some() {
                                         svf_first_formal_param_var_id(&llvm_func)
-                                            .map(|id| {
-                                                format!("{}@{}", id, call_suffix)
-                                            })
+                                            .map(|id| format!("{}@{}", id, call_suffix))
                                     } else {
                                         None
                                     };
@@ -2785,6 +2823,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                             )),
                                             mir_var: mir_arg.clone(),
                                             llvm_var,
+                                            argument_bindings: certified_bindings,
                                             is_internal: Some(false),
                                         }),
                                     ));
@@ -2837,6 +2876,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                             mir_var:
                                                 Some(return_place.clone()),
                                             llvm_var: llvm_return_var,
+                                            argument_bindings: Vec::new(),
                                             is_internal: Some(false),
                                         }),
                                     ));
@@ -2875,6 +2915,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                         id: compute_hash(&(mir_node_id.clone(), dummy_call_id.clone())),
                                         mir_var: arguments.first().map(|arg| arg.arg.clone()),
                                         llvm_var: None,
+                                        argument_bindings: Vec::new(),
                                         is_internal: Some(true),
                                     }),
                                 ));
@@ -2887,6 +2928,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                         id: compute_hash(&(caller_return.clone(), dummy_ret_id.clone())),
                                         mir_var: Some(return_place.clone()),
                                         llvm_var: Some("Local _0".to_string()),
+                                        argument_bindings: Vec::new(),
                                         is_internal: Some(true),
                                     }),
                                 ));
@@ -2949,6 +2991,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                                     .get(callee)
                                                     .map(|arg| arg.arg.clone()),
                                                 llvm_var: None,
+                                                argument_bindings: Vec::new(),
                                                 is_internal: Some(true),
                                             }),
                                         ));
@@ -2963,6 +3006,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                                 // higher-order API's return value.
                                                 mir_var: None,
                                                 llvm_var: None,
+                                                argument_bindings: Vec::new(),
                                                 is_internal: Some(true),
                                             }),
                                         ));
@@ -3006,6 +3050,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                 id: compute_hash(&(mir_node_id.clone(), dummy_call_id.clone())),
                                 mir_var: Some(dropped_value.clone()),
                                 llvm_var: None,
+                                argument_bindings: Vec::new(),
                                 is_internal: Some(true),
                             }),
                         ));
@@ -3018,6 +3063,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                 id: compute_hash(&(caller_return, dummy_ret_id.clone())),
                                 mir_var: None,
                                 llvm_var: None,
+                                argument_bindings: Vec::new(),
                                 is_internal: Some(true),
                             }),
                         ));
@@ -3198,6 +3244,10 @@ pub fn load_all_llvm_json(dir: &str) -> Result<LlvmRepresentation, Box<dyn Error
                             .entry(func_name.clone())
                             .and_modify(|existing_function| {
                                 existing_function.nodes.extend(llvm_function.nodes.clone());
+                                if existing_function.formal_param_var_ids.is_empty() {
+                                    existing_function.formal_param_var_ids =
+                                        llvm_function.formal_param_var_ids.clone();
+                                }
                             })
                             .or_insert(llvm_function);
                     }
@@ -3225,6 +3275,7 @@ pub fn parse_llvm_json(file_path: &str) -> Result<LlvmRepresentation, Box<dyn Er
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
     let llvm_json: LlvmJson = serde_json::from_str(&contents)?;
+    let formal_param_var_ids = llvm_json.formal_param_var_ids.clone();
     
     let mut functions: HashMap<String, LlvmFunction> = HashMap::new();
     
@@ -3238,6 +3289,7 @@ pub fn parse_llvm_json(file_path: &str) -> Result<LlvmRepresentation, Box<dyn Er
                 .or_insert_with(|| LlvmFunction {
                     function_name: func_name,
                     nodes: vec![node],
+                    formal_param_var_ids: formal_param_var_ids.clone(),
                 });
         }
     }
@@ -3566,8 +3618,8 @@ mod phase6k_callee_resolution_tests {
 #[cfg(test)]
 mod phase5_ffi_bridge_tests {
     use super::{
-        svf_first_formal_param_var_id, svf_function_return_var_id,
-        LlvmFunction, LlvmJsonNode, SvfStatement,
+        svf_certified_formal_param_var_ids, svf_first_formal_param_var_id,
+        svf_function_return_var_id, LlvmFunction, LlvmJsonNode, SvfStatement,
     };
 
     fn stmt(
@@ -3616,6 +3668,7 @@ mod phase5_ffi_bridge_tests {
         LlvmFunction {
             function_name: "f".to_string(),
             nodes,
+            formal_param_var_ids: Vec::new(),
         }
     }
 
@@ -3661,6 +3714,33 @@ mod phase5_ffi_bridge_tests {
         //   Var37 = alloca ptr
         //   StoreStmt: [Var37 <-- Var36]
         assert_eq!(svf_first_formal_param_var_id(&f), Some(36));
+    }
+
+    #[test]
+    fn bmulti_certified_formals_preserve_declared_argument_order() {
+        let mut f = function(vec![node("FunEntryBlock", vec![])]);
+        f.formal_param_var_ids = vec![7, 9, 11];
+
+        assert_eq!(
+            svf_certified_formal_param_var_ids(&f, 3),
+            Some(&[7, 9, 11][..])
+        );
+    }
+
+    #[test]
+    fn bmulti_partial_or_wrong_arity_certificate_fails_closed() {
+        let mut f = function(vec![node(
+            "FunEntryBlock",
+            vec![
+                stmt("AddrStmt", Some(8), Some(80), None),
+                stmt("StoreStmt", Some(8), Some(7), None),
+            ],
+        )]);
+        f.formal_param_var_ids = vec![7, 9];
+
+        assert_eq!(svf_certified_formal_param_var_ids(&f, 3), None);
+        // Legacy compatibility remains first-formal only; no position 1 guess.
+        assert_eq!(svf_first_formal_param_var_id(&f), Some(7));
     }
 
     #[test]

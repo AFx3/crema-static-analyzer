@@ -739,7 +739,12 @@ void icfgToDot(SVF::ICFG* icfg, const SVF::ICFGNode* currentNode, const std::str
 /*
 //////////////////////////////////////////////////////////////////// FULL INFO ICFG JSON OUTPUT \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 */
-void outputFinalICFGJson(SVF::ICFG* icfg, const SVF::ICFGNode* startNode, const std::string& outputFileName) {
+void outputFinalICFGJson(
+    SVF::ICFG* icfg,
+    const SVF::ICFGNode* startNode,
+    const std::string& outputFileName,
+    SVF::SVFIR* pag
+) {
 
     Json::Value root;
     Json::Value nodesJson(Json::arrayValue);
@@ -960,6 +965,25 @@ void outputFinalICFGJson(SVF::ICFG* icfg, const SVF::ICFGNode* startNode, const 
     
     root["nodes"] = nodesJson;
     root["edges"] = edgesJson;
+
+    // Bmulti producer certificate. SVFFunction stores formal SVFArgument
+    // objects in declaration order; export their canonical VarIDs so CREMA
+    // never infers positional identity from alloca/store traversal order.
+    Json::Value formalParamVarIds(Json::arrayValue);
+    if (const SVF::SVFFunction* func = startNode ? startNode->getFun() : nullptr) {
+        for (u32_t i = 0; i < func->arg_size(); ++i) {
+            const SVF::SVFArgument* arg = func->getArg(i);
+            if (arg && pag) {
+                // SVFArgument is an SVFValue, not an SVFVar in this pinned SVF.
+                // Resolve its canonical PAG/SVFIR NodeID through the same API
+                // already used by the original SVF example for points-to queries.
+                const SVF::NodeID formalVarId = pag->getValueNode(arg);
+                formalParamVarIds.append(static_cast<Json::UInt64>(formalVarId));
+            }
+        }
+    }
+    root["formal_param_var_ids"] = formalParamVarIds;
+    root["formal_param_mapping_schema"] = "svf_formal_arg_index_v1";
     
     std::ofstream file(outputFileName);
     if (file.is_open()) {
@@ -1035,7 +1059,7 @@ int main(int argc, char **argv) {
             traverseAndDumpICFGemptlyEdge(icfg, firstInstNode, outputPrefix + "no_edge_list_icfg_SVF.json");
             traverseAndDumpICFGFullList(icfg, firstInstNode, outputPrefix + "full_icfg_SVF.json");
             /////////////////////////////////////////////////////////////////////////////////
-            outputFinalICFGJson(icfg, firstInstNode, outputPrefix + "A_FINAL_ICFG.json");   // FINAL JSON WITH STMNT INFOS
+            outputFinalICFGJson(icfg, firstInstNode, outputPrefix + "A_FINAL_ICFG.json", pag);   // FINAL JSON WITH STMNT INFOS
             ////////////////////////////////////////////////////////////////////////////////
             icfgToDot(icfg, firstInstNode, outputPrefix + "view_icfg_output_SVF.dot");
             icfgToDotOnlyNodeAndEdges(icfg, firstInstNode, outputPrefix + "node_and_edges_only_icfg_SVF.dot");

@@ -2061,6 +2061,7 @@ mod tests {
             id: "dc".into(),
             mir_var: None,
             llvm_var: None,
+            argument_bindings: Vec::new(),
             is_internal: Some(true),
         });
         let dummy_ret = GlobalICFGNode::DummyRet(DummyNode {
@@ -2070,6 +2071,7 @@ mod tests {
             id: "dr".into(),
             mir_var: Some("_0".into()),
             llvm_var: Some("Local _0".into()),
+            argument_bindings: Vec::new(),
             is_internal: Some(true),
         });
         let callee_0 = GlobalICFGNode::Mir(MirBasicBlock {
@@ -2167,11 +2169,13 @@ mod tests {
                 ("dummyCall::x".into(), GlobalICFGNode::DummyCall(DummyNode {
                     dummy_node_name: "dummyCall".into(), incoming_edge: "rust::main::bb0".into(),
                     outgoing_edge: "rust::callee::bb0".into(), id: "dc".into(), mir_var: None, llvm_var: None,
+                    argument_bindings: Vec::new(),
                     is_internal: Some(true),
                 })),
                 ("dummyRet::x".into(), GlobalICFGNode::DummyRet(DummyNode {
                     dummy_node_name: "dummyRet".into(), incoming_edge: "rust::callee::bb1".into(),
                     outgoing_edge: "rust::main::bb1".into(), id: "dr".into(), mir_var: None, llvm_var: None,
+                    argument_bindings: Vec::new(),
                     is_internal: Some(true),
                 })),
                 ("rust::main::bb1".into(), GlobalICFGNode::Mir(MirBasicBlock { block_id: 1, statements: vec![], terminator: None })),
