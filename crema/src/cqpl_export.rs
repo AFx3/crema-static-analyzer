@@ -622,6 +622,10 @@ fn export_cqpl_annotated_icfg_versioned(
             let mut caps = vec![
                 "allocation_contracts_v1",
                 "allocation_contracts_v2",
+                // Bcontract-DROP1: additive proof vocabulary for exact
+                // core::mem::drop(Box<T, Global>) calls.  v2 remains frozen;
+                // v3 explicitly gates the new call-site basis.
+                "allocation_contracts_v3",
                 "allocation_state_v1",
                 "allocation_disposition_v1",
                 // B1.1: CString ownership handoff/reclaim extends the frozen
@@ -1045,6 +1049,18 @@ fn deallocator_contract(
                                 "rust_global", "dealloc", "rust", "rust_global_dealloc_api",
                             );
                             contract.callee_def_path = Some(evidence.callee_def_path.clone());
+                            contract
+                        }
+                        RustCallDeallocatorEvidenceKind::MemDropOwnedBoxGlobal => {
+                            let mut contract = AllocationContract::v2_deallocator(
+                                "rust_global",
+                                "drop",
+                                "rust",
+                                "rust_mem_drop_owned_box_global_v1",
+                            );
+                            contract.callee_def_path = Some(evidence.callee_def_path.clone());
+                            contract.owner_def_path = evidence.owner_def_path.clone();
+                            contract.allocator_def_path = evidence.allocator_def_path.clone();
                             contract
                         }
                     }
@@ -2937,6 +2953,8 @@ mod tests {
                     deallocator_evidence: with_evidence.then(|| RustCallDeallocatorEvidence {
                         kind: RustCallDeallocatorEvidenceKind::GlobalDeallocApi,
                         callee_def_path: "alloc::alloc::dealloc".into(),
+                        owner_def_path: None,
+                        allocator_def_path: None,
                     }),
                     allocation_disposition_evidence: None,
                     higher_order_evidence: None,
@@ -2958,6 +2976,58 @@ mod tests {
         assert_eq!(proven.basis, Some("rust_global_dealloc_api"));
         assert_eq!(proven.callee_def_path.as_deref(), Some("alloc::alloc::dealloc"));
 
+        let text_only = deallocator_contract(&call(false), &HashSet::new());
+        assert_eq!(text_only.family, "unknown");
+        assert_eq!(text_only.basis, Some("unresolved"));
+        assert!(text_only.callee_def_path.is_none());
+    }
+
+    #[test]
+    fn bcontract_drop1_mem_drop_owned_box_requires_producer_evidence() {
+        fn call(with_evidence: bool) -> GlobalICFGNode {
+            GlobalICFGNode::Mir(MirBasicBlock {
+                block_id: 17,
+                statements: vec![],
+                terminator: Some(MirTerminator::Call {
+                    details: "core::mem::drop::<std::boxed::Box<i32>>(move _1)".into(),
+                    source_info: "<drop1-test>".into(),
+                    function_called: "core::mem::drop::<std::boxed::Box<i32>>".into(),
+                    callee_def_path: Some("core::mem::drop".into()),
+                    deallocator_evidence: with_evidence.then(|| RustCallDeallocatorEvidence {
+                        kind: RustCallDeallocatorEvidenceKind::MemDropOwnedBoxGlobal,
+                        callee_def_path: "core::mem::drop".into(),
+                        owner_def_path: Some("alloc::boxed::Box".into()),
+                        allocator_def_path: Some("alloc::alloc::Global".into()),
+                    }),
+                    allocation_disposition_evidence: None,
+                    higher_order_evidence: None,
+                    callee_is_local: false,
+                    callback_def_paths: Vec::new(),
+                    resolved_instance_callees: Vec::new(),
+                    instance_dispatch_observed: false,
+                    instance_dispatch_external: false,
+                    instance_dispatch_unresolved: false,
+                    arguments: vec![MirCallArgument {
+                        arg: "Local(_1)".into(),
+                        is_mutable: Some(false),
+                    }],
+                    return_place: "_0".into(),
+                    return_target: Some("bb18".into()),
+                    unwind_target: "continue".into(),
+                }),
+            })
+        }
+
+        let proven = deallocator_contract(&call(true), &HashSet::new());
+        assert_eq!(proven.family, "rust_global");
+        assert_eq!(proven.operation, "drop");
+        assert_eq!(proven.language, "rust");
+        assert_eq!(proven.basis, Some("rust_mem_drop_owned_box_global_v1"));
+        assert_eq!(proven.callee_def_path.as_deref(), Some("core::mem::drop"));
+        assert_eq!(proven.owner_def_path.as_deref(), Some("alloc::boxed::Box"));
+        assert_eq!(proven.allocator_def_path.as_deref(), Some("alloc::alloc::Global"));
+
+        // Pretty/canonical text alone is not proof.
         let text_only = deallocator_contract(&call(false), &HashSet::new());
         assert_eq!(text_only.family, "unknown");
         assert_eq!(text_only.basis, Some("unresolved"));

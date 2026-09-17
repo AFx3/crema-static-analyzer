@@ -73,6 +73,7 @@ def main() -> int:
     delta_paths = args.approved_deltas or [
         root / "artifact" / "A3_R4_FINAL112_PRECISION_DELTAS.tsv",
         root / "artifact" / "B1_1_R1_FINAL112_PRECISION_DELTAS.tsv",
+        root / "artifact" / "BCONTRACT_DROP1_R1_FINAL112_PRECISION_DELTAS.tsv",
     ]
     delta_rows: list[dict[str, str]] = []
     delta_source_for_row: list[str] = []

@@ -48,7 +48,7 @@ fn validate_contract_object(value: &Value, where_: &str) -> Result<(), String> {
 }
 
 
-fn validate_v2_deallocator_contract_object(value: &Value, where_: &str) -> Result<(), String> {
+fn validate_v2_deallocator_contract_object(value: &Value, where_: &str, allow_v3: bool) -> Result<(), String> {
     validate_contract_object(value, where_)?;
     let object = value.as_object().unwrap();
     let basis = object
@@ -90,6 +90,26 @@ fn validate_v2_deallocator_contract_object(value: &Value, where_: &str) -> Resul
             }
             if callee.map_or(true, str::is_empty) {
                 return Err(format!("{where_} basis '{basis}' requires non-empty callee_def_path"));
+            }
+        }
+        "rust_mem_drop_owned_box_global_v1" => {
+            if !allow_v3 {
+                return Err(format!(
+                    "{where_} basis 'rust_mem_drop_owned_box_global_v1' requires artifact capability allocation_contracts_v3"
+                ));
+            }
+            if (family, operation, language) != ("rust_global", "drop", "rust") {
+                return Err(format!(
+                    "{where_} basis 'rust_mem_drop_owned_box_global_v1' requires family=rust_global operation=drop language=rust"
+                ));
+            }
+            if owner.map_or(true, str::is_empty)
+                || allocator.map_or(true, str::is_empty)
+                || callee.map_or(true, str::is_empty)
+            {
+                return Err(format!(
+                    "{where_} basis 'rust_mem_drop_owned_box_global_v1' requires non-empty owner_def_path, allocator_def_path, and callee_def_path"
+                ));
             }
         }
         "structural_c_free_v1" => {
@@ -206,6 +226,7 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
         .unwrap_or_default();
     let has_allocation_contracts = capabilities.contains("allocation_contracts_v1");
     let has_allocation_contracts_v2 = capabilities.contains("allocation_contracts_v2");
+    let has_allocation_contracts_v3 = capabilities.contains("allocation_contracts_v3");
     let has_allocation_state = capabilities.contains("allocation_state_v1");
     let has_allocation_disposition = capabilities.contains("allocation_disposition_v1");
     let has_allocation_disposition_v2 = capabilities.contains("allocation_disposition_v2");
@@ -217,6 +238,9 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
 
     if has_allocation_contracts_v2 && !has_allocation_contracts {
         return Err("allocation_contracts_v2 refines allocation_contracts_v1; the artifact must declare both capabilities".into());
+    }
+    if has_allocation_contracts_v3 && (!has_allocation_contracts || !has_allocation_contracts_v2) {
+        return Err("allocation_contracts_v3 refines allocation_contracts_v2; the artifact must declare allocation_contracts_v1 + allocation_contracts_v2 + allocation_contracts_v3".into());
     }
     if has_mir_semantics_v2 && !has_mir_semantic_labels {
         return Err("mir_semantics_v2 requires mir_semantic_labels_v1 so the active transfer profile remains auditable".into());
@@ -443,7 +467,7 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
                 let where_ = format!("nodes[{index}].allocation_labels[{label_index}].deallocator_contract");
                 validate_contract_object(contract, &where_)?;
                 if has_allocation_contracts_v2 {
-                    validate_v2_deallocator_contract_object(contract, &where_)?;
+                    validate_v2_deallocator_contract_object(contract, &where_, has_allocation_contracts_v3)?;
                 }
             }
         }
@@ -703,6 +727,42 @@ mod tests {
         value["nodes"][0]["allocation_labels"][0]["deallocator_contract"]["family"] = json!("c_malloc");
         let err = validate_boundary_requirements(&value).unwrap_err();
         assert!(err.contains("requires family=rust_global"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn bcontract_drop1_v3_cli_guard_gates_new_basis() {
+        let mut value = minimal_v2_node();
+        value["allocations"] = json!([{
+            "id":"A", "display":"A", "site":{"kind":"synthetic","scope":"t","label":"A"}, "context":[],
+            "allocator_contract":{"family":"rust_global","operation":"box_allocation","language":"rust"}
+        }]);
+        value["nodes"][0]["allocation_labels"] = json!([{
+            "predicate":"drop", "allocation":"A", "certainty":"may_abstract",
+            "deallocator_contract":{
+                "family":"rust_global",
+                "operation":"drop",
+                "language":"rust",
+                "basis":"rust_mem_drop_owned_box_global_v1",
+                "owner_def_path":"alloc::boxed::Box",
+                "allocator_def_path":"alloc::alloc::Global",
+                "callee_def_path":"core::mem::drop"
+            }
+        }]);
+
+        value["capabilities"] = json!(["allocation_contracts_v1", "allocation_contracts_v2"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("requires artifact capability allocation_contracts_v3"), "unexpected error: {err}");
+
+        value["capabilities"] = json!([
+            "allocation_contracts_v1",
+            "allocation_contracts_v2",
+            "allocation_contracts_v3"
+        ]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["nodes"][0]["allocation_labels"][0]["deallocator_contract"]["callee_def_path"] = Value::Null;
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("requires non-empty owner_def_path, allocator_def_path, and callee_def_path"), "unexpected error: {err}");
     }
 
     #[test]

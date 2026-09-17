@@ -261,13 +261,19 @@ pub struct RustDropAllocatorEvidence {
     pub allocator_def_path: String,
 }
 
-/// v6N-r1a producer-side evidence for an explicit Rust deallocator call.
-/// This proof object is emitted while the rustc `DefId` is still available;
-/// exporters/checkers must not reconstruct it from pretty MIR text.
+/// Producer-side evidence for an explicit Rust deallocation call.
+/// This proof object is emitted while rustc semantic identity and argument
+/// types are still available; exporters/checkers must not reconstruct it from
+/// pretty MIR text.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RustCallDeallocatorEvidenceKind {
+    /// Public `alloc::alloc::dealloc` API.
     GlobalDeallocApi,
+    /// Bcontract-DROP1: exact `core::mem::drop` whose moved argument is
+    /// `Box<T, Global>`.  The producer proves both the Box owner identity and
+    /// the Global allocator identity before emitting this kind.
+    MemDropOwnedBoxGlobal,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -275,6 +281,13 @@ pub struct RustCallDeallocatorEvidence {
     pub kind: RustCallDeallocatorEvidenceKind,
     /// Audit-only canonical DefPath after structural producer classification.
     pub callee_def_path: String,
+    /// DROP1 typed-call provenance.  These fields are never interpreted as
+    /// proof by consumers; they are serialized only after the producer has
+    /// matched rustc identities structurally.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_def_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allocator_def_path: Option<String>,
 }
 
 /// v6S-r1 producer-certified ownership/disposition evidence.

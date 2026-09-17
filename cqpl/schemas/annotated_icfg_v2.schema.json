@@ -774,6 +774,40 @@
         },
         {
           "required": [
+            "basis",
+            "owner_def_path",
+            "allocator_def_path",
+            "callee_def_path"
+          ],
+          "properties": {
+            "basis": {
+              "const": "rust_mem_drop_owned_box_global_v1"
+            },
+            "family": {
+              "const": "rust_global"
+            },
+            "operation": {
+              "const": "drop"
+            },
+            "language": {
+              "const": "rust"
+            },
+            "owner_def_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "allocator_def_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "callee_def_path": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "required": [
             "basis"
           ],
           "properties": {
@@ -1148,6 +1182,29 @@
                   }
                 }
               }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "allocation_contracts_v3"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "allocation_contracts_v2"
             }
           }
         }

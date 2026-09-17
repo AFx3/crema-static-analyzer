@@ -134,40 +134,88 @@ fn rust_drop_allocator_evidence<'tcx>(
 }
 
 
-/// v6N-r1a: classify the public Rust global deallocation API while the rustc
-/// `DefId` is available.  This intentionally avoids exporter-side matching of
-/// `function_called` or rendered MIR strings.
+/// Producer-certify supported explicit Rust deallocation calls while rustc's
+/// `DefId` and argument types are still available.  This intentionally avoids
+/// exporter-side matching of `function_called` or rendered MIR strings.
 ///
-/// For the pinned nightly, `std::alloc::dealloc` resolves to the public item
-/// `alloc::alloc::dealloc`.  We establish this structurally from DefId metadata:
-/// external crate `alloc`, parent module named `alloc`, item named `dealloc`.
-/// The canonical DefPath is retained only as audit provenance.
+/// Supported proofs:
+/// - v6N-r1a: public `alloc::alloc::dealloc`;
+/// - Bcontract-DROP1: exact `core::mem::drop(Box<T, Global>)`.
+///
+/// Rust specifies `mem::drop<T>` as moving the value into the function so that
+/// it is automatically dropped before return.  The Box memory-layout contract
+/// states that the default Box allocator is `Global` for non-ZST backing
+/// allocations.  DROP1 still proves both identities structurally with rustc;
+/// these documentation facts define the semantic meaning of the emitted proof.
+///
+/// Official references:
+/// - https://doc.rust-lang.org/std/mem/fn.drop.html
+/// - https://doc.rust-lang.org/std/boxed/#memory-layout
 fn rust_call_deallocator_evidence<'tcx>(
     def_id: DefId,
+    first_arg_ty: Option<ty::Ty<'tcx>>,
     tcx: TyCtxt<'tcx>,
 ) -> Option<RustCallDeallocatorEvidence> {
     if def_id.is_local() {
         return None;
     }
-    if tcx.crate_name(def_id.krate).as_str() != "alloc"
-        || tcx.item_name(def_id).as_str() != "dealloc"
-    {
-        return None;
-    }
+
+    let crate_name = tcx.crate_name(def_id.krate);
+    let item_name = tcx.item_name(def_id);
     let parent = tcx.parent(def_id);
-    // `TyCtxt::item_name` is only valid for definitions that actually carry a
-    // name.  In particular, an `Impl` parent has no item name on the pinned
-    // compiler and asking for one can ICE rustc.  Prove the parent is a module
-    // before reading its name.
-    if !matches!(tcx.def_kind(parent), DefKind::Mod)
-        || tcx.item_name(parent).as_str() != "alloc"
+
+    // v6N-r1a: public alloc::alloc::dealloc.
+    if crate_name.as_str() == "alloc"
+        && item_name.as_str() == "dealloc"
+        && matches!(tcx.def_kind(parent), DefKind::Mod)
+        && tcx.item_name(parent).as_str() == "alloc"
     {
-        return None;
+        return Some(RustCallDeallocatorEvidence {
+            kind: RustCallDeallocatorEvidenceKind::GlobalDeallocApi,
+            callee_def_path: tcx.def_path_str(def_id),
+            owner_def_path: None,
+            allocator_def_path: None,
+        });
     }
-    Some(RustCallDeallocatorEvidence {
-        kind: RustCallDeallocatorEvidenceKind::GlobalDeallocApi,
-        callee_def_path: tcx.def_path_str(def_id),
-    })
+
+    // Bcontract-DROP1: exact core::mem::drop(Box<T, Global>).
+    //
+    // The function identity is established from rustc DefId metadata; the
+    // argument is accepted only when its ADT is the owned_box lang item and
+    // its allocator parameter is the global_alloc_ty lang item.  This is
+    // intentionally narrower than rendered `drop(Box<...>)` text and fails
+    // closed for custom allocators, aliases that do not normalize to an ADT,
+    // non-Box values, and unresolved/generic allocator parameters.
+    if crate_name.as_str() == "core"
+        && item_name.as_str() == "drop"
+        && matches!(tcx.def_kind(parent), DefKind::Mod)
+        && tcx.item_name(parent).as_str() == "mem"
+    {
+        let arg_ty = first_arg_ty?;
+        let TyKind::Adt(owner_def, args) = arg_ty.kind() else {
+            return None;
+        };
+        if tcx.lang_items().owned_box() != Some(owner_def.did()) {
+            return None;
+        }
+
+        let allocator_ty = args.types().nth(1)?;
+        let TyKind::Adt(allocator_def, _) = allocator_ty.kind() else {
+            return None;
+        };
+        if tcx.lang_items().global_alloc_ty() != Some(allocator_def.did()) {
+            return None;
+        }
+
+        return Some(RustCallDeallocatorEvidence {
+            kind: RustCallDeallocatorEvidenceKind::MemDropOwnedBoxGlobal,
+            callee_def_path: tcx.def_path_str(def_id),
+            owner_def_path: Some(tcx.def_path_str(owner_def.did())),
+            allocator_def_path: Some(tcx.def_path_str(allocator_def.did())),
+        });
+    }
+
+    None
 }
 
 /// v6S-r1: producer-certify ownership/disposition operations while rustc
@@ -880,7 +928,7 @@ impl MirExtractor {
                             (
                                 Some(tcx.def_path_str(*def_id)),
                                 def_id.is_local(),
-                                rust_call_deallocator_evidence(*def_id, tcx),
+                                rust_call_deallocator_evidence(*def_id, first_arg_ty, tcx),
                                 if mir_semantics_v2_enabled() {
                                     rust_allocation_disposition_evidence(*def_id, first_arg_ty, tcx)
                                 } else {
