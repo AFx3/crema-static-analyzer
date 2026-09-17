@@ -1,0 +1,13 @@
+{
+  "vulnerable": {
+    "exit_code": 134,
+    "signal": "SIGABRT",
+    "stderr_excerpt": "free(): double free detected in tcache 2",
+    "outcome": "reproduces"
+  },
+  "fixed": {
+    "exit_code": 0,
+    "stdout_excerpt": "EXPECTED: unwound cleanly",
+    "outcome": "no_defect"
+  }
+}

@@ -349,6 +349,7 @@ impl Parser {
             "alloc" => Ok(StateFormula::May { predicate: MayPredicate::Alloc, logic_var }),
             "drop" => Ok(StateFormula::May { predicate: MayPredicate::Drop, logic_var }),
             "own_forg" | "ownforg" => Ok(StateFormula::May { predicate: MayPredicate::OwnForg, logic_var }),
+            "repeat_drop" | "repeatdrop" => Ok(StateFormula::May { predicate: MayPredicate::RepeatDrop, logic_var }),
             "alloc_l" => Ok(StateFormula::Label { predicate: LabelPredicate::Alloc, logic_var }),
             "drop_l" => Ok(StateFormula::Label { predicate: LabelPredicate::Drop, logic_var }),
             "read_l" => Ok(StateFormula::Label { predicate: LabelPredicate::Read, logic_var }),
@@ -438,6 +439,15 @@ mod tests {
                 .unwrap_or_else(|e| panic!("failed to parse term_l({name}): {e}"));
             assert!(q.free_vars().is_empty(), "term_l({name}) must be closed");
         }
+    }
+
+    #[test]
+    fn parses_repeat_drop_as_capability_gated_may_predicate() {
+        let q = parse_query_document(
+            "requires panic_lifecycle_state_v2; exists_alloc a. EF repeat_drop(a)"
+        ).unwrap();
+        assert!(q.required_capabilities.contains("panic_lifecycle_state_v2"));
+        assert!(q.formula.free_vars().is_empty());
     }
 
 }

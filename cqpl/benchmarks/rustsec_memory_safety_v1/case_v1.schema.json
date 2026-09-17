@@ -43,6 +43,20 @@
         "version_or_commit": {
           "minLength": 1,
           "type": "string"
+        },
+        "commit": {
+          "type": ["string", "null"]
+        },
+        "source_origin": {
+          "type": "string"
+        },
+        "source_archive_sha256": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "source_tree_sha256": {
+          "minLength": 1,
+          "type": "string"
         }
       },
       "required": [
@@ -68,6 +82,20 @@
       "additionalProperties": false,
       "properties": {
         "version_or_commit": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "commit": {
+          "type": ["string", "null"]
+        },
+        "source_origin": {
+          "type": "string"
+        },
+        "source_archive_sha256": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "source_tree_sha256": {
           "minLength": 1,
           "type": "string"
         }

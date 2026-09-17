@@ -193,6 +193,8 @@ Non è un nuovo lattice e non è una MUST analysis.
 
 Le query che usano `alloc(a)`, `drop(a)`, `own_forg(a)` con `a : AbstractAllocId` devono dichiarare `allocation_state_v1`.
 
+A3.7 aggiunge un sidecar node-local `panic_lifecycle[]`, capability-gated da `panic_lifecycle_state_v1`. Ogni record è keyed da `AbstractAllocId`, ha certezza `may_abstract` e conserva i flag `may_own`, `may_partial_drop`, `may_stale_owner`, `may_committed`, `may_complete`. `panic_lifecycle_state_v2` aggiunge su ogni nodo `panic_lifecycle_coverage = complete | unresolved`. Il predicato sperimentale `repeat_drop(a)` richiede v2: un record MAY compatibile produce `unk`; in assenza di record, `complete` produce `ff` e `unresolved` produce `unk`. `tt` non è disponibile in questa capability.
+
 ## 11. Contratti allocator/deallocator
 
 Con `allocation_contracts_v1/v2`:
@@ -266,9 +268,9 @@ Il checker rifiuta almeno:
 
 Query/capability mismatch è errore esplicito, mai `ff`.
 
-## 15. `allocation_disposition[]` e `allocation_disposition_v1`
+## 15. `allocation_disposition[]`, v1 e v2
 
-Quando la capability `allocation_disposition_v1` è dichiarata, ogni nodo schema-v2 contiene un array `allocation_disposition` (eventualmente vuoto).
+Quando la capability `allocation_disposition_v1` è dichiarata, ogni nodo schema-v2 contiene un array `allocation_disposition` (eventualmente vuoto).  Il vocabolario v1 rimane chiuso e congelato. `allocation_disposition_v2` è un refinement additivo che richiede v1 e abilita esclusivamente i record `cstring_into_raw` / `cstring_from_raw`; un artifact v1-only che li contiene è invalido.
 
 Esempio:
 

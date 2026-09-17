@@ -1,3 +1,19 @@
 
 # Generated Cargo build trees for the evaluation corpus
 /tests_and_target_repos/**/target/
+# B1.2 / benchmark transient
+repro-results/
+SVF/
+backup_*/
+cqpl.zip
+cqpl_annotated_icfg.json
+global_icfg_nodes_edges.dot
+.main.dot
+project-dir-structure.txt
+project-tree.txt
+project_tree.txt
+es-test/
+cargo_project_test/
+rustc_mir_callback/
+SVF-example/output/
+SVF-example/callgraph_initial.dot.dot

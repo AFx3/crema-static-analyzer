@@ -2023,6 +2023,7 @@ fn apply_mir_terminator_for_edge_enabled(
     if matches!(
         edge.label.as_deref(),
         Some("Rust Call -> dummyCall")
+            | Some("Rust Drop -> dummyCall")
             | Some("Higher-order callback -> dummyCall")
             | Some("FFI Call")
     ) {
@@ -2204,7 +2205,7 @@ fn is_raw_dealloc_call(s: &str) -> bool {
 }
 
 fn is_raw_realloc_call(s: &str) -> bool {
-    s.contains("std::alloc::realloc") || s.contains("alloc::alloc::realloc")
+    memory_events::is_raw_realloc_call(s)
 }
 
 fn is_cstr_from_ptr_call(s: &str) -> bool {
@@ -2549,11 +2550,27 @@ pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place
         CellValue::BOXTIMES
 
     } else if is_raw_realloc_call(func_call_details) {
-        // realloc has success/failure-dependent ownership: on success the old
-        // block may be invalidated and a new pointer returned; on failure the
-        // old allocation remains valid. A single non-disjunctive CellValue
-        // cannot encode both precisely, so do not mutate the old allocation.
-        // TOP on the result records the nullable/unknown raw pointer.
+        // Rust `GlobalAlloc::realloc` is branch-sensitive:
+        //
+        // * non-null result: ownership of the old block has been transferred
+        //   and *any* access through the old pointer is UB, even when the
+        //   allocation stayed in place;
+        // * null result: ownership was not transferred and the old allocation
+        //   is unchanged.
+        //
+        // CellValue has neither a NULL element nor a disjunction capable of
+        // representing {old-live-on-failure, old-invalid-on-success}.  Keeping
+        // the old component at MV/ALLOC would therefore be an under-
+        // approximation.  The sound non-disjunctive abstraction is TOP for
+        // the old alias component and TOP for the nullable returned pointer.
+        // Allocation identity separately records the MAY old-or-fresh relation.
+        if let Some(source) = first_call_local_from_details(func_call_details) {
+            if new_mem.get_allocation(&source).is_some() {
+                new_mem.set_cell_value(&source, CellValue::TOP);
+            }
+        }
+        let full_ret = full_local_name(return_place);
+        new_mem.assign_local_value(&full_ret, CellValue::TOP);
         CellValue::TOP
 
     } else if
@@ -3945,6 +3962,39 @@ pub fn fixed_point_analysis(icfg: &GlobalICFGOrdered) -> (AbstractState, TaintSt
 
                     let mut edge_mem = curr_mem.clone();
                     let mut edge_taint = curr_taint.clone();
+
+                    // A3.6 custom Drop bodies execute before ordinary drop-glue
+                    // completion.  The represented destructor returns through a
+                    // DummyRet; only on that normal return do we apply the
+                    // existing Drop completion summary (FREED for tracked
+                    // ownership plus taint).  This preserves both the explicit
+                    // user destructor effects and CREMA's recursive-field/drop-
+                    // glue abstraction without applying either effect early.
+                    if matches!(
+                        edge.label.as_deref(),
+                        Some("dummyRet -> Rust Drop Continuation")
+                    ) {
+                        if let Some(call) = icfg
+                            .rust_calls
+                            .iter()
+                            .find(|call| call.dummy_ret_node == current)
+                        {
+                            if let GlobalICFGNode::Mir(drop_site) =
+                                get_node_by_id(icfg, &call.call_node)
+                            {
+                                if let Some(term @ MirTerminator::Drop { .. }) =
+                                    drop_site.terminator.as_ref()
+                                {
+                                    edge_mem = apply_mir_terminator_with_extensions(
+                                        &edge_mem,
+                                        &mut edge_taint,
+                                        term,
+                                    );
+                                }
+                            }
+                        }
+                    }
+
                     if let GlobalICFGNode::Mir(source_bb) = get_node_by_id(icfg, &current) {
                         if let Some(term) = source_bb.terminator.as_ref() {
                             edge_mem = apply_mir_terminator_for_edge_with_extensions(
@@ -4325,6 +4375,36 @@ mod panic_unwind_lifecycle_v1_tests {
         assert!(unwind_taint
             .get("Local(_1)")
             .is_some_and(|tags| tags.contains("unwind_partial_drop")));
+    }
+
+    #[test]
+    fn represented_custom_drop_enters_body_before_drop_completion() {
+        let mut mem = AbstractMemory::default();
+        mem.set_cell_value(&"Local(_1)".to_string(), CellValue::ALLOC);
+        let term = MirTerminator::Drop {
+            details: "drop(_1) -> [return: bb1, unwind: bb2]".to_string(),
+            source_info: "test.rs:1:1:1:1 (#0)".to_string(),
+            return_target: "bb1".to_string(),
+            unwind_target: "cleanup(bb2)".to_string(),
+            dropped_value: "_1".to_string(),
+            is_mutable: true,
+            deallocator_evidence: None,
+        };
+
+        let mut taint = TaintStateMap::new();
+        let entered = apply_mir_terminator_for_edge_enabled(
+            &mem,
+            &mut taint,
+            &term,
+            &edge("Rust Drop -> dummyCall", "dummyCall::rust::main::bb0"),
+        );
+
+        assert_eq!(
+            entered.get_cell_value(&"Local(_1)".to_string()),
+            CellValue::ALLOC,
+            "user Drop::drop must observe the pre-drop state; completion happens after its normal return"
+        );
+        assert!(taint.get("Local(_1)").is_none());
     }
 }
 
@@ -7654,16 +7734,24 @@ mod phase4_std_memory_tests {
     }
 
     #[test]
-    fn raw_realloc_is_explicitly_conservative_and_keeps_old_allocation() {
+    fn raw_realloc_widens_source_alias_component_and_nullable_result() {
         let mut mem = AbstractMemory::default();
         mem.set_cell_value(&n("Local(_1)"), CellValue::MV);
+        mem.propagate_cell_value(&n("Local(_1)"), &n("Local(_5)"));
 
         let details =
             "std::alloc::realloc(copy _1, copy _2, copy _3) -> [return: bb1, unwind continue]";
         let (ret, mem2) = transfer_call(&mem, details, "_4");
 
         assert_eq!(ret, CellValue::TOP);
-        assert_eq!(mem2.get_cell_value(&n("Local(_1)")), CellValue::MV);
+        assert_eq!(mem2.get_cell_value(&n("Local(_1)")), CellValue::TOP);
+        assert_eq!(mem2.get_cell_value(&n("Local(_5)")), CellValue::TOP);
+        assert_eq!(mem2.get_cell_value(&n("Local(_4)")), CellValue::TOP);
+        assert_ne!(
+            mem2.get_allocation(&n("Local(_1)")),
+            mem2.get_allocation(&n("Local(_4)")),
+            "realloc success may move, and failure returns null; the return must not be forced into the old alias component"
+        );
     }
 
     #[test]

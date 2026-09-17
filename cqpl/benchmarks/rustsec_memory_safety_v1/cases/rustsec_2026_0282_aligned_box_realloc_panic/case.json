@@ -1,0 +1,44 @@
+{
+  "schema": "b1.2-case-v1",
+  "case_id": "rustsec_2026_0282_aligned_box_realloc_panic",
+  "advisory": "RUSTSEC-2026-0282",
+  "crate": "aligned_box",
+  "materialization_status": "admitted",
+  "reason_if_not_admitted": null,
+  "reason_detail": null,
+  "vulnerable": {
+    "version": "0.3.0",
+    "commit": null,
+    "source_origin": "crates.io",
+    "source_archive_sha256": "5ebdec4a15fc241b75eb9a55d320cef51549f95f739f8ce3dce24b19b9e5f24a",
+    "source_tree_sha256": "5ac5f91e3efd7bf498511b6625abfd0bb142d506688f6b3dbbbb6b5ce32c0dbd",
+    "build_status": "pass"
+  },
+  "fixed": {
+    "version": "0.3.1",
+    "commit": null,
+    "source_origin": "crates.io",
+    "source_archive_sha256": "3a67318d4d368c1c40975ac23a92dd95bbbbeaab1d1c8597000035bb50455189",
+    "source_tree_sha256": "13da751acb0a8b8f348543d6198f0229331f89bf521b3ed2be2c1dfba8735ce7",
+    "build_status": "pass"
+  },
+  "build_contract": {
+    "rust_toolchain": "rustc 1.84.0-nightly (3fee0f12e 2024-11-20)",
+    "target": "x86_64-unknown-linux-gnu",
+    "cargo_features": [
+      "default"
+    ],
+    "native_dependencies": []
+  },
+  "reproducer": {
+    "file": "reproducer/main.rs",
+    "sha256": "fb6d8566be293f47992e58d415a283fb8968bae752ea20ae1627e0ff92d0e8e7",
+    "provenance": "upstream PR michaellass/aligned_box#6 (regression test realloc_shrink_panicking_drop_is_sound); analyzable variant without catch_unwind (schema-v2 fail-closed on higher-order control flow)",
+    "expected_vulnerable_outcome": "sigabrt_double_free_134",
+    "expected_fixed_outcome": "panic_propagates_cleanly_101"
+  },
+  "validation": {
+    "vulnerable_reproduces": true,
+    "fixed_reproduces": false
+  }
+}

@@ -1,0 +1,4 @@
+# A3.7 lifecycle query. Positive MAY evidence and unresolved producer coverage
+# are intentionally UNKNOWN; complete exclusion is FALSE. TRUE is unavailable.
+requires panic_lifecycle_state_v2;
+exists_alloc a. EF repeat_drop(a)

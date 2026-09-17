@@ -35,6 +35,9 @@ impl<'a> ModelChecker<'a> {
         if formula_uses_allocation_state(formula, initial_env) {
             return Err("allocation-bound state predicates require a query document declaring `requires allocation_state_v1;`".into());
         }
+        if formula_uses_panic_lifecycle(formula) {
+            return Err("repeat_drop requires a query document declaring `requires panic_lifecycle_state_v2;`".into());
+        }
         if formula_uses_structural_labels(formula) {
             return Err("stmt_l/rvalue_l/term_l require a query document declaring `requires mir_semantic_labels_v1;`".into());
         }
@@ -54,6 +57,11 @@ impl<'a> ModelChecker<'a> {
             && !document.required_capabilities.contains("allocation_state_v1")
         {
             return Err("allocation-bound state predicates require explicit `requires allocation_state_v1;`".into());
+        }
+        if formula_uses_panic_lifecycle(&document.formula)
+            && !document.required_capabilities.contains("panic_lifecycle_state_v2")
+        {
+            return Err("repeat_drop requires explicit `requires panic_lifecycle_state_v2;`".into());
         }
         if formula_uses_structural_labels(&document.formula)
             && !document.required_capabilities.contains("mir_semantic_labels_v1")
@@ -133,6 +141,16 @@ impl<'a> ModelChecker<'a> {
     ) -> Result<(), String> {
         use StateFormula::*;
         match formula {
+            May { predicate: MayPredicate::RepeatDrop, logic_var } => match sorts.get(logic_var) {
+                Some(LogicSort::Allocation) if self.k.capabilities.contains("panic_lifecycle_state_v2") => Ok(()),
+                Some(LogicSort::Allocation) => Err(format!(
+                    "repeat_drop on allocation variable '{logic_var}' requires annotated-ICFG capability panic_lifecycle_state_v2"
+                )),
+                Some(LogicSort::ProgramVar) => Err(format!(
+                    "repeat_drop requires an allocation variable bound by exists_alloc/forall_alloc ('{logic_var}')"
+                )),
+                None => Err(format!("logical variable '{logic_var}' is unbound")),
+            },
             May { logic_var, .. } => match sorts.get(logic_var) {
                 Some(LogicSort::ProgramVar) => Ok(()),
                 Some(LogicSort::Allocation) if self.k.capabilities.contains("allocation_state_v1") => Ok(()),
@@ -381,7 +399,7 @@ impl<'a> ModelChecker<'a> {
         }
 
         let mut candidates: Option<BTreeSet<String>> = None;
-        for predicate in [MayPredicate::Alloc, MayPredicate::Drop, MayPredicate::OwnForg] {
+        for predicate in [MayPredicate::Alloc, MayPredicate::Drop, MayPredicate::OwnForg, MayPredicate::RepeatDrop] {
             if mask & may_predicate_bit(predicate) == 0 {
                 continue;
             }
@@ -395,6 +413,23 @@ impl<'a> ModelChecker<'a> {
     }
 
     fn may_candidates(&self, predicate: MayPredicate) -> BTreeSet<String> {
+        if predicate == MayPredicate::RepeatDrop {
+            // Candidate pruning is sound only when lifecycle coverage is complete.
+            // Any unresolved node may hide a repeat-drop witness for any represented
+            // abstract allocation, so keep the full allocation domain in that case.
+            if self.k.nodes.keys().any(|node_id| {
+                self.k.panic_lifecycle.coverage_at(node_id)
+                    == Some(crate::kripke::PanicLifecycleCoverage::Unresolved)
+            }) {
+                return self.k.allocation_ids().cloned().collect();
+            }
+            return self.k.panic_lifecycle
+                .values()
+                .flatten()
+                .filter(|record| record.may_repeat_drop())
+                .map(|record| record.allocation.clone())
+                .collect();
+        }
         let atom = may_atom(predicate);
         let mut out = BTreeSet::new();
         for node in self.k.nodes.values() {
@@ -440,6 +475,7 @@ fn formula_uses_allocation_state(formula: &StateFormula, initial_env: &Env) -> b
     ) -> bool {
         use StateFormula::*;
         match formula {
+            May { predicate: MayPredicate::RepeatDrop, .. } => false,
             May { logic_var, .. } => sorts.get(logic_var) == Some(&LogicSort::Allocation),
             Label { .. } | StructuralLabel { .. } => false,
             Not(inner) => visit(inner, sorts),
@@ -483,6 +519,23 @@ fn formula_uses_allocation_state(formula: &StateFormula, initial_env: &Env) -> b
         );
     }
     visit(formula, &mut sorts)
+}
+
+fn formula_uses_panic_lifecycle(formula: &StateFormula) -> bool {
+    use StateFormula::*;
+    match formula {
+        May { predicate: MayPredicate::RepeatDrop, .. } => true,
+        May { .. } | Label { .. } | StructuralLabel { .. } => false,
+        Not(inner) => formula_uses_panic_lifecycle(inner),
+        And(a, b) | Or(a, b) => formula_uses_panic_lifecycle(a) || formula_uses_panic_lifecycle(b),
+        Exists { body, .. } | ForAll { body, .. } | ExistsAlloc { body, .. } | ForAllAlloc { body, .. } =>
+            formula_uses_panic_lifecycle(body),
+        Path { formula, .. } => match formula {
+            PathFormula::State(s) | PathFormula::Next(s) | PathFormula::Eventually(s) | PathFormula::Globally(s) =>
+                formula_uses_panic_lifecycle(s),
+            PathFormula::Until(a, b) => formula_uses_panic_lifecycle(a) || formula_uses_panic_lifecycle(b),
+        },
+    }
 }
 
 fn formula_uses_structural_labels(formula: &StateFormula) -> bool {
@@ -544,6 +597,7 @@ fn may_atom(predicate: MayPredicate) -> CellValue {
         MayPredicate::Alloc => CellValue::Alloc,
         MayPredicate::Drop => CellValue::Freed,
         MayPredicate::OwnForg => CellValue::Mv,
+        MayPredicate::RepeatDrop => unreachable!("repeat_drop is lifecycle-backed"),
     }
 }
 
@@ -552,6 +606,7 @@ fn may_predicate_bit(predicate: MayPredicate) -> u8 {
         MayPredicate::Alloc => 0b001,
         MayPredicate::Drop => 0b010,
         MayPredicate::OwnForg => 0b100,
+        MayPredicate::RepeatDrop => 0b1000,
     }
 }
 
@@ -1327,6 +1382,94 @@ mod tests {
         }
         let missing = parse_query_document("EF term_l(return)").unwrap();
         assert!(mc.evaluate_document(&missing, &Env::new()).is_err());
+    }
+
+    fn lifecycle_query_input(coverage: crate::kripke::PanicLifecycleCoverage) -> (AnnotatedIcfg, crate::kripke::PanicLifecycleOverlay) {
+        let input = AnnotatedIcfg {
+            schema_version: 2,
+            capabilities: vec![
+                "mir_semantic_labels_v1".into(),
+                "mir_semantics_v2".into(),
+                "panic_unwind_lifecycle_v1".into(),
+                "panic_lifecycle_state_v1".into(),
+                "panic_lifecycle_state_v2".into(),
+            ],
+            entry: "b0".into(),
+            variables: vec![ProgramVariable {
+                id: "rust::x".into(), language: ProgramLanguage::Rust, display: None, function: None,
+            }],
+            allocations: vec![AbstractAllocation {
+                id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None,
+            }],
+            nodes: vec![node("b0", &[], vec![], Default::default(), Default::default())],
+        };
+        let mut overlay = crate::kripke::PanicLifecycleOverlay::new();
+        overlay.insert("b0".to_string(), vec![]);
+        overlay.set_coverage("b0", coverage);
+        (input, overlay)
+    }
+
+    #[test]
+    fn repeat_drop_may_query_is_unknown_and_never_true() {
+        let (input, mut overlay) = lifecycle_query_input(crate::kripke::PanicLifecycleCoverage::Complete);
+        overlay.insert(
+            "b0".to_string(),
+            vec![crate::kripke::PanicLifecycleRecord {
+                allocation: "A".into(),
+                certainty: AllocationEventCertainty::MayAbstract,
+                may_own: true, may_partial_drop: true, may_stale_owner: true,
+                may_committed: false, may_complete: false,
+            }],
+        );
+        let k = Kripke::from_annotated_icfg_with_panic_lifecycle(input, overlay).unwrap();
+        let checker = ModelChecker::new(&k);
+        let query = crate::parser::parse_query_document(
+            "requires panic_lifecycle_state_v2; exists_alloc a. EF repeat_drop(a)"
+        ).unwrap();
+        assert_eq!(checker.evaluate_document(&query, &Env::new()).unwrap(), Truth::Unknown);
+    }
+
+    #[test]
+    fn repeat_drop_absence_is_false_when_coverage_is_complete() {
+        let (input, overlay) = lifecycle_query_input(crate::kripke::PanicLifecycleCoverage::Complete);
+        let k = Kripke::from_annotated_icfg_with_panic_lifecycle(input, overlay).unwrap();
+        let checker = ModelChecker::new(&k);
+        let query = crate::parser::parse_query_document(
+            "requires panic_lifecycle_state_v2; exists_alloc a. EF repeat_drop(a)"
+        ).unwrap();
+        assert_eq!(checker.evaluate_document(&query, &Env::new()).unwrap(), Truth::False);
+    }
+
+    #[test]
+    fn repeat_drop_unresolved_coverage_is_unknown() {
+        let (input, overlay) = lifecycle_query_input(crate::kripke::PanicLifecycleCoverage::Unresolved);
+        let k = Kripke::from_annotated_icfg_with_panic_lifecycle(input, overlay).unwrap();
+        let checker = ModelChecker::new(&k);
+        let query = crate::parser::parse_query_document(
+            "requires panic_lifecycle_state_v2; exists_alloc a. EF repeat_drop(a)"
+        ).unwrap();
+        assert_eq!(checker.evaluate_document(&query, &Env::new()).unwrap(), Truth::Unknown);
+    }
+
+    #[test]
+    fn repeat_drop_requires_explicit_capability_declaration() {
+        let input = AnnotatedIcfg {
+            schema_version: 2, capabilities: vec![], entry: "b0".into(),
+            variables: vec![ProgramVariable {
+                id: "rust::x".into(), language: ProgramLanguage::Rust, display: None, function: None,
+            }],
+            allocations: vec![AbstractAllocation {
+                id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None,
+            }],
+            nodes: vec![node("b0", &[], vec![], Default::default(), Default::default())],
+        };
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        let checker = ModelChecker::new(&k);
+        let query = crate::parser::parse_query_document(
+            "exists_alloc a. EF repeat_drop(a)"
+        ).unwrap();
+        let err = checker.evaluate(&query.formula, &Env::new()).unwrap_err();
+        assert!(err.contains("panic_lifecycle_state_v2"), "unexpected error: {err}");
     }
 
 }

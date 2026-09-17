@@ -584,7 +584,20 @@
         "allocation_disposition": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/allocationDispositionRecord"
+            "oneOf": [
+              {
+                "$ref": "#/$defs/allocationDispositionRecord"
+              },
+              {
+                "$ref": "#/$defs/allocationDispositionRecordV2Extension"
+              }
+            ]
+          }
+        },
+        "panic_lifecycle": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/panicLifecycleRecord"
           }
         }
       }
@@ -687,7 +700,8 @@
             "basis": {
               "enum": [
                 "rust_box_global_drop",
-                "rust_vec_global_drop"
+                "rust_vec_global_drop",
+                "rust_cstring_global_drop"
               ]
             },
             "family": {
@@ -888,6 +902,93 @@
           "minLength": 1
         }
       }
+    },
+    "panicLifecycleRecord": {
+      "type": "object",
+      "required": [
+        "allocation",
+        "certainty",
+        "may_own",
+        "may_partial_drop",
+        "may_stale_owner",
+        "may_committed",
+        "may_complete"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "allocation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "certainty": {
+          "const": "may_abstract"
+        },
+        "may_own": {
+          "type": "boolean"
+        },
+        "may_partial_drop": {
+          "type": "boolean"
+        },
+        "may_stale_owner": {
+          "type": "boolean"
+        },
+        "may_committed": {
+          "type": "boolean"
+        },
+        "may_complete": {
+          "type": "boolean"
+        }
+      }
+    },
+    "allocationDispositionRecordV2Extension": {
+      "type": "object",
+      "required": [
+        "allocation",
+        "kind",
+        "certainty",
+        "obligation_effect",
+        "basis"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "allocation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "cstring_into_raw",
+            "cstring_from_raw"
+          ]
+        },
+        "certainty": {
+          "const": "may_abstract"
+        },
+        "obligation_effect": {
+          "enum": [
+            "preserve_manual_obligation",
+            "restore_raii_obligation"
+          ]
+        },
+        "basis": {
+          "enum": [
+            "rustc_cstring_into_raw_v1",
+            "rustc_cstring_from_raw_v1"
+          ]
+        },
+        "source_variable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_variable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "callee_def_path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     }
   },
   "allOf": [
@@ -936,6 +1037,76 @@
               "required": [
                 "allocation_disposition"
               ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "allocation_disposition_v2"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "allocation_disposition_v1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "allOf": [
+          {
+            "properties": {
+              "capabilities": {
+                "contains": {
+                  "const": "allocation_disposition_v1"
+                }
+              }
+            },
+            "required": [
+              "capabilities"
+            ]
+          },
+          {
+            "not": {
+              "properties": {
+                "capabilities": {
+                  "contains": {
+                    "const": "allocation_disposition_v2"
+                  }
+                }
+              },
+              "required": [
+                "capabilities"
+              ]
+            }
+          }
+        ]
+      },
+      "then": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "properties": {
+                "allocation_disposition": {
+                  "items": {
+                    "$ref": "#/$defs/allocationDispositionRecord"
+                  }
+                }
+              }
             }
           }
         }
@@ -1066,6 +1237,36 @@
           "capabilities": {
             "contains": {
               "const": "mir_semantic_labels_v1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "panic_lifecycle_state_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "panic_unwind_lifecycle_v1"
+            }
+          },
+          "nodes": {
+            "items": {
+              "required": [
+                "panic_lifecycle"
+              ]
             }
           }
         }

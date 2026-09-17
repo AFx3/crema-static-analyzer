@@ -247,6 +247,9 @@ pub struct SourceInfoData {
 pub enum RustDropAllocatorEvidenceKind {
     BoxGlobal,
     VecGlobal,
+    /// `CString` stores its owned bytes in `Box<[u8]>`; the canonical
+    /// `cstring_type` diagnostic item therefore has a Global-backed drop.
+    CStringGlobal,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -286,6 +289,15 @@ pub struct RustCallDeallocatorEvidence {
 ///   caller: https://doc.rust-lang.org/std/boxed/struct.Box.html#method.into_raw
 /// - `Box::from_raw` reconstructs Box ownership; the Box destructor will drop T
 ///   and free the allocation: https://doc.rust-lang.org/std/boxed/struct.Box.html#method.from_raw
+/// - `CString::into_raw` transfers ownership to the caller and explicitly must
+///   be paired with `CString::from_raw`, not C `free`:
+///   https://doc.rust-lang.org/std/ffi/struct.CString.html#method.into_raw
+/// - `CString::from_raw` retakes ownership of a pointer previously returned by
+///   `CString::into_raw`:
+///   https://doc.rust-lang.org/std/ffi/struct.CString.html#method.from_raw
+/// - the official `alloc` source marks `CString` with rustc diagnostic item
+///   `cstring_type` and stores its buffer as `Box<[u8]>`:
+///   https://doc.rust-lang.org/src/alloc/ffi/c_str.rs.html
 /// - dropping a raw pointer has no effect on the lifecycle of the pointee:
 ///   https://doc.rust-lang.org/reference/types/pointer.html#raw-pointers-const-and-mut
 /// - `mem::forget` skips the destructor of the consumed value:
@@ -296,6 +308,13 @@ pub enum RustAllocationDispositionEvidenceKind {
     BoxIntoRaw,
     BoxFromRaw,
     BoxLeak,
+    // Canonical B1.1 wire names. Use explicit Serde variant renames rather
+    // than deriving protocol spelling from the Rust identifier.
+    // https://serde.rs/variant-attrs.html
+    #[serde(rename = "cstring_into_raw")]
+    CStringIntoRaw,
+    #[serde(rename = "cstring_from_raw")]
+    CStringFromRaw,
     MemForgetOwnedBox,
     MemDropRawPointer,
 }
@@ -339,6 +358,28 @@ pub enum RustHigherOrderCallEvidenceKind {
     OptionIsSomeAnd,
     /// `Option::is_none_or`: predicate is invoked iff the receiver is `Some`.
     OptionIsNoneOr,
+    /// `Result::map`: callback is invoked iff the receiver is `Ok`.
+    ResultMap,
+    /// `Result::map_err`: callback is invoked iff the receiver is `Err`.
+    ResultMapErr,
+    /// `Result::map_or`: callback is invoked iff the receiver is `Ok`.
+    ResultMapOr,
+    /// `Result::map_or_else`: exactly one of the Err/Ok callbacks is invoked.
+    ResultMapOrElse,
+    /// `Result::and_then`: callback is invoked iff the receiver is `Ok`.
+    ResultAndThen,
+    /// `Result::or_else`: callback is invoked iff the receiver is `Err`.
+    ResultOrElse,
+    /// `Result::unwrap_or_else`: callback is invoked iff the receiver is `Err`.
+    ResultUnwrapOrElse,
+    /// `Result::inspect`: callback is invoked iff the receiver is `Ok`.
+    ResultInspect,
+    /// `Result::inspect_err`: callback is invoked iff the receiver is `Err`.
+    ResultInspectErr,
+    /// `Result::is_ok_and`: predicate is invoked iff the receiver is `Ok`.
+    ResultIsOkAnd,
+    /// `Result::is_err_and`: predicate is invoked iff the receiver is `Err`.
+    ResultIsErrAnd,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

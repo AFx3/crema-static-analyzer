@@ -19,6 +19,11 @@ pub enum RustAllocationSemantics {
     /// Ownership/representation changes while the backing allocation identity
     /// is preserved.
     Transfer,
+    /// `GlobalAlloc::realloc`-style conditional reallocation.  On a non-null
+    /// return the old pointer is invalidated and the result is the only valid
+    /// handle; on a null return the old allocation remains valid.  This is not
+    /// a MUST-fresh allocation and therefore must not be collapsed into `Fresh`.
+    ConditionalReallocation,
 }
 
 fn has_method(s: &str, method: &str) -> bool {
@@ -52,6 +57,10 @@ fn is_raw_alloc_call(s: &str) -> bool {
         && !s.contains("dealloc")
 }
 
+pub fn is_raw_realloc_call(s: &str) -> bool {
+    s.contains("std::alloc::realloc") || s.contains("alloc::alloc::realloc")
+}
+
 fn is_cstring_new(s: &str) -> bool {
     s.contains("CString") && has_method(s, "new")
 }
@@ -64,6 +73,10 @@ fn is_cstring_from_cstr(s: &str) -> bool {
 pub fn rust_allocation_semantics(s: &str) -> RustAllocationSemantics {
     if is_into_vec_transfer_call(s) {
         return RustAllocationSemantics::Transfer;
+    }
+
+    if is_raw_realloc_call(s) {
+        return RustAllocationSemantics::ConditionalReallocation;
     }
 
     if is_exchange_malloc_call(s)
@@ -90,8 +103,11 @@ pub fn rust_allocation_semantics(s: &str) -> RustAllocationSemantics {
 }
 
 /// Whether a CQPL `alloc` MAY event is semantically justified at this call.
-/// Both `Fresh` and `MayFreshOrTransfer` qualify; `Transfer` explicitly does
-/// not, preventing the historical `into_vec` false fresh-allocation event.
+/// Both `Fresh` and `MayFreshOrTransfer` qualify. `Transfer` and
+/// `ConditionalReallocation` deliberately do not: `realloc` may return null
+/// or reuse the existing allocation, so it is not a producer-certified fresh
+/// allocation event even though identity analysis must model a fresh-success
+/// alternative.
 pub fn is_modeled_fresh_allocation(s: &str) -> bool {
     matches!(
         rust_allocation_semantics(s),
@@ -124,5 +140,15 @@ mod tests {
             rust_allocation_semantics("std::ffi::CString::new::<Vec<u8>>"),
             RustAllocationSemantics::MayFreshOrTransfer
         );
+    }
+
+    #[test]
+    fn raw_realloc_is_conditional_reallocation_not_fresh() {
+        let call = "std::alloc::realloc";
+        assert_eq!(
+            rust_allocation_semantics(call),
+            RustAllocationSemantics::ConditionalReallocation
+        );
+        assert!(!is_modeled_fresh_allocation(call));
     }
 }

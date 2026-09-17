@@ -3,7 +3,7 @@
 A2 moves only the existing producer-certified `allocation_disposition_v1`
 projection table into `rust_std_v1.json`.
 
-Active migration summaries:
+Historical v6U-A2 migration summaries:
 
 - rust_box_into_raw_v1
 - rust_box_from_raw_v1
@@ -11,8 +11,17 @@ Active migration summaries:
 - rust_mem_forget_owned_box_v1
 - rust_mem_drop_raw_pointer_v1
 
-All remain `certainty = may_abstract`. No MUST semantics and no libc summaries
-are introduced.
+B1.1 adds two producer-summary entries to the same registry format:
+
+- rust_cstring_into_raw_v1
+- rust_cstring_from_raw_v1
+
+Those two entries project only into the additive `allocation_disposition_v2`
+capability; they do not mutate the frozen seven-kind
+`allocation_disposition_v1` vocabulary.  All remain `certainty = may_abstract`.
+No MUST semantics and no libc summaries are introduced.
+
+Official CString contract: <https://doc.rust-lang.org/std/ffi/struct.CString.html>.
 
 Acceptance requires 112 subjects, 1344 attempts, 392 disposition records,
 468 UNKNOWN explanation sidecars, and zero mismatches in all three surfaces:

@@ -24,6 +24,7 @@ mod cargo_project;
 mod semantic_coverage;
 mod mir_semantics;
 mod panic_unwind;
+mod panic_lifecycle_domain;
 
 use cargo_metadata::{MetadataCommand, Target};
 use icfg::MirExtractor;

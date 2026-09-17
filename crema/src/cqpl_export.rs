@@ -2,6 +2,7 @@ use crate::abstract_domain::{AbstractMemory, AbstractState, CellValue, Name};
 use crate::identity::{AllocationIdentityMemory, AllocationIdentityState};
 use crate::mir_semantics::{mir_semantics_v2_enabled, semantic_labels_for_block};
 use crate::panic_unwind::panic_unwind_lifecycle_v1_enabled;
+use crate::panic_lifecycle_domain::{fixed_point_real_panic_lifecycle, PanicLifecycleMemory};
 use crate::memory_events;
 use crate::structs::{
     AbstractAllocId, AllocationSiteId, GlobalICFGNode, GlobalICFGOrdered, MirTerminator,
@@ -130,6 +131,17 @@ struct AnnotatedNode {
     /// semantics. Present only with capability allocation_disposition_v1.
     #[serde(skip_serializing_if = "Option::is_none")]
     allocation_disposition: Option<Vec<AllocationDispositionRecord>>,
+    /// A3.7 satellite panic/unwind lifecycle state. Under
+    /// `panic_lifecycle_state_v1` this field is present on every schema-v2
+    /// node, including as an empty array. Records are MAY-only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    panic_lifecycle: Option<Vec<PanicLifecycleRecord>>,
+    /// A3.7 lifecycle producer coverage. `complete` means absence of a MAY
+    /// lifecycle witness may be refuted at this node; `unresolved` means the
+    /// producer lost precision on at least one relevant operation along a path.
+    /// Present only with capability `panic_lifecycle_state_v2`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    panic_lifecycle_coverage: Option<&'static str>,
     /// Auditable scoped post-state identity relation at this node. Present only in v2.
     #[serde(skip_serializing_if = "Option::is_none")]
     identity: Option<NodeIdentityAnnotation>,
@@ -159,9 +171,22 @@ struct AllocationEventLabel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct PanicLifecycleRecord {
+    allocation: String,
+    certainty: &'static str,
+    may_own: bool,
+    may_partial_drop: bool,
+    may_stale_owner: bool,
+    may_committed: bool,
+    may_complete: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 struct AllocationDispositionRecord {
     allocation: String,
-    /// Closed v6S-r1 event vocabulary; see allocation_disposition_v1.md.
+    /// Closed allocation-disposition vocabulary.  The historical v1 subset
+    /// remains frozen; CString handoff/reclaim records require the additive
+    /// allocation_disposition_v2 capability.
     kind: &'static str,
     /// Identity resolution is MAY in v6S-r1.  A singleton AbstractAllocId is
     /// not promoted to a concrete MUST fact.
@@ -384,6 +409,22 @@ fn export_cqpl_annotated_icfg_versioned(
     // value remain the same CQPL program object. This does not alter Pi#_post.
     let closure_event_aliases = build_closure_event_aliases(icfg, abs_state);
 
+    // A3.7 Stage 3: compute the real panic lifecycle satellite domain from
+    // canonical MIR/ICFG events plus the existing allocation-identity state.
+    // The capability is declared only when this producer is active.
+    let panic_lifecycle_state = if schema_version == 2 && panic_unwind_lifecycle_v1_enabled() {
+        Some(
+            fixed_point_real_panic_lifecycle(
+                icfg,
+                identity_state.expect("checked schema-v2 identity state"),
+                entry,
+            )
+            .map_err(|err| -> Box<dyn Error> { err.into() })?,
+        )
+    } else {
+        None
+    };
+
     let mut variable_ids = BTreeSet::new();
     let mut nodes = Vec::with_capacity(icfg.ordered_nodes.len());
 
@@ -502,6 +543,16 @@ fn export_cqpl_annotated_icfg_versioned(
             None
         };
 
+        let lifecycle_memory = panic_lifecycle_state
+            .as_ref()
+            .map(|state| state.get(node_id));
+        let panic_lifecycle = lifecycle_memory
+            .as_ref()
+            .map(panic_lifecycle_records);
+        let panic_lifecycle_coverage = lifecycle_memory
+            .as_ref()
+            .map(|memory| memory.coverage().as_str());
+
         nodes.push(AnnotatedNode {
             id: node_id.clone(),
             successors: successors
@@ -514,6 +565,8 @@ fn export_cqpl_annotated_icfg_versioned(
             semantic_labels,
             allocation_labels,
             allocation_disposition,
+            panic_lifecycle,
+            panic_lifecycle_coverage,
             identity,
             event_identity,
             allocation_post,
@@ -549,6 +602,11 @@ fn export_cqpl_annotated_icfg_versioned(
                 "allocation_contracts_v2",
                 "allocation_state_v1",
                 "allocation_disposition_v1",
+                // B1.1: CString ownership handoff/reclaim extends the frozen
+                // v6S-r1 disposition vocabulary.  Keep v1 declared for
+                // backward-compatible base semantics and advertise the
+                // additive closed refinement explicitly as v2.
+                "allocation_disposition_v2",
             ];
             if mir_semantics_v2_enabled() {
                 caps.push("mir_semantic_labels_v1");
@@ -556,6 +614,8 @@ fn export_cqpl_annotated_icfg_versioned(
             }
             if panic_unwind_lifecycle_v1_enabled() {
                 caps.push("panic_unwind_lifecycle_v1");
+                caps.push("panic_lifecycle_state_v1");
+                caps.push("panic_lifecycle_state_v2");
             }
             Some(caps)
         } else {
@@ -569,6 +629,21 @@ fn export_cqpl_annotated_icfg_versioned(
     let file = File::create(output_path)?;
     serde_json::to_writer_pretty(file, &output)?;
     Ok(())
+}
+
+fn panic_lifecycle_records(memory: &PanicLifecycleMemory) -> Vec<PanicLifecycleRecord> {
+    memory
+        .iter()
+        .map(|(allocation, value)| PanicLifecycleRecord {
+            allocation: allocation.to_string(),
+            certainty: "may_abstract",
+            may_own: value.may_own(),
+            may_partial_drop: value.may_partial_drop(),
+            may_stale_owner: value.may_stale_owner(),
+            may_committed: value.may_committed(),
+            may_complete: value.may_complete(),
+        })
+        .collect()
 }
 
 fn stable_allocation_id(allocation: &AbstractAllocId) -> String {
@@ -889,7 +964,11 @@ fn deallocator_contract(
     // https://llvm.org/docs/LangRef.html#alloc-family
     // https://llvm.org/docs/LangRef.html#allockind
     // CREMA serializes that LLVM family as `c_malloc` to avoid confusing the
-    // abstract family name with one concrete allocation operation.
+    // abstract family name with one concrete allocation operation.  The pinned
+    // LLVM IR used by FINAL112 does not necessarily carry those modern
+    // attributes, so `structural_c_free_v1` means an exact direct `@free`
+    // call observed in LLVM/SVF input, not a claim that allockind metadata was
+    // present.  Attribute-certified libc summaries are a separate B1.1-r2 step.
     //
     // Rust Box/Vec `Global` facts are established upstream by rustc semantic
     // type identity (see `rust_drop_allocator_evidence` in icfg.rs) and the
@@ -910,6 +989,7 @@ fn deallocator_contract(
                 let basis = match evidence.kind {
                     RustDropAllocatorEvidenceKind::BoxGlobal => "rust_box_global_drop",
                     RustDropAllocatorEvidenceKind::VecGlobal => "rust_vec_global_drop",
+                    RustDropAllocatorEvidenceKind::CStringGlobal => "rust_cstring_global_drop",
                 };
                 let mut contract = AllocationContract::v2_deallocator(
                     "rust_global", "drop", "rust", basis,
@@ -2677,6 +2757,34 @@ mod tests {
         assert_eq!(contract.language, "rust");
         assert_eq!(contract.basis, Some("rust_box_global_drop"));
         assert_eq!(contract.owner_def_path.as_deref(), Some("alloc::boxed::Box"));
+        assert_eq!(contract.allocator_def_path.as_deref(), Some("alloc::alloc::Global"));
+    }
+
+    #[test]
+    fn b1_1_r1_typed_cstring_global_drop_contract_is_proof_carrying() {
+        let node = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 4,
+            statements: vec![],
+            terminator: Some(MirTerminator::Drop {
+                details: "drop(_1)".into(),
+                source_info: "<cqpl-test>".into(),
+                return_target: "bb5".into(),
+                unwind_target: "continue".into(),
+                dropped_value: "_1".into(),
+                is_mutable: false,
+                deallocator_evidence: Some(RustDropAllocatorEvidence {
+                    kind: RustDropAllocatorEvidenceKind::CStringGlobal,
+                    owner_def_path: "alloc::ffi::c_str::CString".into(),
+                    allocator_def_path: "alloc::alloc::Global".into(),
+                }),
+            }),
+        });
+        let contract = deallocator_contract(&node, &HashSet::new());
+        assert_eq!(contract.family, "rust_global");
+        assert_eq!(contract.operation, "drop");
+        assert_eq!(contract.language, "rust");
+        assert_eq!(contract.basis, Some("rust_cstring_global_drop"));
+        assert_eq!(contract.owner_def_path.as_deref(), Some("alloc::ffi::c_str::CString"));
         assert_eq!(contract.allocator_def_path.as_deref(), Some("alloc::alloc::Global"));
     }
 

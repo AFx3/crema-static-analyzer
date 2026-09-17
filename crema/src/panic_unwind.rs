@@ -40,7 +40,8 @@ pub fn edge_flow_kind(edge: &IcfgEdge) -> EdgeFlowKind {
         | Some("Drop unwind")
         | Some("Assert unwind")
         | Some("InlineAsm unwind")
-        | Some("Rust unwind propagate") => EdgeFlowKind::Unwind,
+        | Some("Rust unwind propagate")
+        | Some("Rust drop unwind propagate") => EdgeFlowKind::Unwind,
         _ => EdgeFlowKind::Normal,
     }
 }
@@ -71,6 +72,7 @@ mod tests {
             "Assert unwind",
             "InlineAsm unwind",
             "Rust unwind propagate",
+            "Rust drop unwind propagate",
         ] {
             assert_eq!(edge_flow_kind(&edge(label)), EdgeFlowKind::Unwind);
         }

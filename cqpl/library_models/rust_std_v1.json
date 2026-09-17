@@ -95,6 +95,64 @@
       "certainty": "may_abstract",
       "language": "rust",
       "legacy_projection": {
+        "allocation_disposition_kind": "cstring_into_raw",
+        "basis": "rustc_cstring_into_raw_v1",
+        "obligation_effect": "preserve_manual_obligation",
+        "target_variable": "return"
+      },
+      "matcher": {
+        "kind": "producer_evidence_kind",
+        "value": "cstring_into_raw"
+      },
+      "normal_return_effects": [
+        {
+          "from": "arg0",
+          "kind": "ownership_transfer",
+          "note": "Official Rust contract: CString::into_raw transfers ownership to the caller; the pointer must be reconstituted with CString::from_raw and must not be released with C free. https://doc.rust-lang.org/std/ffi/struct.CString.html#method.into_raw",
+          "to": "return"
+        }
+      ],
+      "preconditions": [],
+      "provenance": {
+        "basis": "rustc_producer_certified_allocation_disposition",
+        "source": "RustAllocationDispositionEvidenceKind::CStringIntoRaw"
+      },
+      "summary_id": "rust_cstring_into_raw_v1",
+      "unwind_effects": []
+    },
+    {
+      "certainty": "may_abstract",
+      "language": "rust",
+      "legacy_projection": {
+        "allocation_disposition_kind": "cstring_from_raw",
+        "basis": "rustc_cstring_from_raw_v1",
+        "obligation_effect": "restore_raii_obligation",
+        "target_variable": "return"
+      },
+      "matcher": {
+        "kind": "producer_evidence_kind",
+        "value": "cstring_from_raw"
+      },
+      "normal_return_effects": [
+        {
+          "from": "arg0",
+          "kind": "ownership_reclaim",
+          "note": "Official Rust contract: CString::from_raw retakes ownership only for a pointer previously returned by CString::into_raw. https://doc.rust-lang.org/std/ffi/struct.CString.html#method.from_raw",
+          "to": "return"
+        }
+      ],
+      "preconditions": [],
+      "provenance": {
+        "basis": "rustc_producer_certified_allocation_disposition",
+        "source": "RustAllocationDispositionEvidenceKind::CStringFromRaw"
+      },
+      "summary_id": "rust_cstring_from_raw_v1",
+      "unwind_effects": []
+    },
+    {
+      "certainty": "may_abstract",
+      "language": "rust",
+      "legacy_projection": {
         "allocation_disposition_kind": "mem_forget_owned_box",
         "basis": "rustc_mem_forget_owned_box_v1",
         "obligation_effect": "preserve_unreclaimed_obligation",

@@ -1,0 +1,8 @@
+group	target	query	baseline_result	a3_result	source_reference_classes	rationale
+corpus	skip-list-test	double_free_alloc	unk	ff	ML	ML-only oracle; identity refinement removes unrelated double-free MAY ambiguity.
+corpus	skip-list-test	double_free_alloc_state	unk	ff	ML	ML-only oracle; state-aware identity refinement removes unrelated double-free MAY ambiguity.
+corpus	skip-list-test	use_after_free_alloc	unk	ff	ML	ML-only oracle; identity refinement removes unrelated UAF MAY ambiguity.
+corpus	skip-list-test	use_after_free_alloc_state	unk	ff	ML	ML-only oracle; state-aware identity refinement removes unrelated UAF MAY ambiguity.
+corpus	unsafely-created-owned-type	allocator_mismatch_ub	unk	ff	<none>	Clean oracle; refined ownership identity refutes an allocator-family mismatch candidate.
+corpus	unsafely-created-owned-type	allocator_mismatch_ub_v2	unk	ff	<none>	Clean oracle; proof-carrying allocator-contract query is refuted after identity refinement.
+corpus	unsafely-created-owned-type	mir_structural_allocator_example	unk	ff	<none>	Clean oracle; refined identity removes the structural allocator-mismatch MAY witness.

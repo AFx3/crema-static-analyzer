@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import argparse,sys
-p=argparse.ArgumentParser(); p.add_argument("root"); p.add_argument("--rust-status",default="candidate"); p.add_argument("--expected-rust-summaries",type=int,default=5); a=p.parse_args()
+p=argparse.ArgumentParser(); p.add_argument("root"); p.add_argument("--rust-status",default="candidate"); p.add_argument("--expected-rust-summaries",type=int,default=7); a=p.parse_args()
 root=Path(a.root).resolve(); sys.path.insert(0,str(root/"cqpl/scripts"))
 from library_effects_v1 import load_registry,validate_registry_set
 errors=[]; regs=[]

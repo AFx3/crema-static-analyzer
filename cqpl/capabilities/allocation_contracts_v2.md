@@ -84,6 +84,15 @@ above. Reading and validating attributes directly from LLVM IR is deferred.
   type is the rustc `global_alloc_ty` lang item. Contract:
   `rust_global / drop / rust`.
 
+`rust_cstring_global_drop`
+: The MIR drop place is structurally the rustc `cstring_type` diagnostic item
+  (`CString`) and the producer records the global allocator provenance. Contract:
+  `rust_global / drop / rust`. This basis is producer-certified; the checker does
+  not reconstruct it from pretty-printed paths. The ownership/deallocation
+  protocol follows the official `CString` API documentation, including the
+  requirement that pointers transferred by `CString::into_raw` are reclaimed by
+  `CString::from_raw` rather than C `free`: <https://doc.rust-lang.org/std/ffi/struct.CString.html>.
+
 `rust_global_dealloc_api`
 : The rustc-side producer, while holding the call target `DefId`, proves an
   external item in crate `alloc`, parent module `alloc`, named `dealloc`.  The
@@ -128,3 +137,24 @@ requires allocation_contracts_v2;
 ```
 
 Missing capability or malformed proof metadata is a hard error, never `ff`.
+
+## Explainability provenance boundary
+
+`allocation_contracts_v2` certifies **deallocator** evidence only. Allocator
+origins remain the frozen `allocation_contracts_v1` summaries.
+
+For that reason, an allocator-origin witness with no `basis` is not interpreted
+as a failed v2 proof and is not labeled `unresolved`. Explainability records it
+explicitly as:
+
+```text
+legacy_v1_allocator_summary
+```
+
+and renders the proof basis as `<not-applicable-v1>`. Producer-certified v2
+deallocator witnesses are labeled `producer_certified_v2_deallocator`; an
+explicit `basis = "unresolved"` is labeled
+`explicitly_unresolved_v2_deallocator`.
+
+These labels are diagnostic provenance only. They do not alter allocator-family
+comparison or CQPL three-valued truth.

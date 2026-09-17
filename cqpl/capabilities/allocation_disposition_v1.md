@@ -31,6 +31,13 @@ Each schema-v2 node contains `allocation_disposition: []` when the capability is
 
 ## Closed v6S-r1 vocabulary
 
+This seven-kind vocabulary is **frozen**.  B1.1 does not retroactively add
+`CString` events to v1: those records are introduced by the additive
+[`allocation_disposition_v2`](allocation_disposition_v2.md) refinement.  A
+consumer that sees only v1 must therefore continue to reject
+`cstring_into_raw` and `cstring_from_raw`.
+
+
 | `kind` | `obligation_effect` | meaning |
 |---|---|---|
 | `box_into_raw` | `preserve_manual_obligation` | `Box` ownership is consumed; cleanup responsibility remains with the caller/raw-pointer owner |

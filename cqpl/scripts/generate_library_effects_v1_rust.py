@@ -5,7 +5,7 @@ p=argparse.ArgumentParser(); p.add_argument("--root",required=True); p.add_argum
 root=Path(a.root).resolve(); sys.path.insert(0,str(root/"cqpl/scripts"))
 from library_effects_v1 import load_registry,validate_registry_set
 reg=load_registry(root/"cqpl/library_models/rust_std_v1.json"); validate_registry_set([reg])
-expected={"box_into_raw","box_from_raw","box_leak","mem_forget_owned_box","mem_drop_raw_pointer"}
+expected={"box_into_raw","box_from_raw","box_leak","cstring_into_raw","cstring_from_raw","mem_forget_owned_box","mem_drop_raw_pointer"}
 if reg.status!="candidate": raise SystemExit("rust_std_v1 must be candidate")
 items={}
 for s in reg.summaries:

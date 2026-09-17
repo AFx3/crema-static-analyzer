@@ -16,6 +16,7 @@ SUBJECTS="$OUT/subjects.tsv"
 RUNNER="$CQPL_DIR/scripts/run_corpus_allocator_contracts.py"
 REGISTRY_RUNNER="$CQPL_DIR/scripts/run_registry_crates_v6q_r1c.sh"
 MATRIX_RUNNER="$CQPL_DIR/scripts/run_queries_v2_matrix.py"
+TRUTH_IDENTITY_VALIDATOR="$CQPL_DIR/scripts/validate_final112_truth_identity.py"
 EXPECTED="$CQPL_DIR/artifact/EXPECTED_TARGETS_V6L.txt"
 TARGET_CONFIG="$CQPL_DIR/artifact/TARGET_ANALYSIS_CONFIG.tsv"
 ENTRY_OVERRIDES="$CQPL_DIR/regression/reference/entry_overrides.json"
@@ -34,7 +35,7 @@ command -v rustup >/dev/null || fail 'rustup not found'
 command -v cargo >/dev/null || fail 'cargo not found'
 command -v python3 >/dev/null || fail 'python3 not found'
 [[ -d "$ROOT/tests_and_target_repos" ]] || fail "missing $ROOT/tests_and_target_repos"
-for f in "$RUNNER" "$REGISTRY_RUNNER" "$MATRIX_RUNNER" "$EXPECTED" "$TARGET_CONFIG" "$ENTRY_OVERRIDES" "$CHECKER_MANIFEST"; do
+for f in "$RUNNER" "$REGISTRY_RUNNER" "$MATRIX_RUNNER" "$TRUTH_IDENTITY_VALIDATOR" "$EXPECTED" "$TARGET_CONFIG" "$ENTRY_OVERRIDES" "$CHECKER_MANIFEST"; do
   [[ -f "$f" ]] || fail "missing $f"
 done
 
@@ -144,6 +145,15 @@ python3 "$MATRIX_RUNNER" \
   --queries "$CQPL_DIR/queries_v2" \
   --subject-tsv "$SUBJECTS" \
   --out "$MATRIX"
+
+# 4a. Preserve the immutable historical FINAL112 audit and admit only
+# versioned reviewed precision deltas (A3 R4 + B1.1-r1). Any missing, altered,
+# or additional truth-value delta is a hard failure. Historical allowlists are
+# additive and are never rewritten by later features.
+python3 "$TRUTH_IDENTITY_VALIDATOR" \
+  --fresh-wide "$MATRIX/query-results-wide.tsv" \
+  --out "$OUT/final112-precision-audit.json"
+cp "$OUT/final112-precision-audit.json" "$OUT/final112-a3-precision-audit.json"
 
 # 5. Scientific regression gates: cardinality/domain, exact canonical-four
 #    cross-check, and invariants observed in the audited final112 freeze.

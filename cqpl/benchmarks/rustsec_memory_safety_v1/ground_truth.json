@@ -230,13 +230,21 @@
       "crate": "aligned_box",
       "ffi_dependent": false,
       "fixed": {
-        "version_or_commit": ">=0.3.1"
+        "commit": null,
+        "source_archive_sha256": "3a67318d4d368c1c40975ac23a92dd95bbbbeaab1d1c8597000035bb50455189",
+        "source_origin": "crates.io",
+        "source_tree_sha256": "13da751acb0a8b8f348543d6198f0229331f89bf521b3ed2be2c1dfba8735ce7",
+        "version_or_commit": "0.3.1"
       },
       "ground_truth_source": "https://rustsec.org/advisories/RUSTSEC-2026-0282.html",
       "panic_dependent": true,
-      "status": "candidate",
+      "status": "admitted",
       "vulnerable": {
-        "version_or_commit": "<0.3.1"
+        "commit": null,
+        "source_archive_sha256": "5ebdec4a15fc241b75eb9a55d320cef51549f95f739f8ce3dce24b19b9e5f24a",
+        "source_origin": "crates.io",
+        "source_tree_sha256": "5ac5f91e3efd7bf498511b6625abfd0bb142d506688f6b3dbbbb6b5ce32c0dbd",
+        "version_or_commit": "0.3.0"
       }
     }
   ],

@@ -5,6 +5,8 @@ pub enum MayPredicate {
     Alloc,
     Drop,
     OwnForg,
+    /// MAY panic/unwind lifecycle witness for a repeated drop after partial destruction.
+    RepeatDrop,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

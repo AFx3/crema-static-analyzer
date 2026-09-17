@@ -1,4 +1,4 @@
-use cqpl_checker::{parse_query_document, AnnotatedIcfg, Binding, Env, Kripke, ModelChecker};
+use cqpl_checker::{panic_lifecycle_overlay_from_json, parse_query_document, AnnotatedIcfg, Binding, Env, Kripke, ModelChecker};
 use serde::Serialize;
 use serde_json::Value;
 use std::{env, fs, path::Path, process};
@@ -64,7 +64,7 @@ fn validate_v2_deallocator_contract_object(value: &Value, where_: &str) -> Resul
     let callee = object.get("callee_def_path").and_then(Value::as_str);
 
     match basis {
-        "rust_box_global_drop" | "rust_vec_global_drop" => {
+        "rust_box_global_drop" | "rust_vec_global_drop" | "rust_cstring_global_drop" => {
             if (family, operation, language) != ("rust_global", "drop", "rust") {
                 return Err(format!(
                     "{where_} basis '{basis}' requires family=rust_global operation=drop language=rust"
@@ -122,6 +122,7 @@ fn validate_v2_deallocator_contract_object(value: &Value, where_: &str) -> Resul
 fn validate_disposition_object(
     value: &Value,
     known_allocations: &std::collections::BTreeSet<&str>,
+    allow_cstring_v2: bool,
     where_: &str,
 ) -> Result<(), String> {
     let object = value.as_object().ok_or_else(|| format!("{where_} must be an object"))?;
@@ -145,6 +146,21 @@ fn validate_disposition_object(
         "box_into_raw" => ("preserve_manual_obligation", "rustc_box_into_raw_v1", true),
         "box_from_raw" => ("restore_raii_obligation", "rustc_box_from_raw_v1", true),
         "box_leak" => ("preserve_persistent_obligation", "rustc_box_leak_v1", true),
+        "cstring_into_raw" if allow_cstring_v2 => (
+            "preserve_manual_obligation",
+            "rustc_cstring_into_raw_v1",
+            true,
+        ),
+        "cstring_from_raw" if allow_cstring_v2 => (
+            "restore_raii_obligation",
+            "rustc_cstring_from_raw_v1",
+            true,
+        ),
+        "cstring_into_raw" | "cstring_from_raw" => {
+            return Err(format!(
+                "{where_} kind '{kind}' requires artifact capability allocation_disposition_v2"
+            ));
+        }
         "mem_forget_owned_box" => ("preserve_unreclaimed_obligation", "rustc_mem_forget_owned_box_v1", true),
         "raw_pointer_drop_noop" => ("no_pointee_lifecycle_effect", "rustc_mem_drop_raw_pointer_v1", true),
         "return_escape" => ("may_escape_to_caller", "rust_return_identity_v1", false),
@@ -192,9 +208,12 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     let has_allocation_contracts_v2 = capabilities.contains("allocation_contracts_v2");
     let has_allocation_state = capabilities.contains("allocation_state_v1");
     let has_allocation_disposition = capabilities.contains("allocation_disposition_v1");
+    let has_allocation_disposition_v2 = capabilities.contains("allocation_disposition_v2");
     let has_mir_semantic_labels = capabilities.contains("mir_semantic_labels_v1");
     let has_mir_semantics_v2 = capabilities.contains("mir_semantics_v2");
     let has_panic_unwind_lifecycle_v1 = capabilities.contains("panic_unwind_lifecycle_v1");
+    let has_panic_lifecycle_state_v1 = capabilities.contains("panic_lifecycle_state_v1");
+    let has_panic_lifecycle_state_v2 = capabilities.contains("panic_lifecycle_state_v2");
 
     if has_allocation_contracts_v2 && !has_allocation_contracts {
         return Err("allocation_contracts_v2 refines allocation_contracts_v1; the artifact must declare both capabilities".into());
@@ -205,9 +224,24 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     if has_panic_unwind_lifecycle_v1 && (schema_version != 2 || !has_mir_semantics_v2) {
         return Err("panic_unwind_lifecycle_v1 requires schema v2 and mir_semantics_v2".into());
     }
+    if has_panic_lifecycle_state_v1 && !has_panic_unwind_lifecycle_v1 {
+        return Err("panic_lifecycle_state_v1 requires panic_unwind_lifecycle_v1".into());
+    }
+    if has_panic_lifecycle_state_v2 && !has_panic_lifecycle_state_v1 {
+        return Err("panic_lifecycle_state_v2 refines panic_lifecycle_state_v1; the artifact must declare both capabilities".into());
+    }
 
     if has_allocation_disposition && schema_version != 2 {
         return Err("allocation_disposition_v1 requires annotated ICFG schema v2".into());
+    }
+    if has_allocation_disposition_v2 && schema_version != 2 {
+        return Err("allocation_disposition_v2 requires annotated ICFG schema v2".into());
+    }
+    if has_allocation_disposition_v2 && !has_allocation_disposition {
+        return Err(
+            "allocation_disposition_v2 refines allocation_disposition_v1; the artifact must declare both capabilities"
+                .into(),
+        );
     }
 
     if has_allocation_contracts {
@@ -274,6 +308,58 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
                 "artifact declares allocation_disposition_v1 but schema-v2 nodes[{index}] is missing allocation_disposition"
             ));
         }
+        if has_panic_lifecycle_state_v1 && !object.contains_key("panic_lifecycle") {
+            return Err(format!(
+                "artifact declares panic_lifecycle_state_v1 but schema-v2 nodes[{index}] is missing panic_lifecycle"
+            ));
+        }
+        if let Some(records) = object.get("panic_lifecycle") {
+            let records = records.as_array().ok_or_else(|| format!(
+                "schema-v2 nodes[{index}].panic_lifecycle must be an array"
+            ))?;
+            let known_allocations: std::collections::BTreeSet<_> = allocations
+                .iter()
+                .filter_map(|a| a.get("id").and_then(Value::as_str))
+                .collect();
+            let mut seen = std::collections::BTreeSet::new();
+            for (record_index, record) in records.iter().enumerate() {
+                let where_ = format!("nodes[{index}].panic_lifecycle[{record_index}]");
+                let allocation = record.get("allocation").and_then(Value::as_str)
+                    .ok_or_else(|| format!("{where_} is missing string allocation"))?;
+                if !known_allocations.contains(allocation) {
+                    return Err(format!("{where_} references unknown allocation '{allocation}'"));
+                }
+                if !seen.insert(allocation) {
+                    return Err(format!("nodes[{index}].panic_lifecycle contains duplicate allocation '{allocation}'"));
+                }
+                let certainty = record.get("certainty").and_then(Value::as_str)
+                    .ok_or_else(|| format!("{where_} is missing string certainty"))?;
+                if certainty != "may_abstract" {
+                    return Err(format!("{where_}.certainty must be 'may_abstract', got '{certainty}'"));
+                }
+                for field in ["may_own", "may_partial_drop", "may_stale_owner", "may_committed", "may_complete"] {
+                    if !record.get(field).is_some_and(Value::is_boolean) {
+                        return Err(format!("{where_}.{field} must be a boolean"));
+                    }
+                }
+            }
+        }
+        if has_panic_lifecycle_state_v2 {
+            let coverage = object.get("panic_lifecycle_coverage")
+                .and_then(Value::as_str)
+                .ok_or_else(|| format!(
+                    "artifact declares panic_lifecycle_state_v2 but schema-v2 nodes[{index}] is missing string panic_lifecycle_coverage"
+                ))?;
+            if !matches!(coverage, "complete" | "unresolved") {
+                return Err(format!(
+                    "schema-v2 nodes[{index}].panic_lifecycle_coverage must be 'complete' or 'unresolved', got '{coverage}'"
+                ));
+            }
+        } else if object.contains_key("panic_lifecycle_coverage") {
+            return Err(format!(
+                "schema-v2 nodes[{index}] contains panic_lifecycle_coverage without capability panic_lifecycle_state_v2"
+            ));
+        }
         if let Some(records) = object.get("allocation_disposition") {
             let records = records.as_array().ok_or_else(|| format!(
                 "schema-v2 nodes[{index}].allocation_disposition must be an array"
@@ -286,6 +372,7 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
                 validate_disposition_object(
                     record,
                     &known_allocations,
+                    has_allocation_disposition_v2,
                     &format!("nodes[{index}].allocation_disposition[{record_index}]"),
                 )?;
             }
@@ -424,9 +511,10 @@ fn run() -> Result<(), String> {
     let raw_value: Value = serde_json::from_str(&raw_icfg)
         .map_err(|e| format!("invalid annotated ICFG JSON: {e}"))?;
     validate_boundary_requirements(&raw_value)?;
+    let panic_lifecycle = panic_lifecycle_overlay_from_json(&raw_value)?;
     let annotated: AnnotatedIcfg = serde_json::from_value(raw_value)
         .map_err(|e| format!("invalid annotated ICFG JSON: {e}"))?;
-    let base_k = Kripke::from_annotated_icfg(annotated)?;
+    let base_k = Kripke::from_annotated_icfg_with_panic_lifecycle(annotated, panic_lifecycle)?;
     let requested_entry = entry_override.as_deref().unwrap_or(&base_k.entry);
     let k = base_k.project_from_entry(requested_entry, intra)?;
 
@@ -618,6 +706,59 @@ mod tests {
     }
 
     #[test]
+    fn b1_1_disposition_v2_cli_guard_gates_cstring_kinds() {
+        let mut value = minimal_v2_node();
+        value["allocations"] = json!([{
+            "id":"A", "display":"A", "site":{"kind":"synthetic","scope":"t","label":"A"}, "context":[]
+        }]);
+        value["nodes"][0]["allocation_disposition"] = json!([{
+            "allocation":"A",
+            "kind":"cstring_into_raw",
+            "certainty":"may_abstract",
+            "obligation_effect":"preserve_manual_obligation",
+            "basis":"rustc_cstring_into_raw_v1",
+            "callee_def_path":"alloc::ffi::c_str::CString::into_raw"
+        }]);
+
+        value["capabilities"] = json!(["allocation_disposition_v1"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("requires artifact capability allocation_disposition_v2"), "unexpected error: {err}");
+
+        value["capabilities"] = json!(["allocation_disposition_v2"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("must declare both capabilities"), "unexpected error: {err}");
+
+        value["capabilities"] = json!(["allocation_disposition_v1", "allocation_disposition_v2"]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+    }
+
+    #[test]
+    fn b1_1_r1_cli_guard_accepts_cstring_drop_and_rejects_wrong_family() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["allocation_contracts_v1", "allocation_contracts_v2"]);
+        value["allocations"] = json!([{
+            "id":"A", "display":"A", "site":{"kind":"synthetic","scope":"t","label":"A"}, "context":[],
+            "allocator_contract":{"family":"rust_global","operation":"cstring_allocation","language":"rust"}
+        }]);
+        value["nodes"][0]["allocation_labels"] = json!([{
+            "predicate":"drop", "allocation":"A", "certainty":"may_abstract",
+            "deallocator_contract":{
+                "family":"rust_global",
+                "operation":"drop",
+                "language":"rust",
+                "basis":"rust_cstring_global_drop",
+                "owner_def_path":"alloc::ffi::c_str::CString",
+                "allocator_def_path":"alloc::alloc::Global"
+            }
+        }]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["nodes"][0]["allocation_labels"][0]["deallocator_contract"]["family"] = json!("c_malloc");
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("requires family=rust_global"), "unexpected error: {err}");
+    }
+
+    #[test]
     fn panic_unwind_cli_guard_requires_mir_v2() {
         let mut value = minimal_v2_node();
         value["capabilities"] = json!(["panic_unwind_lifecycle_v1"]);
@@ -632,5 +773,72 @@ mod tests {
         value["nodes"][0]["semantic_labels"] = json!([]);
         assert!(validate_boundary_requirements(&value).is_ok());
     }
+
+    #[test]
+    fn panic_lifecycle_boundary_requires_may_abstract_boolean_records() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!([
+            "mir_semantic_labels_v1",
+            "mir_semantics_v2",
+            "panic_unwind_lifecycle_v1",
+            "panic_lifecycle_state_v1"
+        ]);
+        value["allocations"] = json!([{
+            "id": "A", "display": "A", "site": null, "context": []
+        }]);
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        value["nodes"][0]["panic_lifecycle"] = json!([{
+            "allocation": "A",
+            "certainty": "may_abstract",
+            "may_own": true,
+            "may_partial_drop": true,
+            "may_stale_owner": true,
+            "may_committed": false,
+            "may_complete": false
+        }]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["nodes"][0]["panic_lifecycle"][0]["certainty"] = json!("exact_abstract");
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("may_abstract"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn panic_lifecycle_boundary_requires_field_on_every_node_when_capability_is_declared() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!([
+            "mir_semantic_labels_v1",
+            "mir_semantics_v2",
+            "panic_unwind_lifecycle_v1",
+            "panic_lifecycle_state_v1"
+        ]);
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("missing panic_lifecycle"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn panic_lifecycle_v2_boundary_requires_explicit_coverage() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!([
+            "mir_semantic_labels_v1",
+            "mir_semantics_v2",
+            "panic_unwind_lifecycle_v1",
+            "panic_lifecycle_state_v1",
+            "panic_lifecycle_state_v2"
+        ]);
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        value["nodes"][0]["panic_lifecycle"] = json!([]);
+
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("panic_lifecycle_coverage"), "unexpected error: {err}");
+
+        value["nodes"][0]["panic_lifecycle_coverage"] = json!("complete");
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["nodes"][0]["panic_lifecycle_coverage"] = json!("unresolved");
+        assert!(validate_boundary_requirements(&value).is_ok());
+    }
+
 
 }

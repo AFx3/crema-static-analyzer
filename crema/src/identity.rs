@@ -61,19 +61,53 @@ impl AllocationIdentityMemory {
     /// allocation identities are reached.  This does not manufacture alias
     /// equivalence: every returned allocation is justified by a points-to edge
     /// or by a stack-reference/place edge already present in this memory.
-    pub fn event_allocations(&self, var: &ProgramVarId) -> BTreeSet<AbstractAllocId> {
-        let mut out = self.points_to(var);
-        let mut pending: Vec<PlaceId> = self.stack_refs(var).into_iter().collect();
+    pub fn allocations_for_place(&self, start: PlaceId) -> BTreeSet<AbstractAllocId> {
+        let mut out = BTreeSet::new();
+        let mut pending = vec![start];
         let mut seen = BTreeSet::new();
 
         while let Some(place) = pending.pop() {
             if !seen.insert(place.clone()) {
                 continue;
             }
+
             out.extend(self.points_to_place(&place));
             pending.extend(self.stack_refs_place(&place));
+
+            // A projected place whose base is itself a reference denotes the
+            // same projection below every already-proved referent of that base.
+            // Example: `&mut self.container` in a callee where `self` is a
+            // reference to the caller's aggregate.  Rebasing is justified only
+            // by the existing stack-reference relation; it does not manufacture
+            // heap aliases.
+            for mut base_target in self.stack_refs(&place.base) {
+                base_target.projection.extend(place.projection.iter().cloned());
+                pending.push(base_target);
+            }
         }
 
+        out
+    }
+
+    pub fn event_allocations(&self, var: &ProgramVarId) -> BTreeSet<AbstractAllocId> {
+        let mut out = self.points_to(var);
+        for place in self.stack_refs(var) {
+            out.extend(self.allocations_for_place(place));
+        }
+        out
+    }
+
+    /// Conservative universe already represented at this program point.
+    /// Used only as a fail-closed MAY widening when a lifecycle subject cannot
+    /// be correlated more precisely; no fresh abstract allocation is created.
+    pub fn represented_allocations(&self) -> BTreeSet<AbstractAllocId> {
+        let mut out = BTreeSet::new();
+        for allocs in self.points_to.values() {
+            out.extend(allocs.iter().cloned());
+        }
+        for allocs in self.place_points_to.values() {
+            out.extend(allocs.iter().cloned());
+        }
         out
     }
 
@@ -545,12 +579,107 @@ fn direct_deref_reference(function: &str, rvalue: &str) -> Option<ProgramVarId> 
     local(function, tail)
 }
 
-fn direct_reference_target(function: &str, rvalue: &str) -> Option<ProgramVarId> {
+fn reference_field_projection(rvalue: &str, local_text: &str) -> Vec<PlaceProjection> {
+    let Some(start) = rvalue.find(local_text) else {
+        return Vec::new();
+    };
+    let suffix = &rvalue[start + local_text.len()..];
+    let suffix = suffix.split(':').next().unwrap_or(suffix);
+    let bytes = suffix.as_bytes();
+    let mut projection = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'.' {
+            i += 1;
+            continue;
+        }
+        i += 1;
+        let begin = i;
+        while i < bytes.len() && bytes[i].is_ascii_digit() {
+            i += 1;
+        }
+        if begin == i {
+            continue;
+        }
+        if let Ok(index) = suffix[begin..i].parse::<u32>() {
+            projection.push(PlaceProjection::Field { index });
+        }
+    }
+    projection
+}
+
+fn direct_reference_place(function: &str, rvalue: &str) -> Option<PlaceId> {
     let trimmed = rvalue.trim();
     if !trimmed.starts_with('&') || trimmed.starts_with("&raw") {
         return None;
     }
-    first_local_operand(function, trimmed)
+    let base = first_local_operand(function, trimmed)?;
+    let local_text = match &base {
+        ProgramVarId::Rust { local, .. } => format!("_{local}"),
+        _ => return None,
+    };
+    Some(PlaceId {
+        base,
+        projection: reference_field_projection(trimmed, &local_text),
+    })
+}
+
+fn aggregate_field_operands(function: &str, rvalue: &str) -> Option<Vec<(usize, ProgramVarId)>> {
+    let text = rvalue.trim();
+
+    // Address-of rvalues are MIR references, not aggregate constructors.  In
+    // particular, spellings such as
+    // `&mut ((*_1).0: std::mem::ManuallyDrop<std::boxed::Box<[T]>>)` contain
+    // both `::` and a trailing `)`, which would otherwise satisfy the broad
+    // tuple/ADT fallback below and prevent `direct_reference_place` from
+    // recording the projected stack-place relation.  Reject the reference
+    // family here rather than teaching lifecycle analysis about any concrete
+    // container type.
+    if text.starts_with('&')
+        || text.starts_with("move ")
+        || text.starts_with("copy ")
+        || text.starts_with("deref_copy ")
+    {
+        return None;
+    }
+
+    let fields = if let Some(open) = text.rfind(" { ") {
+        text.get(open + 3..)?.strip_suffix('}')?
+    } else if text.starts_with('(') && text.ends_with(')') {
+        &text[1..text.len() - 1]
+    } else if text.contains("::") && text.ends_with(')') {
+        let open = text.rfind('(')?;
+        &text[open + 1..text.len() - 1]
+    } else {
+        return None;
+    };
+
+    let mut out = Vec::new();
+    for (index, field) in fields.split(',').enumerate() {
+        let field = field.trim();
+        if field.is_empty() {
+            continue;
+        }
+        let rhs = field.split_once(':').map(|(_, rhs)| rhs.trim()).unwrap_or(field);
+        if let Some(source) = first_local_operand(function, rhs) {
+            out.push((index, source));
+        }
+    }
+    Some(out)
+}
+
+fn downcast_field_use(function: &str, rvalue: &str) -> Option<(ProgramVarId, Vec<PlaceProjection>)> {
+    let text = rvalue.trim();
+    if !(text.starts_with("copy ") || text.starts_with("move ")) || !text.contains(" as ") {
+        return None;
+    }
+    let source = first_local_operand(function, text)?;
+    let local_text = match &source {
+        ProgramVarId::Rust { local, .. } => format!("_{local}"),
+        _ => return None,
+    };
+    let projection = reference_field_projection(text, &local_text);
+    (!projection.is_empty()).then_some((source, projection))
 }
 
 fn closure_capture_operands(function: &str, rvalue: &str) -> Option<Vec<ProgramVarId>> {
@@ -693,6 +822,25 @@ fn is_cstring_result_extractor(callee: &str) -> bool {
         && (method_terminal(callee, "unwrap") || method_terminal(callee, "expect"))
 }
 
+
+fn is_manually_drop_new(callee: &str) -> bool {
+    callee.contains("ManuallyDrop") && method_terminal(callee, "new")
+}
+
+fn is_manually_drop_take(callee: &str) -> bool {
+    callee.contains("ManuallyDrop") && method_terminal(callee, "take")
+}
+
+fn is_result_try_branch(callee: &str) -> bool {
+    callee.contains("std::result::Result")
+        && callee.contains("std::ops::Try")
+        && method_terminal(callee, "branch")
+}
+
+fn is_result_value_extractor(callee: &str) -> bool {
+    callee.contains("std::result::Result")
+        && (method_terminal(callee, "unwrap") || method_terminal(callee, "expect"))
+}
 
 // -----------------------------------------------------------------------------
 // Phase 6E: modeled Rust <-> C/SVF allocation-identity bridge
@@ -934,13 +1082,21 @@ fn transfer_statement_with_profile(
     if let Some(captures) = closure_capture_operands(function, rvalue) {
         clear_destination(memory, &dest);
         for (index, source) in captures.into_iter().enumerate() {
-            let field = PlaceId {
-                base: dest.clone(),
-                projection: vec![PlaceProjection::Field { index: index as u32 }],
-            };
-            memory.assign_place_points_to(field.clone(), memory.points_to(&source));
-            memory.assign_place_stack_refs(field, memory.stack_refs(&source));
+            copy_value_into_field(memory, &source, &dest, index);
         }
+        return;
+    }
+
+    if let Some(fields) = aggregate_field_operands(function, rvalue) {
+        clear_destination(memory, &dest);
+        for (index, source) in fields {
+            copy_value_into_field(memory, &source, &dest, index);
+        }
+        return;
+    }
+
+    if let Some((source, projection)) = downcast_field_use(function, rvalue) {
+        copy_downcast_payload(memory, &source, &projection, &dest);
         return;
     }
 
@@ -957,15 +1113,9 @@ fn transfer_statement_with_profile(
         return;
     }
 
-    if let Some(target) = direct_reference_target(function, rvalue) {
+    if let Some(target) = direct_reference_place(function, rvalue) {
         clear_destination(memory, &dest);
-        memory.assign_stack_refs(
-            dest,
-            BTreeSet::from([PlaceId {
-                base: target,
-                projection: Vec::new(),
-            }]),
-        );
+        memory.assign_stack_refs(dest, BTreeSet::from([target]));
         return;
     }
 
@@ -988,11 +1138,8 @@ fn transfer_statement_with_profile(
         || rvalue.contains("PointerCoercion")
     {
         if let Some(source) = first_local_operand(function, rvalue) {
-            let points_to = memory.points_to(&source);
-            let refs = memory.stack_refs(&source);
             clear_destination(memory, &dest);
-            memory.assign_points_to(dest.clone(), points_to);
-            memory.assign_stack_refs(dest, refs);
+            copy_binding(memory, &source, dest);
             return;
         }
     }
@@ -1013,6 +1160,68 @@ fn transfer_library_call(
     memory: &mut AllocationIdentityMemory,
 ) {
     let Some(dest) = local(function, return_place) else { return; };
+
+    if is_manually_drop_new(callee) {
+        if let Some(source) = arguments
+            .first()
+            .and_then(|arg| first_local_operand(function, &arg.arg))
+        {
+            clear_destination(memory, &dest);
+            copy_binding(memory, &source, dest);
+        }
+        return;
+    }
+
+    if is_manually_drop_take(callee) {
+        if let Some(source) = arguments
+            .first()
+            .and_then(|arg| first_local_operand(function, &arg.arg))
+        {
+            let allocs = memory.event_allocations(&source);
+            clear_destination(memory, &dest);
+            memory.assign_points_to(dest, allocs);
+        }
+        return;
+    }
+
+    if is_result_try_branch(callee) {
+        if let Some(source) = arguments
+            .first()
+            .and_then(|arg| first_local_operand(function, &arg.arg))
+        {
+            clear_destination(memory, &dest);
+            // Result::{Ok,Err}(x) and ControlFlow::{Continue,Break}(x) both
+            // expose their payload as field 0 after the corresponding MIR
+            // downcast. Preserve only already represented projected identity.
+            copy_projected_subtree(
+                memory,
+                &source,
+                &[PlaceProjection::Field { index: 0 }],
+                &dest,
+                &[PlaceProjection::Field { index: 0 }],
+            );
+        }
+        return;
+    }
+
+    if is_result_value_extractor(callee) && !is_cstring_result_extractor(callee) {
+        if let Some(source) = arguments
+            .first()
+            .and_then(|arg| first_local_operand(function, &arg.arg))
+        {
+            clear_destination(memory, &dest);
+            // On a normal return unwrap/expect has selected Result::Ok.  Rebase
+            // the already-proved Ok payload subtree onto the returned value.
+            copy_projected_subtree(
+                memory,
+                &source,
+                &[PlaceProjection::Field { index: 0 }],
+                &dest,
+                &[],
+            );
+        }
+        return;
+    }
 
     match memory_events::rust_allocation_semantics(callee) {
         RustAllocationSemantics::Fresh => {
@@ -1068,6 +1277,43 @@ fn transfer_library_call(
                 memory.assign_points_to(dest.clone(), allocs);
                 memory.assign_stack_refs(dest, refs);
             }
+            return;
+        }
+        RustAllocationSemantics::ConditionalReallocation => {
+            // Rust `GlobalAlloc::realloc` has two observable outcomes:
+            //
+            // * non-null: ownership of the old block is transferred and the
+            //   returned pointer is the only valid handle; the block may have
+            //   moved or may have remained in place;
+            // * null: ownership is not transferred and the original block is
+            //   unchanged.
+            //
+            // AllocationIdentityMemory is a MAY domain, so the result points
+            // to both the old abstract allocation (in-place/failure relation)
+            // and a fresh call-site identity (moved-success relation).  The
+            // CellValue transfer separately widens the old handle because this
+            // identity relation alone does not encode pointer validity.
+            let source = arguments
+                .first()
+                .and_then(|arg| first_local_operand(function, &arg.arg));
+            let mut allocs = source
+                .as_ref()
+                .map(|src| memory.points_to(src))
+                .unwrap_or_default();
+            let refs = source
+                .as_ref()
+                .map(|src| memory.stack_refs(src))
+                .unwrap_or_default();
+            allocs.insert(AbstractAllocId::new(
+                AllocationSiteId::RustCall {
+                    node_id: node_id.to_string(),
+                    callee: callee.to_string(),
+                },
+                context.to_vec(),
+            ));
+            clear_destination(memory, &dest);
+            memory.assign_points_to(dest.clone(), allocs);
+            memory.assign_stack_refs(dest, refs);
             return;
         }
         RustAllocationSemantics::None => {}
@@ -1148,7 +1394,8 @@ fn copy_binding(
     let allocs = memory.points_to(source);
     let refs = memory.stack_refs(source);
     memory.assign_points_to(destination.clone(), allocs);
-    memory.assign_stack_refs(destination, refs);
+    memory.assign_stack_refs(destination.clone(), refs);
+    copy_projected_fields(memory, source, &destination);
 }
 
 /// Rebase projected fields of a closure environment object onto the closure
@@ -1187,6 +1434,130 @@ fn copy_projected_fields(
             refs,
         );
     }
+}
+
+fn copy_projected_subtree(
+    memory: &mut AllocationIdentityMemory,
+    source: &ProgramVarId,
+    source_prefix: &[PlaceProjection],
+    destination: &ProgramVarId,
+    destination_prefix: &[PlaceProjection],
+) -> bool {
+    let source_place = PlaceId {
+        base: source.clone(),
+        projection: source_prefix.to_vec(),
+    };
+    let exact_allocs = memory.points_to_place(&source_place);
+    let exact_refs = memory.stack_refs_place(&source_place);
+
+    let point_descendants: Vec<_> = memory
+        .place_points_to
+        .iter()
+        .filter(|(place, _)| {
+            place.base == *source
+                && place.projection.len() >= source_prefix.len()
+                && place.projection[..source_prefix.len()] == source_prefix[..]
+        })
+        .map(|(place, allocs)| {
+            (place.projection[source_prefix.len()..].to_vec(), allocs.clone())
+        })
+        .collect();
+    let ref_descendants: Vec<_> = memory
+        .place_stack_refs
+        .iter()
+        .filter(|(place, _)| {
+            place.base == *source
+                && place.projection.len() >= source_prefix.len()
+                && place.projection[..source_prefix.len()] == source_prefix[..]
+        })
+        .map(|(place, refs)| {
+            (place.projection[source_prefix.len()..].to_vec(), refs.clone())
+        })
+        .collect();
+
+    let had_projected_evidence = !exact_allocs.is_empty()
+        || !exact_refs.is_empty()
+        || point_descendants.iter().any(|(_, allocs)| !allocs.is_empty())
+        || ref_descendants.iter().any(|(_, refs)| !refs.is_empty());
+
+    let exact_destination = PlaceId {
+        base: destination.clone(),
+        projection: destination_prefix.to_vec(),
+    };
+    if exact_destination.projection.is_empty() {
+        memory.assign_points_to(destination.clone(), exact_allocs);
+        memory.assign_stack_refs(destination.clone(), exact_refs);
+    } else {
+        memory.assign_place_points_to(exact_destination.clone(), exact_allocs);
+        memory.assign_place_stack_refs(exact_destination, exact_refs);
+    }
+
+    for (suffix, allocs) in point_descendants {
+        if suffix.is_empty() {
+            continue;
+        }
+        let mut projection = destination_prefix.to_vec();
+        projection.extend(suffix);
+        memory.assign_place_points_to(
+            PlaceId { base: destination.clone(), projection },
+            allocs,
+        );
+    }
+    for (suffix, refs) in ref_descendants {
+        if suffix.is_empty() {
+            continue;
+        }
+        let mut projection = destination_prefix.to_vec();
+        projection.extend(suffix);
+        memory.assign_place_stack_refs(
+            PlaceId { base: destination.clone(), projection },
+            refs,
+        );
+    }
+
+    had_projected_evidence
+}
+
+/// Copy a MIR downcast payload while preserving the MAY abstraction boundary.
+///
+/// Field-sensitive identity is preferred whenever the producer has represented
+/// it.  If the wrapper binding carries only a coarse MAY identity and no
+/// projected fact exists, dropping that coarse fact would turn loss of
+/// precision into a false refutation.  The fallback therefore reuses only
+/// identities already present on the source binding; it never creates a fresh
+/// allocation or overrides represented field-sensitive evidence.
+fn copy_downcast_payload(
+    memory: &mut AllocationIdentityMemory,
+    source: &ProgramVarId,
+    source_prefix: &[PlaceProjection],
+    destination: &ProgramVarId,
+) {
+    let fallback_allocs = memory.points_to(source);
+    let fallback_refs = memory.stack_refs(source);
+
+    clear_destination(memory, destination);
+    let had_projected_evidence =
+        copy_projected_subtree(memory, source, source_prefix, destination, &[]);
+
+    if !had_projected_evidence {
+        memory.assign_points_to(destination.clone(), fallback_allocs);
+        memory.assign_stack_refs(destination.clone(), fallback_refs);
+    }
+}
+
+fn copy_value_into_field(
+    memory: &mut AllocationIdentityMemory,
+    source: &ProgramVarId,
+    destination: &ProgramVarId,
+    field_index: usize,
+) {
+    copy_projected_subtree(
+        memory,
+        source,
+        &[],
+        destination,
+        &[PlaceProjection::Field { index: field_index as u32 }],
+    );
 }
 
 fn bind_actuals_to_formals(
@@ -2398,6 +2769,42 @@ mod tests {
     }
 
     #[test]
+    fn raw_realloc_identity_is_old_or_fresh_without_invalidating_source_identity() {
+        let mut mem = AllocationIdentityMemory::default();
+        let source = rust("main", 1);
+        let result = rust("main", 4);
+        let old = alloc("old");
+        mem.assign_fresh(source.clone(), old.clone());
+
+        transfer_library_call(
+            "rust::main::bb7",
+            "main",
+            &[],
+            "std::alloc::realloc",
+            &[crate::structs::MirCallArgument {
+                arg: "Local(_1) [mutable]".to_string(),
+                is_mutable: Some(true),
+            }],
+            "_4",
+            &mut mem,
+        );
+
+        // Identity is a MAY relation.  The result may denote the old abstract
+        // allocation (in-place success), a fresh one (moved success), or null
+        // (represented by absence from the identity domain).  The source ID is
+        // retained here; pointer validity is modeled separately by CellValue.
+        assert_eq!(mem.points_to(&source), BTreeSet::from([old.clone()]));
+        let result_ids = mem.points_to(&result);
+        assert!(result_ids.contains(&old));
+        assert_eq!(result_ids.len(), 2);
+        assert!(result_ids.iter().any(|id| matches!(
+            &id.site,
+            AllocationSiteId::RustCall { node_id, callee }
+                if node_id == "rust::main::bb7" && callee == "std::alloc::realloc"
+        )));
+    }
+
+    #[test]
     fn phase6j_cstring_result_extraction_is_type_restricted() {
         assert!(is_cstring_result_extractor(
             "std::result::Result::<std::ffi::CString, std::ffi::NulError>::unwrap"
@@ -3018,6 +3425,262 @@ mod tests {
 
         assert!(mem.points_to(&reference).is_empty());
         assert_eq!(mem.event_allocations(&reference), BTreeSet::from([a]));
+    }
+
+    #[test]
+    fn address_of_projected_place_is_not_classified_as_aggregate() {
+        let function = "aligned_box::AlignedBox::<[T]>::realloc";
+        let rvalue = "&mut ((*_1).0: std::mem::ManuallyDrop<std::boxed::Box<[T]>>)";
+
+        assert!(aggregate_field_operands(function, rvalue).is_none());
+        assert_eq!(
+            direct_reference_place(function, rvalue),
+            Some(PlaceId {
+                base: rust(function, 1),
+                projection: vec![PlaceProjection::Field { index: 0 }],
+            })
+        );
+    }
+
+    #[test]
+    fn downcast_move_is_not_classified_as_aggregate() {
+        let function = "main";
+        let rvalue = "move ((_6 as Continue).0: aligned_box::AlignedBox<[T]>)";
+
+        assert!(aggregate_field_operands(function, rvalue).is_none());
+        assert_eq!(
+            downcast_field_use(function, rvalue),
+            Some((
+                rust(function, 6),
+                vec![PlaceProjection::Field { index: 0 }],
+            ))
+        );
+    }
+
+    #[test]
+    fn downcast_payload_falls_back_to_existing_binding_may_identity() {
+        let mut mem = AllocationIdentityMemory::default();
+        let source = rust("main", 16);
+        let destination = rust("main", 18);
+        let a = alloc("cstring-result-payload");
+
+        // Some library summaries represent the owned payload coarsely on the
+        // Result/enum binding itself.  A field-sensitive downcast must not
+        // erase that MAY identity merely because no projected fact exists.
+        mem.assign_points_to(source.clone(), BTreeSet::from([a.clone()]));
+
+        copy_downcast_payload(
+            &mut mem,
+            &source,
+            &[PlaceProjection::Field { index: 0 }],
+            &destination,
+        );
+
+        assert_eq!(mem.points_to(&destination), BTreeSet::from([a]));
+    }
+
+    #[test]
+    fn downcast_payload_prefers_projected_identity_over_binding_fallback() {
+        let mut mem = AllocationIdentityMemory::default();
+        let source = rust("main", 6);
+        let destination = rust("main", 7);
+        let wrapper = alloc("wrapper-coarse");
+        let payload = alloc("projected-payload");
+
+        mem.assign_points_to(source.clone(), BTreeSet::from([wrapper]));
+        mem.assign_place_points_to(
+            PlaceId {
+                base: source.clone(),
+                projection: vec![PlaceProjection::Field { index: 0 }],
+            },
+            BTreeSet::from([payload.clone()]),
+        );
+
+        copy_downcast_payload(
+            &mut mem,
+            &source,
+            &[PlaceProjection::Field { index: 0 }],
+            &destination,
+        );
+
+        assert_eq!(mem.points_to(&destination), BTreeSet::from([payload]));
+    }
+
+    #[test]
+    fn projected_reference_rebases_through_reference_base_to_owner_field() {
+        let mut mem = AllocationIdentityMemory::default();
+        let caller_owner = rust("main", 1);
+        let callee_self = rust("aligned_box::AlignedBox::<[T]>::realloc", 1);
+        let field_ref = rust("aligned_box::AlignedBox::<[T]>::realloc", 27);
+        let a = alloc("container");
+
+        mem.assign_place_points_to(
+            PlaceId {
+                base: caller_owner.clone(),
+                projection: vec![PlaceProjection::Field { index: 0 }],
+            },
+            BTreeSet::from([a.clone()]),
+        );
+        mem.assign_stack_refs(
+            callee_self,
+            BTreeSet::from([PlaceId {
+                base: caller_owner,
+                projection: Vec::new(),
+            }]),
+        );
+
+        let stmt = MirStatement {
+            source_info: source_info(),
+            kind: "Assign".to_string(),
+            details: "Assign((_27, &mut ((*_1).0: std::mem::ManuallyDrop<std::boxed::Box<[T]>>)))".to_string(),
+            place: Some("Local(_27) [mutable]".to_string()),
+            is_mutable: Some(true),
+            rvalue: Some("&mut ((*_1).0: std::mem::ManuallyDrop<std::boxed::Box<[T]>>)".to_string()),
+        };
+        transfer_statement_with_profile(
+            "aligned_box::AlignedBox::<[T]>::realloc",
+            &stmt,
+            &mut mem,
+            IdentityTransferProfile::DispositionV6S,
+        );
+
+        assert_eq!(mem.event_allocations(&field_ref), BTreeSet::from([a]));
+    }
+
+    #[test]
+    fn aggregate_result_branch_unwrap_and_manually_drop_preserve_projected_owner_identity() {
+        let mut mem = AllocationIdentityMemory::default();
+        let a = alloc("container");
+        mem.assign_fresh(rust("main", 4), a.clone());
+
+        transfer_library_call(
+            "rust::main::bb0",
+            "main",
+            &[],
+            "std::mem::ManuallyDrop::<std::boxed::Box<[T]>>::new",
+            &[crate::structs::MirCallArgument {
+                arg: "Local(_4)".to_string(),
+                is_mutable: Some(false),
+            }],
+            "_3",
+            &mut mem,
+        );
+
+        let aligned_box = MirStatement {
+            source_info: source_info(),
+            kind: "Assign".to_string(),
+            details: "Assign((_0, aligned_box::AlignedBox::<[T]> { container: move _3, layout: copy _2 }))".to_string(),
+            place: Some("Local(_0) [mutable]".to_string()),
+            is_mutable: Some(true),
+            rvalue: Some("aligned_box::AlignedBox::<[T]> { container: move _3, layout: copy _2 }".to_string()),
+        };
+        transfer_statement_with_profile(
+            "main",
+            &aligned_box,
+            &mut mem,
+            IdentityTransferProfile::DispositionV6S,
+        );
+
+        let ok = MirStatement {
+            source_info: source_info(),
+            kind: "Assign".to_string(),
+            details: "Assign((_5, std::result::Result::<aligned_box::AlignedBox<[T]>, E>::Ok(move _0)))".to_string(),
+            place: Some("Local(_5) [mutable]".to_string()),
+            is_mutable: Some(true),
+            rvalue: Some("std::result::Result::<aligned_box::AlignedBox<[T]>, E>::Ok(move _0)".to_string()),
+        };
+        transfer_statement_with_profile(
+            "main",
+            &ok,
+            &mut mem,
+            IdentityTransferProfile::DispositionV6S,
+        );
+
+        transfer_library_call(
+            "rust::main::bb1",
+            "main",
+            &[],
+            "<std::result::Result<aligned_box::AlignedBox<[T]>, E> as std::ops::Try>::branch",
+            &[crate::structs::MirCallArgument {
+                arg: "Local(_5) [mutable]".to_string(),
+                is_mutable: Some(true),
+            }],
+            "_6",
+            &mut mem,
+        );
+
+        let continue_value = MirStatement {
+            source_info: source_info(),
+            kind: "Assign".to_string(),
+            details: "Assign((_7, move ((_6 as Continue).0: aligned_box::AlignedBox<[T]>)))".to_string(),
+            place: Some("Local(_7)".to_string()),
+            is_mutable: Some(false),
+            rvalue: Some("move ((_6 as Continue).0: aligned_box::AlignedBox<[T]>)".to_string()),
+        };
+        transfer_statement_with_profile(
+            "main",
+            &continue_value,
+            &mut mem,
+            IdentityTransferProfile::DispositionV6S,
+        );
+
+        let ok_again = MirStatement {
+            source_info: source_info(),
+            kind: "Assign".to_string(),
+            details: "Assign((_8, std::result::Result::<aligned_box::AlignedBox<[T]>, E>::Ok(move _7)))".to_string(),
+            place: Some("Local(_8) [mutable]".to_string()),
+            is_mutable: Some(true),
+            rvalue: Some("std::result::Result::<aligned_box::AlignedBox<[T]>, E>::Ok(move _7)".to_string()),
+        };
+        transfer_statement_with_profile(
+            "main",
+            &ok_again,
+            &mut mem,
+            IdentityTransferProfile::DispositionV6S,
+        );
+
+        transfer_library_call(
+            "rust::main::bb2",
+            "main",
+            &[],
+            "std::result::Result::<aligned_box::AlignedBox<[T]>, E>::unwrap",
+            &[crate::structs::MirCallArgument {
+                arg: "Local(_8) [mutable]".to_string(),
+                is_mutable: Some(true),
+            }],
+            "_9",
+            &mut mem,
+        );
+
+        let ref_container = MirStatement {
+            source_info: source_info(),
+            kind: "Assign".to_string(),
+            details: "Assign((_10, &mut (_9.0: std::mem::ManuallyDrop<std::boxed::Box<[T]>>)))".to_string(),
+            place: Some("Local(_10) [mutable]".to_string()),
+            is_mutable: Some(true),
+            rvalue: Some("&mut (_9.0: std::mem::ManuallyDrop<std::boxed::Box<[T]>> )".to_string()),
+        };
+        transfer_statement_with_profile(
+            "main",
+            &ref_container,
+            &mut mem,
+            IdentityTransferProfile::DispositionV6S,
+        );
+
+        transfer_library_call(
+            "rust::main::bb3",
+            "main",
+            &[],
+            "std::mem::ManuallyDrop::<std::boxed::Box<[T]>>::take",
+            &[crate::structs::MirCallArgument {
+                arg: "Local(_10) [mutable]".to_string(),
+                is_mutable: Some(true),
+            }],
+            "_11",
+            &mut mem,
+        );
+
+        assert_eq!(mem.points_to(&rust("main", 11)), BTreeSet::from([a]));
     }
 
 }

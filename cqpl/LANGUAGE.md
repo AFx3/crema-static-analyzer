@@ -93,7 +93,7 @@ Il sort checker viene eseguito prima del model checking. Per esempio `allocator_
 Forma semplificata:
 
 ```text
-phi ::= alloc(x) | drop(x) | own_forg(x)
+phi ::= alloc(x) | drop(x) | own_forg(x) | repeat_drop(a)
       | alloc_l(v) | drop_l(v) | read_l(v) | write_l(v) | use_l(v)
       | allocator_mismatch_l(a) | dealloc_mismatch_l(a)
       | stmt_l(statement_name)
@@ -120,7 +120,7 @@ Precedenza, dalla più forte:
 
 Usare parentesi quando la portata non è ovvia.
 
-## 6. Predicati di stato MAY: `alloc`, `drop`, `own_forg`
+## 6. Predicati di stato MAY: `alloc`, `drop`, `own_forg`, `repeat_drop`
 
 ```cqpl
 alloc(x)
@@ -157,6 +157,19 @@ requires allocation_state_v1;
 ```
 
 Leggono `allocation_post`, che è una proiezione MAY dello stato `ProgramVar` attraverso l'identity analysis. La semantica three-valued è identica: match=`unk`, esclusione=`ff`.
+
+`repeat_drop(a)` è invece un predicato allocation-only del dominio satellite panic lifecycle e richiede:
+
+```cqpl
+requires panic_lifecycle_state_v2;
+```
+
+`panic_lifecycle_state_v2` mantiene i record MAY di v1 e aggiunge il frontier
+`panic_lifecycle_coverage = complete | unresolved`. Il predicato verifica il
+witness MAY `may_own && may_partial_drop && may_stale_owner`: un match produce
+`unk`, mai `tt`. In assenza del witness, `complete` produce `ff`, mentre
+`unresolved` produce `unk`. L'incompletezza del producer è quindi un fatto
+esplicito dell'artefatto e non viene dedotta dall'assenza di record.
 
 ### Effetto del reticolo
 
@@ -591,4 +604,4 @@ e proibisce che tale evidenza autorizzi `drop_l(a)` o `may_deallocate(a)`.
 
 `Box::into_raw` è invece `preserve_manual_obligation`: la documentazione Rust rende il caller responsabile della distruzione e del rilascio della memoria. `Box::from_raw` ricostruisce l'owner RAII, ma in r1 resta una osservazione MAY e non equivale da sola a deallocation.
 
-Per il vocabolario completo vedi `capabilities/allocation_disposition_v1.md`. Una futura v6S-r2 potrà aggiungere predicati MUST/obligation separati, senza reinterpretare `alloc_l` e `drop_l`.
+Per il vocabolario v1 congelato vedi `capabilities/allocation_disposition_v1.md`. B1.1 aggiunge `allocation_disposition_v2` esclusivamente come refinement MAY per `CString::{into_raw,from_raw}`; v2 richiede v1 e non reinterpreta `alloc_l`, `drop_l` né le 12 formule congelate. Una futura capability separata potrà aggiungere predicati MUST/obligation senza retroattivamente modificare questi record MAY.

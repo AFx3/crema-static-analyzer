@@ -1,0 +1,24 @@
+[package]
+authors = ["Michael Lass <bevan@bi-co.net>"]
+categories = ["data-structures", "memory-management"]
+description = "Allocate heap memory with user-specified alignment"
+documentation = "https://docs.rs/aligned_box/"
+edition = "2021"
+homepage = "https://github.com/michaellass/aligned_box/"
+keywords = ["aligned", "alignment", "box", "heap", "memory"]
+license = "MIT"
+name = "aligned_box"
+publish = ["crates-io"]
+readme = "README.md"
+repository = "https://github.com/michaellass/aligned_box.git"
+version = "0.3.0"
+
+[badges]
+travis-ci = { repository = "michaellass/aligned_box", branch = "master" }
+
+[dev-dependencies]
+lazy_static = "^1.4"
+
+[features]
+default = ["std"]
+std = []

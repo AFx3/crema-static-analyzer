@@ -87,6 +87,8 @@ Per una spiegazione didattica campo-per-campo e un esempio completo su `boxed_bo
 
 v6S-r1 aggiunge la capability artifact `allocation_disposition_v1`. CREMA serializza osservazioni MAY sull'evoluzione della responsabilità di cleanup di un `AbstractAllocId`: `Box::into_raw`, `Box::from_raw`, `Box::leak`, `mem::forget(Box)`, return escape, deallocation MAY e soprattutto `mem::drop(raw_pointer)` come **no-op sul pointee**.
 
+B1.1 mantiene quel vocabolario v1 congelato e dichiara `allocation_disposition_v2` come refinement fail-closed per `CString::into_raw` / `CString::from_raw`. v2 richiede v1; entrambi restano MAY-only e non cambiano la truth semantics CQPL.
+
 La Rust Reference specifica che copiare o droppare un raw pointer non influenza il lifecycle di altri valori; quindi una call `std::mem::drop(raw: *mut T)` non produce `drop_l(a)`, non produce `may_deallocate(a)` e non deve portare il pointee a `FREED`. La classificazione v6S è fatta dal producer usando rustc `DefId` e il tipo dell'argomento, non ricostruita nel checker da stringhe.
 
 Tutti i record r1 hanno `certainty=may_abstract`. **Le 12 query esistenti non consumano questi record**, quindi l'accettazione v6S-r1 richiede una nuova run 112×12 con zero mismatch contro v6R. Per la spiegazione semplice e i tre esempi `boxed_bool__ml`, `clean_into_from_raw` e `drop_raw_ptr_no_free`, vedi [V6S_R1_GUIDE.md](V6S_R1_GUIDE.md). Il contratto normativo è [capabilities/allocation_disposition_v1.md](capabilities/allocation_disposition_v1.md).
@@ -145,11 +147,12 @@ CQPL non interpreta questi valori in modo booleano: i predicati MAY positivi pro
 alloc(x)
 drop(x)
 own_forg(x)
+repeat_drop(a)
 ```
 
-Con `x : ProgramVar` leggono `post`; con `x : AbstractAllocId` leggono `allocation_post` e richiedono `allocation_state_v1`.
+Con `x : ProgramVar` leggono `post`; con `x : AbstractAllocId` leggono `allocation_post` e richiedono `allocation_state_v1`. `repeat_drop(a)` è allocation-only e, nella semantica sperimentale A3.7, richiede `panic_lifecycle_state_v2`: un witness MAY dà `unk`, l'assenza con coverage `complete` dà `ff`, mentre coverage `unresolved` dà `unk`. `tt` non è disponibile in v2.
 
-Un match MAY positivo vale `unk`; l'esclusione vale `ff`.
+Un match MAY positivo vale `unk`; l'esclusione vale `ff`. Questo vale anche per `repeat_drop`: il witness lifecycle `may_abstract` è diagnostico e viene spiegato dall'explainer, non promosso a `tt`.
 
 Esempio:
 

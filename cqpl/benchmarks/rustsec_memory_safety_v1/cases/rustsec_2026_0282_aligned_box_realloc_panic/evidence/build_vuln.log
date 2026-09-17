@@ -1,0 +1,16 @@
+     Locking 1 package to latest compatible version
+   Compiling aligned_box v0.3.0 (/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/vulnerable)
+   Compiling b1_2_harness_vulnerable v0.0.0 (/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/harness/vulnerable)
+warning: field `inner` is never read
+  --> ../../reproducer/main.rs:34:5
+   |
+32 | struct PanicOnDrop {
+   |        ----------- field in this struct
+33 |     id: u32,
+34 |     inner: Box<u32>,
+   |     ^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `b1_2_harness_vulnerable` (bin "reproducer") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.29s

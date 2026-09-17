@@ -1,0 +1,12 @@
+[package]
+name = "b1_2_harness_fixed"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "reproducer"
+path = "../../reproducer/main.rs"
+
+[dependencies]
+aligned_box = { path = "../../fixed" }

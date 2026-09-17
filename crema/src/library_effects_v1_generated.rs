@@ -40,6 +40,20 @@ pub fn projection_for_producer_evidence(
             basis: "rustc_box_leak_v1",
             target_variable: LegacyTargetVariable::Return,
         },
+        RustAllocationDispositionEvidenceKind::CStringFromRaw => LegacyDispositionProjection {
+            summary_id: "rust_cstring_from_raw_v1",
+            kind: "cstring_from_raw",
+            obligation_effect: "restore_raii_obligation",
+            basis: "rustc_cstring_from_raw_v1",
+            target_variable: LegacyTargetVariable::Return,
+        },
+        RustAllocationDispositionEvidenceKind::CStringIntoRaw => LegacyDispositionProjection {
+            summary_id: "rust_cstring_into_raw_v1",
+            kind: "cstring_into_raw",
+            obligation_effect: "preserve_manual_obligation",
+            basis: "rustc_cstring_into_raw_v1",
+            target_variable: LegacyTargetVariable::Return,
+        },
         RustAllocationDispositionEvidenceKind::MemDropRawPointer => LegacyDispositionProjection {
             summary_id: "rust_mem_drop_raw_pointer_v1",
             kind: "raw_pointer_drop_noop",

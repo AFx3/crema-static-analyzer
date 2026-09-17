@@ -101,12 +101,134 @@ pub struct AllocationEventLabel {
     pub deallocator_contract: Option<AllocationContract>,
 }
 
+/// Satellite panic/unwind lifecycle evidence keyed by AbstractAllocId.
+///
+/// Stage A3.7-v1 exports positive MAY facts only. Capability v2 adds an
+/// explicit producer-coverage frontier: matching MAY evidence is `unk`;
+/// absence is `ff` only under complete coverage and `unk` when unresolved.
+/// `tt` remains unavailable for this MAY-only predicate.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PanicLifecycleRecord {
+    pub allocation: String,
+    pub certainty: AllocationEventCertainty,
+    #[serde(default)]
+    pub may_own: bool,
+    #[serde(default)]
+    pub may_partial_drop: bool,
+    #[serde(default)]
+    pub may_stale_owner: bool,
+    #[serde(default)]
+    pub may_committed: bool,
+    #[serde(default)]
+    pub may_complete: bool,
+}
+
+impl PanicLifecycleRecord {
+    pub fn may_repeat_drop(&self) -> bool {
+        self.may_own && self.may_partial_drop && self.may_stale_owner
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PanicLifecycleCoverage {
+    Complete,
+    Unresolved,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PanicLifecycleOverlay {
+    records: BTreeMap<String, Vec<PanicLifecycleRecord>>,
+    coverage: BTreeMap<String, PanicLifecycleCoverage>,
+}
+
+impl std::ops::Deref for PanicLifecycleOverlay {
+    type Target = BTreeMap<String, Vec<PanicLifecycleRecord>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.records
+    }
+}
+
+impl std::ops::DerefMut for PanicLifecycleOverlay {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.records
+    }
+}
+
+impl<'a> IntoIterator for &'a PanicLifecycleOverlay {
+    type Item = (&'a String, &'a Vec<PanicLifecycleRecord>);
+    type IntoIter = std::collections::btree_map::Iter<'a, String, Vec<PanicLifecycleRecord>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.records.iter()
+    }
+}
+
+impl PanicLifecycleOverlay {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn coverage_at(&self, node_id: &str) -> Option<PanicLifecycleCoverage> {
+        self.coverage.get(node_id).copied()
+    }
+
+    pub fn set_coverage(
+        &mut self,
+        node_id: impl Into<String>,
+        coverage: PanicLifecycleCoverage,
+    ) -> Option<PanicLifecycleCoverage> {
+        self.coverage.insert(node_id.into(), coverage)
+    }
+
+    pub fn coverage_is_empty(&self) -> bool {
+        self.coverage.is_empty()
+    }
+}
+
+/// Parse node-local lifecycle records and, for capability v2, the explicit
+/// producer coverage frontier without changing the frozen AnnotatedNode serde
+/// boundary.
+pub fn panic_lifecycle_overlay_from_json(root: &serde_json::Value) -> Result<PanicLifecycleOverlay, String> {
+    let mut overlay = PanicLifecycleOverlay::new();
+    let Some(nodes) = root.get("nodes").and_then(serde_json::Value::as_array) else {
+        return Ok(overlay);
+    };
+    for (index, node) in nodes.iter().enumerate() {
+        let Some(object) = node.as_object() else { continue; };
+        let Some(node_id) = object.get("id").and_then(serde_json::Value::as_str) else { continue; };
+        if let Some(raw_records) = object.get("panic_lifecycle") {
+            let records: Vec<PanicLifecycleRecord> = serde_json::from_value(raw_records.clone())
+                .map_err(|err| format!("invalid nodes[{index}].panic_lifecycle: {err}"))?;
+            if overlay.insert(node_id.to_string(), records).is_some() {
+                return Err(format!("duplicate node id '{node_id}' while parsing panic_lifecycle overlay"));
+            }
+        }
+        if let Some(raw_coverage) = object.get("panic_lifecycle_coverage") {
+            let coverage: PanicLifecycleCoverage = serde_json::from_value(raw_coverage.clone())
+                .map_err(|err| format!("invalid nodes[{index}].panic_lifecycle_coverage: {err}"))?;
+            if overlay.set_coverage(node_id.to_string(), coverage).is_some() {
+                return Err(format!("duplicate node id '{node_id}' while parsing panic lifecycle coverage"));
+            }
+        }
+    }
+    Ok(overlay)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AllocationDispositionKind {
     BoxIntoRaw,
     BoxFromRaw,
     BoxLeak,
+    // Pin the versioned wire vocabulary explicitly. Serde supports per-variant
+    // rename attributes (<https://serde.rs/variant-attrs.html>); do not let
+    // Rust identifier case-conversion define an artifact protocol.
+    #[serde(rename = "cstring_into_raw")]
+    CStringIntoRaw,
+    #[serde(rename = "cstring_from_raw")]
+    CStringFromRaw,
     MemForgetOwnedBox,
     RawPointerDropNoop,
     ReturnEscape,
@@ -274,6 +396,7 @@ pub struct Kripke {
     pub variables: BTreeMap<String, ProgramVariable>,
     pub allocations: BTreeMap<String, AbstractAllocation>,
     pub nodes: BTreeMap<String, AnnotatedNode>,
+    pub panic_lifecycle: PanicLifecycleOverlay,
 }
 
 fn rust_function_scope(node_id: &str) -> Option<&str> {
@@ -300,7 +423,10 @@ fn valid_structural_label(label: &str) -> bool {
     name.chars().all(|c| c == '_' || c.is_ascii_lowercase() || c.is_ascii_digit())
 }
 
-fn validate_allocation_disposition_record(record: &AllocationDispositionRecord) -> Result<(), String> {
+fn validate_allocation_disposition_record(
+    record: &AllocationDispositionRecord,
+    allow_cstring_v2: bool,
+) -> Result<(), String> {
     use AllocationDispositionKind as K;
     use AllocationObligationEffect as E;
 
@@ -308,6 +434,18 @@ fn validate_allocation_disposition_record(record: &AllocationDispositionRecord) 
         K::BoxIntoRaw => (E::PreserveManualObligation, "rustc_box_into_raw_v1", true),
         K::BoxFromRaw => (E::RestoreRaiiObligation, "rustc_box_from_raw_v1", true),
         K::BoxLeak => (E::PreservePersistentObligation, "rustc_box_leak_v1", true),
+        K::CStringIntoRaw if allow_cstring_v2 => {
+            (E::PreserveManualObligation, "rustc_cstring_into_raw_v1", true)
+        }
+        K::CStringFromRaw if allow_cstring_v2 => {
+            (E::RestoreRaiiObligation, "rustc_cstring_from_raw_v1", true)
+        }
+        K::CStringIntoRaw | K::CStringFromRaw => {
+            return Err(format!(
+                "allocation disposition {:?} requires artifact capability allocation_disposition_v2",
+                record.kind
+            ));
+        }
         K::MemForgetOwnedBox => (E::PreserveUnreclaimedObligation, "rustc_mem_forget_owned_box_v1", true),
         K::RawPointerDropNoop => (E::NoPointeeLifecycleEffect, "rustc_mem_drop_raw_pointer_v1", true),
         K::ReturnEscape => (E::MayEscapeToCaller, "rust_return_identity_v1", false),
@@ -336,6 +474,13 @@ fn validate_allocation_disposition_record(record: &AllocationDispositionRecord) 
 
 impl Kripke {
     pub fn from_annotated_icfg(input: AnnotatedIcfg) -> Result<Self, String> {
+        Self::from_annotated_icfg_with_panic_lifecycle(input, PanicLifecycleOverlay::new())
+    }
+
+    pub fn from_annotated_icfg_with_panic_lifecycle(
+        input: AnnotatedIcfg,
+        panic_lifecycle: PanicLifecycleOverlay,
+    ) -> Result<Self, String> {
         if !matches!(input.schema_version, 1 | 2) {
             return Err(format!(
                 "unsupported annotated ICFG schema_version {}; expected 1 or 2",
@@ -348,6 +493,7 @@ impl Kripke {
         let has_allocation_contracts_v2 = capabilities.contains("allocation_contracts_v2");
         let has_allocation_state = capabilities.contains("allocation_state_v1");
         let has_allocation_disposition = capabilities.contains("allocation_disposition_v1");
+        let has_allocation_disposition_v2 = capabilities.contains("allocation_disposition_v2");
         if has_allocation_contracts && schema_version != 2 {
             return Err("allocation_contracts_v1 requires annotated ICFG schema v2".into());
         }
@@ -363,6 +509,15 @@ impl Kripke {
         if has_allocation_disposition && schema_version != 2 {
             return Err("allocation_disposition_v1 requires annotated ICFG schema v2".into());
         }
+        if has_allocation_disposition_v2 && schema_version != 2 {
+            return Err("allocation_disposition_v2 requires annotated ICFG schema v2".into());
+        }
+        if has_allocation_disposition_v2 && !has_allocation_disposition {
+            return Err(
+                "allocation_disposition_v2 refines allocation_disposition_v1 and requires both artifact capabilities"
+                    .into(),
+            );
+        }
         let has_mir_semantic_labels = capabilities.contains("mir_semantic_labels_v1");
         if has_mir_semantic_labels && schema_version != 2 {
             return Err("mir_semantic_labels_v1 requires annotated ICFG schema v2".into());
@@ -375,6 +530,16 @@ impl Kripke {
             && (schema_version != 2 || !has_mir_semantics_v2)
         {
             return Err("panic_unwind_lifecycle_v1 requires schema v2 and mir_semantics_v2".into());
+        }
+        let has_panic_lifecycle_state = capabilities.contains("panic_lifecycle_state_v1");
+        let has_panic_lifecycle_state_v2 = capabilities.contains("panic_lifecycle_state_v2");
+        if has_panic_lifecycle_state
+            && (schema_version != 2 || !capabilities.contains("panic_unwind_lifecycle_v1"))
+        {
+            return Err("panic_lifecycle_state_v1 requires schema v2 and panic_unwind_lifecycle_v1".into());
+        }
+        if has_panic_lifecycle_state_v2 && !has_panic_lifecycle_state {
+            return Err("panic_lifecycle_state_v2 refines panic_lifecycle_state_v1; the artifact must declare both capabilities".into());
         }
 
         let mut variables = BTreeMap::new();
@@ -482,7 +647,7 @@ impl Kripke {
                         node.id, record.allocation
                     ));
                 }
-                validate_allocation_disposition_record(record)?;
+                validate_allocation_disposition_record(record, has_allocation_disposition_v2)?;
                 for variable in [record.source_variable.as_ref(), record.target_variable.as_ref()]
                     .into_iter()
                     .flatten()
@@ -521,7 +686,53 @@ impl Kripke {
             }
         }
 
-        Ok(Self { schema_version, entry: input.entry, capabilities, variables, allocations, nodes })
+        if has_panic_lifecycle_state {
+            for node_id in nodes.keys() {
+                if !panic_lifecycle.contains_key(node_id) {
+                    return Err(format!(
+                        "artifact declares panic_lifecycle_state_v1 but node '{node_id}' is missing panic_lifecycle"
+                    ));
+                }
+            }
+        } else if !panic_lifecycle.is_empty() {
+            return Err("panic lifecycle records require capability panic_lifecycle_state_v1".into());
+        }
+        if has_panic_lifecycle_state_v2 {
+            for node_id in nodes.keys() {
+                if panic_lifecycle.coverage_at(node_id).is_none() {
+                    return Err(format!(
+                        "artifact declares panic_lifecycle_state_v2 but node '{node_id}' is missing panic_lifecycle_coverage"
+                    ));
+                }
+            }
+        } else if !panic_lifecycle.coverage_is_empty() {
+            return Err("panic lifecycle coverage requires capability panic_lifecycle_state_v2".into());
+        }
+        for (node_id, records) in &panic_lifecycle {
+            if !nodes.contains_key(node_id) {
+                return Err(format!("panic lifecycle overlay references unknown node '{node_id}'"));
+            }
+            let mut seen = BTreeSet::new();
+            for record in records {
+                if !allocations.contains_key(&record.allocation) {
+                    return Err(format!(
+                        "node '{node_id}' panic lifecycle record references undeclared allocation '{}'",
+                        record.allocation
+                    ));
+                }
+                if !seen.insert(record.allocation.clone()) {
+                    return Err(format!(
+                        "node '{node_id}' has duplicate panic lifecycle record for allocation '{}'",
+                        record.allocation
+                    ));
+                }
+            }
+        }
+
+        Ok(Self {
+            schema_version, entry: input.entry, capabilities, variables, allocations, nodes,
+            panic_lifecycle,
+        })
     }
 
     /// Resolve a node id or Rust function name to exactly one Kripke entry.
@@ -626,6 +837,17 @@ impl Kripke {
             }
         }
 
+        let mut panic_lifecycle = PanicLifecycleOverlay::new();
+        for id in &retained {
+            if let Some(records) = self.panic_lifecycle.get(id) {
+                used_allocations.extend(records.iter().map(|record| record.allocation.clone()));
+                panic_lifecycle.insert(id.clone(), records.clone());
+            }
+            if let Some(coverage) = self.panic_lifecycle.coverage_at(id) {
+                panic_lifecycle.set_coverage(id.clone(), coverage);
+            }
+        }
+
         let variables = self
             .variables
             .iter()
@@ -646,6 +868,7 @@ impl Kripke {
             variables,
             allocations,
             nodes,
+            panic_lifecycle,
         })
     }
 
@@ -684,6 +907,7 @@ impl Kripke {
             MayPredicate::Alloc => CellValue::Alloc,
             MayPredicate::Drop => CellValue::Freed,
             MayPredicate::OwnForg => CellValue::Mv,
+            MayPredicate::RepeatDrop => return Truth::False,
         };
         if atom.leq(node.post.value_of(var)) { Truth::Unknown } else { Truth::False }
     }
@@ -712,11 +936,32 @@ impl Kripke {
     /// predicates; exclusion yields `ff`.
     pub fn allocation_may_hold(&self, node_id: &str, allocation: &str, p: MayPredicate) -> Truth {
         let Some(node) = self.nodes.get(node_id) else { return Truth::False; };
+        if p == MayPredicate::RepeatDrop {
+            let has_may_witness = self.panic_lifecycle
+                .get(node_id)
+                .into_iter()
+                .flatten()
+                .any(|record| {
+                    record.allocation == allocation
+                        && record.certainty == AllocationEventCertainty::MayAbstract
+                        && record.may_repeat_drop()
+                });
+            if has_may_witness {
+                return Truth::Unknown;
+            }
+            if self.capabilities.contains("panic_lifecycle_state_v2")
+                && self.panic_lifecycle.coverage_at(node_id) == Some(PanicLifecycleCoverage::Unresolved)
+            {
+                return Truth::Unknown;
+            }
+            return Truth::False;
+        }
         let Some(post) = node.allocation_post.as_ref() else { return Truth::False; };
         let atom = match p {
             MayPredicate::Alloc => CellValue::Alloc,
             MayPredicate::Drop => CellValue::Freed,
             MayPredicate::OwnForg => CellValue::Mv,
+            MayPredicate::RepeatDrop => unreachable!("handled above"),
         };
         if atom.leq(post.value_of(allocation)) { Truth::Unknown } else { Truth::False }
     }
@@ -816,7 +1061,7 @@ fn validate_v2_deallocator_contract(contract: &AllocationContract, field: &str) 
     })?;
 
     match basis {
-        "rust_box_global_drop" | "rust_vec_global_drop" => {
+        "rust_box_global_drop" | "rust_vec_global_drop" | "rust_cstring_global_drop" => {
             if contract.family != "rust_global" || contract.operation != "drop" || contract.language != "rust" {
                 return Err(format!(
                     "{field} basis '{basis}' requires family=rust_global operation=drop language=rust"
@@ -983,6 +1228,89 @@ mod tests {
             target_variable: None,
             callee_def_path: Some("core::mem::drop".into()),
         }];
+        Kripke::from_annotated_icfg(input).unwrap();
+    }
+
+    #[test]
+    fn b1_1_disposition_v2_wire_names_are_exact_and_closed() {
+        assert_eq!(
+            serde_json::to_string(&AllocationDispositionKind::CStringIntoRaw).unwrap(),
+            "\"cstring_into_raw\""
+        );
+        assert_eq!(
+            serde_json::to_string(&AllocationDispositionKind::CStringFromRaw).unwrap(),
+            "\"cstring_from_raw\""
+        );
+        assert_eq!(
+            serde_json::from_str::<AllocationDispositionKind>("\"cstring_into_raw\"").unwrap(),
+            AllocationDispositionKind::CStringIntoRaw
+        );
+        assert_eq!(
+            serde_json::from_str::<AllocationDispositionKind>("\"cstring_from_raw\"").unwrap(),
+            AllocationDispositionKind::CStringFromRaw
+        );
+        assert!(serde_json::from_str::<AllocationDispositionKind>("\"c_string_into_raw\"").is_err());
+        assert!(serde_json::from_str::<AllocationDispositionKind>("\"c_string_from_raw\"").is_err());
+    }
+
+    #[test]
+    fn b1_1_r1_allocation_disposition_accepts_cstring_handoff_and_reclaim() {
+        let mut input = base();
+        // The disposition validator deliberately requires every source/target
+        // variable to be declared in the annotated-ICFG variable universe.
+        // Keep the fixture faithful to producer output instead of relying on
+        // synthetic undeclared temporaries.
+        input.variables.extend([
+            ProgramVariable {
+                id: "rust::ret".into(),
+                language: ProgramLanguage::Rust,
+                display: None,
+                function: None,
+            },
+            ProgramVariable {
+                id: "rust::owner".into(),
+                language: ProgramLanguage::Rust,
+                display: None,
+                function: None,
+            },
+        ]);
+        input.schema_version = 2;
+        input.capabilities = vec!["allocation_disposition_v1".into()];
+        input.allocations = vec![AbstractAllocation {
+            id: "A".into(),
+            display: None,
+            site: None,
+            context: vec![],
+            allocator_contract: None,
+        }];
+        input.nodes[0].allocation_disposition = vec![
+            AllocationDispositionRecord {
+                allocation: "A".into(),
+                kind: AllocationDispositionKind::CStringIntoRaw,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::PreserveManualObligation,
+                basis: "rustc_cstring_into_raw_v1".into(),
+                source_variable: Some("rust::x".into()),
+                target_variable: Some("rust::ret".into()),
+                callee_def_path: Some("alloc::ffi::c_str::CString::into_raw".into()),
+            },
+            AllocationDispositionRecord {
+                allocation: "A".into(),
+                kind: AllocationDispositionKind::CStringFromRaw,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::RestoreRaiiObligation,
+                basis: "rustc_cstring_from_raw_v1".into(),
+                source_variable: Some("rust::ret".into()),
+                target_variable: Some("rust::owner".into()),
+                callee_def_path: Some("alloc::ffi::c_str::CString::from_raw".into()),
+            },
+        ];
+        let err = Kripke::from_annotated_icfg(input.clone()).unwrap_err();
+        assert!(
+            err.contains("requires artifact capability allocation_disposition_v2"),
+            "unexpected error: {err}"
+        );
+        input.capabilities.push("allocation_disposition_v2".into());
         Kripke::from_annotated_icfg(input).unwrap();
     }
 
@@ -1274,6 +1602,20 @@ mod tests {
     }
 
     #[test]
+    fn allocation_contracts_v2_typed_cstring_drop_accepts_producer_provenance() {
+        let contract = AllocationContract {
+            family: "rust_global".into(),
+            operation: "drop".into(),
+            language: "rust".into(),
+            basis: Some("rust_cstring_global_drop".into()),
+            owner_def_path: Some("alloc::ffi::c_str::CString".into()),
+            allocator_def_path: Some("alloc::alloc::Global".into()),
+            callee_def_path: None,
+        };
+        Kripke::from_annotated_icfg(v2_contract_test_input(contract)).unwrap();
+    }
+
+    #[test]
     fn allocation_contracts_v2_rejects_basis_family_mismatch() {
         let contract = AllocationContract {
             family: "c_malloc".into(),
@@ -1341,6 +1683,124 @@ mod tests {
         input.capabilities = vec!["panic_unwind_lifecycle_v1".into()];
         let err = Kripke::from_annotated_icfg(input).unwrap_err();
         assert!(err.contains("panic_unwind_lifecycle_v1"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn panic_lifecycle_repeat_drop_may_is_unknown() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec![
+            "mir_semantic_labels_v1".into(),
+            "mir_semantics_v2".into(),
+            "panic_unwind_lifecycle_v1".into(),
+            "panic_lifecycle_state_v1".into(),
+        ];
+        input.allocations = vec![AbstractAllocation {
+            id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None,
+        }];
+        let mut overlay = PanicLifecycleOverlay::new();
+        overlay.insert(
+            "b0".to_string(),
+            vec![PanicLifecycleRecord {
+                allocation: "A".into(),
+                certainty: AllocationEventCertainty::MayAbstract,
+                may_own: true,
+                may_partial_drop: true,
+                may_stale_owner: true,
+                may_committed: false,
+                may_complete: false,
+            }],
+        );
+        let k = Kripke::from_annotated_icfg_with_panic_lifecycle(input, overlay).unwrap();
+        assert_eq!(k.allocation_may_hold("b0", "A", MayPredicate::RepeatDrop), Truth::Unknown);
+    }
+
+    #[test]
+    fn panic_lifecycle_repeat_drop_absence_is_false_when_coverage_is_complete() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec![
+            "mir_semantic_labels_v1".into(),
+            "mir_semantics_v2".into(),
+            "panic_unwind_lifecycle_v1".into(),
+            "panic_lifecycle_state_v1".into(),
+            "panic_lifecycle_state_v2".into(),
+        ];
+        input.allocations = vec![AbstractAllocation {
+            id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None,
+        }];
+        let mut overlay = PanicLifecycleOverlay::new();
+        overlay.insert("b0".to_string(), Vec::new());
+        overlay.set_coverage("b0", PanicLifecycleCoverage::Complete);
+        let k = Kripke::from_annotated_icfg_with_panic_lifecycle(input, overlay).unwrap();
+        assert_eq!(k.allocation_may_hold("b0", "A", MayPredicate::RepeatDrop), Truth::False);
+    }
+
+    #[test]
+    fn panic_lifecycle_repeat_drop_unresolved_coverage_is_unknown() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec![
+            "mir_semantic_labels_v1".into(),
+            "mir_semantics_v2".into(),
+            "panic_unwind_lifecycle_v1".into(),
+            "panic_lifecycle_state_v1".into(),
+            "panic_lifecycle_state_v2".into(),
+        ];
+        input.allocations = vec![AbstractAllocation {
+            id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None,
+        }];
+        let mut overlay = PanicLifecycleOverlay::new();
+        overlay.insert("b0".to_string(), Vec::new());
+        overlay.set_coverage("b0", PanicLifecycleCoverage::Unresolved);
+        let k = Kripke::from_annotated_icfg_with_panic_lifecycle(input, overlay).unwrap();
+        assert_eq!(k.allocation_may_hold("b0", "A", MayPredicate::RepeatDrop), Truth::Unknown);
+    }
+
+    #[test]
+    fn entry_projection_preserves_reachable_panic_lifecycle_sidecar() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.entry = "rust::main::bb0".into();
+        input.capabilities = vec![
+            "mir_semantic_labels_v1".into(),
+            "mir_semantics_v2".into(),
+            "panic_unwind_lifecycle_v1".into(),
+            "panic_lifecycle_state_v1".into(),
+        ];
+        input.allocations = vec![AbstractAllocation {
+            id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None,
+        }];
+        let empty_node = |id: &str, successors: Vec<String>| AnnotatedNode {
+            id: id.into(), successors, labels: vec![], semantic_labels: vec![],
+            allocation_labels: vec![], allocation_disposition: vec![], identity: None,
+            event_identity: None, allocation_post: None,
+            pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        };
+        input.nodes = vec![
+            empty_node("rust::main::bb0", vec!["rust::main::bb1".into()]),
+            empty_node("rust::main::bb1", vec![]),
+            empty_node("rust::dead::bb0", vec![]),
+        ];
+        let record = PanicLifecycleRecord {
+            allocation: "A".into(),
+            certainty: AllocationEventCertainty::MayAbstract,
+            may_own: true, may_partial_drop: true, may_stale_owner: true,
+            may_committed: false, may_complete: false,
+        };
+        let mut overlay = PanicLifecycleOverlay::new();
+        overlay.insert("rust::main::bb0".to_string(), vec![record.clone()]);
+        overlay.insert("rust::main::bb1".to_string(), vec![record]);
+        overlay.insert("rust::dead::bb0".to_string(), Vec::new());
+        let k = Kripke::from_annotated_icfg_with_panic_lifecycle(input, overlay).unwrap();
+        let projected = k.project_from_entry("main", false).unwrap();
+        assert!(projected.panic_lifecycle.contains_key("rust::main::bb0"));
+        assert!(projected.panic_lifecycle.contains_key("rust::main::bb1"));
+        assert!(!projected.panic_lifecycle.contains_key("rust::dead::bb0"));
+        assert_eq!(
+            projected.allocation_may_hold("rust::main::bb1", "A", MayPredicate::RepeatDrop),
+            Truth::Unknown
+        );
     }
 
 }
