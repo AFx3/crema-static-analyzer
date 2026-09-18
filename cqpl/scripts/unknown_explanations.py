@@ -107,6 +107,32 @@ def explain_unknown(
             f"explanation report/result mismatch for {query.name}: {report.get('result')!r}"
         )
 
+    assessment = report.get("assessment")
+    plain_assessment = plain.get("assessment")
+    if not isinstance(assessment, dict) or assessment.get("schema") != "cqpl_result_assessment_v1":
+        raise UnknownExplanationError(
+            f"unknown query {query.name} is missing query-result assessment"
+        )
+    if assessment != plain_assessment:
+        raise UnknownExplanationError(
+            f"query-result assessment mismatch between --json and explanation for {query.name}"
+        )
+    subresult = assessment.get("subresult")
+    direction = assessment.get("direction")
+    strength = assessment.get("strength")
+    if subresult not in {"unk_true", "unk_false", "unk_mixed", "unk_unoriented"}:
+        raise UnknownExplanationError(
+            f"unknown query {query.name} has invalid subresult {subresult!r}"
+        )
+    if direction not in {"true", "false", "mixed", "none"}:
+        raise UnknownExplanationError(
+            f"unknown query {query.name} has invalid evidence direction {direction!r}"
+        )
+    if strength not in {"strong_abstract_evidence", "observational_candidate", "unresolved"}:
+        raise UnknownExplanationError(
+            f"unknown query {query.name} has invalid UNKNOWN strength {strength!r}"
+        )
+
     reasons = sorted({str(x) for x in report.get("reason_frontier", [])})
     diagnostics = report.get("diagnostics", {})
     if not reasons or not diagnostics.get("unknown_has_reason_frontier", False):
@@ -127,6 +153,12 @@ def explain_unknown(
     return {
         "query": query.stem,
         "result": "unk",
+        "subresult": subresult,
+        "direction": direction,
+        "strength": strength,
+        "assessment_schema": assessment["schema"],
+        "assessment_basis": list(assessment.get("basis", [])),
+        "assessment_caveats": list(assessment.get("caveats", [])),
         "explanation": str(explanation),
         "reason_frontier": reasons,
         "witnesses": len(report.get("witnesses", [])),

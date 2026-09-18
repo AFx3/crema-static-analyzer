@@ -1056,6 +1056,33 @@ fn visit_c_source_dirs(dir: &Path, c_files: &mut Vec<String>) -> std::io::Result
     Ok(())
 }
 
+// Resolve the C frontend explicitly. Rust's std::process::Command searches PATH
+// for non-absolute program names; EFX0 freezes the historical frontend instead
+// of silently inheriting a different `clang` after a PATH/toolchain change.
+fn crema_clang_program() -> String {
+    let configured = env::var("CREMA_CLANG")
+        .ok()
+        .filter(|path| !path.trim().is_empty())
+        .unwrap_or_else(|| "/usr/bin/clang-14".to_string());
+    let path = Path::new(&configured);
+    if !path.is_absolute() {
+        panic!(
+            "EFX0 requires an absolute CREMA_CLANG path; refusing PATH-dependent frontend '{}'",
+            configured
+        );
+    }
+    if !path.is_file() {
+        panic!(
+            "EFX0 configured C frontend '{}' is not a regular file",
+            configured
+        );
+    }
+    fs::canonicalize(path)
+        .unwrap_or_else(|e| panic!("Failed to canonicalize C frontend '{}': {e}", configured))
+        .to_string_lossy()
+        .into_owned()
+}
+
 // compiles the first C file found into LLVM IR, runs the SVF driver;
 // compiles the C file into an object file, and creates a static library;
 // returns the path to the created library.
@@ -1088,7 +1115,29 @@ lexicographically: {}",
     let output_lib = output_dir.join("libffi.a");
 
     // 1. compile the C file into LLVM IR
-    let clang_status = Command::new("clang")
+    let clang_program = crema_clang_program();
+    let clang_version = Command::new(&clang_program)
+        .arg("--version")
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to query configured C frontend '{}': {e}", clang_program));
+    if !clang_version.status.success() {
+        panic!(
+            "Configured C frontend '{}' failed --version with status {}: {}",
+            clang_program,
+            clang_version.status,
+            String::from_utf8_lossy(&clang_version.stderr)
+        );
+    }
+    let provenance = format!(
+        "schema=efx0_c_frontend_provenance_v1\nprogram={}\nversion_stdout={}\nversion_stderr={}\nflags=-S -c -fno-discard-value-names -emit-llvm\n",
+        clang_program,
+        String::from_utf8_lossy(&clang_version.stdout).replace('\n', "\\n"),
+        String::from_utf8_lossy(&clang_version.stderr).replace('\n', "\\n"),
+    );
+    fs::write(svf_output_dir.join("EFX0_C_FRONTEND_PROVENANCE.txt"), provenance)
+        .expect("Failed to write EFX0 C frontend provenance");
+
+    let clang_status = Command::new(&clang_program)
         .args(&["-S", "-c", "-fno-discard-value-names", "-emit-llvm", c_file, "-o"])
         .arg(&output_llvm_cfile)
         .status()
@@ -1129,7 +1178,7 @@ Rebuild SVF-example/src/svf-example from the v6G source before running CREMA.",
     println!("SVF artifacts isolated at: {}", svf_output_dir.display());
 
     // 3. compile the C file into an object file
-    let obj_status = Command::new("clang")
+    let obj_status = Command::new(&clang_program)
         .args(&["-c", c_file, "-o"])
         .arg(object_file.to_str().unwrap())
         .status()

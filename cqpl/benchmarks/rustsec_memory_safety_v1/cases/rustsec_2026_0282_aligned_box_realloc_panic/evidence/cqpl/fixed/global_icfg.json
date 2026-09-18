@@ -1,0 +1,1253 @@
+{
+  "ordered_nodes": [
+    [
+      "rust::<PanicOnDrop as std::default::Default>::default::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:40:17: 40:24 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_2, const {alloc6: &std::sync::atomic::AtomicU32}))",
+              "place": "Local(_2) [mutable]",
+              "is_mutable": true,
+              "rvalue": "const {alloc6: &std::sync::atomic::AtomicU32}"
+            },
+            {
+              "source_info": {
+                "span": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:40:38: 40:54 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_3, std::sync::atomic::Ordering::SeqCst))",
+              "place": "Local(_3) [mutable]",
+              "is_mutable": true,
+              "rvalue": "std::sync::atomic::Ordering::SeqCst"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:40:17: 40:55 (#0), scope: scope[0] }, kind: _1 = std::sync::atomic::AtomicU32::fetch_add(move _2, const 1_u32, move _3) -> [return: bb1, unwind continue] }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:40:17: 40:55 (#0)",
+            "function_called": "std::sync::atomic::AtomicU32::fetch_add",
+            "callee_def_path": "std::sync::atomic::AtomicU32::fetch_add",
+            "deallocator_evidence": null,
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_2) [mutable]",
+                "is_mutable": true
+              },
+              {
+                "arg": "const 1_u32",
+                "is_mutable": null
+              },
+              {
+                "arg": "Local(_3) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_1",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<PanicOnDrop as std::default::Default>::default::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:41:20: 41:31 (#0), scope: scope[0] }, kind: _4 = std::boxed::Box::<u32>::new(const 0_u32) -> [return: bb2, unwind continue] }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:41:20: 41:31 (#0)",
+            "function_called": "std::boxed::Box::<u32>::new",
+            "callee_def_path": "std::boxed::Box::<T>::new",
+            "deallocator_evidence": null,
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "const 0_u32",
+                "is_mutable": null
+              }
+            ],
+            "return_place": "_4",
+            "return_target": "bb2",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<PanicOnDrop as std::default::Default>::default::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:39:9: 42:10 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_0, PanicOnDrop { id: move _1, inner: move _4 }))",
+              "place": "Local(_0) [mutable]",
+              "is_mutable": true,
+              "rvalue": "PanicOnDrop { id: move _1, inner: move _4 }"
+            }
+          ],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:43:6: 43:6 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:43:6: 43:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<PanicOnDrop as std::ops::Drop>::drop::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:52:12: 52:19 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_2, copy ((*_1).0: u32)))",
+              "place": "Local(_2) [mutable]",
+              "is_mutable": true,
+              "rvalue": "copy ((*_1).0: u32)"
+            }
+          ],
+          "terminator": {
+            "kind": "SwitchInt",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:52:12: 52:24 (#0), scope: scope[0] }, kind: switchInt(move _2) -> [2: bb1, otherwise: bb5] }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:52:12: 52:24 (#0)",
+            "targets": [
+              "(2, bb1)"
+            ],
+            "discr": "move _2",
+            "otherwise": "bb5"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<PanicOnDrop as std::ops::Drop>::drop::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:52:29: 52:37 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_4, const {alloc1: &std::sync::atomic::AtomicBool}))",
+              "place": "Local(_4) [mutable]",
+              "is_mutable": true,
+              "rvalue": "const {alloc1: &std::sync::atomic::AtomicBool}"
+            },
+            {
+              "source_info": {
+                "span": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:52:49: 52:65 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_5, std::sync::atomic::Ordering::SeqCst))",
+              "place": "Local(_5) [mutable]",
+              "is_mutable": true,
+              "rvalue": "std::sync::atomic::Ordering::SeqCst"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:52:29: 52:66 (#0), scope: scope[0] }, kind: _3 = std::sync::atomic::AtomicBool::swap(move _4, const true, move _5) -> [return: bb2, unwind continue] }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:52:29: 52:66 (#0)",
+            "function_called": "std::sync::atomic::AtomicBool::swap",
+            "callee_def_path": "std::sync::atomic::AtomicBool::swap",
+            "deallocator_evidence": null,
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_4) [mutable]",
+                "is_mutable": true
+              },
+              {
+                "arg": "const true",
+                "is_mutable": null
+              },
+              {
+                "arg": "Local(_5) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_3",
+            "return_target": "bb2",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<PanicOnDrop as std::ops::Drop>::drop::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [],
+          "terminator": {
+            "kind": "SwitchInt",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:52:29: 52:66 (#0), scope: scope[0] }, kind: switchInt(move _3) -> [0: bb3, otherwise: bb5] }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:52:29: 52:66 (#0)",
+            "targets": [
+              "(0, bb3)"
+            ],
+            "discr": "move _3",
+            "otherwise": "bb5"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<PanicOnDrop as std::ops::Drop>::drop::bb3",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 3,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:53:20: 53:61 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_8, const <PanicOnDrop as std::ops::Drop>::drop::promoted[0]))",
+              "place": "Local(_8)",
+              "is_mutable": false,
+              "rvalue": "const <PanicOnDrop as std::ops::Drop>::drop::promoted[0]"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panic.rs:107:38: 107:72 (#20), scope: scope[0] }, kind: _7 = std::fmt::Arguments::<'_>::new_const::<1>(copy _8) -> [return: bb4, unwind continue] }",
+            "source_info": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panic.rs:107:38: 107:72 (#20)",
+            "function_called": "std::fmt::Arguments::<'_>::new_const::<1>",
+            "callee_def_path": "std::fmt::Arguments::<'a>::new_const",
+            "deallocator_evidence": null,
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_8)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_7",
+            "return_target": "bb4",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<PanicOnDrop as std::ops::Drop>::drop::bb4",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 4,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panic.rs:107:9: 107:73 (#19), scope: scope[0] }, kind: _6 = std::rt::panic_fmt(move _7) -> unwind continue }",
+            "source_info": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panic.rs:107:9: 107:73 (#19)",
+            "function_called": "std::rt::panic_fmt",
+            "callee_def_path": "std::rt::panic_fmt",
+            "deallocator_evidence": null,
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_7) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_6",
+            "return_target": null,
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::<PanicOnDrop as std::ops::Drop>::drop::bb5",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 5,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:55:6: 55:6 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:55:6: 55:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:60:26: 60:42 (#0), scope: scope[0] }, kind: _3 = std::boxed::Box::<{closure@/tmp/b1_2_crema_work/driver_fixed/src/main.rs:60:35: 60:38}>::new(const ZeroSized: {closure@/tmp/b1_2_crema_work/driver_fixed/src/main.rs:60:35: 60:38}) -> [return: bb1, unwind continue] }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:60:26: 60:42 (#0)",
+            "function_called": "std::boxed::Box::<{closure@/tmp/b1_2_crema_work/driver_fixed/src/main.rs:60:35: 60:38}>::new",
+            "callee_def_path": "std::boxed::Box::<T>::new",
+            "deallocator_evidence": null,
+            "callee_is_local": false,
+            "callback_def_paths": [
+              "main::{closure#0}"
+            ],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "const ZeroSized: {closure@/tmp/b1_2_crema_work/driver_fixed/src/main.rs:60:35: 60:38}",
+                "is_mutable": null
+              }
+            ],
+            "return_place": "_3",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:60:26: 60:42 (#0)",
+                "scope": "scope[0]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_2, move _3 as std::boxed::Box<dyn for<'a, 'b> std::ops::Fn(&'a std::panic::PanicHookInfo<'b>) + std::marker::Send + std::marker::Sync> (PointerCoercion(Unsize, Implicit))))",
+              "place": "Local(_2) [mutable]",
+              "is_mutable": true,
+              "rvalue": "move _3 as std::boxed::Box<dyn for<'a, 'b> std::ops::Fn(&'a std::panic::PanicHookInfo<'b>) + std::marker::Send + std::marker::Sync> (PointerCoercion(Unsize, Implicit))"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:60:5: 60:43 (#0), scope: scope[0] }, kind: _1 = std::panic::set_hook(move _2) -> [return: bb2, unwind continue] }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:60:5: 60:43 (#0)",
+            "function_called": "std::panic::set_hook",
+            "callee_def_path": "std::panic::set_hook",
+            "deallocator_evidence": null,
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_2) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_1",
+            "return_target": "bb2",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb10",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 10,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:79:13: 79:34 (#0), scope: scope[1] }, kind: _13 = std::process::exit(const 0_i32) -> bb11 }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:79:13: 79:34 (#0)",
+            "function_called": "std::process::exit",
+            "callee_def_path": "std::process::exit",
+            "deallocator_evidence": null,
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "const 0_i32",
+                "is_mutable": null
+              }
+            ],
+            "return_place": "_13",
+            "return_target": null,
+            "unwind_target": "cleanup(bb11)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb11",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 11,
+          "statements": [],
+          "terminator": {
+            "kind": "Drop",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:82:1: 82:2 (#0), scope: scope[0] }, kind: drop(_4) -> [return: bb12, unwind terminate(cleanup)] }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:82:1: 82:2 (#0)",
+            "return_target": "bb12",
+            "unwind_target": "terminate",
+            "dropped_value": "Local(_4)",
+            "is_mutable": false,
+            "deallocator_evidence": null
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb12",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 12,
+          "statements": [],
+          "terminator": {
+            "kind": "UnwindResume",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:58:1: 82:2 (#0), scope: scope[0] }, kind: resume }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:58:1: 82:2 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:62:18: 70:7 (#0), scope: scope[0] }, kind: _4 = std::panic::catch_unwind::<{closure@/tmp/b1_2_crema_work/driver_fixed/src/main.rs:62:43: 62:45}, ()>(const ZeroSized: {closure@/tmp/b1_2_crema_work/driver_fixed/src/main.rs:62:43: 62:45}) -> [return: bb3, unwind continue] }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:62:18: 70:7 (#0)",
+            "function_called": "std::panic::catch_unwind::<{closure@/tmp/b1_2_crema_work/driver_fixed/src/main.rs:62:43: 62:45}, ()>",
+            "callee_def_path": "std::panic::catch_unwind",
+            "deallocator_evidence": null,
+            "callee_is_local": false,
+            "callback_def_paths": [
+              "main::{closure#1}"
+            ],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "const ZeroSized: {closure@/tmp/b1_2_crema_work/driver_fixed/src/main.rs:62:43: 62:45}",
+                "is_mutable": null
+              }
+            ],
+            "return_place": "_4",
+            "return_target": "bb3",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb3",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 3,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:72:11: 72:17 (#0)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_5, discriminant(_4)))",
+              "place": "Local(_5) [mutable]",
+              "is_mutable": true,
+              "rvalue": "discriminant(_4)"
+            }
+          ],
+          "terminator": {
+            "kind": "SwitchInt",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:72:5: 72:17 (#0), scope: scope[1] }, kind: switchInt(move _5) -> [0: bb6, 1: bb5, otherwise: bb4] }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:72:5: 72:17 (#0)",
+            "targets": [
+              "(0, bb6)",
+              "(1, bb5)"
+            ],
+            "discr": "move _5",
+            "otherwise": "bb4"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb4",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 4,
+          "statements": [],
+          "terminator": {
+            "kind": "Unreachable",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:72:11: 72:17 (#0), scope: scope[1] }, kind: unreachable }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:72:11: 72:17 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb5",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 5,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:78:23: 78:50 (#0)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_12, const main::promoted[0]))",
+              "place": "Local(_12)",
+              "is_mutable": false,
+              "rvalue": "const main::promoted[0]"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:221:29: 221:62 (#24), scope: scope[1] }, kind: _11 = std::fmt::Arguments::<'_>::new_const::<1>(copy _12) -> [return: bb9, unwind: bb11] }",
+            "source_info": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:221:29: 221:62 (#24)",
+            "function_called": "std::fmt::Arguments::<'_>::new_const::<1>",
+            "callee_def_path": "std::fmt::Arguments::<'a>::new_const",
+            "deallocator_evidence": null,
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_12)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_11",
+            "return_target": "bb9",
+            "unwind_target": "cleanup(bb11)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb6",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 6,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:74:23: 74:45 (#0)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_8, const main::promoted[1]))",
+              "place": "Local(_8)",
+              "is_mutable": false,
+              "rvalue": "const main::promoted[1]"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:221:29: 221:62 (#22), scope: scope[1] }, kind: _7 = std::fmt::Arguments::<'_>::new_const::<1>(copy _8) -> [return: bb7, unwind: bb11] }",
+            "source_info": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:221:29: 221:62 (#22)",
+            "function_called": "std::fmt::Arguments::<'_>::new_const::<1>",
+            "callee_def_path": "std::fmt::Arguments::<'a>::new_const",
+            "deallocator_evidence": null,
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_8)",
+                "is_mutable": false
+              }
+            ],
+            "return_place": "_7",
+            "return_target": "bb7",
+            "unwind_target": "cleanup(bb11)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb7",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 7,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:221:9: 221:63 (#21), scope: scope[1] }, kind: _6 = std::io::_eprint(move _7) -> [return: bb8, unwind: bb11] }",
+            "source_info": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:221:9: 221:63 (#21)",
+            "function_called": "std::io::_eprint",
+            "callee_def_path": "std::io::_eprint",
+            "deallocator_evidence": null,
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_7) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_6",
+            "return_target": "bb8",
+            "unwind_target": "cleanup(bb11)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb8",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 8,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:75:13: 75:34 (#0), scope: scope[1] }, kind: _9 = std::process::exit(const 2_i32) -> bb11 }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:75:13: 75:34 (#0)",
+            "function_called": "std::process::exit",
+            "callee_def_path": "std::process::exit",
+            "deallocator_evidence": null,
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "const 2_i32",
+                "is_mutable": null
+              }
+            ],
+            "return_place": "_9",
+            "return_target": null,
+            "unwind_target": "cleanup(bb11)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::bb9",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 9,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:221:9: 221:63 (#23), scope: scope[1] }, kind: _10 = std::io::_eprint(move _11) -> [return: bb10, unwind: bb11] }",
+            "source_info": "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/macros.rs:221:9: 221:63 (#23)",
+            "function_called": "std::io::_eprint",
+            "callee_def_path": "std::io::_eprint",
+            "deallocator_evidence": null,
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": true,
+            "instance_dispatch_external": true,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_11) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_10",
+            "return_target": "bb10",
+            "unwind_target": "cleanup(bb11)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::terminate",
+      {
+        "node_type": "Terminal",
+        "node_data": {
+          "reason": "unwind_terminate"
+        }
+      }
+    ],
+    [
+      "rust::main::{closure#0}::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:60:41: 60:41 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:60:41: 60:41 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::{closure#1}::bb0",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 0,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:64:13: 64:51 (#0), scope: scope[0] }, kind: _3 = aligned_box::AlignedBox::<[PanicOnDrop]>::slice_from_default(const 128_usize, const 4_usize) -> [return: bb1, unwind continue] }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:64:13: 64:51 (#0)",
+            "function_called": "aligned_box::AlignedBox::<[PanicOnDrop]>::slice_from_default",
+            "callee_def_path": "aligned_box::AlignedBox::<[T]>::slice_from_default",
+            "deallocator_evidence": null,
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "const 128_usize",
+                "is_mutable": null
+              },
+              {
+                "arg": "const 4_usize",
+                "is_mutable": null
+              }
+            ],
+            "return_place": "_3",
+            "return_target": "bb1",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::{closure#1}::bb1",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 1,
+          "statements": [],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:64:13: 64:60 (#0), scope: scope[0] }, kind: _2 = std::result::Result::<aligned_box::AlignedBox<[PanicOnDrop]>, aligned_box::AlignedBoxError>::unwrap(move _3) -> [return: bb2, unwind continue] }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:64:13: 64:60 (#0)",
+            "function_called": "std::result::Result::<aligned_box::AlignedBox<[PanicOnDrop]>, aligned_box::AlignedBoxError>::unwrap",
+            "callee_def_path": "std::result::Result::<T, E>::unwrap",
+            "deallocator_evidence": null,
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_3) [mutable]",
+                "is_mutable": true
+              }
+            ],
+            "return_place": "_2",
+            "return_target": "bb2",
+            "unwind_target": "continue"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::{closure#1}::bb2",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 2,
+          "statements": [
+            {
+              "source_info": {
+                "span": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:69:17: 69:18 (#0)",
+                "scope": "scope[1]"
+              },
+              "kind": "Assign",
+              "details": "Assign((_5, &mut _2))",
+              "place": "Local(_5) [mutable]",
+              "is_mutable": true,
+              "rvalue": "&mut _2"
+            }
+          ],
+          "terminator": {
+            "kind": "Call",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:69:17: 69:42 (#0), scope: scope[1] }, kind: _4 = aligned_box::AlignedBox::<[PanicOnDrop]>::realloc_with_default(move _5, const 1_usize) -> [return: bb3, unwind: bb5] }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:69:17: 69:42 (#0)",
+            "function_called": "aligned_box::AlignedBox::<[PanicOnDrop]>::realloc_with_default",
+            "callee_def_path": "aligned_box::AlignedBox::<[T]>::realloc_with_default",
+            "deallocator_evidence": null,
+            "callee_is_local": false,
+            "callback_def_paths": [],
+            "resolved_instance_callees": [],
+            "instance_dispatch_observed": false,
+            "instance_dispatch_external": false,
+            "instance_dispatch_unresolved": false,
+            "arguments": [
+              {
+                "arg": "Local(_5) [mutable]",
+                "is_mutable": true
+              },
+              {
+                "arg": "const 1_usize",
+                "is_mutable": null
+              }
+            ],
+            "return_place": "_4",
+            "return_target": "bb3",
+            "unwind_target": "cleanup(bb5)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::{closure#1}::bb3",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 3,
+          "statements": [],
+          "terminator": {
+            "kind": "Drop",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:70:5: 70:6 (#0), scope: scope[0] }, kind: drop(_2) -> [return: bb4, unwind continue] }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:70:5: 70:6 (#0)",
+            "return_target": "bb4",
+            "unwind_target": "continue",
+            "dropped_value": "Local(_2) [mutable]",
+            "is_mutable": true,
+            "deallocator_evidence": null
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::{closure#1}::bb4",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 4,
+          "statements": [],
+          "terminator": {
+            "kind": "Return",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:70:6: 70:6 (#0), scope: scope[0] }, kind: return }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:70:6: 70:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::{closure#1}::bb5",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 5,
+          "statements": [],
+          "terminator": {
+            "kind": "Drop",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:70:5: 70:6 (#0), scope: scope[0] }, kind: drop(_2) -> [return: bb6, unwind terminate(cleanup)] }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:70:5: 70:6 (#0)",
+            "return_target": "bb6",
+            "unwind_target": "terminate",
+            "dropped_value": "Local(_2) [mutable]",
+            "is_mutable": true,
+            "deallocator_evidence": null
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::{closure#1}::bb6",
+      {
+        "node_type": "Mir",
+        "node_data": {
+          "block_id": 6,
+          "statements": [],
+          "terminator": {
+            "kind": "UnwindResume",
+            "details": "Terminator { source_info: SourceInfo { span: /tmp/b1_2_crema_work/driver_fixed/src/main.rs:62:43: 70:6 (#0), scope: scope[0] }, kind: resume }",
+            "source_info": "/tmp/b1_2_crema_work/driver_fixed/src/main.rs:62:43: 70:6 (#0)"
+          }
+        }
+      }
+    ],
+    [
+      "rust::main::{closure#1}::terminate",
+      {
+        "node_type": "Terminal",
+        "node_data": {
+          "reason": "unwind_terminate"
+        }
+      }
+    ]
+  ],
+  "icfg_edges": [
+    {
+      "source": "rust::<PanicOnDrop as std::default::Default>::default::bb0",
+      "destination": "rust::<PanicOnDrop as std::default::Default>::default::bb1",
+      "label": "External/summary call return",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::<PanicOnDrop as std::default::Default>::default::bb1",
+      "destination": "rust::<PanicOnDrop as std::default::Default>::default::bb2",
+      "label": "External/summary call return",
+      "source_label": "Mir bb1",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb0",
+      "destination": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb1",
+      "label": "SwitchInt target",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb0",
+      "destination": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb5",
+      "label": "SwitchInt otherwise",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb5"
+    },
+    {
+      "source": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb1",
+      "destination": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb2",
+      "label": "External/summary call return",
+      "source_label": "Mir bb1",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb2",
+      "destination": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb3",
+      "label": "SwitchInt target",
+      "source_label": "Mir bb2",
+      "destination_label": "Mir bb3"
+    },
+    {
+      "source": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb2",
+      "destination": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb5",
+      "label": "SwitchInt otherwise",
+      "source_label": "Mir bb2",
+      "destination_label": "Mir bb5"
+    },
+    {
+      "source": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb3",
+      "destination": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb4",
+      "label": "External/summary call return",
+      "source_label": "Mir bb3",
+      "destination_label": "Mir bb4"
+    },
+    {
+      "source": "rust::main::bb0",
+      "destination": "rust::main::bb1",
+      "label": "UNRESOLVED_HIGHER_ORDER: callback API semantics not modeled",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::main::bb1",
+      "destination": "rust::main::bb2",
+      "label": "Resolved external Instance summary return",
+      "source_label": "Mir bb1",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::main::bb10",
+      "destination": "rust::main::bb11",
+      "label": "Call unwind",
+      "source_label": "Mir bb10",
+      "destination_label": "Mir bb11"
+    },
+    {
+      "source": "rust::main::bb11",
+      "destination": "rust::main::bb12",
+      "label": "Drop return",
+      "source_label": "Mir bb11",
+      "destination_label": "Mir bb12"
+    },
+    {
+      "source": "rust::main::bb11",
+      "destination": "rust::main::terminate",
+      "label": "Drop unwind",
+      "source_label": "Mir bb11",
+      "destination_label": "Terminal (unwind_terminate)"
+    },
+    {
+      "source": "rust::main::bb2",
+      "destination": "rust::main::bb3",
+      "label": "UNRESOLVED_HIGHER_ORDER: callback API semantics not modeled",
+      "source_label": "Mir bb2",
+      "destination_label": "Mir bb3"
+    },
+    {
+      "source": "rust::main::bb3",
+      "destination": "rust::main::bb4",
+      "label": "SwitchInt otherwise",
+      "source_label": "Mir bb3",
+      "destination_label": "Mir bb4"
+    },
+    {
+      "source": "rust::main::bb3",
+      "destination": "rust::main::bb5",
+      "label": "SwitchInt target",
+      "source_label": "Mir bb3",
+      "destination_label": "Mir bb5"
+    },
+    {
+      "source": "rust::main::bb3",
+      "destination": "rust::main::bb6",
+      "label": "SwitchInt target",
+      "source_label": "Mir bb3",
+      "destination_label": "Mir bb6"
+    },
+    {
+      "source": "rust::main::bb5",
+      "destination": "rust::main::bb11",
+      "label": "Call unwind",
+      "source_label": "Mir bb5",
+      "destination_label": "Mir bb11"
+    },
+    {
+      "source": "rust::main::bb5",
+      "destination": "rust::main::bb9",
+      "label": "Resolved external Instance summary return",
+      "source_label": "Mir bb5",
+      "destination_label": "Mir bb9"
+    },
+    {
+      "source": "rust::main::bb6",
+      "destination": "rust::main::bb11",
+      "label": "Call unwind",
+      "source_label": "Mir bb6",
+      "destination_label": "Mir bb11"
+    },
+    {
+      "source": "rust::main::bb6",
+      "destination": "rust::main::bb7",
+      "label": "Resolved external Instance summary return",
+      "source_label": "Mir bb6",
+      "destination_label": "Mir bb7"
+    },
+    {
+      "source": "rust::main::bb7",
+      "destination": "rust::main::bb11",
+      "label": "Call unwind",
+      "source_label": "Mir bb7",
+      "destination_label": "Mir bb11"
+    },
+    {
+      "source": "rust::main::bb7",
+      "destination": "rust::main::bb8",
+      "label": "Resolved external Instance summary return",
+      "source_label": "Mir bb7",
+      "destination_label": "Mir bb8"
+    },
+    {
+      "source": "rust::main::bb8",
+      "destination": "rust::main::bb11",
+      "label": "Call unwind",
+      "source_label": "Mir bb8",
+      "destination_label": "Mir bb11"
+    },
+    {
+      "source": "rust::main::bb9",
+      "destination": "rust::main::bb10",
+      "label": "Resolved external Instance summary return",
+      "source_label": "Mir bb9",
+      "destination_label": "Mir bb10"
+    },
+    {
+      "source": "rust::main::bb9",
+      "destination": "rust::main::bb11",
+      "label": "Call unwind",
+      "source_label": "Mir bb9",
+      "destination_label": "Mir bb11"
+    },
+    {
+      "source": "rust::main::{closure#1}::bb0",
+      "destination": "rust::main::{closure#1}::bb1",
+      "label": "External/summary call return",
+      "source_label": "Mir bb0",
+      "destination_label": "Mir bb1"
+    },
+    {
+      "source": "rust::main::{closure#1}::bb1",
+      "destination": "rust::main::{closure#1}::bb2",
+      "label": "External/summary call return",
+      "source_label": "Mir bb1",
+      "destination_label": "Mir bb2"
+    },
+    {
+      "source": "rust::main::{closure#1}::bb2",
+      "destination": "rust::main::{closure#1}::bb3",
+      "label": "External/summary call return",
+      "source_label": "Mir bb2",
+      "destination_label": "Mir bb3"
+    },
+    {
+      "source": "rust::main::{closure#1}::bb2",
+      "destination": "rust::main::{closure#1}::bb5",
+      "label": "Call unwind",
+      "source_label": "Mir bb2",
+      "destination_label": "Mir bb5"
+    },
+    {
+      "source": "rust::main::{closure#1}::bb3",
+      "destination": "rust::main::{closure#1}::bb4",
+      "label": "Drop return",
+      "source_label": "Mir bb3",
+      "destination_label": "Mir bb4"
+    },
+    {
+      "source": "rust::main::{closure#1}::bb5",
+      "destination": "rust::main::{closure#1}::bb6",
+      "label": "Drop return",
+      "source_label": "Mir bb5",
+      "destination_label": "Mir bb6"
+    },
+    {
+      "source": "rust::main::{closure#1}::bb5",
+      "destination": "rust::main::{closure#1}::terminate",
+      "label": "Drop unwind",
+      "source_label": "Mir bb5",
+      "destination_label": "Terminal (unwind_terminate)"
+    }
+  ],
+  "rust_functions": {
+    "<PanicOnDrop as std::default::Default>::default": {
+      "name": "<PanicOnDrop as std::default::Default>::default",
+      "arg_count": 0,
+      "entry_node": "rust::<PanicOnDrop as std::default::Default>::default::bb0",
+      "return_nodes": [
+        "rust::<PanicOnDrop as std::default::Default>::default::bb2"
+      ]
+    },
+    "<PanicOnDrop as std::ops::Drop>::drop": {
+      "name": "<PanicOnDrop as std::ops::Drop>::drop",
+      "arg_count": 1,
+      "entry_node": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb0",
+      "return_nodes": [
+        "rust::<PanicOnDrop as std::ops::Drop>::drop::bb5"
+      ]
+    },
+    "main": {
+      "name": "main",
+      "arg_count": 0,
+      "entry_node": "rust::main::bb0",
+      "return_nodes": []
+    },
+    "main::{closure#0}": {
+      "name": "main::{closure#0}",
+      "arg_count": 2,
+      "entry_node": "rust::main::{closure#0}::bb0",
+      "return_nodes": [
+        "rust::main::{closure#0}::bb0"
+      ]
+    },
+    "main::{closure#1}": {
+      "name": "main::{closure#1}",
+      "arg_count": 1,
+      "entry_node": "rust::main::{closure#1}::bb0",
+      "return_nodes": [
+        "rust::main::{closure#1}::bb4"
+      ]
+    }
+  },
+  "rust_calls": []
+}

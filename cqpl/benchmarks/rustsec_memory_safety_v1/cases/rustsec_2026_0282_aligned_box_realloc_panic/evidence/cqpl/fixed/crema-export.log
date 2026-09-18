@@ -1,0 +1,220 @@
+   Compiling crema v0.1.0 (/home/af/Documenti/a-phd/crema)
+warning: crema@0.1.0: No C source files found; skipping static library generation
+warning: unused imports: `RustAllocationDispositionEvidence`, `RustCallDeallocatorEvidence`, and `RustDropAllocatorEvidence`
+ --> src/cqpl_export.rs:7:45
+  |
+7 |     PlaceId, PlaceProjection, ProgramVarId, RustDropAllocatorEvidence, RustDropAllocatorEvidenceKind,
+  |                                             ^^^^^^^^^^^^^^^^^^^^^^^^^
+8 |     RustCallDeallocatorEvidence, RustCallDeallocatorEvidenceKind, RustAllocationDispositionEvidence, RustAllocationDispositionEvidenceKin...
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unreachable pattern
+   --> src/icfg.rs:859:13
+    |
+859 |             _ => MirTerminator::Unhandled {
+    |             ^ no value can reach this
+    |
+note: multiple earlier patterns match some of the same values
+   --> src/icfg.rs:859:13
+    |
+609 |             TerminatorKind::Goto { target } => MirTerminator::Goto {
+    |             ------------------------------- matches some of the same values
+...
+614 |             TerminatorKind::SwitchInt { discr, targets, .. } => {
+    |             ------------------------------------------------ matches some of the same values
+...
+630 |             TerminatorKind::Return => MirTerminator::Return {
+    |             ---------------------- matches some of the same values
+...
+634 |             TerminatorKind::UnwindResume => MirTerminator::UnwindResume {
+    |             ---------------------------- matches some of the same values
+...
+859 |             _ => MirTerminator::Unhandled {
+    |             ^ ...and 11 other patterns collectively make this unreachable
+    = note: `#[warn(unreachable_patterns)]` on by default
+
+warning: unused variable: `details`
+    --> src/icfg.rs:1923:59
+     |
+1923 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+     |                                                           ^^^^^^^ help: try ignoring the field: `details: _`
+     |
+     = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+    --> src/icfg.rs:1923:68
+     |
+1923 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+     |                                                                    ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `callee_is_local`
+    --> src/icfg.rs:2114:21
+     |
+2114 |                     callee_is_local,
+     |                     ^^^^^^^^^^^^^^^ help: try ignoring the field: `callee_is_local: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:4748:50
+     |
+4748 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return_place, allocation_disposition_evidence, ....
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:132:12
+    |
+99  | impl CellValue {
+    | -------------- methods in this implementation
+...
+132 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+150 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:678:8
+    |
+678 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintStateMap {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `closure_entry_scope_for_call` is never used
+    --> src/abstract_domain.rs:1349:4
+     |
+1349 | fn closure_entry_scope_for_call(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `CQPL_ANNOTATED_ICFG_SCHEMA_VERSION` is never used
+  --> src/cqpl_export.rs:25:11
+   |
+25 | pub const CQPL_ANNOTATED_ICFG_SCHEMA_VERSION: u32 = 1;
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `CQPL_ANNOTATED_ICFG_IDENTITY_SCHEMA_VERSION` is never used
+  --> src/cqpl_export.rs:26:11
+   |
+26 | pub const CQPL_ANNOTATED_ICFG_IDENTITY_SCHEMA_VERSION: u32 = 2;
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `export_cqpl_annotated_icfg_with_identity` is never used
+   --> src/cqpl_export.rs:267:8
+    |
+267 | pub fn export_cqpl_annotated_icfg_with_identity(
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `is_box_new_call` is never used
+    --> src/cqpl_export.rs:1615:4
+     |
+1615 | fn is_box_new_call(s: &str) -> bool {
+     |    ^^^^^^^^^^^^^^^
+
+warning: function `is_raw_alloc_zeroed_call` is never used
+    --> src/cqpl_export.rs:1620:4
+     |
+1620 | fn is_raw_alloc_zeroed_call(s: &str) -> bool {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `is_raw_alloc_call` is never used
+    --> src/cqpl_export.rs:1624:4
+     |
+1624 | fn is_raw_alloc_call(s: &str) -> bool {
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: methods `copy_points_to`, `may_alias`, `same_singleton_abstract_id`, and `leq` are never used
+   --> src/identity.rs:99:12
+    |
+32  | impl AllocationIdentityMemory {
+    | ----------------------------- methods in this implementation
+...
+99  |     pub fn copy_points_to(&mut self, from: &ProgramVarId, to: ProgramVarId) {
+    |            ^^^^^^^^^^^^^^
+...
+143 |     pub fn may_alias(&self, left: &ProgramVarId, right: &ProgramVarId) -> bool {
+    |            ^^^^^^^^^
+...
+154 |     pub fn same_singleton_abstract_id(&self, left: &ProgramVarId, right: &ProgramVarId) -> bool {
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+196 |     pub fn leq(&self, other: &Self) -> bool {
+    |            ^^^
+
+warning: function `is_fresh_rust_allocator` is never used
+   --> src/identity.rs:649:4
+    |
+649 | fn is_fresh_rust_allocator(callee: &str) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `transfer_statement` is never used
+   --> src/identity.rs:904:4
+    |
+904 | fn transfer_statement(
+    |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `is_option_map_or_def_path` is never used
+   --> src/mir_semantics.rs:154:8
+    |
+154 | pub fn is_option_map_or_def_path(path: &str) -> bool {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 19 warnings (run `cargo fix --bin "crema"` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 18.52s
+     Running `target/release/crema /tmp/b1_2_crema_work/driver_fixed --mir-semantics-v2 --only-icfg-annotated --cqpl-schema-version 2 --annotated-icfg-out /home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/cqpl/fixed/annotated_icfg_v2.json --allocation-identity-out /home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/cqpl/fixed/allocation_identity.json`
+mir_semantics_profile=v2-extension-over-v6O
+Analyzing Cargo project at: /tmp/b1_2_crema_work/driver_fixed
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running `target/debug/ffi_extraction /tmp/b1_2_crema_work/driver_fixed /home/af/Documenti/a-phd/crema`
+warning: field `inner` is never read
+  --> /tmp/b1_2_crema_work/driver_fixed/src/main.rs:23:5
+   |
+21 | struct PanicOnDrop {
+   |        ----------- field in this struct
+22 |     id: u32,
+23 |     inner: Box<u32>,
+   |     ^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: 1 warning emitted
+
+No C files found in the project; isolated SVF directory remains empty: /tmp/b1_2_crema_work/driver_fixed/target/crema-svf/run-1248913-1789546960421217980
+ffi_extraction finished with status: ExitStatus(unix_wait_status(0))
+Analyzing package b1_2_driver_fixed target b1_2_driver_fixed at /tmp/b1_2_crema_work/driver_fixed/src/main.rs
+>>> POST-DEP COLLECTION rustc_args = 
+[
+    "rustc",
+    "/tmp/b1_2_crema_work/driver_fixed/src/main.rs",
+    "--crate-type",
+    "bin",
+    "--edition=2021",
+    "-Z",
+    "unstable-options",
+    "--sysroot",
+    "/mnt/dara/dara-dev/toolchains/rustup/toolchains/nightly-2024-11-21-x86_64-unknown-linux-gnu",
+    "-L",
+    "dependency=/tmp/b1_2_crema_work/driver_fixed/target/debug/deps",
+    "-L",
+    "/tmp/b1_2_crema_work/driver_fixed/target/debug",
+    "--extern=aligned_box=/tmp/b1_2_crema_work/driver_fixed/target/debug/deps/libaligned_box-58589ec93ab8af79.rlib",
+]
+warning: field `inner` is never read
+  --> /tmp/b1_2_crema_work/driver_fixed/src/main.rs:23:5
+   |
+21 | struct PanicOnDrop {
+   |        ----------- field in this struct
+22 |     id: u32,
+23 |     inner: Box<u32>,
+   |     ^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+Global ICFG saved to global_icfg.json
+warning: 1 warning emitted
+
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+entrypoint: rust::main::bb0
+Allocation identity state saved to /home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/cqpl/fixed/allocation_identity.json
+CQPL annotated ICFG saved to /home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/cqpl/fixed/annotated_icfg_v2.json

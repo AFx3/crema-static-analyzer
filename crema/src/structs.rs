@@ -651,6 +651,160 @@ pub struct LlvmEdge {
     pub destination: usize,
     pub edge_type: String,
 }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct LlvmMemoryAccessV1 {
+    pub argmem: String,
+    pub inaccessiblemem: String,
+    pub other: String,
+    #[serde(default)]
+    pub encoded: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct LlvmFormalEffectsSnapshotV1 {
+    pub index: usize,
+    #[serde(default)]
+    pub pointer_typed: bool,
+    #[serde(default)]
+    pub nofree: bool,
+    #[serde(default)]
+    pub nocapture: bool,
+    #[serde(default)]
+    pub returned: bool,
+    #[serde(default)]
+    pub readnone: bool,
+    #[serde(default)]
+    pub readonly: bool,
+    #[serde(default)]
+    pub writeonly: bool,
+    #[serde(default)]
+    pub allocptr: bool,
+    #[serde(default)]
+    pub allocalign: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LlvmAllocSizeV1 {
+    pub element_size_arg: usize,
+    #[serde(default)]
+    pub num_elements_arg: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct LlvmFunctionEffectsSnapshotV1 {
+    #[serde(default)]
+    pub nofree: bool,
+    #[serde(default)]
+    pub nosync: bool,
+    #[serde(default)]
+    pub willreturn: bool,
+    #[serde(default)]
+    pub nobuiltin: bool,
+    #[serde(default)]
+    pub optnone: bool,
+    #[serde(default)]
+    pub memory_explicit: bool,
+    pub memory: LlvmMemoryAccessV1,
+    #[serde(default)]
+    pub alloc_kind: Vec<String>,
+    #[serde(default)]
+    pub alloc_family: Option<String>,
+    #[serde(default)]
+    pub return_noalias: bool,
+    #[serde(default)]
+    pub alloc_size: Option<LlvmAllocSizeV1>,
+    #[serde(default)]
+    pub formals: Vec<LlvmFormalEffectsSnapshotV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct LlvmFunctionEffectsRecordV1 {
+    pub name: String,
+    pub is_declaration: bool,
+    pub origin_explicit: String,
+    pub explicit: LlvmFunctionEffectsSnapshotV1,
+    #[serde(default)]
+    pub tli_recognized: bool,
+    #[serde(default)]
+    pub tli_libfunc: Option<String>,
+    pub origin_inferred: String,
+    pub tli_inferred: LlvmFunctionEffectsSnapshotV1,
+    #[serde(default)]
+    pub tli_changed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct LlvmCallsiteEffectsRecordV1 {
+    pub caller: String,
+    pub ordinal: usize,
+    pub direct: bool,
+    #[serde(default)]
+    pub callee: Option<String>,
+    #[serde(default)]
+    pub callsite_memory_explicit: bool,
+    pub effective_memory: LlvmMemoryAccessV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct LlvmEffectsModuleV1 {
+    pub input: String,
+    pub target_triple: String,
+    pub input_ir_verified: bool,
+    pub tli_clone_verified: bool,
+    #[serde(default)]
+    pub functions: Vec<LlvmFunctionEffectsRecordV1>,
+    #[serde(default)]
+    pub callsites_explicit: Vec<LlvmCallsiteEffectsRecordV1>,
+    #[serde(default)]
+    pub callsites_tli_inferred: Vec<LlvmCallsiteEffectsRecordV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct LlvmMemoryEffectsArtifactV1 {
+    pub schema: String,
+    pub llvm_version: String,
+    pub explicit_basis: String,
+    pub tli_basis: String,
+    #[serde(default)]
+    pub modules: Vec<LlvmEffectsModuleV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct SvfFormalPointsToV1 {
+    pub formal_index: usize,
+    pub svf_var_id: usize,
+    #[serde(default)]
+    pub points_to: Vec<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct SvfFunctionPointsToV1 {
+    pub function: String,
+    #[serde(default)]
+    pub formals: Vec<SvfFormalPointsToV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct SvfSolvedPointsToArtifactV1 {
+    pub schema: String,
+    pub analysis: String,
+    pub semantics: String,
+    pub formal_mapping_schema: String,
+    #[serde(default)]
+    pub functions: Vec<SvfFunctionPointsToV1>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlvmJson {
     pub nodes: Vec<LlvmJsonNode>, // list of nodes in the JSON structure
@@ -659,6 +813,8 @@ pub struct LlvmJson {
     /// order. Historical SVF artifacts omit this field and remain readable.
     #[serde(default)]
     pub formal_param_var_ids: Vec<usize>,
+    #[serde(default)]
+    pub formal_param_mapping_schema: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -670,12 +826,18 @@ pub struct LlvmFunction {
     /// SVF artifact. Empty means legacy artifact / no Bmulti certificate.
     #[serde(default)]
     pub formal_param_var_ids: Vec<usize>,
+    #[serde(default)]
+    pub formal_param_mapping_schema: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct LlvmRepresentation {
     pub functions: HashMap<String, LlvmFunction>,
     pub global_edges: Vec<LlvmEdge>,
+    #[serde(default)]
+    pub llvm_memory_effects: Option<LlvmMemoryEffectsArtifactV1>,
+    #[serde(default)]
+    pub svf_solved_points_to: Option<SvfSolvedPointsToArtifactV1>,
 }
 
 // -----------------------
@@ -718,6 +880,12 @@ pub struct DummyArgumentBinding {
     pub mir_var: String,
     /// Callsite-scoped SVF formal VarID spelling (`<id>@rust::<...>::bbN`).
     pub llvm_var: String,
+    /// EFX1/Bpta-R1: solved Andersen points-to set for this formal. MAY only.
+    #[serde(default)]
+    pub svf_may_points_to: Vec<usize>,
+    /// Exact producer basis for the MAY set. None on historical artifacts.
+    #[serde(default)]
+    pub svf_points_to_basis: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -747,6 +915,13 @@ pub struct GlobalICFG {
 pub struct GlobalICFGOrdered {
     pub ordered_nodes: Vec<(String, GlobalICFGNode)>,
     pub icfg_edges: Vec<IcfgEdge>,
+    /// EFX1 evidence is carried through the global ICFG as immutable metadata.
+    /// CQPL export may consume it only through capability-gated derivations.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llvm_memory_effects: Option<LlvmMemoryEffectsArtifactV1>,
+    /// Bpta-R1 solved Andersen points-to evidence. Membership is MAY only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub svf_solved_points_to: Option<SvfSolvedPointsToArtifactV1>,
     /// Phase-6 interprocedural identity metadata.  `serde(default)` keeps
     /// historical frozen ICFG JSON files readable.
     #[serde(default)]

@@ -1,0 +1,1 @@
+"/home/af/Documenti/a-phd/cqpl/cqpl_checker/target/debug/cqpl_checker" "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/annotated_icfg_v2.json" "/home/af/Documenti/a-phd/cqpl/queries_v2/use_after_free_alloc.cqpl" "--json"

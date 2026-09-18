@@ -1,0 +1,983 @@
+{
+  "schema_version": 2,
+  "entry": "rust::main::bb0",
+  "capabilities": [
+    "allocation_contracts_v1",
+    "allocation_contracts_v2",
+    "allocation_state_v1",
+    "allocation_disposition_v1",
+    "mir_semantic_labels_v1",
+    "mir_semantics_v2"
+  ],
+  "variables": [
+    {
+      "id": "Local(_0)",
+      "language": "rust"
+    },
+    {
+      "id": "Local(_1)",
+      "language": "rust"
+    },
+    {
+      "id": "Local(_2)",
+      "language": "rust"
+    },
+    {
+      "id": "Local(_3)",
+      "language": "rust"
+    },
+    {
+      "id": "Local(_4)",
+      "language": "rust"
+    },
+    {
+      "id": "Local(_5)",
+      "language": "rust"
+    },
+    {
+      "id": "Local(_6)",
+      "language": "rust"
+    },
+    {
+      "id": "Local(_64)",
+      "language": "rust"
+    },
+    {
+      "id": "Local(_7)",
+      "language": "rust"
+    },
+    {
+      "id": "Local(_8)",
+      "language": "rust"
+    },
+    {
+      "id": "rust::main::Local(_1)",
+      "language": "rust"
+    },
+    {
+      "id": "rust::main::Local(_4)",
+      "language": "rust"
+    }
+  ],
+  "allocations": [],
+  "nodes": [
+    {
+      "id": "rust::<PanicOnDrop as std::default::Default>::default::bb0",
+      "successors": [
+        "rust::<PanicOnDrop as std::default::Default>::default::bb1"
+      ],
+      "labels": [],
+      "semantic_labels": [
+        "rvalue:aggregate",
+        "rvalue:const",
+        "stmt:assign",
+        "term:call"
+      ],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": []
+      }
+    },
+    {
+      "id": "rust::<PanicOnDrop as std::default::Default>::default::bb1",
+      "successors": [
+        "rust::<PanicOnDrop as std::default::Default>::default::bb2"
+      ],
+      "labels": [
+        {
+          "predicate": "alloc",
+          "variable": "Local(_4)"
+        }
+      ],
+      "semantic_labels": [
+        "term:call"
+      ],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": []
+      }
+    },
+    {
+      "id": "rust::<PanicOnDrop as std::default::Default>::default::bb2",
+      "successors": [],
+      "labels": [],
+      "semantic_labels": [
+        "rvalue:aggregate",
+        "stmt:assign",
+        "term:return"
+      ],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": []
+      }
+    },
+    {
+      "id": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb0",
+      "successors": [
+        "rust::<PanicOnDrop as std::ops::Drop>::drop::bb1",
+        "rust::<PanicOnDrop as std::ops::Drop>::drop::bb5"
+      ],
+      "labels": [
+        {
+          "predicate": "read",
+          "variable": "Local(_1)"
+        }
+      ],
+      "semantic_labels": [
+        "rvalue:use",
+        "stmt:assign",
+        "term:switch_int"
+      ],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": []
+      }
+    },
+    {
+      "id": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb1",
+      "successors": [
+        "rust::<PanicOnDrop as std::ops::Drop>::drop::bb2"
+      ],
+      "labels": [],
+      "semantic_labels": [
+        "rvalue:aggregate",
+        "rvalue:const",
+        "stmt:assign",
+        "term:call"
+      ],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": []
+      }
+    },
+    {
+      "id": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb2",
+      "successors": [
+        "rust::<PanicOnDrop as std::ops::Drop>::drop::bb3",
+        "rust::<PanicOnDrop as std::ops::Drop>::drop::bb5"
+      ],
+      "labels": [],
+      "semantic_labels": [
+        "term:switch_int"
+      ],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": []
+      }
+    },
+    {
+      "id": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb3",
+      "successors": [
+        "rust::<PanicOnDrop as std::ops::Drop>::drop::bb4"
+      ],
+      "labels": [],
+      "semantic_labels": [
+        "rvalue:const",
+        "stmt:assign",
+        "term:call"
+      ],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": []
+      }
+    },
+    {
+      "id": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb4",
+      "successors": [],
+      "labels": [],
+      "semantic_labels": [
+        "term:call"
+      ],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": []
+      }
+    },
+    {
+      "id": "rust::<PanicOnDrop as std::ops::Drop>::drop::bb5",
+      "successors": [],
+      "labels": [],
+      "semantic_labels": [
+        "term:return"
+      ],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": []
+      }
+    },
+    {
+      "id": "rust::main::bb0",
+      "successors": [
+        "rust::main::bb1"
+      ],
+      "labels": [],
+      "semantic_labels": [
+        "term:call"
+      ],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": []
+      }
+    },
+    {
+      "id": "rust::main::bb1",
+      "successors": [
+        "rust::main::bb2"
+      ],
+      "labels": [],
+      "semantic_labels": [
+        "term:call"
+      ],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": []
+      }
+    },
+    {
+      "id": "rust::main::bb2",
+      "successors": [
+        "rust::main::bb3",
+        "rust::main::bb6"
+      ],
+      "labels": [],
+      "semantic_labels": [
+        "rvalue:ref",
+        "stmt:assign",
+        "term:call"
+      ],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": [
+          {
+            "aliases": [
+              "Local(_4)"
+            ],
+            "value": "TOP"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rust::main::bb3",
+      "successors": [
+        "rust::main::bb4",
+        "rust::main::bb6"
+      ],
+      "labels": [],
+      "semantic_labels": [
+        "rvalue:const",
+        "stmt:assign",
+        "term:call"
+      ],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": [
+          {
+            "aliases": [
+              "Local(_4)"
+            ],
+            "value": "TOP"
+          },
+          {
+            "aliases": [
+              "Local(_7)"
+            ],
+            "value": "TOP"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rust::main::bb4",
+      "successors": [
+        "rust::main::bb5",
+        "rust::main::bb6"
+      ],
+      "labels": [],
+      "semantic_labels": [
+        "term:call"
+      ],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": [
+          {
+            "aliases": [
+              "Local(_4)"
+            ],
+            "value": "TOP"
+          },
+          {
+            "aliases": [
+              "Local(_7)"
+            ],
+            "value": "TOP"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rust::main::bb5",
+      "successors": [
+        "rust::main::bb6"
+      ],
+      "labels": [],
+      "semantic_labels": [
+        "term:call"
+      ],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": [
+          {
+            "aliases": [
+              "Local(_4)"
+            ],
+            "value": "TOP"
+          },
+          {
+            "aliases": [
+              "Local(_7)"
+            ],
+            "value": "TOP"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rust::main::bb6",
+      "successors": [
+        "rust::main::bb7",
+        "rust::main::terminate"
+      ],
+      "labels": [
+        {
+          "predicate": "drop",
+          "variable": "Local(_1)"
+        }
+      ],
+      "semantic_labels": [
+        "term:drop"
+      ],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": [
+          {
+            "aliases": [
+              "Local(_1)"
+            ],
+            "value": "FREED"
+          },
+          {
+            "aliases": [
+              "Local(_4)"
+            ],
+            "value": "TOP"
+          },
+          {
+            "aliases": [
+              "Local(_7)"
+            ],
+            "value": "TOP"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rust::main::bb7",
+      "successors": [],
+      "labels": [],
+      "semantic_labels": [
+        "term:unwind_resume"
+      ],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": [
+          {
+            "aliases": [
+              "Local(_1)"
+            ],
+            "value": "FREED"
+          },
+          {
+            "aliases": [
+              "Local(_4)"
+            ],
+            "value": "TOP"
+          },
+          {
+            "aliases": [
+              "Local(_7)"
+            ],
+            "value": "TOP"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rust::main::terminate",
+      "successors": [],
+      "labels": [],
+      "semantic_labels": [],
+      "allocation_labels": [],
+      "allocation_disposition": [],
+      "identity": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "event_identity": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      },
+      "allocation_post": {
+        "cells": []
+      },
+      "pre": {
+        "cells": []
+      },
+      "post": {
+        "cells": [
+          {
+            "aliases": [
+              "Local(_1)"
+            ],
+            "value": "FREED"
+          },
+          {
+            "aliases": [
+              "Local(_4)"
+            ],
+            "value": "TOP"
+          },
+          {
+            "aliases": [
+              "Local(_7)"
+            ],
+            "value": "TOP"
+          }
+        ]
+      }
+    }
+  ]
+}

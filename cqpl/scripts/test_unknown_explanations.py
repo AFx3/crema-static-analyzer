@@ -21,8 +21,18 @@ plain="tt" if "mismatch" in mode else "unk"
 report_result="ff" if "reportmismatch" in mode else "unk"
 reasons=[] if "noreason" in mode else ["MAY_ALLOCATION"]
 specific=False if "nonspecific" in mode else True
+assessment={
+  "schema":"cqpl_result_assessment_v1",
+  "result":"unk",
+  "subresult":"unk_true",
+  "direction":"true",
+  "strength":"strong_abstract_evidence",
+  "basis":["finding:test"],
+  "caveats":["MAY evidence is never promoted to MUST"],
+}
 report={
   "result":report_result,
+  "assessment":assessment,
   "reason_frontier":reasons,
   "witnesses":[{"truth":"unk"}],
   "supporting_findings":[{"kind":"normal_return_open_manual_obligation","strength":"strong_abstract_evidence"}],
@@ -31,7 +41,7 @@ report={
 path.write_text(json.dumps(report)+"\n")
 if "--explain-unk-verbose" in args:
     print("VERBOSE_UNKNOWN_REPORT", file=sys.stderr)
-print(json.dumps({"result":plain}))
+print(json.dumps({"result":plain,"assessment":assessment}))
 '''
 
 
@@ -63,6 +73,9 @@ class UnknownExplanationTests(unittest.TestCase):
                 checker=checker, artifact=art, query=q, result="unk", explanation=explain,
             )
             self.assertEqual(record["result"],"unk")
+            self.assertEqual(record["subresult"],"unk_true")
+            self.assertEqual(record["direction"],"true")
+            self.assertEqual(record["strength"],"strong_abstract_evidence")
             self.assertEqual(record["reason_frontier"],["MAY_ALLOCATION"])
             self.assertEqual(record["supporting_findings"],1)
             self.assertTrue(explain.is_file())

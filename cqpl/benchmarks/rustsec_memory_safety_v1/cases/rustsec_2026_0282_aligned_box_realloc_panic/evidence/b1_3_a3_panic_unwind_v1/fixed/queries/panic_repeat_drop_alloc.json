@@ -1,0 +1,6 @@
+{
+  "result": "unk",
+  "entry": "rust::main::bb0",
+  "scope": "reachable",
+  "query_file": "/home/af/Documenti/a-phd/cqpl/queries_experimental/panic_repeat_drop_alloc.cqpl"
+}

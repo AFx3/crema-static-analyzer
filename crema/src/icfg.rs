@@ -557,11 +557,50 @@ fn svf_certified_formal_param_var_ids(
     function: &LlvmFunction,
     actual_count: usize,
 ) -> Option<&[usize]> {
-    if function.formal_param_var_ids.len() == actual_count {
-        Some(function.formal_param_var_ids.as_slice())
-    } else {
-        None
+    if function.formal_param_mapping_schema.as_deref() != Some("svf_formal_arg_index_v1")
+        || function.formal_param_var_ids.len() != actual_count
+    {
+        return None;
     }
+    // A positional producer certificate must be a one-to-one mapping from
+    // formal index to SVF value node. Duplicate VarIDs would collapse two
+    // distinct formal positions and are therefore rejected fail-closed.
+    let unique = function
+        .formal_param_var_ids
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    if unique.len() != actual_count {
+        return None;
+    }
+    Some(function.formal_param_var_ids.as_slice())
+}
+
+/// Bpta-R1 producer-certified MAY points-to set for a positional C formal.
+/// Absence is unresolved evidence, never an empty-set proof.
+fn svf_formal_may_points_to(
+    repr: &LlvmRepresentation,
+    function_name: &str,
+    formal_index: usize,
+    expected_var_id: usize,
+) -> Option<Vec<usize>> {
+    let artifact = repr.svf_solved_points_to.as_ref()?;
+    if artifact.schema != "svf_solved_points_to_v1"
+        || artifact.analysis != "AndersenWaveDiff"
+        || artifact.semantics != "may"
+        || artifact.formal_mapping_schema != "svf_formal_arg_index_v1"
+    {
+        return None;
+    }
+    let f = artifact.functions.iter().find(|f| f.function == function_name)?;
+    let formal = f.formals.iter().find(|p| p.formal_index == formal_index)?;
+    if formal.svf_var_id != expected_var_id {
+        return None;
+    }
+    let mut pts = formal.points_to.clone();
+    pts.sort_unstable();
+    pts.dedup();
+    Some(pts)
 }
 
 /// Legacy fallback for historical SVF artifacts that predate Bmulti. It
@@ -2833,6 +2872,12 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                                 .zip(formals.iter().copied())
                                                 .enumerate()
                                                 .map(|(arg_index, (actual, formal))| {
+                                                    let may_pts = svf_formal_may_points_to(
+                                                        llvm_repr,
+                                                        function_called,
+                                                        arg_index,
+                                                        formal,
+                                                    );
                                                     DummyArgumentBinding {
                                                         arg_index,
                                                         mir_var: actual.arg.clone(),
@@ -2840,6 +2885,8 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                                             "{}@{}",
                                                             formal, call_suffix
                                                         ),
+                                                        svf_may_points_to: may_pts.clone().unwrap_or_default(),
+                                                        svf_points_to_basis: may_pts.map(|_| "svf_andersen_wave_diff_may_v1".to_string()),
                                                     }
                                                 })
                                                 .collect::<Vec<_>>()
@@ -3237,6 +3284,14 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
         });
 
         let global_icfg_ordered = GlobalICFGOrdered {
+            llvm_memory_effects: self
+                .llvm_representation
+                .as_ref()
+                .and_then(|repr| repr.llvm_memory_effects.clone()),
+            svf_solved_points_to: self
+                .llvm_representation
+                .as_ref()
+                .and_then(|repr| repr.svf_solved_points_to.clone()),
             ordered_nodes: ordered_icfg_nodes,
             icfg_edges: updated_edges,
             rust_functions,
@@ -3273,6 +3328,186 @@ fn extract_target<'a>(target: &'a str) -> &'a str {
     }
 }
 
+
+fn efx1_valid_memory_access(access: &str) -> bool {
+    matches!(access, "none" | "read" | "write" | "readwrite")
+}
+
+fn validate_efx1_snapshot(
+    snapshot: &crate::structs::LlvmFunctionEffectsSnapshotV1,
+    where_: &str,
+) -> Result<(), String> {
+    if snapshot.memory.encoded > 63 {
+        return Err(format!("{where_}: invalid LLVM16 MemoryEffects encoding {}", snapshot.memory.encoded));
+    }
+    for (location, access) in [
+        ("argmem", snapshot.memory.argmem.as_str()),
+        ("inaccessiblemem", snapshot.memory.inaccessiblemem.as_str()),
+        ("other", snapshot.memory.other.as_str()),
+    ] {
+        if !efx1_valid_memory_access(access) {
+            return Err(format!("{where_}: invalid {location} memory access '{access}'"));
+        }
+    }
+    let valid_alloc_kinds = ["alloc", "realloc", "free", "uninitialized", "zeroed", "aligned"];
+    let mut seen_kinds = BTreeSet::new();
+    for kind in &snapshot.alloc_kind {
+        if !valid_alloc_kinds.contains(&kind.as_str()) || !seen_kinds.insert(kind.as_str()) {
+            return Err(format!("{where_}: invalid/duplicate alloc kind '{kind}'"));
+        }
+    }
+    let mut returned = 0usize;
+    for (expected, formal) in snapshot.formals.iter().enumerate() {
+        if formal.index != expected {
+            return Err(format!("{where_}: formal index {} != declaration position {expected}", formal.index));
+        }
+        if formal.returned {
+            returned += 1;
+        }
+        if (formal.nofree
+            || formal.nocapture
+            || formal.readnone
+            || formal.readonly
+            || formal.writeonly
+            || formal.allocptr)
+            && !formal.pointer_typed
+        {
+            return Err(format!("{where_}: pointer effect attached to non-pointer formal {expected}"));
+        }
+    }
+    if returned > 1 {
+        return Err(format!("{where_}: returned appears on more than one formal"));
+    }
+    if let Some(alloc_size) = snapshot.alloc_size.as_ref() {
+        if alloc_size.element_size_arg >= snapshot.formals.len() {
+            return Err(format!("{where_}: alloc_size element_size_arg out of range"));
+        }
+        if alloc_size
+            .num_elements_arg
+            .is_some_and(|index| index >= snapshot.formals.len())
+        {
+            return Err(format!("{where_}: alloc_size num_elements_arg out of range"));
+        }
+    }
+    Ok(())
+}
+
+fn validate_efx1_effect_artifact(
+    artifact: &crate::structs::LlvmMemoryEffectsArtifactV1,
+) -> Result<(), String> {
+    if artifact.schema != "llvm_memory_effects_v1"
+        || artifact.llvm_version != "16.0.4"
+        || artifact.explicit_basis != "llvm16_explicit_input_ir_v1"
+        || artifact.tli_basis != "llvm16_tli_libfunc_attrs_v1"
+    {
+        return Err(format!(
+            "unsupported EFX1 artifact header: schema={} llvm={} explicit_basis={} tli_basis={}",
+            artifact.schema, artifact.llvm_version, artifact.explicit_basis, artifact.tli_basis
+        ));
+    }
+    if artifact.modules.is_empty() {
+        return Err("EFX1 artifact contains no modules".into());
+    }
+    for (mi, module) in artifact.modules.iter().enumerate() {
+        if module.input.is_empty() || !module.input_ir_verified || !module.tli_clone_verified {
+            return Err(format!("modules[{mi}]: missing input or LLVM verifier certificate"));
+        }
+        let mut names = BTreeSet::new();
+        for (fi, record) in module.functions.iter().enumerate() {
+            let where_ = format!("modules[{mi}].functions[{fi}]({})", record.name);
+            if record.name.is_empty() || !names.insert(record.name.as_str()) {
+                return Err(format!("{where_}: missing/duplicate function name"));
+            }
+            if record.origin_explicit != "explicit_input_ir"
+                || record.origin_inferred != "llvm_tli_inferred"
+            {
+                return Err(format!("{where_}: invalid provenance origin"));
+            }
+            if record.tli_recognized != record.tli_libfunc.as_ref().is_some_and(|name| !name.is_empty()) {
+                return Err(format!("{where_}: tli_recognized/tli_libfunc mismatch"));
+            }
+            validate_efx1_snapshot(&record.explicit, &format!("{where_}.explicit"))?;
+            validate_efx1_snapshot(&record.tli_inferred, &format!("{where_}.tli_inferred"))?;
+            let structural_delta = record.explicit != record.tli_inferred;
+            if record.tli_changed != structural_delta {
+                return Err(format!("{where_}: tli_changed disagrees with structural delta"));
+            }
+            if record.tli_changed
+                && (!record.tli_recognized
+                    || !record.is_declaration
+                    || record.explicit.nobuiltin
+                    || record.explicit.optnone)
+            {
+                return Err(format!("{where_}: inadmissible TLI-inferred mutation"));
+            }
+        }
+        if module.callsites_explicit.len() != module.callsites_tli_inferred.len() {
+            return Err(format!("modules[{mi}]: TLI clone changed callsite cardinality"));
+        }
+        for (ci, (before, after)) in module
+            .callsites_explicit
+            .iter()
+            .zip(&module.callsites_tli_inferred)
+            .enumerate()
+        {
+            if before.caller != after.caller
+                || before.ordinal != after.ordinal
+                || before.direct != after.direct
+                || before.callee != after.callee
+            {
+                return Err(format!("modules[{mi}].callsites[{ci}]: TLI clone changed callsite identity"));
+            }
+            for access in [
+                before.effective_memory.argmem.as_str(),
+                before.effective_memory.inaccessiblemem.as_str(),
+                before.effective_memory.other.as_str(),
+                after.effective_memory.argmem.as_str(),
+                after.effective_memory.inaccessiblemem.as_str(),
+                after.effective_memory.other.as_str(),
+            ] {
+                if !efx1_valid_memory_access(access) {
+                    return Err(format!("modules[{mi}].callsites[{ci}]: invalid memory access '{access}'"));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_svf_solved_points_to_artifact(
+    artifact: &crate::structs::SvfSolvedPointsToArtifactV1,
+) -> Result<(), String> {
+    if artifact.schema != "svf_solved_points_to_v1"
+        || artifact.analysis != "AndersenWaveDiff"
+        || artifact.semantics != "may"
+        || artifact.formal_mapping_schema != "svf_formal_arg_index_v1"
+    {
+        return Err("invalid solved Andersen points-to artifact header".into());
+    }
+    let mut functions = BTreeSet::new();
+    for function in &artifact.functions {
+        if function.function.is_empty() || !functions.insert(function.function.as_str()) {
+            return Err("missing/duplicate function in solved points-to artifact".into());
+        }
+        let mut var_ids = BTreeSet::new();
+        for (expected, formal) in function.formals.iter().enumerate() {
+            if formal.formal_index != expected {
+                return Err(format!(
+                    "{}: formal index {} != declaration position {expected}",
+                    function.function, formal.formal_index
+                ));
+            }
+            if !var_ids.insert(formal.svf_var_id) {
+                return Err(format!("{}: duplicate formal SVF VarID", function.function));
+            }
+            if !formal.points_to.windows(2).all(|w| w[0] < w[1]) {
+                return Err(format!("{} formal {expected}: points-to set is not sorted unique", function.function));
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn load_all_llvm_json(dir: &str) -> Result<LlvmRepresentation, Box<dyn Error>> {
     let mut combined_functions: HashMap<String, LlvmFunction> = HashMap::new();
     let mut combined_global_edges: Vec<LlvmEdge> = Vec::new();
@@ -3295,6 +3530,8 @@ pub fn load_all_llvm_json(dir: &str) -> Result<LlvmRepresentation, Box<dyn Error
                                 if existing_function.formal_param_var_ids.is_empty() {
                                     existing_function.formal_param_var_ids =
                                         llvm_function.formal_param_var_ids.clone();
+                                    existing_function.formal_param_mapping_schema =
+                                        llvm_function.formal_param_mapping_schema.clone();
                                 }
                             })
                             .or_insert(llvm_function);
@@ -3311,10 +3548,34 @@ pub fn load_all_llvm_json(dir: &str) -> Result<LlvmRepresentation, Box<dyn Error
             .then(a.edge_type.cmp(&b.edge_type))
     });
     combined_global_edges.dedup();
+
+    let effects_path = std::path::Path::new(dir).join("LLVM_MEMORY_EFFECTS_V1.json");
+    let llvm_memory_effects = if effects_path.is_file() {
+        let text = std::fs::read_to_string(&effects_path)?;
+        let artifact: crate::structs::LlvmMemoryEffectsArtifactV1 = serde_json::from_str(&text)?;
+        validate_efx1_effect_artifact(&artifact)
+            .map_err(|e| format!("invalid EFX1 artifact {}: {e}", effects_path.display()))?;
+        Some(artifact)
+    } else {
+        None
+    };
+
+    let pts_path = std::path::Path::new(dir).join("SVF_SOLVED_POINTS_TO_V1.json");
+    let svf_solved_points_to = if pts_path.is_file() {
+        let text = std::fs::read_to_string(&pts_path)?;
+        let artifact: crate::structs::SvfSolvedPointsToArtifactV1 = serde_json::from_str(&text)?;
+        validate_svf_solved_points_to_artifact(&artifact)
+            .map_err(|e| format!("invalid solved PTA artifact {}: {e}", pts_path.display()))?;
+        Some(artifact)
+    } else {
+        None
+    };
     
     Ok(LlvmRepresentation {
         functions: combined_functions,
         global_edges: combined_global_edges,
+        llvm_memory_effects,
+        svf_solved_points_to,
     })
 }
 
@@ -3324,6 +3585,7 @@ pub fn parse_llvm_json(file_path: &str) -> Result<LlvmRepresentation, Box<dyn Er
     file.read_to_string(&mut contents)?;
     let llvm_json: LlvmJson = serde_json::from_str(&contents)?;
     let formal_param_var_ids = llvm_json.formal_param_var_ids.clone();
+    let formal_param_mapping_schema = llvm_json.formal_param_mapping_schema.clone();
     
     let mut functions: HashMap<String, LlvmFunction> = HashMap::new();
     
@@ -3338,6 +3600,7 @@ pub fn parse_llvm_json(file_path: &str) -> Result<LlvmRepresentation, Box<dyn Er
                     function_name: func_name,
                     nodes: vec![node],
                     formal_param_var_ids: formal_param_var_ids.clone(),
+                    formal_param_mapping_schema: formal_param_mapping_schema.clone(),
                 });
         }
     }
@@ -3346,7 +3609,12 @@ pub fn parse_llvm_json(file_path: &str) -> Result<LlvmRepresentation, Box<dyn Er
     global_edges.sort_by(|a, b| a.source.cmp(&b.source).then(a.destination.cmp(&b.destination)));
     global_edges.dedup();
     
-    Ok(LlvmRepresentation { functions, global_edges })
+    Ok(LlvmRepresentation {
+        functions,
+        global_edges,
+        llvm_memory_effects: None,
+        svf_solved_points_to: None,
+    })
 }
 
 #[cfg(test)]
@@ -3717,6 +3985,7 @@ mod phase5_ffi_bridge_tests {
             function_name: "f".to_string(),
             nodes,
             formal_param_var_ids: Vec::new(),
+            formal_param_mapping_schema: None,
         }
     }
 
@@ -3768,6 +4037,7 @@ mod phase5_ffi_bridge_tests {
     fn bmulti_certified_formals_preserve_declared_argument_order() {
         let mut f = function(vec![node("FunEntryBlock", vec![])]);
         f.formal_param_var_ids = vec![7, 9, 11];
+        f.formal_param_mapping_schema = Some("svf_formal_arg_index_v1".into());
 
         assert_eq!(
             svf_certified_formal_param_var_ids(&f, 3),
@@ -3785,10 +4055,21 @@ mod phase5_ffi_bridge_tests {
             ],
         )]);
         f.formal_param_var_ids = vec![7, 9];
+        f.formal_param_mapping_schema = Some("svf_formal_arg_index_v1".into());
 
         assert_eq!(svf_certified_formal_param_var_ids(&f, 3), None);
         // Legacy compatibility remains first-formal only; no position 1 guess.
         assert_eq!(svf_first_formal_param_var_id(&f), Some(7));
+
+        f.formal_param_var_ids = vec![7, 9, 11];
+        f.formal_param_mapping_schema = None;
+        assert_eq!(svf_certified_formal_param_var_ids(&f, 3), None);
+        f.formal_param_mapping_schema = Some("unknown_mapping_v0".into());
+        assert_eq!(svf_certified_formal_param_var_ids(&f, 3), None);
+
+        f.formal_param_mapping_schema = Some("svf_formal_arg_index_v1".into());
+        f.formal_param_var_ids = vec![7, 7, 11];
+        assert_eq!(svf_certified_formal_param_var_ids(&f, 3), None);
     }
 
     #[test]

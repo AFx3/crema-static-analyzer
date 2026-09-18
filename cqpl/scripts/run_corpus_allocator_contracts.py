@@ -532,6 +532,12 @@ def main() -> int:
                     query_record["supporting_findings"] = explanation["supporting_findings"]
                     query_record["supporting_finding_kinds"] = explanation["supporting_finding_kinds"]
                     query_record["supporting_finding_strengths"] = explanation["supporting_finding_strengths"]
+                    query_record["subresult"] = explanation["subresult"]
+                    query_record["direction"] = explanation["direction"]
+                    query_record["strength"] = explanation["strength"]
+                    query_record["assessment_schema"] = explanation["assessment_schema"]
+                    query_record["assessment_basis"] = explanation["assessment_basis"]
+                    query_record["assessment_caveats"] = explanation["assessment_caveats"]
                     explanation.update({
                         "target": key,
                         "relative_path": rel,
@@ -572,6 +578,7 @@ def main() -> int:
     with (out / "unknown-explanations.tsv").open("w", encoding="utf-8", newline="") as f:
         fields = [
             "target", "relative_path", "artifact", "query_slot", "query", "result",
+            "subresult", "direction", "strength", "assessment_schema", "assessment_basis", "assessment_caveats",
             "explanation", "reason_frontier", "witnesses", "supporting_findings",
             "supporting_finding_kinds", "supporting_finding_strengths",
         ]
@@ -579,7 +586,7 @@ def main() -> int:
         w.writeheader()
         for record in unknown_explanations:
             row = dict(record)
-            for key_ in ["reason_frontier", "supporting_finding_kinds", "supporting_finding_strengths"]:
+            for key_ in ["reason_frontier", "supporting_finding_kinds", "supporting_finding_strengths", "assessment_basis", "assessment_caveats"]:
                 row[key_] = ";".join(row[key_])
             w.writerow({key_: row.get(key_, "") for key_ in fields})
     unknown_summary = {

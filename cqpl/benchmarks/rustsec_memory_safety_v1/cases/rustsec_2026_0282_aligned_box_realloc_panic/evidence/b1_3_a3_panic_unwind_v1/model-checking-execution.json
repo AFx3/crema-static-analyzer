@@ -1,0 +1,305 @@
+{
+  "checker": "/home/af/Documenti/a-phd/cqpl/cqpl_checker/target/debug/cqpl_checker",
+  "query_sources": {
+    "frozen": "/home/af/Documenti/a-phd/cqpl/queries_v2",
+    "experimental": "/home/af/Documenti/a-phd/cqpl/queries_experimental"
+  },
+  "queries_discovered": [
+    "allocator_mismatch_ub",
+    "allocator_mismatch_ub_v2",
+    "double_free_alloc",
+    "double_free_alloc_state",
+    "leak_alloc",
+    "leak_alloc_state",
+    "mir_rvalue_presence",
+    "mir_statement_presence",
+    "mir_structural_allocator_example",
+    "mir_terminator_presence",
+    "use_after_free_alloc",
+    "use_after_free_alloc_state",
+    "panic_repeat_drop_alloc"
+  ],
+  "required_queries": [
+    "allocator_mismatch_ub",
+    "allocator_mismatch_ub_v2",
+    "double_free_alloc",
+    "double_free_alloc_state",
+    "leak_alloc",
+    "leak_alloc_state",
+    "mir_rvalue_presence",
+    "mir_statement_presence",
+    "mir_structural_allocator_example",
+    "mir_terminator_presence",
+    "panic_repeat_drop_alloc",
+    "use_after_free_alloc",
+    "use_after_free_alloc_state"
+  ],
+  "variants": {
+    "vulnerable": [
+      {
+        "query": "allocator_mismatch_ub",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/allocator_mismatch_ub.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/allocator_mismatch_ub.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/allocator_mismatch_ub.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/allocator_mismatch_ub.stderr.log",
+        "returncode": 0,
+        "verdict": "ff",
+        "explain_exists": false
+      },
+      {
+        "query": "allocator_mismatch_ub_v2",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/allocator_mismatch_ub_v2.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/allocator_mismatch_ub_v2.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/allocator_mismatch_ub_v2.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/allocator_mismatch_ub_v2.stderr.log",
+        "returncode": 0,
+        "verdict": "ff",
+        "explain_exists": false
+      },
+      {
+        "query": "double_free_alloc",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/double_free_alloc.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/double_free_alloc.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/double_free_alloc.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/double_free_alloc.stderr.log",
+        "returncode": 0,
+        "verdict": "ff",
+        "explain_exists": false
+      },
+      {
+        "query": "double_free_alloc_state",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/double_free_alloc_state.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/double_free_alloc_state.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/double_free_alloc_state.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/double_free_alloc_state.stderr.log",
+        "returncode": 0,
+        "verdict": "ff",
+        "explain_exists": false
+      },
+      {
+        "query": "leak_alloc",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/leak_alloc.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/leak_alloc.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/leak_alloc.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/leak_alloc.stderr.log",
+        "returncode": 0,
+        "verdict": "unk",
+        "explain_exists": false
+      },
+      {
+        "query": "leak_alloc_state",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/leak_alloc_state.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/leak_alloc_state.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/leak_alloc_state.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/leak_alloc_state.stderr.log",
+        "returncode": 0,
+        "verdict": "unk",
+        "explain_exists": false
+      },
+      {
+        "query": "mir_rvalue_presence",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/mir_rvalue_presence.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/mir_rvalue_presence.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/mir_rvalue_presence.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/mir_rvalue_presence.stderr.log",
+        "returncode": 0,
+        "verdict": "tt",
+        "explain_exists": false
+      },
+      {
+        "query": "mir_statement_presence",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/mir_statement_presence.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/mir_statement_presence.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/mir_statement_presence.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/mir_statement_presence.stderr.log",
+        "returncode": 0,
+        "verdict": "tt",
+        "explain_exists": false
+      },
+      {
+        "query": "mir_structural_allocator_example",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/mir_structural_allocator_example.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/mir_structural_allocator_example.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/mir_structural_allocator_example.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/mir_structural_allocator_example.stderr.log",
+        "returncode": 0,
+        "verdict": "ff",
+        "explain_exists": false
+      },
+      {
+        "query": "mir_terminator_presence",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/mir_terminator_presence.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/mir_terminator_presence.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/mir_terminator_presence.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/mir_terminator_presence.stderr.log",
+        "returncode": 0,
+        "verdict": "tt",
+        "explain_exists": false
+      },
+      {
+        "query": "use_after_free_alloc",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/use_after_free_alloc.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/use_after_free_alloc.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/use_after_free_alloc.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/use_after_free_alloc.stderr.log",
+        "returncode": 0,
+        "verdict": "ff",
+        "explain_exists": false
+      },
+      {
+        "query": "use_after_free_alloc_state",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/use_after_free_alloc_state.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/use_after_free_alloc_state.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/use_after_free_alloc_state.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/use_after_free_alloc_state.stderr.log",
+        "returncode": 0,
+        "verdict": "ff",
+        "explain_exists": false
+      },
+      {
+        "query": "panic_repeat_drop_alloc",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_experimental/panic_repeat_drop_alloc.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/panic_repeat_drop_alloc.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/panic_repeat_drop_alloc.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/panic_repeat_drop_alloc.stderr.log",
+        "returncode": 0,
+        "explain_json": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/queries/panic_repeat_drop_alloc.explain.json",
+        "verdict": "unk",
+        "explain_exists": true
+      }
+    ],
+    "fixed": [
+      {
+        "query": "allocator_mismatch_ub",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/allocator_mismatch_ub.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/allocator_mismatch_ub.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/allocator_mismatch_ub.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/allocator_mismatch_ub.stderr.log",
+        "returncode": 0,
+        "verdict": "ff",
+        "explain_exists": false
+      },
+      {
+        "query": "allocator_mismatch_ub_v2",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/allocator_mismatch_ub_v2.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/allocator_mismatch_ub_v2.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/allocator_mismatch_ub_v2.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/allocator_mismatch_ub_v2.stderr.log",
+        "returncode": 0,
+        "verdict": "ff",
+        "explain_exists": false
+      },
+      {
+        "query": "double_free_alloc",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/double_free_alloc.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/double_free_alloc.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/double_free_alloc.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/double_free_alloc.stderr.log",
+        "returncode": 0,
+        "verdict": "ff",
+        "explain_exists": false
+      },
+      {
+        "query": "double_free_alloc_state",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/double_free_alloc_state.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/double_free_alloc_state.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/double_free_alloc_state.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/double_free_alloc_state.stderr.log",
+        "returncode": 0,
+        "verdict": "ff",
+        "explain_exists": false
+      },
+      {
+        "query": "leak_alloc",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/leak_alloc.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/leak_alloc.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/leak_alloc.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/leak_alloc.stderr.log",
+        "returncode": 0,
+        "verdict": "unk",
+        "explain_exists": false
+      },
+      {
+        "query": "leak_alloc_state",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/leak_alloc_state.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/leak_alloc_state.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/leak_alloc_state.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/leak_alloc_state.stderr.log",
+        "returncode": 0,
+        "verdict": "unk",
+        "explain_exists": false
+      },
+      {
+        "query": "mir_rvalue_presence",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/mir_rvalue_presence.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/mir_rvalue_presence.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/mir_rvalue_presence.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/mir_rvalue_presence.stderr.log",
+        "returncode": 0,
+        "verdict": "tt",
+        "explain_exists": false
+      },
+      {
+        "query": "mir_statement_presence",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/mir_statement_presence.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/mir_statement_presence.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/mir_statement_presence.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/mir_statement_presence.stderr.log",
+        "returncode": 0,
+        "verdict": "tt",
+        "explain_exists": false
+      },
+      {
+        "query": "mir_structural_allocator_example",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/mir_structural_allocator_example.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/mir_structural_allocator_example.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/mir_structural_allocator_example.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/mir_structural_allocator_example.stderr.log",
+        "returncode": 0,
+        "verdict": "ff",
+        "explain_exists": false
+      },
+      {
+        "query": "mir_terminator_presence",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/mir_terminator_presence.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/mir_terminator_presence.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/mir_terminator_presence.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/mir_terminator_presence.stderr.log",
+        "returncode": 0,
+        "verdict": "tt",
+        "explain_exists": false
+      },
+      {
+        "query": "use_after_free_alloc",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/use_after_free_alloc.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/use_after_free_alloc.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/use_after_free_alloc.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/use_after_free_alloc.stderr.log",
+        "returncode": 0,
+        "verdict": "ff",
+        "explain_exists": false
+      },
+      {
+        "query": "use_after_free_alloc_state",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/use_after_free_alloc_state.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/use_after_free_alloc_state.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/use_after_free_alloc_state.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/use_after_free_alloc_state.stderr.log",
+        "returncode": 0,
+        "verdict": "ff",
+        "explain_exists": false
+      },
+      {
+        "query": "panic_repeat_drop_alloc",
+        "query_file": "/home/af/Documenti/a-phd/cqpl/queries_experimental/panic_repeat_drop_alloc.cqpl",
+        "command_file": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/panic_repeat_drop_alloc.command.txt",
+        "stdout": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/panic_repeat_drop_alloc.json",
+        "stderr": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/panic_repeat_drop_alloc.stderr.log",
+        "returncode": 0,
+        "explain_json": "/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/fixed/queries/panic_repeat_drop_alloc.explain.json",
+        "verdict": "unk",
+        "explain_exists": true
+      }
+    ]
+  }
+}

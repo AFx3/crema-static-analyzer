@@ -1,0 +1,6 @@
+{
+  "result": "unk",
+  "entry": "rust::main::bb0",
+  "scope": "reachable",
+  "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/leak_alloc_state.cqpl"
+}

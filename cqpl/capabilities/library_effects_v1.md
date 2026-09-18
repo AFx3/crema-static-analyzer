@@ -1,3 +1,15 @@
+# Historical note
+
+The `468` UNKNOWN count below is the acceptance count of the historical v6U-A2 migration experiment. It is **not** the current FINAL112 truth closure.
+
+Current frozen FINAL112 after the approved precision deltas is:
+
+```text
+ff=705  unk=413  tt=226
+```
+
+R2 provenance/explainability changes do not alter those counts. See `../ANALYSIS_PIPELINE.md`.
+
 # library_effects_v1 — A2 migration-only candidate
 
 A2 moves only the existing producer-certified `allocation_disposition_v1`
@@ -47,6 +59,6 @@ Acceptance requires:
     corpus explanation mismatches       = 0
     total explanation mismatches        = 0
 
-The value 468 is the normative UNKNOWN closure for the 112 x 12 query
+Within that historical migration experiment, 468 was the expected UNKNOWN closure for its 112 x 12 query
 matrix. It is not the total number of *.explain.json files in the complete
 evidence tree.

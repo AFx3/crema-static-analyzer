@@ -8,6 +8,8 @@ use crate::structs::{
     AbstractAllocId, AllocationSiteId, GlobalICFGNode, GlobalICFGOrdered, MirTerminator,
     PlaceId, PlaceProjection, ProgramVarId, RustDropAllocatorEvidence, RustDropAllocatorEvidenceKind,
     RustCallDeallocatorEvidence, RustCallDeallocatorEvidenceKind, RustAllocationDispositionEvidence, RustAllocationDispositionEvidenceKind, SvfStatement,
+    LlvmMemoryEffectsArtifactV1, LlvmFunctionEffectsRecordV1, LlvmFunctionEffectsSnapshotV1,
+    SvfSolvedPointsToArtifactV1,
 };
 use crate::utils::load_ffi_functions;
 use regex::Regex;
@@ -41,6 +43,18 @@ struct AnnotatedIcfg {
     /// never interpreted as proof of absence.
     #[serde(skip_serializing_if = "Option::is_none")]
     external_deallocation_effects: Option<Vec<ExternalDeallocationEffectRecord>>,
+    /// EFX1 proof payload. This is the exact validated producer sidecar carried
+    /// across the CREMA -> CQPL boundary, not merely a capability bit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    llvm_memory_effects: Option<LlvmMemoryEffectsArtifactV1>,
+    /// Bpta-R1 solved Andersen evidence. Membership is MAY only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    svf_solved_points_to: Option<SvfSolvedPointsToArtifactV1>,
+    /// R2 proof-carrying Rust -> C positional allocation-identity bridge.
+    /// This serializes the already-computed Bmulti/identity relation; it does
+    /// not create aliases or upgrade MAY evidence to MUST.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ffi_argument_identity: Option<Vec<FfiArgumentIdentityRecord>>,
     nodes: Vec<AnnotatedNode>,
 }
 
@@ -94,8 +108,40 @@ struct ExternalDeallocationEffectRecord {
     callee: String,
     /// Closed ND1 vocabulary: certified_absent | observed_may_deallocate | unresolved.
     status: &'static str,
-    /// Closed producer-evidence basis validated by the CQPL checker.
+    /// Primary evidence basis. Historical bases remain stable for reproducibility.
     basis: &'static str,
+    /// Independent evidence that supports the same status without replacing the
+    /// historical primary basis.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    corroborating_bases: Vec<&'static str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct FfiArgumentIdentityRecord {
+    /// External DummyCall at which the positional Rust -> C binding occurs.
+    node: String,
+    /// Canonical C callee from the replicated LLVM entry edge.
+    callee: String,
+    /// Replicated Rust callsite used to scope the SVF formal ProgramVarId.
+    callsite: String,
+    /// Zero-based Bmulti-certified argument position.
+    arg_index: usize,
+    /// Canonical Rust actual ProgramVarId.
+    actual_variable: String,
+    /// Canonical callsite-scoped C formal ProgramVarId.
+    formal_variable: String,
+    /// MAY AbstractAllocIds proven equal on both sides of the positional bridge.
+    allocations: Vec<String>,
+    /// Closed certainty vocabulary. R2 does not introduce MUST identity.
+    certainty: &'static str,
+    /// Producer proof basis for the cross-language identity transfer.
+    basis: &'static str,
+    /// Positional certificate required by Bmulti.
+    formal_mapping_basis: &'static str,
+    /// Independent solved Andersen MAY set for this formal, when available.
+    svf_may_points_to: Vec<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    svf_points_to_basis: Option<String>,
 }
 
 impl AllocationContract {
@@ -614,6 +660,15 @@ fn export_cqpl_annotated_icfg_versioned(
     } else {
         None
     };
+    let ffi_argument_identity = if schema_version == 2 {
+        let records = ffi_argument_identity_records(
+            icfg,
+            identity_state.expect("checked schema-v2 identity state"),
+        )?;
+        if records.is_empty() { None } else { Some(records) }
+    } else {
+        None
+    };
 
     let output = AnnotatedIcfg {
         schema_version,
@@ -633,12 +688,21 @@ fn export_cqpl_annotated_icfg_versioned(
                 // backward-compatible base semantics and advertise the
                 // additive closed refinement explicitly as v2.
                 "allocation_disposition_v2",
-                // Bcontract-ND1: explicit external-call deallocation-effect
-                // evidence.  `certified_absent` is emitted only for a closed
-                // SVF leaf body with no call nodes; all other uncertain cases
-                // remain explicitly unresolved.
+                // Bcontract-ND1 + EFX1: explicit external-call deallocation
+                // evidence. Frozen leaf/structural behavior is preserved; a
+                // bodyless external boundary may additionally close from a
+                // capability-gated explicit/TLI LLVM16 contract.
                 "external_deallocation_effects_v1",
             ];
+            if icfg.llvm_memory_effects.is_some() {
+                caps.push("llvm_memory_effects_v1");
+            }
+            if icfg.svf_solved_points_to.is_some() {
+                caps.push("svf_solved_points_to_v1");
+            }
+            if ffi_argument_identity.is_some() {
+                caps.push("ffi_argument_identity_v1");
+            }
             if mir_semantics_v2_enabled() {
                 caps.push("mir_semantic_labels_v1");
                 caps.push("mir_semantics_v2");
@@ -655,6 +719,9 @@ fn export_cqpl_annotated_icfg_versioned(
         variables,
         allocations,
         external_deallocation_effects,
+        llvm_memory_effects: if schema_version == 2 { icfg.llvm_memory_effects.clone() } else { None },
+        svf_solved_points_to: if schema_version == 2 { icfg.svf_solved_points_to.clone() } else { None },
+        ffi_argument_identity,
         nodes,
     };
 
@@ -1090,24 +1157,189 @@ fn deallocator_contract(
     }
 }
 
-/// Bcontract-ND1 producer classifier over the already materialized SVF body.
+fn efx1_unique_function_effect<'a>(
+    effects: &'a LlvmMemoryEffectsArtifactV1,
+    name: &str,
+) -> Option<&'a LlvmFunctionEffectsRecordV1> {
+    let mut matches = effects
+        .modules
+        .iter()
+        .flat_map(|module| module.functions.iter())
+        .filter(|record| record.name == name);
+    let first = matches.next()?;
+    if matches.next().is_some() {
+        // Multiple modules may legally contain same-named internal functions.
+        // Without module identity at this boundary, do not guess.
+        return None;
+    }
+    Some(first)
+}
+
+fn efx1_memory_is_nonmodifying(snapshot: &LlvmFunctionEffectsSnapshotV1) -> bool {
+    if !snapshot.memory_explicit {
+        return false;
+    }
+    [
+        snapshot.memory.argmem.as_str(),
+        snapshot.memory.inaccessiblemem.as_str(),
+        snapshot.memory.other.as_str(),
+    ]
+    .into_iter()
+    .all(|access| matches!(access, "none" | "read"))
+}
+
+fn efx1_snapshot_may_deallocate(snapshot: &LlvmFunctionEffectsSnapshotV1) -> bool {
+    let dealloc_kind = snapshot
+        .alloc_kind
+        .iter()
+        .any(|kind| matches!(kind.as_str(), "free" | "realloc"));
+    dealloc_kind && snapshot.formals.iter().any(|formal| formal.allocptr)
+}
+
+fn efx1_snapshot_no_deallocation_basis(
+    snapshot: &LlvmFunctionEffectsSnapshotV1,
+    explicit: bool,
+) -> Option<&'static str> {
+    if snapshot.nofree {
+        return Some(if explicit {
+            "llvm16_explicit_nofree_v1"
+        } else {
+            "llvm16_tli_nofree_v1"
+        });
+    }
+    // LLVM 16 Function::doesNotFreeMemory treats read-only/no-access memory
+    // effects as sufficient to prove that the function does not free memory.
+    // Preserve that as a distinct proof basis rather than mislabeling it nofree.
+    if efx1_memory_is_nonmodifying(snapshot) {
+        return Some(if explicit {
+            "llvm16_explicit_nonmodifying_memory_v1"
+        } else {
+            "llvm16_tli_nonmodifying_memory_v1"
+        });
+    }
+    None
+}
+
+/// Return a capability-gated LLVM16 effect classification for a named callee.
 ///
-/// This is deliberately narrow and fail-closed.  We certify absence only for a
-/// body-backed C function with *no* SVF FunCallBlock at all.  A direct `@free`
-/// call is positive evidence of MAY deallocation.  Any other call, missing body,
-/// indirect/opaque call, or wrapper is unresolved in v1.  Therefore the
-/// certificate never turns "not observed" into "proved absent" except for a
-/// closed leaf body.
+/// Explicit input-IR contracts take precedence.  TLI evidence is admitted only
+/// when the cloned module actually changed a TLI-recognized declaration.  This
+/// preserves the scientific distinction between source/frontend contracts and
+/// LLVM name+prototype library inference.
+fn efx1_callee_deallocation_contract(
+    effects: &LlvmMemoryEffectsArtifactV1,
+    callee: &str,
+) -> Option<(&'static str, &'static str)> {
+    if effects.schema != "llvm_memory_effects_v1"
+        || effects.explicit_basis != "llvm16_explicit_input_ir_v1"
+        || effects.tli_basis != "llvm16_tli_libfunc_attrs_v1"
+    {
+        return None;
+    }
+    let record = efx1_unique_function_effect(effects, callee)?;
+
+    if efx1_snapshot_may_deallocate(&record.explicit) {
+        return Some((
+            "observed_may_deallocate",
+            "llvm16_explicit_allockind_deallocation_v1",
+        ));
+    }
+    if let Some(basis) = efx1_snapshot_no_deallocation_basis(&record.explicit, true) {
+        return Some(("certified_absent", basis));
+    }
+
+    if record.tli_changed && record.tli_recognized {
+        if efx1_snapshot_may_deallocate(&record.tli_inferred) {
+            return Some((
+                "observed_may_deallocate",
+                "llvm16_tli_allockind_deallocation_v1",
+            ));
+        }
+        if let Some(basis) = efx1_snapshot_no_deallocation_basis(&record.tli_inferred, false) {
+            return Some(("certified_absent", basis));
+        }
+    }
+    None
+}
+
+/// Structured positive closure for a body-backed C wrapper: if the LLVM input
+/// contains a direct CallBase from `caller` to a callee whose explicit or
+/// TLI-inferred contract is free/realloc + allocptr, the wrapper has a
+/// conservative MAY-deallocation effect.  This is intentionally positive-only:
+/// absence of such a call is never promoted to a negative certificate.
+fn efx1_structured_direct_callee_deallocation_basis(
+    effects: &LlvmMemoryEffectsArtifactV1,
+    caller: &str,
+) -> Option<&'static str> {
+    let mut matching_modules = effects.modules.iter().filter(|module| {
+        module.functions.iter().any(|record| record.name == caller)
+    });
+    let module = matching_modules.next()?;
+    if matching_modules.next().is_some() {
+        // Same-named wrapper in more than one module: module identity is not
+        // available on the DummyCall boundary, so fail closed.
+        return None;
+    }
+
+    for call in module.callsites_explicit.iter().filter(|call| call.caller == caller && call.direct) {
+        let Some(callee) = call.callee.as_deref() else { continue; };
+        let Some(record) = module.functions.iter().find(|record| record.name == callee) else {
+            continue;
+        };
+        if efx1_snapshot_may_deallocate(&record.explicit) {
+            return Some("llvm16_explicit_direct_callee_allockind_deallocation_v1");
+        }
+        if record.tli_changed && record.tli_recognized
+            && efx1_snapshot_may_deallocate(&record.tli_inferred)
+        {
+            return Some("llvm16_tli_direct_callee_allockind_deallocation_v1");
+        }
+    }
+    None
+}
+
+/// Independent LLVM16 evidence that corroborates an already-selected
+/// historical external-effect basis.
+///
+/// `structural_c_free_v1` remains the primary provenance for historical
+/// comparability. A matching structured LLVM CallBase + explicit/TLI
+/// `allockind(free|realloc)+allocptr` contract is emitted only as additive
+/// corroboration and never changes the MAY status or CQPL truth value.
+fn external_deallocation_corroborating_bases(
+    effects: Option<&LlvmMemoryEffectsArtifactV1>,
+    outer_callee: &str,
+    status: &str,
+    basis: &str,
+) -> Vec<&'static str> {
+    if status != "observed_may_deallocate" || basis != "structural_c_free_v1" {
+        return Vec::new();
+    }
+    let Some(effects) = effects else {
+        return Vec::new();
+    };
+    efx1_structured_direct_callee_deallocation_basis(effects, outer_callee)
+        .into_iter()
+        .collect()
+}
+
+/// Bcontract-ND1 + EFX1 conservative producer classifier.
+///
+/// The classifier selects exactly one primary status/basis. Historical ND1
+/// structural evidence is checked first so existing provenance remains stable.
+/// EFX1 then closes bodyless frontiers and structured body-backed cases without
+/// parsing SVF pretty strings. Independent LLVM evidence that agrees with an
+/// already-selected historical basis is emitted separately by
+/// `external_deallocation_corroborating_bases`.
 fn classify_external_deallocation_effect(
     nodes: &[crate::structs::LlvmJsonNode],
+    effects: Option<&LlvmMemoryEffectsArtifactV1>,
+    outer_callee: &str,
 ) -> (&'static str, &'static str) {
     let has_body = nodes.iter().any(|node| {
         node.basic_block_name.is_some() || node.basic_block_info.is_some()
     });
-    if !has_body {
-        return ("unresolved", "svf_body_unavailable_v1");
-    }
 
+    // Preserve the frozen positive structural oracle before introducing EFX1.
     let calls = nodes
         .iter()
         .filter(|node| node.node_kind_string == "FunCallBlock")
@@ -1115,10 +1347,155 @@ fn classify_external_deallocation_effect(
     if calls.iter().any(|node| node.info.contains("@free(")) {
         return ("observed_may_deallocate", "structural_c_free_v1");
     }
+
+    if let Some(effects) = effects {
+        // Contracts on the outer function itself are valid for declarations or
+        // definitions. TLI inference is admitted only when tli_changed is true,
+        // which in EFX1 can occur only for declarations.
+        if let Some(classification) = efx1_callee_deallocation_contract(effects, outer_callee) {
+            return classification;
+        }
+        // For body-backed wrappers, structured CallBase identity supports a
+        // positive MAY closure to free/realloc without parsing pretty strings.
+        if has_body {
+            if let Some(basis) = efx1_structured_direct_callee_deallocation_basis(effects, outer_callee) {
+                return ("observed_may_deallocate", basis);
+            }
+        }
+    }
+
+    if !has_body {
+        return ("unresolved", "svf_body_unavailable_v1");
+    }
+
     if calls.is_empty() {
         return ("certified_absent", "svf_leaf_no_call_deallocation_v1");
     }
+
     ("unresolved", "svf_call_effect_unresolved_v1")
+}
+
+fn external_dummy_callee_callsite(dummy: &crate::structs::DummyNode) -> Option<(String, String)> {
+    let rest = dummy.outgoing_edge.strip_prefix("llvm::")?;
+    let (callee, tail) = rest.split_once("::node")?;
+    let (_, suffix) = tail.split_once("::rust::")?;
+    if callee.is_empty() || suffix.is_empty() {
+        return None;
+    }
+    Some((callee.to_string(), format!("rust::{suffix}")))
+}
+
+/// Serialize the already-established Bmulti positional Rust -> C allocation
+/// identity relation.  This is an observational certificate only: both sides
+/// are read from the same post-DummyCall identity fixed point, and the producer
+/// fails closed if their MAY allocation sets disagree.
+fn ffi_argument_identity_records(
+    icfg: &GlobalICFGOrdered,
+    identity_state: &AllocationIdentityState,
+) -> Result<Vec<FfiArgumentIdentityRecord>, Box<dyn Error>> {
+    let mut out = BTreeSet::new();
+
+    for (node_id, node) in &icfg.ordered_nodes {
+        let GlobalICFGNode::DummyCall(dummy) = node else { continue; };
+        if dummy.is_internal != Some(false) || dummy.argument_bindings.is_empty() {
+            continue;
+        }
+
+        let Some(caller_scope) = mir_function_scope_from_node_id(&dummy.incoming_edge) else {
+            return Err(format!(
+                "ffi_argument_identity_v1: cannot resolve Rust caller scope for '{node_id}'"
+            ).into());
+        };
+        let caller_function = caller_scope.strip_prefix("rust::").unwrap_or(&caller_scope);
+        let Some((callee, callsite)) = external_dummy_callee_callsite(dummy) else {
+            return Err(format!(
+                "ffi_argument_identity_v1: cannot resolve C callee/callsite for '{node_id}'"
+            ).into());
+        };
+        let post = identity_state.by_node.get(node_id).cloned().unwrap_or_default();
+        let mut seen_indices = BTreeSet::new();
+
+        for binding in &dummy.argument_bindings {
+            if !seen_indices.insert(binding.arg_index) {
+                return Err(format!(
+                    "ffi_argument_identity_v1: duplicate arg_index {} at '{node_id}'",
+                    binding.arg_index
+                ).into());
+            }
+            let Some(actual) = ProgramVarId::rust(caller_function.to_string(), &binding.mir_var) else {
+                // Bmulti certifies source-language argument positions, not that every
+                // MIR operand is a local place. Constants and other non-local operands
+                // have no ProgramVarId in the allocation-identity domain and therefore
+                // cannot carry an AbstractAllocId certificate here.
+                //
+                // This mirrors transfer_external_dummy_call_identity(), which skips
+                // the same non-local bindings. Absence of a record is strictly
+                // non-evidence; it must never be interpreted as proof that no
+                // allocation flows through the argument.
+                continue;
+            };
+            let raw_formal = binding
+                .llvm_var
+                .split_once('@')
+                .map(|(id, _)| id)
+                .unwrap_or(binding.llvm_var.as_str())
+                .trim()
+                .trim_start_matches('%');
+            let formal_id = raw_formal.parse::<usize>().map_err(|_| {
+                format!(
+                    "ffi_argument_identity_v1: invalid SVF formal '{}' at '{node_id}'",
+                    binding.llvm_var
+                )
+            })?;
+            let formal = ProgramVarId::c(callee.clone(), formal_id, Some(callsite.clone()));
+
+            let actual_allocs = post.event_allocations(&actual);
+            let formal_allocs = post.event_allocations(&formal);
+            if actual_allocs != formal_allocs {
+                return Err(format!(
+                    "ffi_argument_identity_v1: positional identity mismatch at '{node_id}' arg {}: actual={} formal={}",
+                    binding.arg_index,
+                    actual_allocs.len(),
+                    formal_allocs.len(),
+                ).into());
+            }
+            // An empty MAY identity set is not negative evidence.  Do not emit
+            // a vacuous certificate that could be misread as proving absence
+            // of allocation flow across the FFI boundary.
+            if actual_allocs.is_empty() {
+                continue;
+            }
+
+            let mut svf_pts = binding.svf_may_points_to.clone();
+            svf_pts.sort_unstable();
+            svf_pts.dedup();
+            if !svf_pts.is_empty()
+                && binding.svf_points_to_basis.as_deref() != Some("svf_andersen_wave_diff_may_v1")
+            {
+                return Err(format!(
+                    "ffi_argument_identity_v1: nonempty SVF MAY set without Andersen basis at '{node_id}' arg {}",
+                    binding.arg_index
+                ).into());
+            }
+
+            out.insert(FfiArgumentIdentityRecord {
+                node: node_id.clone(),
+                callee: callee.clone(),
+                callsite: callsite.clone(),
+                arg_index: binding.arg_index,
+                actual_variable: actual.canonical_string(),
+                formal_variable: formal.canonical_string(),
+                allocations: actual_allocs.iter().map(stable_allocation_id).collect(),
+                certainty: "may_abstract",
+                basis: "crema_bmulti_actual_formal_identity_v1",
+                formal_mapping_basis: "svf_formal_arg_index_v1",
+                svf_may_points_to: svf_pts,
+                svf_points_to_basis: binding.svf_points_to_basis.clone(),
+            });
+        }
+    }
+
+    Ok(out.into_iter().collect())
 }
 
 fn external_deallocation_effect_records(
@@ -1153,12 +1530,23 @@ fn external_deallocation_effect_records(
             })
             .collect::<Vec<_>>();
 
-        let (status, basis) = classify_external_deallocation_effect(&body_nodes);
+        let (status, basis) = classify_external_deallocation_effect(
+            &body_nodes,
+            icfg.llvm_memory_effects.as_ref(),
+            callee,
+        );
+        let corroborating_bases = external_deallocation_corroborating_bases(
+            icfg.llvm_memory_effects.as_ref(),
+            callee,
+            status,
+            basis,
+        );
         out.insert(ExternalDeallocationEffectRecord {
             node: node_id.clone(),
             callee: callee.to_string(),
             status,
             basis,
+            corroborating_bases,
         });
     }
 
@@ -2039,6 +2427,114 @@ mod tests {
     }
 
     #[test]
+    fn r2_ffi_argument_identity_serializes_existing_bmulti_may_identity() {
+        let node_id = "dummyCall::rust::main::bb3::rust::main::bb3";
+        let dummy = GlobalICFGNode::DummyCall(DummyNode {
+            dummy_node_name: "dummyCall".into(),
+            incoming_edge: "rust::main::bb3".into(),
+            outgoing_edge: "llvm::c_free_i32::node1::rust::main::bb3".into(),
+            id: "dc".into(),
+            mir_var: Some("Local(_1)".into()),
+            llvm_var: Some("36@rust::main::bb3".into()),
+            argument_bindings: vec![crate::structs::DummyArgumentBinding {
+                arg_index: 0,
+                mir_var: "Local(_1)".into(),
+                llvm_var: "36@rust::main::bb3".into(),
+                svf_may_points_to: vec![],
+                svf_points_to_basis: Some("svf_andersen_wave_diff_may_v1".into()),
+            }],
+            is_internal: Some(false),
+        });
+        let icfg = GlobalICFGOrdered {
+            ordered_nodes: vec![(node_id.into(), dummy)],
+            icfg_edges: vec![],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            rust_functions: Default::default(),
+            rust_calls: vec![],
+        };
+        let actual = ProgramVarId::rust("main", "Local(_1)").unwrap();
+        let formal = ProgramVarId::c("c_free_i32", 36, Some("rust::main::bb3".into()));
+        let allocation = AbstractAllocId::new(
+            AllocationSiteId::Synthetic { scope: "test".into(), label: "A".into() },
+            vec![],
+        );
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_points_to(actual.clone(), BTreeSet::from([allocation.clone()]));
+        memory.assign_points_to(formal.clone(), BTreeSet::from([allocation.clone()]));
+        let mut state = AllocationIdentityState::default();
+        state.by_node.insert(node_id.into(), memory);
+
+        let records = ffi_argument_identity_records(&icfg, &state).unwrap();
+        assert_eq!(records.len(), 1);
+        let record = &records[0];
+        assert_eq!(record.arg_index, 0);
+        assert_eq!(record.actual_variable, actual.canonical_string());
+        assert_eq!(record.formal_variable, formal.canonical_string());
+        assert_eq!(record.allocations, vec![stable_allocation_id(&allocation)]);
+        assert_eq!(record.certainty, "may_abstract");
+        assert_eq!(record.basis, "crema_bmulti_actual_formal_identity_v1");
+    }
+
+
+    #[test]
+    fn r2_ffi_argument_identity_skips_non_local_actual_but_keeps_later_local_binding() {
+        let node_id = "dummyCall::rust::main::bb3::rust::main::bb3";
+        let dummy = GlobalICFGNode::DummyCall(DummyNode {
+            dummy_node_name: "dummyCall".into(),
+            incoming_edge: "rust::main::bb3".into(),
+            outgoing_edge: "llvm::c_mixed::node1::rust::main::bb3".into(),
+            id: "dc".into(),
+            mir_var: Some("const 7_i32".into()),
+            llvm_var: Some("10@rust::main::bb3".into()),
+            argument_bindings: vec![
+                crate::structs::DummyArgumentBinding {
+                    arg_index: 0,
+                    mir_var: "const 7_i32".into(),
+                    llvm_var: "10@rust::main::bb3".into(),
+                    svf_may_points_to: vec![],
+                    svf_points_to_basis: None,
+                },
+                crate::structs::DummyArgumentBinding {
+                    arg_index: 1,
+                    mir_var: "Local(_1)".into(),
+                    llvm_var: "36@rust::main::bb3".into(),
+                    svf_may_points_to: vec![],
+                    svf_points_to_basis: Some("svf_andersen_wave_diff_may_v1".into()),
+                },
+            ],
+            is_internal: Some(false),
+        });
+        let icfg = GlobalICFGOrdered {
+            ordered_nodes: vec![(node_id.into(), dummy)],
+            icfg_edges: vec![],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            rust_functions: Default::default(),
+            rust_calls: vec![],
+        };
+
+        let actual = ProgramVarId::rust("main", "Local(_1)").unwrap();
+        let formal = ProgramVarId::c("c_mixed", 36, Some("rust::main::bb3".into()));
+        let allocation = AbstractAllocId::new(
+            AllocationSiteId::Synthetic { scope: "test".into(), label: "A".into() },
+            vec![],
+        );
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_points_to(actual.clone(), BTreeSet::from([allocation.clone()]));
+        memory.assign_points_to(formal.clone(), BTreeSet::from([allocation.clone()]));
+        let mut state = AllocationIdentityState::default();
+        state.by_node.insert(node_id.into(), memory);
+
+        let records = ffi_argument_identity_records(&icfg, &state).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].arg_index, 1);
+        assert_eq!(records[0].actual_variable, actual.canonical_string());
+        assert_eq!(records[0].formal_variable, formal.canonical_string());
+        assert_eq!(records[0].allocations, vec![stable_allocation_id(&allocation)]);
+    }
+
+    #[test]
     fn dereference_statement_produces_read_and_write_labels() {
         let bb = MirBasicBlock {
             block_id: 0,
@@ -2063,6 +2559,8 @@ mod tests {
         let n0 = GlobalICFGNode::Mir(MirBasicBlock { block_id: 0, statements: vec![], terminator: None });
         let n1 = GlobalICFGNode::Mir(MirBasicBlock { block_id: 1, statements: vec![], terminator: None });
         let g = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![("rust::main::bb0".into(), n0), ("rust::main::bb1".into(), n1)],
             icfg_edges: vec![edge("rust::main::bb0", "rust::main::bb1")],
             rust_functions: Default::default(),
@@ -2089,6 +2587,8 @@ mod tests {
     fn exporter_rejects_dangling_canonical_edge() {
         let n0 = GlobalICFGNode::Mir(MirBasicBlock { block_id: 0, statements: vec![], terminator: None });
         let g = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![("rust::main::bb0".into(), n0)],
             icfg_edges: vec![edge("rust::main::bb0", "rust::main::terminate")],
             rust_functions: Default::default(),
@@ -2106,6 +2606,8 @@ mod tests {
         let n0 = GlobalICFGNode::Mir(MirBasicBlock { block_id: 0, statements: vec![], terminator: None });
         let terminal = GlobalICFGNode::Terminal(TerminalNode { reason: "unwind_terminate".into() });
         let g = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![
                 ("rust::main::bb0".into(), n0),
                 ("rust::main::terminate".into(), terminal),
@@ -2234,6 +2736,8 @@ mod tests {
         }];
 
         let g = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![
                 (call_site.into(), main_call),
                 (dummy_call_id.into(), dummy_call),
@@ -2283,6 +2787,8 @@ mod tests {
     #[test]
     fn exporter_rejects_hidden_internal_call_relation() {
         let mut g = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![
                 ("rust::main::bb0".into(), GlobalICFGNode::Mir(MirBasicBlock { block_id: 0, statements: vec![], terminator: None })),
                 ("dummyCall::x".into(), GlobalICFGNode::DummyCall(DummyNode {
@@ -2380,6 +2886,8 @@ mod tests {
         let n2 = format!("{scope}::bb2");
         let n3 = format!("{scope}::bb3");
         let g = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![
                 (n0.clone(), c0),
                 (n1.clone(), c1.clone()),
@@ -2595,6 +3103,8 @@ mod tests {
             terminator: None,
         });
         let g = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![(n0, node)],
             icfg_edges: vec![],
             rust_functions: Default::default(),
@@ -2614,6 +3124,8 @@ mod tests {
     fn schema_v2_variable_catalog_is_closed_over_identity_program_vars() {
         let node_id = "rust::main::bb0".to_string();
         let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![(
                 node_id.clone(),
                 GlobalICFGNode::Mir(MirBasicBlock {
@@ -2717,6 +3229,8 @@ mod tests {
             terminator: None,
         });
         let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![(node_id.clone(), node)],
             icfg_edges: vec![],
             rust_functions: Default::default(),
@@ -3187,7 +3701,7 @@ mod tests {
             outgoing_edges: vec![],
         };
         assert_eq!(
-            classify_external_deallocation_effect(&[node]),
+            classify_external_deallocation_effect(&[node], None, ""),
             ("certified_absent", "svf_leaf_no_call_deallocation_v1")
         );
     }
@@ -3210,7 +3724,7 @@ mod tests {
             outgoing_edges: vec![],
         };
         assert_eq!(
-            classify_external_deallocation_effect(&[node]),
+            classify_external_deallocation_effect(&[node], None, ""),
             ("observed_may_deallocate", "structural_c_free_v1")
         );
     }
@@ -3233,8 +3747,108 @@ mod tests {
             outgoing_edges: vec![],
         };
         assert_eq!(
-            classify_external_deallocation_effect(&[node]),
+            classify_external_deallocation_effect(&[node], None, ""),
             ("unresolved", "svf_call_effect_unresolved_v1")
+        );
+    }
+
+    fn efx1_test_artifact(
+        name: &str,
+        explicit: LlvmFunctionEffectsSnapshotV1,
+        inferred: LlvmFunctionEffectsSnapshotV1,
+        tli_recognized: bool,
+        tli_changed: bool,
+    ) -> LlvmMemoryEffectsArtifactV1 {
+        LlvmMemoryEffectsArtifactV1 {
+            schema: "llvm_memory_effects_v1".into(),
+            llvm_version: "16.0.4".into(),
+            explicit_basis: "llvm16_explicit_input_ir_v1".into(),
+            tli_basis: "llvm16_tli_libfunc_attrs_v1".into(),
+            modules: vec![crate::structs::LlvmEffectsModuleV1 {
+                input: "fixture.ll".into(),
+                target_triple: "x86_64-pc-linux-gnu".into(),
+                input_ir_verified: true,
+                tli_clone_verified: true,
+                functions: vec![LlvmFunctionEffectsRecordV1 {
+                    name: name.into(),
+                    is_declaration: true,
+                    origin_explicit: "explicit_input_ir".into(),
+                    explicit,
+                    tli_recognized,
+                    tli_libfunc: tli_recognized.then(|| name.into()),
+                    origin_inferred: "llvm_tli_inferred".into(),
+                    tli_inferred: inferred,
+                    tli_changed,
+                }],
+                callsites_explicit: vec![],
+                callsites_tli_inferred: vec![],
+            }],
+        }
+    }
+
+    #[test]
+    fn efx1_tli_free_declaration_is_positive_may_deallocation() {
+        let explicit = LlvmFunctionEffectsSnapshotV1::default();
+        let mut inferred = LlvmFunctionEffectsSnapshotV1::default();
+        inferred.alloc_kind = vec!["free".into()];
+        inferred.formals = vec![crate::structs::LlvmFormalEffectsSnapshotV1 {
+            index: 0,
+            pointer_typed: true,
+            allocptr: true,
+            nocapture: true,
+            ..Default::default()
+        }];
+        let artifact = efx1_test_artifact("free", explicit, inferred, true, true);
+        assert_eq!(
+            classify_external_deallocation_effect(&[], Some(&artifact), "free"),
+            ("observed_may_deallocate", "llvm16_tli_allockind_deallocation_v1")
+        );
+    }
+
+
+    #[test]
+    fn efx1_structural_free_keeps_legacy_basis_and_adds_tli_corroboration() {
+        let explicit = LlvmFunctionEffectsSnapshotV1::default();
+        let mut inferred = LlvmFunctionEffectsSnapshotV1::default();
+        inferred.alloc_kind = vec!["free".into()];
+        inferred.formals = vec![crate::structs::LlvmFormalEffectsSnapshotV1 {
+            index: 0,
+            pointer_typed: true,
+            allocptr: true,
+            nocapture: true,
+            ..Default::default()
+        }];
+        let mut artifact = efx1_test_artifact("free", explicit, inferred, true, true);
+        artifact.modules[0].functions.push(LlvmFunctionEffectsRecordV1 {
+            name: "wrapper".into(),
+            is_declaration: false,
+            origin_explicit: "explicit_input_ir".into(),
+            explicit: LlvmFunctionEffectsSnapshotV1::default(),
+            tli_recognized: false,
+            tli_libfunc: None,
+            origin_inferred: "llvm_tli_inferred".into(),
+            tli_inferred: LlvmFunctionEffectsSnapshotV1::default(),
+            tli_changed: false,
+        });
+        artifact.modules[0].callsites_explicit.push(
+            crate::structs::LlvmCallsiteEffectsRecordV1 {
+                caller: "wrapper".into(),
+                ordinal: 0,
+                direct: true,
+                callee: Some("free".into()),
+                callsite_memory_explicit: false,
+                effective_memory: crate::structs::LlvmMemoryAccessV1::default(),
+            },
+        );
+
+        assert_eq!(
+            external_deallocation_corroborating_bases(
+                Some(&artifact),
+                "wrapper",
+                "observed_may_deallocate",
+                "structural_c_free_v1",
+            ),
+            vec!["llvm16_tli_direct_callee_allockind_deallocation_v1"]
         );
     }
 

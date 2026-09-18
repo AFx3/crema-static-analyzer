@@ -1,6 +1,18 @@
-# Guida operativa — analizzare target e crate con CREMA + CQPL v6R-r1
+# Guida operativa — analizzare target e crate con CREMA + CQPL R2
 
 Questa guida descrive la procedura riproducibile usata dalla release final112.
+
+
+Per il significato scientifico dei layer, leggere prima [ANALYSIS_PIPELINE.md](ANALYSIS_PIPELINE.md).
+
+La baseline corrente da preservare è:
+
+```text
+112 subjects x 12 queries = 1344
+ff=705  unk=413  tt=226
+```
+
+Per un `unk`, il JSON corrente aggiunge anche `assessment.subresult`, `direction`, `strength`, `basis` e `caveats`. Questi campi spiegano l'evidence disponibile ma non cambiano il `result`.
 
 ## 1. Prerequisiti
 
@@ -301,7 +313,7 @@ CREMA_RUST_TOOLCHAIN="$NIGHTLY" \
 Il protocollo fallisce se cambia silenziosamente census, query count, toolchain, capability, target registry o risultato dei regression gates.
 
 
-## 10. Explainability v6R-r1
+## 10. Explainability corrente
 
 Quando una query restituisce `unk`, non cercare subito una causa guardando tutto il grafo. Genera prima la dependency trace v6R sullo stesso artifact:
 
@@ -335,7 +347,7 @@ a-code_full_rust/a-memory_leaks_full_rust_literals/boxed_bool
 
 e mostra l'intera catena target → CREMA → annotated ICFG → CQPL `unk` → `MAY_ALLOCATION` witness. Vedi [EXPLAINABILITY_GUIDE.md](EXPLAINABILITY_GUIDE.md).
 
-## v6S-r1: leggere allocation disposition
+## Allocation disposition: leggere la provenance lifecycle
 
 Dopo una run v6S, ogni `annotated_icfg_v2.json` può contenere `allocation_disposition[]`. Per una lettura umana usa `V6S_R1_GUIDE.md`; per aggregare i 105 leak `unk` usa:
 

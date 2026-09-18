@@ -66,11 +66,16 @@ Official reference:
 - https://llvm.org/docs/LangRef.html#alloc-family
 - https://llvm.org/docs/LangRef.html#allockind
 
-**Evidence boundary:** v6Q-r1c does not claim that the current CREMA/SVF JSON
-contains LLVM `alloc-family` or `allockind` attributes. Existing structural
-recognition of modeled C `malloc/calloc/free` calls is retained; the family
-semantics assigned to those recognized operations is the LLVM family specified
-above. Reading and validating attributes directly from LLVM IR is deferred.
+**Current evidence boundary:** the historical allocation-contract basis remains
+separate from EFX1. `structural_c_free_v1` continues to identify the frozen
+producer proof used for the allocation event itself. Separately,
+`llvm_memory_effects_v1` now carries explicit LLVM16 and isolated-TLI evidence,
+including `alloc-family`, `allockind` and `allocptr` where available.
+
+When both proofs support the same external MAY-deallocation effect, R2-R1.2
+preserves the historical primary basis and exposes the LLVM proof as
+`external_deallocation_effects_v1.corroborating_bases`. The checker does not
+silently rewrite one provenance class into the other.
 
 ## Closed v2 proof bases
 
@@ -101,9 +106,10 @@ above. Reading and validating attributes directly from LLVM IR is deferred.
 
 `structural_c_free_v1`
 : CREMA has structurally recognized the modeled C `free` operation using the
-  pre-existing v1 producer model. The family *meaning* is consistent with LLVM's
-  `"alloc-family"="malloc"` contract, but v6Q-r1c does not claim to have read or
-  validated LLVM `alloc-family`/`allockind` attributes. Contract: `c_malloc / free / c`.
+  pre-existing v1 producer model. Contract: `c_malloc / free / c`. This basis is
+  intentionally retained for historical comparability. If independent
+  LLVM16/TLI evidence proves the same MAY effect, it is reported separately as
+  external-effect corroboration rather than replacing this basis.
 
 `unresolved`
 : The producer has no supported structural proof. `family` MUST be `unknown`.

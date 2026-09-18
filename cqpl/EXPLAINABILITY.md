@@ -1,49 +1,58 @@
-# CQPL v6R-r1 — contratto di explainability
+# CQPL R2 — contratto di explainability e assessment
 
 ## 1. Scopo
 
-v6R-r1 aggiunge un layer di **explainability osservazionale** sopra la semantica congelata v6Q-r1c.
-
-Non cambia:
-
-- i transfer CREMA;
-- il dominio astratto;
-- il Kripke costruito dall'annotated ICFG;
-- il truth lattice `ff < unk < tt`;
-- CTL e quantificatori;
-- le 12 query ufficiali;
-- capability checking.
-
-Il checker calcola prima il normale risultato CQPL. Solo dopo costruisce la spiegazione usando le stesse valuation. Se i due risultati differiscono, il checker termina con errore.
-
-Baseline Git:
+Il layer explainability è **osservazionale rispetto alla truth semantics**:
 
 ```text
-bbca5f09096d77718624564e0aafff9d87a96e6e
+result = ff | unk | tt
 ```
 
-Runtime acceptance v6R-r1:
+CQPL valuta prima la query sul Kripke. Solo dopo costruisce la spiegazione usando lo stesso modello e la stessa valuation.
+
+R2 aggiunge un assessment ortogonale:
+
+```text
+subresult = tt | ff | unk_true | unk_false | unk_mixed | unk_unoriented
+direction = true | false | mixed | none
+strength  = abstract_established | strong_abstract_evidence
+          | observational_candidate | unresolved
+```
+
+`unk_true` non è un quarto truth value: resta `result=unk`. Indica soltanto che esiste una proof chain astratta direzionale a favore del pattern cercato.
+
+`unk_false` e `unk_mixed` restano riservati finché non esiste una pipeline refutante duale esplicita.
+
+## 2. Acceptance corrente
+
+FINAL112 R2-R1.1 ha verificato:
 
 ```text
 112 subjects
 12 queries
-1344 explanations
-baseline_result_mismatches = 0
-ff=650 unk=468 tt=226
+1344 results
+
+ff  = 705
+unk = 413
+tt  = 226
+
+unk_true       = 273
+unk_unoriented = 140
+
+strong_abstract_evidence = 73
+observational_candidate  = 200
+unresolved               = 140
 ```
 
-## 2. Perché spiegare `unk`
+Ogni UNKNOWN ha explanation e assessment schema-validi. La micro-release R2-R1.2 non deve cambiare nessuno di questi conteggi.
 
-`unk` non è un crash e non è un “forse bug” generico. È il risultato della semantica three-valued quando l'astrazione non permette né prova né refutazione.
+Il campo `basis` deve essere canonicale e proof-carrying:
 
-Per migliorare precisione serve sapere **dove nasce quell'incertezza**.
+- il token dell'evidence deve coincidere con il wire token JSON;
+- `pta_basis` è positive supporting evidence solo con `svf_may_points_to` non vuoto;
+- la provenance primaria storica può essere mantenuta e affiancata da `corroborating_bases` indipendenti.
 
-v6R distingue quindi:
-
-- **uncertainty frontier**: reason code realmente presenti sulla dependency trace scelta per spiegare la query;
-- **correlazioni del grafo**: imprecisioni presenti altrove, che non sono chiamate cause finché non compaiono nella trace.
-
-Questa distinzione impedisce frasi scorrette come “il risultato è `unk` perché il grafo contiene `TOP`” quando quel `TOP` non è usato dalla derivazione della query.
+Per una vista end-to-end vedere [ANALYSIS_PIPELINE.md](ANALYSIS_PIPELINE.md).
 
 ## 3. Come attivare l'explainability
 
@@ -65,6 +74,7 @@ Campi top-level:
 | `schema` | Deve essere `cqpl_explanation_v1`. |
 | `taxonomy` | Deve essere `cqpl_uncertainty_reasons_v1`. |
 | `result` | `ff`, `unk` o `tt`; deve coincidere col risultato ordinario. |
+| `assessment` | `cqpl_result_assessment_v1`: subresult, direction, strength, basis e caveats; non modifica `result`. |
 | `entry` | Entry del Kripke già proiettato. |
 | `scope_note` | Specifica che la spiegazione riguarda il modello astratto. |
 | `reason_frontier` | Reason code deduplicati nei witness emessi. |

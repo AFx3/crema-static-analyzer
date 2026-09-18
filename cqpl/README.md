@@ -1,87 +1,70 @@
 # CQPL — CREMA Query/Property Language
 
-CQPL è il checker temporale three-valued usato per interrogare il grafo annotato prodotto da CREMA.
+CQPL è il checker temporale three-valued che interroga il modello astratto prodotto da CREMA.
 
-La pipeline del candidate v6S-r1 parte dal freeze v6R-r1 e mantiene la semantica delle 12 query v6Q-r1c congelata:
-
-> **Implementation revision r1a.** The first r1 full-run exposed a pinned-rustc ICE caused by reading `item_name` from an `Impl` parent `DefId`. r1a guards parent-name reads with `DefKind::Mod`; allocation-disposition semantics and frozen-query truth remain unchanged.
+Per il flusso corrente, partire da **[ANALYSIS_PIPELINE.md](ANALYSIS_PIPELINE.md)**. Quel documento distingue in modo compatto:
 
 ```text
-Cargo project / crate
-        |
-        v
-      CREMA
-  Rust MIR + LLVM/SVF + abstract interpretation
-        |
-        |  schema-v2 boundary
-        v
-annotated_icfg_v2.json
-        |
-        v
-  cqpl_checker
-        |\
-        | \
-        |  +--> explanation.json (v6R, opt-in)
-        |  +--> allocation_disposition[] (v6S-r1 producer provenance)
-        v
-   ff | unk | tt
+evidence producer
+    -> annotated_icfg_v2
+    -> Kripke
+    -> result ff|unk|tt
+    -> explanation
+    -> subresult / direction / strength
 ```
 
-CQPL **non ricompila il programma e non ricostruisce MIR/LLVM**. Il checker riceve un artifact già costruito da CREMA, ne valida schema, capability e riferimenti, costruisce il Kripke finito e valuta la formula dalla `entry` dichiarata.
+## Stato scientifico corrente
 
-## Release corrente
+La baseline semantica frozen delle 12 query è:
 
 ```text
-CREMA-CQPL-v6S-r1
-semantic baseline: CREMA-CQPL-v6Q-r1c
-explainability baseline: CREMA-CQPL-v6R-r1 (commit aa7ed4e...)
-status: allocation-disposition observational candidate; runtime validation required
-primary toolchain: nightly-2024-11-21
-rustc: 1.84.0-nightly (3fee0f12e 2024-11-20)
+subjects = 112
+queries  = 12
+attempts = 1344
+
+ff  = 705
+unk = 413
+tt  = 226
 ```
 
-v6R-r1 mantiene **byte-identiche la semantica CREMA e le 12 query congelate di v6Q-r1c**. Aggiunge soltanto un secondo passaggio diagnostico opt-in che spiega `unk` e costruisce witness astratti per `tt`/`unk`. La validation runtime ha verificato identità dei risultati ordinari su tutte le 1344 celle final112.
+R2 aggiunge explainability/provenance senza modificare questa truth semantics.
 
-### Evidenza runtime finale
-
-Il run finale r1c contiene:
-
-- 109/109 target corpus attivi, su 110 discovered e 1 skip esplicito;
-- 3/3 crate registry: `unicode-ident 1.0.18`, `ryu 1.0.20`, `memchr 2.7.4`;
-- 112 grafi `annotated_icfg_v2.json`;
-- 12 query in `queries_v2/`;
-- 1344 valutazioni CQPL, tutte con return code 0;
-- `ff=650`, `unk=468`, `tt=226`;
-- matrice r1c identica 1344/1344 alla matrice r1b già auditata sui byte dei grafi;
-- 112/112 grafi validati strutturalmente;
-- 6894/6894 record di identity sidecar verificati contro le annotazioni dei grafi;
-- sulle tre crate registry: `rvalue_unmodeled=0`, `statement_unmodeled=0`, `terminator_unmodeled=0` e nessun `UNRESOLVED_HIGHER_ORDER`.
-
-Archivio runtime finale verificato:
+Distribuzione UNKNOWN validata in R2-R1.1:
 
 ```text
-cqpl-v6q-r1c-final112.zip
-SHA-256: bd77b63d67523346b4e3c3cd9554f9787d7685e0f46265912137d55a98a8e902
+unk_true       = 273
+unk_unoriented = 140
+
+strong_abstract_evidence = 73
+observational_candidate  = 200
+unresolved               = 140
 ```
 
-Il PASS significa **riproducibilità e coerenza rispetto al protocollo dichiarato**. Non significa perfect accuracy. In particolare la leak analysis è ancora molto conservativa: 105/112 soggetti risultano `unk` nelle due query leak.
+`unk_true` **non significa `tt`**: significa che esiste evidence direzionale positiva ma non sufficientemente forte da superare la semantica three-valued corrente. `unk_unoriented` indica invece che l'evidence disponibile non giustifica un orientamento.
 
-### Evidenza explainability v6R-r1
+La micro-release R2-R1.2 normalizza soltanto la provenance:
 
-La validation v6R-r1 sullo stesso final112 ha prodotto:
+- token CString canonici;
+- `pta_basis` citato solo con membership points-to non vuota;
+- basis storico `structural_c_free_v1` preservato, con eventuale LLVM16/TLI corroboration separata;
+- nessun cambiamento alle 12 query, al truth lattice o a `subresult/strength`.
 
-- 112 soggetti × 12 query = 1344 spiegazioni;
-- `baseline_result_mismatches=0`;
-- `ff=650`, `unk=468`, `tt=226`, identici a v6Q-r1c;
-- 0 `unk` senza reason frontier;
-- 0 `unk` senza origine atomica specifica;
-- 0 `tt` senza witness;
-- 0 `tt` senza atomic witness endpoint;
-- per `leak_alloc` e `leak_alloc_state`: 105/112 `unk`, tutti 105/105 con `MAY_ALLOCATION` nella frontier.
+## Pipeline in una frase
 
-Il bundle runtime esterno `explainability.zip` ha SHA-256 `f41117d1d2fc1838cc1ee830071b07673811765884c9d96e4229ebbd187247d4`. Il repository conserva summary e protocollo, non i 1344 JSON runtime.
+CREMA produce fatti astratti e proof-carrying evidence da MIR, Bmulti, LLVM16/TLI e SVF; CQPL valida l'artifact fail-closed, valuta la formula frozen sul Kripke e solo dopo costruisce explanation e assessment.
 
-Per una spiegazione didattica campo-per-campo e un esempio completo su `boxed_bool__ml`, vedi [EXPLAINABILITY_GUIDE.md](EXPLAINABILITY_GUIDE.md).
+Documenti principali:
+
+- [ANALYSIS_PIPELINE.md](ANALYSIS_PIPELINE.md) — flusso completo, semplice e corrente;
+- [ANALYSIS_GUIDE.md](ANALYSIS_GUIDE.md) — comandi operativi;
+- [ANNOTATED_ICFG.md](ANNOTATED_ICFG.md) — boundary CREMA -> CQPL;
+- [EXPLAINABILITY.md](EXPLAINABILITY.md) — contratto explanation/assessment;
+- [QUERY_CATALOG.md](QUERY_CATALOG.md) — significato delle 12 query e conteggi frozen;
+- `capabilities/*.md` — contratti normativi delle evidence capability.
+
+## Regola metodologica
+
+Il PASS FINAL112 significa coerenza e riproducibilità rispetto al protocollo dichiarato. Non è una claim di perfect accuracy o concrete-execution proof. Le query memory-safety restano conservative perché gli eventi e l'identity sono spesso MAY.
 
 ### v6S-r1: allocation disposition senza cambiare le query storiche
 

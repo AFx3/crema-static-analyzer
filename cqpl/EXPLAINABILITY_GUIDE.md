@@ -1,6 +1,6 @@
-# Guida semplice all'explainability CQPL v6R-r1
+# Guida semplice all'explainability CQPL R2
 
-Questa guida spiega **che cosa produce v6R-r1, come leggere ogni campo e come riprodurre un esempio completo** partendo da un target reale in `tests_and_target_repos`.
+Questa guida spiega **che cosa produce il layer explainability R2, come leggere ogni campo e come riprodurre un esempio completo** partendo da un target reale in `tests_and_target_repos`.
 
 L'idea centrale è semplice:
 
@@ -24,7 +24,7 @@ explainability v6R
     +-- se il risultato è tt, qual è il witness nel modello astratto?
 ```
 
-L'explainability è **osservazionale**: non cambia il risultato CQPL. Prima viene calcolato il normale `ff|unk|tt`; solo dopo viene costruita la spiegazione. La validation v6R-r1 ha verificato 1344/1344 risultati identici alla baseline v6Q-r1c.
+L'explainability è **osservazionale**: non cambia il risultato CQPL. Prima viene calcolato `ff|unk|tt`; solo dopo vengono costruiti explanation e assessment. FINAL112 R2 verifica 1344/1344 risultati con baseline `705 ff / 413 unk / 226 tt`.
 
 ## 1. Tre concetti da ricordare
 
@@ -43,6 +43,28 @@ v6R aggiunge una `reason_frontier`: l'insieme delle cause di incertezza che comp
 La formula è stabilita nel modello astratto. v6R richiede almeno un witness con almeno una osservazione atomica finale.
 
 Un witness v6R è un witness **nell'annotated abstract Kripke model**. Non è automaticamente una concrete execution del programma.
+
+### Assessment R2
+
+Ogni risultato JSON contiene anche:
+
+```text
+subresult
+direction
+strength
+basis
+caveats
+```
+
+Per `unk`:
+
+- `unk_true`: esiste evidence direzionale positiva, ma la query resta semanticamente UNKNOWN;
+- `unk_unoriented`: l'evidence è insufficiente per scegliere una direzione;
+- `strong_abstract_evidence`: proof chain astratta più forte, non concrete proof;
+- `observational_candidate`: pattern MAY osservato;
+- `unresolved`: nessun orientamento giustificato.
+
+La stessa evidence usa lo stesso wire token sia nel finding sia in `assessment.basis`.
 
 ## 2. Il file `.explain.json`
 
@@ -81,6 +103,7 @@ Esempio minimo:
 | `schema` | Versione del formato JSON di explainability. In v6R-r1 è `cqpl_explanation_v1`. |
 | `taxonomy` | Versione del vocabolario delle cause di incertezza. In v6R-r1 è `cqpl_uncertainty_reasons_v1`. |
 | `result` | Lo stesso risultato CQPL normale: `ff`, `unk` oppure `tt`. |
+| `assessment` | Orientamento/strength/provenance del risultato; è ortogonale a `ff|unk|tt`. |
 | `entry` | Nodo di ingresso del Kripke già proiettato su cui è stata valutata la query. |
 | `scope_note` | Ricorda che la spiegazione riguarda il modello astratto, non una esecuzione concreta garantita. |
 | `reason_frontier` | Insieme deduplicato delle cause di `unk` incontrate sulla dependency trace dei witness emessi. |
@@ -449,8 +472,8 @@ true without witness                0
 true without atomic witness         0
 
 result counts:
-ff   650
-unk  468
+ff   705
+unk  413
 tt   226
 ```
 

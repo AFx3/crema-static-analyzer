@@ -1,0 +1,317 @@
+   Compiling proc-macro2 v1.0.94
+   Compiling unicode-ident v1.0.18
+   Compiling serde v1.0.218
+   Compiling memchr v2.7.4
+   Compiling camino v1.1.9
+   Compiling same-file v1.0.6
+   Compiling equivalent v1.0.2
+   Compiling serde_json v1.0.140
+   Compiling semver v1.0.26
+   Compiling hashbrown v0.15.2
+   Compiling shlex v1.3.0
+   Compiling thiserror v2.0.12
+   Compiling itoa v1.0.15
+   Compiling walkdir v2.5.0
+   Compiling cc v1.2.18
+   Compiling ryu v1.0.20
+   Compiling winnow v0.7.3
+   Compiling regex-syntax v0.8.5
+   Compiling log v0.4.26
+   Compiling once_cell v1.21.3
+   Compiling aho-corasick v1.1.3
+   Compiling indexmap v2.7.1
+   Compiling quote v1.0.39
+   Compiling syn v2.0.99
+   Compiling crema v0.1.0 (/home/af/Documenti/a-phd/crema)
+warning: crema@0.1.0: No C source files found; skipping static library generation
+   Compiling regex-automata v0.4.9
+   Compiling serde_derive v1.0.218
+   Compiling thiserror-impl v2.0.12
+   Compiling regex v1.11.1
+   Compiling serde_spanned v0.6.8
+   Compiling toml_datetime v0.6.8
+   Compiling cargo-platform v0.1.9
+   Compiling toml_edit v0.22.24
+   Compiling cargo_metadata v0.19.2
+   Compiling toml v0.8.20
+warning: unused imports: `RustAllocationDispositionEvidence`, `RustCallDeallocatorEvidence`, and `RustDropAllocatorEvidence`
+  --> src/cqpl_export.rs:9:45
+   |
+9  |     PlaceId, PlaceProjection, ProgramVarId, RustDropAllocatorEvidence, RustDropAllocatorEvidenceKind,
+   |                                             ^^^^^^^^^^^^^^^^^^^^^^^^^
+10 |     RustCallDeallocatorEvidence, RustCallDeallocatorEvidenceKind, RustAllocationDispositionEvidence, RustAllocationDispositionEvidenceKin...
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unreachable pattern
+    --> src/icfg.rs:1004:13
+     |
+1004 |             _ => MirTerminator::Unhandled {
+     |             ^ no value can reach this
+     |
+note: multiple earlier patterns match some of the same values
+    --> src/icfg.rs:1004:13
+     |
+754  |             TerminatorKind::Goto { target } => MirTerminator::Goto {
+     |             ------------------------------- matches some of the same values
+...
+759  |             TerminatorKind::SwitchInt { discr, targets, .. } => {
+     |             ------------------------------------------------ matches some of the same values
+...
+775  |             TerminatorKind::Return => MirTerminator::Return {
+     |             ---------------------- matches some of the same values
+...
+779  |             TerminatorKind::UnwindResume => MirTerminator::UnwindResume {
+     |             ---------------------------- matches some of the same values
+...
+1004 |             _ => MirTerminator::Unhandled {
+     |             ^ ...and 11 other patterns collectively make this unreachable
+     = note: `#[warn(unreachable_patterns)]` on by default
+
+warning: unused variable: `details`
+    --> src/icfg.rs:2367:59
+     |
+2367 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+     |                                                           ^^^^^^^ help: try ignoring the field: `details: _`
+     |
+     = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `source_info`
+    --> src/icfg.rs:2367:68
+     |
+2367 |                 if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+     |                                                                    ^^^^^^^^^^^ help: try ignoring the field: `source_info: _`
+
+warning: unused variable: `callee_is_local`
+    --> src/icfg.rs:2683:21
+     |
+2683 |                     callee_is_local,
+     |                     ^^^^^^^^^^^^^^^ help: try ignoring the field: `callee_is_local: _`
+
+warning: unused variable: `details`
+    --> src/abstract_domain.rs:5037:50
+     |
+5037 | ...   if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return_place, allocation_disposition_evidence, ....
+     |                                        ^^^^^^^ help: try ignoring the field: `details: _`
+
+warning: methods `meet` and `is_default` are never used
+   --> src/abstract_domain.rs:133:12
+    |
+100 | impl CellValue {
+    | -------------- methods in this implementation
+...
+133 |     pub fn meet(self, other: Self) -> Self {
+    |            ^^^^
+...
+151 |     pub fn is_default(self) -> bool {
+    |            ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `get_taint_state_for_block` is never used
+   --> src/abstract_domain.rs:679:8
+    |
+679 | pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintStateMap {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `closure_entry_scope_for_call` is never used
+    --> src/abstract_domain.rs:1350:4
+     |
+1350 | fn closure_entry_scope_for_call(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `CQPL_ANNOTATED_ICFG_SCHEMA_VERSION` is never used
+  --> src/cqpl_export.rs:27:11
+   |
+27 | pub const CQPL_ANNOTATED_ICFG_SCHEMA_VERSION: u32 = 1;
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `CQPL_ANNOTATED_ICFG_IDENTITY_SCHEMA_VERSION` is never used
+  --> src/cqpl_export.rs:28:11
+   |
+28 | pub const CQPL_ANNOTATED_ICFG_IDENTITY_SCHEMA_VERSION: u32 = 2;
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `export_cqpl_annotated_icfg_with_identity` is never used
+   --> src/cqpl_export.rs:291:8
+    |
+291 | pub fn export_cqpl_annotated_icfg_with_identity(
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `is_box_new_call` is never used
+    --> src/cqpl_export.rs:1687:4
+     |
+1687 | fn is_box_new_call(s: &str) -> bool {
+     |    ^^^^^^^^^^^^^^^
+
+warning: function `is_raw_alloc_zeroed_call` is never used
+    --> src/cqpl_export.rs:1692:4
+     |
+1692 | fn is_raw_alloc_zeroed_call(s: &str) -> bool {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `is_raw_alloc_call` is never used
+    --> src/cqpl_export.rs:1696:4
+     |
+1696 | fn is_raw_alloc_call(s: &str) -> bool {
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: methods `represented_allocations`, `copy_points_to`, `may_alias`, `same_singleton_abstract_id`, and `leq` are never used
+   --> src/identity.rs:103:12
+    |
+32  | impl AllocationIdentityMemory {
+    | ----------------------------- methods in this implementation
+...
+103 |     pub fn represented_allocations(&self) -> BTreeSet<AbstractAllocId> {
+    |            ^^^^^^^^^^^^^^^^^^^^^^^
+...
+133 |     pub fn copy_points_to(&mut self, from: &ProgramVarId, to: ProgramVarId) {
+    |            ^^^^^^^^^^^^^^
+...
+177 |     pub fn may_alias(&self, left: &ProgramVarId, right: &ProgramVarId) -> bool {
+    |            ^^^^^^^^^
+...
+188 |     pub fn same_singleton_abstract_id(&self, left: &ProgramVarId, right: &ProgramVarId) -> bool {
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+230 |     pub fn leq(&self, other: &Self) -> bool {
+    |            ^^^
+
+warning: function `is_fresh_rust_allocator` is never used
+   --> src/identity.rs:778:4
+    |
+778 | fn is_fresh_rust_allocator(callee: &str) -> bool {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `transfer_statement` is never used
+    --> src/identity.rs:1052:4
+     |
+1052 | fn transfer_statement(
+     |    ^^^^^^^^^^^^^^^^^^
+
+warning: function `is_option_map_or_def_path` is never used
+   --> src/mir_semantics.rs:154:8
+    |
+154 | pub fn is_option_map_or_def_path(path: &str) -> bool {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `is_unwind_edge` is never used
+  --> src/panic_unwind.rs:49:8
+   |
+49 | pub fn is_unwind_edge(edge: &IcfgEdge) -> bool {
+   |        ^^^^^^^^^^^^^^
+
+warning: associated items `owned`, `leq`, `drop_return`, and `may_repeat_drop` are never used
+   --> src/panic_lifecycle_domain.rs:38:18
+    |
+27  | impl LifecycleValue {
+    | ------------------- associated items in this implementation
+...
+38  |     pub const fn owned() -> Self {
+    |                  ^^^^^
+...
+65  |     pub const fn leq(self, other: Self) -> bool {
+    |                  ^^^
+...
+114 |     pub const fn drop_return(mut self) -> Self {
+    |                  ^^^^^^^^^^^
+...
+124 |     pub const fn may_repeat_drop(self) -> bool {
+    |                  ^^^^^^^^^^^^^^^
+
+warning: method `leq` is never used
+   --> src/panic_lifecycle_domain.rs:143:18
+    |
+142 | impl LifecycleCoverage {
+    | ---------------------- method in this implementation
+143 |     pub const fn leq(self, other: Self) -> bool {
+    |                  ^^^
+
+warning: methods `mark_owned`, `drop_return`, and `leq` are never used
+   --> src/panic_lifecycle_domain.rs:203:12
+    |
+178 | impl PanicLifecycleMemory {
+    | ------------------------- methods in this implementation
+...
+203 |     pub fn mark_owned(&mut self, key: impl Into<String>) {
+    |            ^^^^^^^^^^
+...
+219 |     pub fn drop_return(&mut self, key: &str) {
+    |            ^^^^^^^^^^^
+...
+250 |     pub fn leq(&self, other: &Self) -> bool {
+    |            ^^^
+
+warning: function `fixed_point_lifecycle_passthrough` is never used
+   --> src/panic_lifecycle_domain.rs:386:8
+    |
+386 | pub fn fixed_point_lifecycle_passthrough(
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `crema` (bin "crema") generated 24 warnings (run `cargo fix --bin "crema"` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 24.30s
+     Running `/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/cargo-target/debug/crema /home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/analysis-workspace/case/harness/vulnerable --analysis-mode application --cargo-kind bin --cargo-target reproducer --only-icfg-annotated --cqpl-schema-version 2 --annotated-icfg-out /home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/annotated_icfg_v2.json --allocation-identity-out /home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/allocation_identity.json --cargo-plan-out /home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/cargo_analysis_plan.json --semantic-coverage-out /home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/semantic_coverage.json --mir-semantics-v2 --panic-unwind-lifecycle-v1`
+mir_semantics_profile=v2-extension-over-v6O
+panic_unwind_lifecycle_profile=v1-edge-sensitive
+Analyzing Cargo project at: /home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/analysis-workspace/case/harness/vulnerable
+CREMA v6O Cargo plan: mode=Application package=b1_2_harness_vulnerable 0.0.0 target=Bin:reproducer roots=main
+cargo_metadata_format_version=1
+resolved_features=
+resolved_features_source=manifest_feature_closure_v1
+Cargo analysis plan saved to /home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/cargo_analysis_plan.json
+No authored C files found in selected package b1_2_harness_vulnerable
+V6O_LOCAL_ROOT_NAMESPACE: requested=main normalized=main crate=reproducer
+   Compiling aligned_box v0.3.0 (/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/analysis-workspace/case/vulnerable)
+   Compiling b1_2_harness_vulnerable v0.0.0 (/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/analysis-workspace/case/harness/vulnerable)
+warning: field `inner` is never read
+  --> ../../reproducer/main.rs:23:5
+   |
+21 | struct PanicOnDrop {
+   |        ----------- field in this struct
+22 |     id: u32,
+23 |     inner: Box<u32>,
+   |     ^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+V6O_CARGO_FFI_DECLARATIONS: PASS functions=0 names=
+V6S_ALLOCATION_DISPOSITION_PRODUCER_EVIDENCE: kind=BoxIntoRaw callee=std::boxed::Box::<T, A>::into_raw owner=std::boxed::Box
+A3_EXTERNAL_CALLBACK_MIR_DISCOVERED: caller=aligned_box::AlignedBox::<T>::allocate callback=aligned_box::AlignedBox::<T>::allocate::{closure#0}
+A3_EXTERNAL_MIR_IMPORTED: <aligned_box::AlignedBox<T> as std::ops::Drop>::drop
+V6Q_HIGHER_ORDER_PRODUCER_EVIDENCE: kind=ResultMapErr callee=std::result::Result::<T, E>::map_err owner=std::result::Result callback_args=[1]
+V6S_ALLOCATION_DISPOSITION_PRODUCER_EVIDENCE: kind=BoxFromRaw callee=std::boxed::Box::<T>::from_raw owner=std::boxed::Box
+A3_EXTERNAL_MIR_IMPORTED: aligned_box::AlignedBox::<T>::allocate
+A3_EXTERNAL_MIR_IMPORTED: aligned_box::AlignedBox::<T>::from_raw_parts
+A3_EXTERNAL_MIR_IMPORTED: aligned_box::AlignedBox::<[T]>::new_slice
+A3_EXTERNAL_CALLBACK_MIR_DISCOVERED: caller=aligned_box::AlignedBox::<[T]>::realloc callback=aligned_box::AlignedBox::<[T]>::realloc::{closure#0}
+V6Q_HIGHER_ORDER_PRODUCER_EVIDENCE: kind=ResultMapErr callee=std::result::Result::<T, E>::map_err owner=std::result::Result callback_args=[1]
+V6S_ALLOCATION_DISPOSITION_PRODUCER_EVIDENCE: kind=BoxIntoRaw callee=std::boxed::Box::<T, A>::into_raw owner=std::boxed::Box
+V6S_ALLOCATION_DISPOSITION_PRODUCER_EVIDENCE: kind=BoxFromRaw callee=std::boxed::Box::<T>::from_raw owner=std::boxed::Box
+V6S_ALLOCATION_DISPOSITION_PRODUCER_EVIDENCE: kind=BoxFromRaw callee=std::boxed::Box::<T>::from_raw owner=std::boxed::Box
+A3_EXTERNAL_MIR_IMPORTED: aligned_box::AlignedBox::<[T]>::realloc
+A3_EXTERNAL_MIR_IMPORTED: aligned_box::AlignedBox::<[T]>::realloc_with_default
+A3_EXTERNAL_MIR_IMPORTED: aligned_box::AlignedBox::<[T]>::realloc_with_default::{closure#0}
+A3_EXTERNAL_MIR_IMPORTED: aligned_box::AlignedBox::<[T]>::slice_from_default
+A3_EXTERNAL_MIR_IMPORTED: aligned_box::AlignedBox::<[T]>::slice_from_default::{closure#0}
+A3_EXTERNAL_MIR_IMPORTED: aligned_box::AlignedBox::<T>::allocate::{closure#0}
+A3_EXTERNAL_MIR_IMPORTED: aligned_box::AlignedBox::<[T]>::realloc::{closure#0}
+Global ICFG saved to /home/af/Documenti/a-phd/crema/target/crema-v6o-operational/1561536/global_icfg--main.json
+warning: `b1_2_harness_vulnerable` (bin "reproducer") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s
+Global ICFG nodes/edges DOT file saved as global_icfg_nodes_edges.dot
+entrypoint: rust::main::bb0
+entrypoint: rust::main::bb0
+A3_PANIC_LIFECYCLE_EXTRACT_OWNER_MAY: node=rust::<aligned_box::AlignedBox<T> as std::ops::Drop>::drop::bb0 subject=Local(_3) [mutable] candidates=1
+A3_PANIC_LIFECYCLE_EXTRACT: node=rust::<aligned_box::AlignedBox<T> as std::ops::Drop>::drop::bb0 allocation={"site":{"kind":"rust_call","node_id":"rust::aligned_box::AlignedBox::<T>::allocate::bb13","callee":"std::alloc::alloc"},"context":["rust::aligned_box::AlignedBox::<[T]>::new_slice::bb4"]}
+A3_PANIC_LIFECYCLE_PARTIAL_UNWIND: node=rust::<aligned_box::AlignedBox<T> as std::ops::Drop>::drop::bb2 stale_owners=1
+A3_PANIC_LIFECYCLE_EXTRACT_OWNER_MAY: node=rust::aligned_box::AlignedBox::<[T]>::realloc::bb15 subject=Local(_27) [mutable] candidates=1
+A3_PANIC_LIFECYCLE_EXTRACT: node=rust::aligned_box::AlignedBox::<[T]>::realloc::bb15 allocation={"site":{"kind":"rust_call","node_id":"rust::aligned_box::AlignedBox::<T>::allocate::bb13","callee":"std::alloc::alloc"},"context":["rust::aligned_box::AlignedBox::<[T]>::new_slice::bb4"]}
+A3_PANIC_LIFECYCLE_PARTIAL_UNWIND: node=rust::aligned_box::AlignedBox::<[T]>::realloc::bb48 stale_owners=1
+A3_PANIC_LIFECYCLE_PARTIAL_UNWIND: node=rust::aligned_box::AlignedBox::<[T]>::realloc::bb24 stale_owners=1
+A3_PANIC_LIFECYCLE_EXTRACT_OWNER_MAY: node=rust::<aligned_box::AlignedBox<T> as std::ops::Drop>::drop::bb0 subject=Local(_3) [mutable] candidates=1
+A3_PANIC_LIFECYCLE_PARTIAL_UNWIND: node=rust::aligned_box::AlignedBox::<[T]>::new_slice::bb20 stale_owners=1
+A3_PANIC_LIFECYCLE_EXTRACT_OWNER_MAY: node=rust::aligned_box::AlignedBox::<[T]>::realloc::bb15 subject=Local(_27) [mutable] candidates=1
+CQPL annotated ICFG saved to /home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/annotated_icfg_v2.json
+Semantic coverage saved to /home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/semantic_coverage.json
+CREMA v6O analysis manifest saved to /home/af/Documenti/a-phd/crema/analysis_manifest.json

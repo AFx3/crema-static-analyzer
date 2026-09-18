@@ -69,6 +69,7 @@ else()
             instcombine
             instrumentation
             target
+            transformutils
             linker
             analysis
             scalaropts
@@ -137,7 +138,7 @@ message(STATUS "SVF STATUS:
 
 
 # Define the actual runtime executable
-llvm_map_components_to_libnames(llvm_libs bitwriter core ipo irreader instcombine instrumentation target linker analysis scalaropts support )
+llvm_map_components_to_libnames(llvm_libs bitwriter core ipo irreader instcombine instrumentation target transformutils linker analysis scalaropts support )
 
 
 # If the SVF CMake package was found, show how to use some "modern" features of this approach; otherwise use old system

@@ -242,7 +242,7 @@ def main() -> int:
 
     with (out / "unknown-explanations.tsv").open("w", encoding="utf-8", newline="") as f:
         fields = [
-            "target", "artifact", "query", "result", "explanation",
+            "target", "artifact", "query", "result", "subresult", "direction", "strength", "assessment_schema", "assessment_basis", "assessment_caveats", "explanation",
             "reason_frontier", "witnesses", "supporting_findings",
             "supporting_finding_kinds", "supporting_finding_strengths",
         ]
@@ -250,7 +250,7 @@ def main() -> int:
         w.writeheader()
         for record in unknown_explanations:
             row = dict(record)
-            for key in ["reason_frontier", "supporting_finding_kinds", "supporting_finding_strengths"]:
+            for key in ["reason_frontier", "supporting_finding_kinds", "supporting_finding_strengths", "assessment_basis", "assessment_caveats"]:
                 row[key] = ";".join(row[key])
             w.writerow({key: row.get(key, "") for key in fields})
 

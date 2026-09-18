@@ -1,7 +1,8 @@
 use crate::ast::{LabelPredicate, MayPredicate, PathFormula, PathQuantifier, QueryDocument, StateFormula, StructuralLabelKind};
 use crate::kripke::{
     AllocationContract, AllocationDispositionKind, AllocationDispositionRecord, AllocationEventCertainty,
-    AllocationObligationEffect, CellValue, EventKind,
+    AllocationObligationEffect, CellValue, EventKind, ExternalDeallocationEffectRecord,
+    FfiArgumentIdentityRecord,
 };
 use crate::model_checker::{Binding, Env, ModelChecker};
 use crate::truth::Truth;
@@ -12,6 +13,66 @@ pub const EXPLAINABILITY_TAXONOMY_VERSION: &str = "cqpl_uncertainty_reasons_v1";
 pub const ALLOCATION_OBLIGATION_DIAGNOSTICS_VERSION: &str = "allocation_obligation_diagnostics_v1";
 pub const MEMORY_ERROR_DIAGNOSTICS_VERSION: &str = "memory_error_diagnostics_v1";
 pub const ALLOCATION_CONTRACT_WITNESS_VERSION: &str = "allocation_contract_witness_v1";
+pub const QUERY_RESULT_ASSESSMENT_VERSION: &str = "cqpl_result_assessment_v1";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QuerySubresult { Tt, Ff, UnkTrue, UnkFalse, UnkMixed, UnkUnoriented }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QueryEvidenceDirection { True, False, Mixed, None }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QueryResultStrength { Unresolved, ObservationalCandidate, StrongAbstractEvidence, AbstractEstablished }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct QueryResultAssessment {
+    pub schema: &'static str,
+    pub result: &'static str,
+    pub subresult: QuerySubresult,
+    pub direction: QueryEvidenceDirection,
+    pub strength: QueryResultStrength,
+    pub basis: Vec<String>,
+    pub caveats: Vec<&'static str>,
+}
+
+impl QuerySubresult {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Tt => "tt",
+            Self::Ff => "ff",
+            Self::UnkTrue => "unk_true",
+            Self::UnkFalse => "unk_false",
+            Self::UnkMixed => "unk_mixed",
+            Self::UnkUnoriented => "unk_unoriented",
+        }
+    }
+}
+
+impl QueryEvidenceDirection {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::True => "true",
+            Self::False => "false",
+            Self::Mixed => "mixed",
+            Self::None => "none",
+        }
+    }
+}
+
+impl QueryResultStrength {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Unresolved => "unresolved",
+            Self::ObservationalCandidate => "observational_candidate",
+            Self::StrongAbstractEvidence => "strong_abstract_evidence",
+            Self::AbstractEstablished => "abstract_established",
+        }
+    }
+}
+
 
 /// Read-only bug-supporting evidence that is intentionally separate from CQPL truth.
 ///
@@ -70,6 +131,15 @@ impl AllocationObligationFindingKind {
             Self::AllocatorFamilyMismatch => "allocator_family_mismatch",
             Self::UnresolvedAllocatorContractCandidate => "unresolved_allocator_contract_candidate",
         }
+    }
+
+    /// Whether this finding is directional evidence for the queried property.
+    ///
+    /// An unresolved allocator/deallocator family is diagnostically relevant,
+    /// but it is symmetric with respect to "families differ" versus "families
+    /// match".  It therefore cannot orient an UNKNOWN result toward true.
+    fn supports_query_true(self) -> bool {
+        !matches!(self, Self::UnresolvedAllocatorContractCandidate)
     }
 }
 
@@ -189,8 +259,8 @@ impl AllocationObligationEvidence {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ProducerCertifiedBoxIntoRaw => "producer_certified_box_into_raw",
-            Self::ProducerCertifiedCStringIntoRaw => "producer_certified_cstring_into_raw",
-            Self::ProducerCertifiedCStringFromRaw => "producer_certified_cstring_from_raw",
+            Self::ProducerCertifiedCStringIntoRaw => "producer_certified_c_string_into_raw",
+            Self::ProducerCertifiedCStringFromRaw => "producer_certified_c_string_from_raw",
             Self::NormalReturnReachable => "normal_return_reachable",
             Self::NoModeledDischargeOnWitnessPath => "no_modeled_discharge_on_witness_path",
             Self::NoInterveningCallAfterHandoff => "no_intervening_call_after_handoff",
@@ -289,6 +359,10 @@ pub struct AllocationObligationFinding {
     /// this ordered diagnostic witness.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dispositions: Vec<AllocationDispositionWitness>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ffi_argument_identity: Vec<FfiArgumentIdentityRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub external_effects: Vec<ExternalDeallocationEffectRecord>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub non_returning_discharge_nodes: Vec<String>,
     pub summary: String,
@@ -400,6 +474,7 @@ pub struct ExplanationReport {
     pub schema: &'static str,
     pub taxonomy: &'static str,
     pub result: &'static str,
+    pub assessment: QueryResultAssessment,
     pub entry: String,
     pub scope_note: &'static str,
     pub reason_frontier: Vec<UncertaintyReason>,
@@ -439,6 +514,9 @@ impl ExplanationReport {
         let _ = writeln!(out, "QUERY: {query_name}");
         let _ = writeln!(out, "{bar}");
         let _ = writeln!(out, "truth: {}", self.result);
+        let _ = writeln!(out, "subresult: {}", self.assessment.subresult.as_str());
+        let _ = writeln!(out, "direction: {}", self.assessment.direction.as_str());
+        let _ = writeln!(out, "assessment strength: {}", self.assessment.strength.as_str());
         let _ = writeln!(out);
         let _ = writeln!(out, "why unknown:");
         for reason in &self.reason_frontier {
@@ -548,6 +626,32 @@ impl ExplanationReport {
                     }
                 }
             }
+            if !finding.ffi_argument_identity.is_empty() {
+                let _ = writeln!(out, "  ffi identity:");
+                for record in &finding.ffi_argument_identity {
+                    let _ = writeln!(out, "    - {} arg{}: {} -> {} allocations={:?} basis={}",
+                        record.node, record.arg_index, record.actual_variable, record.formal_variable,
+                        record.allocations, record.basis);
+                    if !record.svf_may_points_to.is_empty() {
+                        let _ = writeln!(
+                            out,
+                            "      svf MAY points-to={:?} basis={}",
+                            record.svf_may_points_to,
+                            record.svf_points_to_basis.as_deref().unwrap_or("<missing>"),
+                        );
+                    }
+                }
+            }
+            if !finding.external_effects.is_empty() {
+                let _ = writeln!(out, "  external effects:");
+                for record in &finding.external_effects {
+                    let _ = writeln!(out, "    - {} callee={} status={:?} basis={}",
+                        record.node, record.callee, record.status, record.basis);
+                    for corroborating in &record.corroborating_bases {
+                        let _ = writeln!(out, "      corroborated by: {corroborating}");
+                    }
+                }
+            }
             let _ = writeln!(out, "  path:");
             for node in &finding.witness_path {
                 let _ = writeln!(out, "    -> {node}");
@@ -651,15 +755,6 @@ impl Trace {
         }
     }
 
-    fn merge(&mut self, other: Trace) {
-        for node in other.relevant_nodes {
-            self.add_node(&node);
-        }
-        self.reasons.extend(other.reasons);
-        self.derivation.extend(other.derivation);
-        self.atoms.extend(other.atoms);
-        self.complete &= other.complete;
-    }
 }
 
 fn snapshot_env(env: &Env) -> BTreeMap<String, ExplanationBinding> {
@@ -819,28 +914,14 @@ impl<'a> ModelChecker<'a> {
             return Err("v6R explainability invariant violated: tt result has no atomic witness endpoint".into());
         }
 
-        let mut supporting_findings = Vec::new();
-        if formula_contains_negated_drop(&document.formula) {
-            supporting_findings.extend(self.allocation_obligation_findings(result));
-        }
-        if formula_is_use_after_free_shape(&document.formula) {
-            supporting_findings.extend(self.use_after_free_findings(result));
-        }
-        if formula_is_double_free_shape(&document.formula) {
-            supporting_findings.extend(self.double_free_findings(result));
-        }
-        if formula_uses_allocator_mismatch(&document.formula) {
-            supporting_findings.extend(self.allocator_mismatch_findings(result));
-        }
-        supporting_findings.sort_by(|a, b| {
-            (a.kind.as_str(), &a.allocation, &a.witness_path)
-                .cmp(&(b.kind.as_str(), &b.allocation, &b.witness_path))
-        });
+        let supporting_findings = self.supporting_findings_for_document(document, result);
+        let assessment = self.assessment_from_findings(result, &supporting_findings);
 
         Ok(ExplanationReport {
             schema: "cqpl_explanation_v1",
             taxonomy: EXPLAINABILITY_TAXONOMY_VERSION,
             result: result.as_str(),
+            assessment,
             entry: self.k.entry.clone(),
             scope_note: "explanations are over the already-projected annotated abstract Kripke model; they do not assert a concrete execution",
             reason_frontier,
@@ -864,6 +945,181 @@ impl<'a> ModelChecker<'a> {
             },
             witnesses,
         })
+    }
+
+    pub fn assess_document(
+        &self,
+        document: &QueryDocument,
+        result: Truth,
+    ) -> QueryResultAssessment {
+        let findings = self.supporting_findings_for_document(document, result);
+        self.assessment_from_findings(result, &findings)
+    }
+
+    fn supporting_findings_for_document(
+        &self,
+        document: &QueryDocument,
+        result: Truth,
+    ) -> Vec<AllocationObligationFinding> {
+        let mut findings = Vec::new();
+        if formula_contains_negated_drop(&document.formula) {
+            findings.extend(self.allocation_obligation_findings(result));
+        }
+        if formula_is_use_after_free_shape(&document.formula) {
+            findings.extend(self.use_after_free_findings(result));
+        }
+        if formula_is_double_free_shape(&document.formula) {
+            findings.extend(self.double_free_findings(result));
+        }
+        if formula_uses_allocator_mismatch(&document.formula) {
+            findings.extend(self.allocator_mismatch_findings(result));
+        }
+        for finding in &mut findings {
+            self.attach_boundary_evidence(finding);
+        }
+        findings.sort_by(|a, b| {
+            (a.kind.as_str(), &a.allocation, &a.witness_path)
+                .cmp(&(b.kind.as_str(), &b.allocation, &b.witness_path))
+        });
+        findings
+    }
+
+    fn attach_boundary_evidence(&self, finding: &mut AllocationObligationFinding) {
+        let mut nodes: BTreeSet<String> = finding.witness_path.iter().cloned().collect();
+        for node in [
+            finding.origin_node.as_ref(),
+            finding.handoff_node.as_ref(),
+            finding.return_node.as_ref(),
+            finding.first_drop_node.as_ref(),
+            finding.second_drop_node.as_ref(),
+            finding.use_node.as_ref(),
+            finding.mismatch_node.as_ref(),
+        ].into_iter().flatten() {
+            nodes.insert(node.clone());
+        }
+        let mut ffi = Vec::new();
+        let mut ext = Vec::new();
+        for node in nodes {
+            for record in self.k.ffi_argument_identity_at(&node) {
+                if record.allocations.iter().any(|a| a == &finding.allocation) {
+                    ffi.push(record.clone());
+                }
+            }
+            if let Some(record) = self.k.external_deallocation_effect_at(&node) {
+                ext.push(record.clone());
+            }
+        }
+        ffi.sort_by(|a, b| (&a.node, a.arg_index).cmp(&(&b.node, b.arg_index)));
+        ffi.dedup_by(|a, b| a.node == b.node && a.arg_index == b.arg_index);
+        ext.sort_by(|a, b| a.node.cmp(&b.node));
+        ext.dedup_by(|a, b| a.node == b.node);
+        finding.ffi_argument_identity = ffi;
+        finding.external_effects = ext;
+    }
+
+    fn assessment_from_findings(
+        &self,
+        result: Truth,
+        findings: &[AllocationObligationFinding],
+    ) -> QueryResultAssessment {
+        let mut basis = BTreeSet::new();
+        basis.insert("cqpl_three_valued_model_check_v1".to_string());
+        for finding in findings {
+            basis.insert(format!("finding:{}", finding.kind.as_str()));
+            basis.insert(format!("finding_strength:{}", finding.strength.as_str()));
+            for evidence in &finding.evidence {
+                basis.insert(format!("evidence:{}", evidence.as_str()));
+            }
+            for contract in &finding.contracts {
+                if let Some(b) = &contract.contract.basis {
+                    basis.insert(format!("contract_basis:{b}"));
+                }
+            }
+            for disposition in &finding.dispositions {
+                basis.insert(format!("disposition_basis:{}", disposition.basis));
+            }
+            for record in &finding.ffi_argument_identity {
+                basis.insert(format!("ffi_identity_basis:{}", record.basis));
+                basis.insert(format!("formal_mapping_basis:{}", record.formal_mapping_basis));
+                if !record.svf_may_points_to.is_empty() {
+                    if let Some(b) = &record.svf_points_to_basis {
+                        basis.insert(format!("pta_basis:{b}"));
+                    }
+                }
+            }
+            for record in &finding.external_effects {
+                basis.insert(format!("external_effect_basis:{}", record.basis));
+                for corroborating in &record.corroborating_bases {
+                    basis.insert(format!(
+                        "external_effect_corroborating_basis:{corroborating}"
+                    ));
+                }
+            }
+        }
+        match result {
+            Truth::True => QueryResultAssessment {
+                schema: QUERY_RESULT_ASSESSMENT_VERSION,
+                result: result.as_str(),
+                subresult: QuerySubresult::Tt,
+                direction: QueryEvidenceDirection::True,
+                strength: QueryResultStrength::AbstractEstablished,
+                basis: basis.into_iter().collect(),
+                caveats: vec!["established in the annotated abstract Kripke model; not by itself a concrete-execution proof"],
+            },
+            Truth::False => QueryResultAssessment {
+                schema: QUERY_RESULT_ASSESSMENT_VERSION,
+                result: result.as_str(),
+                subresult: QuerySubresult::Ff,
+                direction: QueryEvidenceDirection::False,
+                strength: QueryResultStrength::AbstractEstablished,
+                basis: basis.into_iter().collect(),
+                caveats: vec!["refuted within the modeled predicates and current abstraction"],
+            },
+            Truth::Unknown => {
+                let directional_findings = findings
+                    .iter()
+                    .filter(|finding| finding.kind.supports_query_true())
+                    .collect::<Vec<_>>();
+                let strength = if directional_findings
+                    .iter()
+                    .any(|f| f.strength == AllocationObligationFindingStrength::StrongAbstractEvidence)
+                {
+                    QueryResultStrength::StrongAbstractEvidence
+                } else if !directional_findings.is_empty() {
+                    QueryResultStrength::ObservationalCandidate
+                } else {
+                    QueryResultStrength::Unresolved
+                };
+                if directional_findings.is_empty() {
+                    QueryResultAssessment {
+                        schema: QUERY_RESULT_ASSESSMENT_VERSION,
+                        result: result.as_str(),
+                        subresult: QuerySubresult::UnkUnoriented,
+                        direction: QueryEvidenceDirection::None,
+                        strength,
+                        basis: basis.into_iter().collect(),
+                        caveats: vec![
+                            "no directional supporting or refuting finding is certified beyond the uncertainty frontier",
+                            "non-directional unresolved-contract candidates do not orient UNKNOWN toward true or false",
+                        ],
+                    }
+                } else {
+                    QueryResultAssessment {
+                        schema: QUERY_RESULT_ASSESSMENT_VERSION,
+                        result: result.as_str(),
+                        subresult: QuerySubresult::UnkTrue,
+                        direction: QueryEvidenceDirection::True,
+                        strength,
+                        basis: basis.into_iter().collect(),
+                        caveats: vec![
+                            "positive supporting evidence does not promote UNKNOWN to true",
+                            "MAY evidence is never promoted to MUST",
+                            "unk_false and unk_mixed are reserved until explicit dual refuting evidence is implemented",
+                        ],
+                    }
+                }
+            }
+        }
     }
 
     fn value_at(&self, formula: &StateFormula, env: &Env, node: &str) -> Result<Truth, String> {
@@ -1622,6 +1878,8 @@ impl<'a> ModelChecker<'a> {
                     deallocator_family: None,
                     contracts,
                     dispositions,
+                    ffi_argument_identity: Vec::new(),
+                    external_effects: Vec::new(),
                     non_returning_discharge_nodes,
                     summary,
                 });
@@ -1737,6 +1995,8 @@ impl<'a> ModelChecker<'a> {
                         deallocator_family: None,
                         contracts,
                         dispositions,
+                        ffi_argument_identity: Vec::new(),
+                        external_effects: Vec::new(),
                         non_returning_discharge_nodes: Vec::new(),
                         summary,
                     });
@@ -1855,6 +2115,8 @@ impl<'a> ModelChecker<'a> {
                         deallocator_family: None,
                         contracts,
                         dispositions,
+                        ffi_argument_identity: Vec::new(),
+                        external_effects: Vec::new(),
                         non_returning_discharge_nodes: Vec::new(),
                         summary,
                     });
@@ -1987,6 +2249,8 @@ impl<'a> ModelChecker<'a> {
                         deallocator_family: Some(deallocator_family),
                         contracts,
                         dispositions,
+                        ffi_argument_identity: Vec::new(),
+                        external_effects: Vec::new(),
                         non_returning_discharge_nodes: Vec::new(),
                         summary,
                     });
@@ -2455,6 +2719,9 @@ mod tests {
             schema_version: 2,
             entry: "b0".into(),
             capabilities: vec![],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ffi_argument_identity: vec![],
             variables: vec![ProgramVariable {
                 id: "rust::main::_1".into(),
                 language: ProgramLanguage::Rust,
@@ -2487,6 +2754,104 @@ mod tests {
                 post: AbstractMemoryAnnotation::default(),
             }],
         }).unwrap()
+    }
+
+
+    fn minimal_directional_finding() -> AllocationObligationFinding {
+        AllocationObligationFinding {
+            taxonomy: "allocation_obligation_finding_v1",
+            kind: AllocationObligationFindingKind::DropThenUseWithoutReallocation,
+            strength: AllocationObligationFindingStrength::ObservationalCandidate,
+            allocation: "A".into(),
+            query_result: "unk",
+            witness_path: vec!["b0".into()],
+            evidence: vec![AllocationObligationEvidence::MayDeallocationObserved],
+            origin_node: None,
+            handoff_node: None,
+            return_node: None,
+            first_drop_node: Some("b0".into()),
+            second_drop_node: None,
+            use_node: Some("b0".into()),
+            mismatch_node: None,
+            allocator_family: None,
+            deallocator_family: None,
+            contracts: vec![],
+            dispositions: vec![],
+            ffi_argument_identity: vec![],
+            external_effects: vec![],
+            non_returning_discharge_nodes: vec![],
+            summary: "test directional finding".into(),
+        }
+    }
+
+    #[test]
+    fn cstring_evidence_wire_name_matches_assessment_basis_token() {
+        for evidence in [
+            AllocationObligationEvidence::ProducerCertifiedCStringIntoRaw,
+            AllocationObligationEvidence::ProducerCertifiedCStringFromRaw,
+        ] {
+            let serialized = serde_json::to_string(&evidence).unwrap();
+            assert_eq!(serialized.trim_matches('"'), evidence.as_str());
+        }
+    }
+
+    #[test]
+    fn assessment_cites_pta_basis_only_for_nonempty_memberships() {
+        let k = one_allocation_graph();
+        let checker = ModelChecker::new(&k);
+        let mut finding = minimal_directional_finding();
+        finding.ffi_argument_identity.push(FfiArgumentIdentityRecord {
+            node: "dummyCall::x".into(),
+            callee: "f".into(),
+            callsite: "rust::main::bb0".into(),
+            arg_index: 0,
+            actual_variable: "rust::x".into(),
+            formal_variable: "c::p".into(),
+            allocations: vec!["A".into()],
+            certainty: "may_abstract".into(),
+            basis: "crema_bmulti_actual_formal_identity_v1".into(),
+            formal_mapping_basis: "svf_formal_arg_index_v1".into(),
+            svf_may_points_to: vec![],
+            svf_points_to_basis: Some("svf_andersen_wave_diff_may_v1".into()),
+        });
+
+        let empty = checker.assessment_from_findings(Truth::Unknown, &[finding.clone()]);
+        assert!(!empty
+            .basis
+            .iter()
+            .any(|b| b == "pta_basis:svf_andersen_wave_diff_may_v1"));
+
+        finding.ffi_argument_identity[0].svf_may_points_to = vec![6];
+        let nonempty = checker.assessment_from_findings(Truth::Unknown, &[finding]);
+        assert!(nonempty
+            .basis
+            .iter()
+            .any(|b| b == "pta_basis:svf_andersen_wave_diff_may_v1"));
+    }
+
+    #[test]
+    fn assessment_surfaces_external_effect_corroboration_separately() {
+        let k = one_allocation_graph();
+        let checker = ModelChecker::new(&k);
+        let mut finding = minimal_directional_finding();
+        finding.external_effects.push(ExternalDeallocationEffectRecord {
+            node: "dummyCall::x".into(),
+            callee: "wrapper".into(),
+            status: crate::kripke::ExternalDeallocationEffectStatus::ObservedMayDeallocate,
+            basis: "structural_c_free_v1".into(),
+            corroborating_bases: vec![
+                "llvm16_tli_direct_callee_allockind_deallocation_v1".into(),
+            ],
+        });
+
+        let assessment = checker.assessment_from_findings(Truth::Unknown, &[finding]);
+        assert!(assessment
+            .basis
+            .iter()
+            .any(|b| b == "external_effect_basis:structural_c_free_v1"));
+        assert!(assessment.basis.iter().any(|b| {
+            b == "external_effect_corroborating_basis:llvm16_tli_direct_callee_allockind_deallocation_v1"
+        }));
     }
 
     #[test]
@@ -2545,6 +2910,9 @@ mod tests {
             4,
         ).unwrap();
         assert_eq!(report.result, "unk");
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkUnoriented);
+        assert_eq!(report.assessment.direction, QueryEvidenceDirection::None);
+        assert_eq!(report.assessment.strength, QueryResultStrength::Unresolved);
         assert!(report.reason_frontier.contains(&UncertaintyReason::MayAllocation));
         assert_eq!(report.witnesses[0].atomic_observations[0].detail["allocation_post_value"], "Alloc");
     }
@@ -2624,6 +2992,10 @@ mod tests {
         ).unwrap();
 
         assert_eq!(report.result, "unk");
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkTrue);
+        assert_eq!(report.assessment.direction, QueryEvidenceDirection::True);
+        assert_eq!(report.assessment.strength, QueryResultStrength::StrongAbstractEvidence);
+        assert!(report.assessment.basis.iter().any(|b| b == "finding:normal_return_open_manual_obligation"));
         assert_eq!(report.supporting_findings.len(), 1);
         let finding = &report.supporting_findings[0];
         assert_eq!(finding.kind, AllocationObligationFindingKind::NormalReturnOpenManualObligation);
@@ -2796,6 +3168,9 @@ mod tests {
         ).unwrap();
         let report = ModelChecker::new(&k).explain_document(&doc, &Env::new(), 8).unwrap();
         assert_eq!(report.result, "unk");
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkTrue);
+        assert_eq!(report.assessment.direction, QueryEvidenceDirection::True);
+        assert_eq!(report.assessment.strength, QueryResultStrength::StrongAbstractEvidence);
         let finding = report.supporting_findings.iter()
             .find(|f| f.kind == AllocationObligationFindingKind::RepeatedDropWithoutReallocation)
             .expect("CString double-free supporting finding");
@@ -3061,6 +3436,9 @@ mod tests {
         ).unwrap();
         let report = ModelChecker::new(&k).explain_document(&doc, &Env::new(), 8).unwrap();
         assert_eq!(report.result, "unk");
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkTrue);
+        assert_eq!(report.assessment.direction, QueryEvidenceDirection::True);
+        assert_eq!(report.assessment.strength, QueryResultStrength::StrongAbstractEvidence);
         let finding = report.supporting_findings.iter()
             .find(|f| f.kind == AllocationObligationFindingKind::AllocatorFamilyMismatch)
             .expect("allocator mismatch supporting finding");
@@ -3108,6 +3486,11 @@ mod tests {
             "requires allocation_contracts_v1; exists_alloc a. EF (alloc_l(a) && EX EF allocator_mismatch_l(a))"
         ).unwrap();
         let report = ModelChecker::new(&k).explain_document(&doc, &Env::new(), 8).unwrap();
+        assert_eq!(report.result, "unk");
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkUnoriented);
+        assert_eq!(report.assessment.direction, QueryEvidenceDirection::None);
+        assert_eq!(report.assessment.strength, QueryResultStrength::Unresolved);
+        assert!(report.assessment.caveats.iter().any(|c| c.contains("non-directional unresolved-contract")));
         let finding = report.supporting_findings.iter()
             .find(|f| f.kind == AllocationObligationFindingKind::UnresolvedAllocatorContractCandidate)
             .expect("unresolved-contract candidate");

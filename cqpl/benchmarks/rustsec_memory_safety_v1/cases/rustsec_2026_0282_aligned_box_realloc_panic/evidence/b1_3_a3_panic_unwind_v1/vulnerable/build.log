@@ -1,0 +1,15 @@
+   Compiling aligned_box v0.3.0 (/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/analysis-workspace/case/vulnerable)
+   Compiling b1_2_harness_vulnerable v0.0.0 (/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/evidence/b1_3_a3_panic_unwind_v1/vulnerable/analysis-workspace/case/harness/vulnerable)
+warning: field `inner` is never read
+  --> ../../reproducer/main.rs:23:5
+   |
+21 | struct PanicOnDrop {
+   |        ----------- field in this struct
+22 |     id: u32,
+23 |     inner: Box<u32>,
+   |     ^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `b1_2_harness_vulnerable` (bin "reproducer") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s

@@ -1,4 +1,4 @@
-# Contratto CREMA → CQPL v6S-r1 — `annotated_icfg_v2.json`
+# Contratto CREMA → CQPL corrente — `annotated_icfg_v2.json`
 
 L'annotated ICFG è il boundary versionato fra l'analizzatore CREMA e il checker CQPL.
 
@@ -15,19 +15,47 @@ Principio fondamentale:
   "capabilities": ["..."],
   "variables": [],
   "allocations": [],
+  "external_deallocation_effects": [],
+  "llvm_memory_effects": null,
+  "svf_solved_points_to": null,
+  "ffi_argument_identity": [],
   "nodes": []
 }
 ```
 
-La freeze final112 richiede su tutti i 112 grafi:
+La freeze FINAL112 usa capability di base e capability additive. Le principali per memory-safety/explainability sono:
 
 ```text
 allocation_contracts_v1
 allocation_contracts_v2
+allocation_contracts_v3
 allocation_state_v1
+allocation_disposition_v1
+allocation_disposition_v2
+external_deallocation_effects_v1
+
+# presenti solo quando esiste il relativo payload:
+llvm_memory_effects_v1
+svf_solved_points_to_v1
+ffi_argument_identity_v1
+
 mir_semantic_labels_v1
 mir_semantics_v2
 ```
+
+Le capability e i payload evidence devono essere atomici quando previsto dallo schema. CQPL rifiuta capability nude, payload nudi e provenance fuori vocabolario.
+
+Per la relazione fra questi layer vedere [ANALYSIS_PIPELINE.md](ANALYSIS_PIPELINE.md).
+
+
+### Evidence fields R2
+
+- `external_deallocation_effects[]`: status/basis per boundary esterni; può avere `corroborating_bases[]`;
+- `llvm_memory_effects`: snapshot LLVM16 explicit + TLI clone, se la capability è presente;
+- `svf_solved_points_to`: AndersenWaveDiff MAY sidecar, se presente;
+- `ffi_argument_identity[]`: certificati posizionali Rust actual -> C formal -> MAY `AbstractAllocId`.
+
+La presenza di questi campi **non cambia automaticamente le query**. Sono input/provenance validati dal checker e usati dall'explanation secondo capability separate.
 
 ## 2. Grafo di controllo
 

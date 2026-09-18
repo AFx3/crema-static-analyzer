@@ -1,0 +1,24 @@
+================================================================================
+QUERY: panic_repeat_drop_alloc
+================================================================================
+truth: unk
+
+why unknown:
+  - PANIC_LIFECYCLE_UNRESOLVED
+  - QUERY_THREE_VALUED_PROPAGATION
+
+supporting findings:
+  <none>
+
+  interpretation:
+    No bug-specific supporting witness was certified beyond the uncertainty frontier. UNKNOWN therefore means insufficient abstract evidence for a definite verdict, not a positive finding by itself.
+
+uncertainty witnesses:
+  witness 1: truth=unk
+     rust::aligned_box::AlignedBox::<[T]>::new_slice::bb20 | repeat_drop(a) = unk | PANIC_LIFECYCLE_UNRESOLVED
+  witness 2: truth=unk
+     rust::aligned_box::AlignedBox::<[T]>::new_slice::bb20 | repeat_drop(a) = unk | PANIC_LIFECYCLE_UNRESOLVED
+  witness 3: truth=unk
+     rust::aligned_box::AlignedBox::<[T]>::new_slice::bb20 | repeat_drop(a) = unk | PANIC_LIFECYCLE_UNRESOLVED
+  witness 4: truth=unk
+     rust::aligned_box::AlignedBox::<[T]>::new_slice::bb20 | repeat_drop(a) = unk | PANIC_LIFECYCLE_UNRESOLVED

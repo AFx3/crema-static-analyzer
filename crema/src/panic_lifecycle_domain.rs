@@ -1137,6 +1137,8 @@ mod tests {
 
     fn synthetic_icfg(nodes: &[&str], edges: Vec<IcfgEdge>) -> GlobalICFGOrdered {
         GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: nodes
                 .iter()
                 .map(|id| (id.to_string(), terminal("lifecycle-test")))
@@ -1353,6 +1355,8 @@ mod tests {
         let drop = "rust::test::f::bb1";
         let cleanup = "rust::test::f::bb2";
         let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![
                 (
                     take.to_string(),
@@ -1417,6 +1421,8 @@ mod tests {
         let take = "rust::test::f::bb0";
         let exit = "rust::test::f::bb1";
         let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![
                 (
                     take.to_string(),
@@ -1636,6 +1642,8 @@ mod tests {
         ));
 
         GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: nodes,
             icfg_edges: vec![
                 edge(take, init, "Resolved external Instance summary return"),
@@ -1729,6 +1737,8 @@ mod tests {
         let drop = "rust::test::f::bb1";
         let cleanup = "rust::test::f::bb2";
         let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![
                 (
                     take.to_string(),

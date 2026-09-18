@@ -1,0 +1,293 @@
+{
+  "schema": "cqpl_explanation_v1",
+  "taxonomy": "cqpl_uncertainty_reasons_v1",
+  "result": "unk",
+  "entry": "rust::main::bb0",
+  "scope_note": "explanations are over the already-projected annotated abstract Kripke model; they do not assert a concrete execution",
+  "reason_frontier": [
+    "PANIC_LIFECYCLE_UNRESOLVED",
+    "QUERY_THREE_VALUED_PROPAGATION"
+  ],
+  "reason_counts": {
+    "PANIC_LIFECYCLE_UNRESOLVED": 4,
+    "QUERY_THREE_VALUED_PROPAGATION": 4
+  },
+  "witnesses": [
+    {
+      "truth": "unk",
+      "binding": {
+        "a": {
+          "kind": "allocation",
+          "value": "{\"site\":{\"kind\":\"rust_call\",\"node_id\":\"rust::<PanicOnDrop as std::default::Default>::default::bb1\",\"callee\":\"std::boxed::Box::<u32>::new\"},\"context\":[\"rust::aligned_box::AlignedBox::<[T]>::realloc_with_default::{closure#0}::bb0\"]}"
+        }
+      },
+      "relevant_nodes": [
+        "rust::main::bb0",
+        "dummyCall::rust::main::bb0::rust::main::bb0_internal",
+        "rust::aligned_box::AlignedBox::<[T]>::slice_from_default::bb0",
+        "dummyCall::rust::aligned_box::AlignedBox::<[T]>::slice_from_default::bb0::rust::aligned_box::AlignedBox::<[T]>::slice_from_default::bb0_internal",
+        "rust::aligned_box::AlignedBox::<[T]>::new_slice::bb0",
+        "rust::aligned_box::AlignedBox::<[T]>::new_slice::bb20"
+      ],
+      "reasons": [
+        "PANIC_LIFECYCLE_UNRESOLVED",
+        "QUERY_THREE_VALUED_PROPAGATION"
+      ],
+      "derivation": [
+        {
+          "node": "rust::main::bb0",
+          "formula_kind": "exists_allocation",
+          "truth": "unk"
+        },
+        {
+          "node": "rust::main::bb0",
+          "formula_kind": "eventually",
+          "truth": "unk",
+          "detail": {
+            "path_nodes": "6"
+          }
+        },
+        {
+          "node": "rust::aligned_box::AlignedBox::<[T]>::new_slice::bb20",
+          "formula_kind": "may_atom",
+          "truth": "unk"
+        }
+      ],
+      "atomic_observations": [
+        {
+          "node": "rust::aligned_box::AlignedBox::<[T]>::new_slice::bb20",
+          "atom": "repeat_drop(a)",
+          "truth": "unk",
+          "binding": {
+            "a": {
+              "kind": "allocation",
+              "value": "{\"site\":{\"kind\":\"rust_call\",\"node_id\":\"rust::<PanicOnDrop as std::default::Default>::default::bb1\",\"callee\":\"std::boxed::Box::<u32>::new\"},\"context\":[\"rust::aligned_box::AlignedBox::<[T]>::realloc_with_default::{closure#0}::bb0\"]}"
+            }
+          },
+          "reasons": [
+            "PANIC_LIFECYCLE_UNRESOLVED"
+          ],
+          "detail": {
+            "allocation": "{\"site\":{\"kind\":\"rust_call\",\"node_id\":\"rust::<PanicOnDrop as std::default::Default>::default::bb1\",\"callee\":\"std::boxed::Box::<u32>::new\"},\"context\":[\"rust::aligned_box::AlignedBox::<[T]>::realloc_with_default::{closure#0}::bb0\"]}",
+            "lifecycle_coverage": "unresolved",
+            "lifecycle_record": "absent",
+            "may_repeat_drop": "unknown",
+            "predicate": "repeat_drop"
+          }
+        }
+      ],
+      "complete_dependency_trace": true
+    },
+    {
+      "truth": "unk",
+      "binding": {
+        "a": {
+          "kind": "allocation",
+          "value": "{\"site\":{\"kind\":\"rust_call\",\"node_id\":\"rust::<PanicOnDrop as std::default::Default>::default::bb1\",\"callee\":\"std::boxed::Box::<u32>::new\"},\"context\":[\"rust::aligned_box::AlignedBox::<[T]>::slice_from_default::{closure#0}::bb0\"]}"
+        }
+      },
+      "relevant_nodes": [
+        "rust::main::bb0",
+        "dummyCall::rust::main::bb0::rust::main::bb0_internal",
+        "rust::aligned_box::AlignedBox::<[T]>::slice_from_default::bb0",
+        "dummyCall::rust::aligned_box::AlignedBox::<[T]>::slice_from_default::bb0::rust::aligned_box::AlignedBox::<[T]>::slice_from_default::bb0_internal",
+        "rust::aligned_box::AlignedBox::<[T]>::new_slice::bb0",
+        "rust::aligned_box::AlignedBox::<[T]>::new_slice::bb20"
+      ],
+      "reasons": [
+        "PANIC_LIFECYCLE_UNRESOLVED",
+        "QUERY_THREE_VALUED_PROPAGATION"
+      ],
+      "derivation": [
+        {
+          "node": "rust::main::bb0",
+          "formula_kind": "exists_allocation",
+          "truth": "unk"
+        },
+        {
+          "node": "rust::main::bb0",
+          "formula_kind": "eventually",
+          "truth": "unk",
+          "detail": {
+            "path_nodes": "6"
+          }
+        },
+        {
+          "node": "rust::aligned_box::AlignedBox::<[T]>::new_slice::bb20",
+          "formula_kind": "may_atom",
+          "truth": "unk"
+        }
+      ],
+      "atomic_observations": [
+        {
+          "node": "rust::aligned_box::AlignedBox::<[T]>::new_slice::bb20",
+          "atom": "repeat_drop(a)",
+          "truth": "unk",
+          "binding": {
+            "a": {
+              "kind": "allocation",
+              "value": "{\"site\":{\"kind\":\"rust_call\",\"node_id\":\"rust::<PanicOnDrop as std::default::Default>::default::bb1\",\"callee\":\"std::boxed::Box::<u32>::new\"},\"context\":[\"rust::aligned_box::AlignedBox::<[T]>::slice_from_default::{closure#0}::bb0\"]}"
+            }
+          },
+          "reasons": [
+            "PANIC_LIFECYCLE_UNRESOLVED"
+          ],
+          "detail": {
+            "allocation": "{\"site\":{\"kind\":\"rust_call\",\"node_id\":\"rust::<PanicOnDrop as std::default::Default>::default::bb1\",\"callee\":\"std::boxed::Box::<u32>::new\"},\"context\":[\"rust::aligned_box::AlignedBox::<[T]>::slice_from_default::{closure#0}::bb0\"]}",
+            "lifecycle_coverage": "unresolved",
+            "lifecycle_record": "absent",
+            "may_repeat_drop": "unknown",
+            "predicate": "repeat_drop"
+          }
+        }
+      ],
+      "complete_dependency_trace": true
+    },
+    {
+      "truth": "unk",
+      "binding": {
+        "a": {
+          "kind": "allocation",
+          "value": "{\"site\":{\"kind\":\"rust_call\",\"node_id\":\"rust::aligned_box::AlignedBox::<T>::allocate::bb13\",\"callee\":\"std::alloc::alloc\"},\"context\":[\"rust::aligned_box::AlignedBox::<[T]>::new_slice::bb4\"]}"
+        }
+      },
+      "relevant_nodes": [
+        "rust::main::bb0",
+        "dummyCall::rust::main::bb0::rust::main::bb0_internal",
+        "rust::aligned_box::AlignedBox::<[T]>::slice_from_default::bb0",
+        "dummyCall::rust::aligned_box::AlignedBox::<[T]>::slice_from_default::bb0::rust::aligned_box::AlignedBox::<[T]>::slice_from_default::bb0_internal",
+        "rust::aligned_box::AlignedBox::<[T]>::new_slice::bb0",
+        "rust::aligned_box::AlignedBox::<[T]>::new_slice::bb20"
+      ],
+      "reasons": [
+        "PANIC_LIFECYCLE_UNRESOLVED",
+        "QUERY_THREE_VALUED_PROPAGATION"
+      ],
+      "derivation": [
+        {
+          "node": "rust::main::bb0",
+          "formula_kind": "exists_allocation",
+          "truth": "unk"
+        },
+        {
+          "node": "rust::main::bb0",
+          "formula_kind": "eventually",
+          "truth": "unk",
+          "detail": {
+            "path_nodes": "6"
+          }
+        },
+        {
+          "node": "rust::aligned_box::AlignedBox::<[T]>::new_slice::bb20",
+          "formula_kind": "may_atom",
+          "truth": "unk"
+        }
+      ],
+      "atomic_observations": [
+        {
+          "node": "rust::aligned_box::AlignedBox::<[T]>::new_slice::bb20",
+          "atom": "repeat_drop(a)",
+          "truth": "unk",
+          "binding": {
+            "a": {
+              "kind": "allocation",
+              "value": "{\"site\":{\"kind\":\"rust_call\",\"node_id\":\"rust::aligned_box::AlignedBox::<T>::allocate::bb13\",\"callee\":\"std::alloc::alloc\"},\"context\":[\"rust::aligned_box::AlignedBox::<[T]>::new_slice::bb4\"]}"
+            }
+          },
+          "reasons": [
+            "PANIC_LIFECYCLE_UNRESOLVED"
+          ],
+          "detail": {
+            "allocation": "{\"site\":{\"kind\":\"rust_call\",\"node_id\":\"rust::aligned_box::AlignedBox::<T>::allocate::bb13\",\"callee\":\"std::alloc::alloc\"},\"context\":[\"rust::aligned_box::AlignedBox::<[T]>::new_slice::bb4\"]}",
+            "lifecycle_coverage": "unresolved",
+            "lifecycle_record": "absent",
+            "may_repeat_drop": "unknown",
+            "predicate": "repeat_drop"
+          }
+        }
+      ],
+      "complete_dependency_trace": true
+    },
+    {
+      "truth": "unk",
+      "binding": {
+        "a": {
+          "kind": "allocation",
+          "value": "{\"site\":{\"kind\":\"rust_call\",\"node_id\":\"rust::aligned_box::AlignedBox::<[T]>::realloc::bb23\",\"callee\":\"std::alloc::realloc\"},\"context\":[\"rust::aligned_box::AlignedBox::<[T]>::realloc_with_default::bb0\"]}"
+        }
+      },
+      "relevant_nodes": [
+        "rust::main::bb0",
+        "dummyCall::rust::main::bb0::rust::main::bb0_internal",
+        "rust::aligned_box::AlignedBox::<[T]>::slice_from_default::bb0",
+        "dummyCall::rust::aligned_box::AlignedBox::<[T]>::slice_from_default::bb0::rust::aligned_box::AlignedBox::<[T]>::slice_from_default::bb0_internal",
+        "rust::aligned_box::AlignedBox::<[T]>::new_slice::bb0",
+        "rust::aligned_box::AlignedBox::<[T]>::new_slice::bb20"
+      ],
+      "reasons": [
+        "PANIC_LIFECYCLE_UNRESOLVED",
+        "QUERY_THREE_VALUED_PROPAGATION"
+      ],
+      "derivation": [
+        {
+          "node": "rust::main::bb0",
+          "formula_kind": "exists_allocation",
+          "truth": "unk"
+        },
+        {
+          "node": "rust::main::bb0",
+          "formula_kind": "eventually",
+          "truth": "unk",
+          "detail": {
+            "path_nodes": "6"
+          }
+        },
+        {
+          "node": "rust::aligned_box::AlignedBox::<[T]>::new_slice::bb20",
+          "formula_kind": "may_atom",
+          "truth": "unk"
+        }
+      ],
+      "atomic_observations": [
+        {
+          "node": "rust::aligned_box::AlignedBox::<[T]>::new_slice::bb20",
+          "atom": "repeat_drop(a)",
+          "truth": "unk",
+          "binding": {
+            "a": {
+              "kind": "allocation",
+              "value": "{\"site\":{\"kind\":\"rust_call\",\"node_id\":\"rust::aligned_box::AlignedBox::<[T]>::realloc::bb23\",\"callee\":\"std::alloc::realloc\"},\"context\":[\"rust::aligned_box::AlignedBox::<[T]>::realloc_with_default::bb0\"]}"
+            }
+          },
+          "reasons": [
+            "PANIC_LIFECYCLE_UNRESOLVED"
+          ],
+          "detail": {
+            "allocation": "{\"site\":{\"kind\":\"rust_call\",\"node_id\":\"rust::aligned_box::AlignedBox::<[T]>::realloc::bb23\",\"callee\":\"std::alloc::realloc\"},\"context\":[\"rust::aligned_box::AlignedBox::<[T]>::realloc_with_default::bb0\"]}",
+            "lifecycle_coverage": "unresolved",
+            "lifecycle_record": "absent",
+            "may_repeat_drop": "unknown",
+            "predicate": "repeat_drop"
+          }
+        }
+      ],
+      "complete_dependency_trace": true
+    }
+  ],
+  "diagnostics": {
+    "witnesses_requested": 8,
+    "witnesses_emitted": 4,
+    "unknown_has_reason_frontier": true,
+    "unknown_has_specific_origin": true,
+    "true_has_witness": true,
+    "true_has_atomic_witness": true,
+    "producer_provenance_capability_present": false,
+    "reserved_reason_codes_not_inferred": [
+      "EXTERNAL_EFFECT",
+      "UNRESOLVED_ESCAPE",
+      "GLOBAL_TOP_EFFECT",
+      "CONTROL_FLOW_UNRESOLVED",
+      "HIGHER_ORDER_UNRESOLVED"
+    ]
+  }
+}

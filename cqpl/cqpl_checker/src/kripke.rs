@@ -106,6 +106,149 @@ pub struct ExternalDeallocationEffectRecord {
     pub callee: String,
     pub status: ExternalDeallocationEffectStatus,
     pub basis: String,
+    #[serde(default)]
+    pub corroborating_bases: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FfiArgumentIdentityRecord {
+    pub node: String,
+    pub callee: String,
+    pub callsite: String,
+    pub arg_index: usize,
+    pub actual_variable: String,
+    pub formal_variable: String,
+    #[serde(default)]
+    pub allocations: Vec<String>,
+    pub certainty: String,
+    pub basis: String,
+    pub formal_mapping_basis: String,
+    #[serde(default)]
+    pub svf_may_points_to: Vec<usize>,
+    #[serde(default)]
+    pub svf_points_to_basis: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct LlvmMemoryAccessEvidenceV1 {
+    pub argmem: String,
+    pub inaccessiblemem: String,
+    pub other: String,
+    #[serde(default)]
+    pub encoded: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct LlvmFormalEffectsEvidenceV1 {
+    pub index: usize,
+    #[serde(default)] pub pointer_typed: bool,
+    #[serde(default)] pub nofree: bool,
+    #[serde(default)] pub nocapture: bool,
+    #[serde(default)] pub returned: bool,
+    #[serde(default)] pub readnone: bool,
+    #[serde(default)] pub readonly: bool,
+    #[serde(default)] pub writeonly: bool,
+    #[serde(default)] pub allocptr: bool,
+    #[serde(default)] pub allocalign: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LlvmAllocSizeEvidenceV1 {
+    pub element_size_arg: usize,
+    #[serde(default)]
+    pub num_elements_arg: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct LlvmFunctionEffectsEvidenceV1 {
+    #[serde(default)] pub nofree: bool,
+    #[serde(default)] pub nosync: bool,
+    #[serde(default)] pub willreturn: bool,
+    #[serde(default)] pub nobuiltin: bool,
+    #[serde(default)] pub optnone: bool,
+    #[serde(default)] pub memory_explicit: bool,
+    pub memory: LlvmMemoryAccessEvidenceV1,
+    #[serde(default)] pub alloc_kind: Vec<String>,
+    #[serde(default)] pub alloc_family: Option<String>,
+    #[serde(default)] pub return_noalias: bool,
+    #[serde(default)] pub alloc_size: Option<LlvmAllocSizeEvidenceV1>,
+    #[serde(default)] pub formals: Vec<LlvmFormalEffectsEvidenceV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct LlvmFunctionEffectsRecordEvidenceV1 {
+    pub name: String,
+    pub is_declaration: bool,
+    pub origin_explicit: String,
+    pub explicit: LlvmFunctionEffectsEvidenceV1,
+    #[serde(default)] pub tli_recognized: bool,
+    #[serde(default)] pub tli_libfunc: Option<String>,
+    pub origin_inferred: String,
+    pub tli_inferred: LlvmFunctionEffectsEvidenceV1,
+    #[serde(default)] pub tli_changed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct LlvmCallsiteEffectsEvidenceV1 {
+    pub caller: String,
+    pub ordinal: usize,
+    pub direct: bool,
+    #[serde(default)] pub callee: Option<String>,
+    #[serde(default)] pub callsite_memory_explicit: bool,
+    pub effective_memory: LlvmMemoryAccessEvidenceV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct LlvmEffectsModuleEvidenceV1 {
+    pub input: String,
+    pub target_triple: String,
+    pub input_ir_verified: bool,
+    pub tli_clone_verified: bool,
+    #[serde(default)] pub functions: Vec<LlvmFunctionEffectsRecordEvidenceV1>,
+    #[serde(default)] pub callsites_explicit: Vec<LlvmCallsiteEffectsEvidenceV1>,
+    #[serde(default)] pub callsites_tli_inferred: Vec<LlvmCallsiteEffectsEvidenceV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct LlvmMemoryEffectsEvidenceV1 {
+    pub schema: String,
+    pub llvm_version: String,
+    pub explicit_basis: String,
+    pub tli_basis: String,
+    #[serde(default)] pub modules: Vec<LlvmEffectsModuleEvidenceV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct SvfFormalPointsToEvidenceV1 {
+    pub formal_index: usize,
+    pub svf_var_id: usize,
+    #[serde(default)] pub points_to: Vec<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct SvfFunctionPointsToEvidenceV1 {
+    pub function: String,
+    #[serde(default)] pub formals: Vec<SvfFormalPointsToEvidenceV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct SvfSolvedPointsToEvidenceV1 {
+    pub schema: String,
+    pub analysis: String,
+    pub semantics: String,
+    pub formal_mapping_schema: String,
+    #[serde(default)] pub functions: Vec<SvfFunctionPointsToEvidenceV1>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -405,6 +548,12 @@ pub struct AnnotatedIcfg {
     /// never interpreted as a negative certificate.
     #[serde(default)]
     pub external_deallocation_effects: Vec<ExternalDeallocationEffectRecord>,
+    #[serde(default)]
+    pub llvm_memory_effects: Option<LlvmMemoryEffectsEvidenceV1>,
+    #[serde(default)]
+    pub svf_solved_points_to: Option<SvfSolvedPointsToEvidenceV1>,
+    #[serde(default)]
+    pub ffi_argument_identity: Vec<FfiArgumentIdentityRecord>,
     pub nodes: Vec<AnnotatedNode>,
 }
 
@@ -417,6 +566,9 @@ pub struct Kripke {
     pub allocations: BTreeMap<String, AbstractAllocation>,
     pub nodes: BTreeMap<String, AnnotatedNode>,
     pub external_deallocation_effects: BTreeMap<String, ExternalDeallocationEffectRecord>,
+    pub ffi_argument_identity: BTreeMap<(String, usize), FfiArgumentIdentityRecord>,
+    pub llvm_memory_effects: Option<LlvmMemoryEffectsEvidenceV1>,
+    pub svf_solved_points_to: Option<SvfSolvedPointsToEvidenceV1>,
     pub panic_lifecycle: PanicLifecycleOverlay,
 }
 
@@ -493,6 +645,143 @@ fn validate_allocation_disposition_record(
     Ok(())
 }
 
+fn efx1_valid_access(access: &str) -> bool {
+    matches!(access, "none" | "read" | "write" | "readwrite")
+}
+
+fn validate_embedded_memory(memory: &LlvmMemoryAccessEvidenceV1, where_: &str) -> Result<(), String> {
+    if memory.encoded > 63 {
+        return Err(format!("{where_}: invalid LLVM16 MemoryEffects encoding {}", memory.encoded));
+    }
+    for (location, access) in [
+        ("argmem", memory.argmem.as_str()),
+        ("inaccessiblemem", memory.inaccessiblemem.as_str()),
+        ("other", memory.other.as_str()),
+    ] {
+        if !efx1_valid_access(access) {
+            return Err(format!("{where_}: invalid {location} memory access '{access}'"));
+        }
+    }
+    Ok(())
+}
+
+fn validate_embedded_snapshot(snapshot: &LlvmFunctionEffectsEvidenceV1, where_: &str) -> Result<(), String> {
+    validate_embedded_memory(&snapshot.memory, &format!("{where_}.memory"))?;
+    let valid_alloc_kinds = ["alloc", "realloc", "free", "uninitialized", "zeroed", "aligned"];
+    let mut kinds = BTreeSet::new();
+    for kind in &snapshot.alloc_kind {
+        if !valid_alloc_kinds.contains(&kind.as_str()) || !kinds.insert(kind.as_str()) {
+            return Err(format!("{where_}: invalid/duplicate alloc kind '{kind}'"));
+        }
+    }
+    let mut returned = 0usize;
+    for (expected, formal) in snapshot.formals.iter().enumerate() {
+        if formal.index != expected {
+            return Err(format!("{where_}: formal index {} != declaration position {expected}", formal.index));
+        }
+        if formal.returned { returned += 1; }
+        if (formal.nofree || formal.nocapture || formal.readnone || formal.readonly || formal.writeonly || formal.allocptr)
+            && !formal.pointer_typed
+        {
+            return Err(format!("{where_}: pointer effect attached to non-pointer formal {expected}"));
+        }
+    }
+    if returned > 1 {
+        return Err(format!("{where_}: returned appears on more than one formal"));
+    }
+    if let Some(alloc_size) = snapshot.alloc_size.as_ref() {
+        if alloc_size.element_size_arg >= snapshot.formals.len() {
+            return Err(format!("{where_}: alloc_size element_size_arg out of range"));
+        }
+        if alloc_size.num_elements_arg.is_some_and(|index| index >= snapshot.formals.len()) {
+            return Err(format!("{where_}: alloc_size num_elements_arg out of range"));
+        }
+    }
+    Ok(())
+}
+
+fn validate_embedded_llvm_effects(evidence: &LlvmMemoryEffectsEvidenceV1) -> Result<(), String> {
+    if evidence.schema != "llvm_memory_effects_v1"
+        || evidence.llvm_version != "16.0.4"
+        || evidence.explicit_basis != "llvm16_explicit_input_ir_v1"
+        || evidence.tli_basis != "llvm16_tli_libfunc_attrs_v1"
+    {
+        return Err("invalid embedded llvm_memory_effects_v1 header/provenance".into());
+    }
+    if evidence.modules.is_empty() {
+        return Err("embedded llvm_memory_effects_v1 contains no modules".into());
+    }
+    for (mi, module) in evidence.modules.iter().enumerate() {
+        if module.input.is_empty() || !module.input_ir_verified || !module.tli_clone_verified {
+            return Err(format!("llvm_memory_effects modules[{mi}] missing input or LLVM verifier certificate"));
+        }
+        let mut names = BTreeSet::new();
+        for (fi, function) in module.functions.iter().enumerate() {
+            let where_ = format!("llvm_memory_effects modules[{mi}].functions[{fi}]({})", function.name);
+            if function.name.is_empty() || !names.insert(function.name.as_str()) {
+                return Err(format!("{where_}: missing/duplicate function"));
+            }
+            if function.origin_explicit != "explicit_input_ir" || function.origin_inferred != "llvm_tli_inferred" {
+                return Err(format!("{where_}: invalid origin"));
+            }
+            if function.tli_recognized != function.tli_libfunc.as_ref().is_some_and(|name| !name.is_empty()) {
+                return Err(format!("{where_}: tli_recognized/tli_libfunc mismatch"));
+            }
+            validate_embedded_snapshot(&function.explicit, &format!("{where_}.explicit"))?;
+            validate_embedded_snapshot(&function.tli_inferred, &format!("{where_}.tli_inferred"))?;
+            let delta = function.explicit != function.tli_inferred;
+            if delta != function.tli_changed {
+                return Err(format!("{where_}: tli_changed disagrees with structural delta"));
+            }
+            if function.tli_changed
+                && (!function.tli_recognized || !function.is_declaration || function.explicit.nobuiltin || function.explicit.optnone)
+            {
+                return Err(format!("{where_}: inadmissible TLI mutation"));
+            }
+        }
+        if module.callsites_explicit.len() != module.callsites_tli_inferred.len() {
+            return Err(format!("llvm_memory_effects modules[{mi}]: TLI clone changed callsite cardinality"));
+        }
+        for (ci, (before, after)) in module.callsites_explicit.iter().zip(&module.callsites_tli_inferred).enumerate() {
+            if before.caller != after.caller || before.ordinal != after.ordinal || before.direct != after.direct || before.callee != after.callee {
+                return Err(format!("llvm_memory_effects modules[{mi}].callsites[{ci}]: identity changed under TLI clone"));
+            }
+            validate_embedded_memory(&before.effective_memory, &format!("llvm_memory_effects modules[{mi}].callsites[{ci}].explicit"))?;
+            validate_embedded_memory(&after.effective_memory, &format!("llvm_memory_effects modules[{mi}].callsites[{ci}].inferred"))?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_embedded_svf_pts(evidence: &SvfSolvedPointsToEvidenceV1) -> Result<(), String> {
+    if evidence.schema != "svf_solved_points_to_v1"
+        || evidence.analysis != "AndersenWaveDiff"
+        || evidence.semantics != "may"
+        || evidence.formal_mapping_schema != "svf_formal_arg_index_v1"
+    {
+        return Err("invalid embedded svf_solved_points_to_v1 header".into());
+    }
+    let mut functions = BTreeSet::new();
+    for function in &evidence.functions {
+        if function.function.is_empty() || !functions.insert(function.function.as_str()) {
+            return Err("embedded svf_solved_points_to_v1 has missing/duplicate function".into());
+        }
+        let mut vars = BTreeSet::new();
+        for (expected, formal) in function.formals.iter().enumerate() {
+            if formal.formal_index != expected {
+                return Err(format!("{}: non-contiguous formal index", function.function));
+            }
+            if !vars.insert(formal.svf_var_id) {
+                return Err(format!("{}: duplicate formal SVF VarID", function.function));
+            }
+            if !formal.points_to.windows(2).all(|w| w[0] < w[1]) {
+                return Err(format!("{} formal {expected}: points-to set is not sorted unique", function.function));
+            }
+        }
+    }
+    Ok(())
+}
+
 impl Kripke {
     pub fn from_annotated_icfg(input: AnnotatedIcfg) -> Result<Self, String> {
         Self::from_annotated_icfg_with_panic_lifecycle(input, PanicLifecycleOverlay::new())
@@ -509,6 +798,8 @@ impl Kripke {
             ));
         }
         let schema_version = input.schema_version;
+        let llvm_memory_effects = input.llvm_memory_effects.clone();
+        let svf_solved_points_to = input.svf_solved_points_to.clone();
         let capabilities: BTreeSet<String> = input.capabilities.iter().cloned().collect();
         let has_allocation_contracts = capabilities.contains("allocation_contracts_v1");
         let has_allocation_contracts_v2 = capabilities.contains("allocation_contracts_v2");
@@ -517,6 +808,24 @@ impl Kripke {
         let has_allocation_disposition = capabilities.contains("allocation_disposition_v1");
         let has_allocation_disposition_v2 = capabilities.contains("allocation_disposition_v2");
         let has_external_deallocation_effects = capabilities.contains("external_deallocation_effects_v1");
+        let has_llvm_memory_effects = capabilities.contains("llvm_memory_effects_v1");
+        let has_svf_solved_points_to = capabilities.contains("svf_solved_points_to_v1");
+        let has_ffi_argument_identity = capabilities.contains("ffi_argument_identity_v1");
+        if has_ffi_argument_identity != !input.ffi_argument_identity.is_empty() {
+            return Err("ffi_argument_identity_v1 capability and evidence records must appear together".into());
+        }
+        if has_llvm_memory_effects != input.llvm_memory_effects.is_some() {
+            return Err("llvm_memory_effects_v1 capability and embedded evidence must appear together".into());
+        }
+        if has_svf_solved_points_to != input.svf_solved_points_to.is_some() {
+            return Err("svf_solved_points_to_v1 capability and embedded evidence must appear together".into());
+        }
+        if let Some(evidence) = input.llvm_memory_effects.as_ref() {
+            validate_embedded_llvm_effects(evidence)?;
+        }
+        if let Some(evidence) = input.svf_solved_points_to.as_ref() {
+            validate_embedded_svf_pts(evidence)?;
+        }
         if has_allocation_contracts && schema_version != 2 {
             return Err("allocation_contracts_v1 requires annotated ICFG schema v2".into());
         }
@@ -549,6 +858,15 @@ impl Kripke {
         }
         if has_external_deallocation_effects && schema_version != 2 {
             return Err("external_deallocation_effects_v1 requires annotated ICFG schema v2".into());
+        }
+        if has_llvm_memory_effects && schema_version != 2 {
+            return Err("llvm_memory_effects_v1 requires annotated ICFG schema v2".into());
+        }
+        if has_svf_solved_points_to && schema_version != 2 {
+            return Err("svf_solved_points_to_v1 requires annotated ICFG schema v2".into());
+        }
+        if has_ffi_argument_identity && schema_version != 2 {
+            return Err("ffi_argument_identity_v1 requires annotated ICFG schema v2".into());
         }
         let has_mir_semantic_labels = capabilities.contains("mir_semantic_labels_v1");
         if has_mir_semantic_labels && schema_version != 2 {
@@ -736,9 +1054,70 @@ impl Kripke {
             if record.callee.is_empty() {
                 return Err("external deallocation-effect record has empty callee".into());
             }
-            validate_external_deallocation_effect(&record)?;
+            validate_external_deallocation_effect(&record, has_llvm_memory_effects)?;
             if external_deallocation_effects.insert(record.node.clone(), record).is_some() {
                 return Err("duplicate external deallocation-effect record for node".into());
+            }
+        }
+
+        let mut ffi_argument_identity = BTreeMap::new();
+        for record in input.ffi_argument_identity {
+            if !nodes.contains_key(&record.node) {
+                return Err(format!("ffi argument-identity record references unknown node '{}'", record.node));
+            }
+            if !record.node.starts_with("dummyCall::") {
+                return Err(format!("ffi argument-identity record must reference a dummyCall node, got '{}'", record.node));
+            }
+            if record.callee.is_empty() || record.callsite.is_empty() {
+                return Err("ffi argument-identity record requires non-empty callee/callsite".into());
+            }
+            if !variables.contains_key(&record.actual_variable) {
+                return Err(format!("ffi argument-identity actual variable is undeclared: '{}'", record.actual_variable));
+            }
+            if !variables.contains_key(&record.formal_variable) {
+                return Err(format!("ffi argument-identity formal variable is undeclared: '{}'", record.formal_variable));
+            }
+            if record.certainty != "may_abstract"
+                || record.basis != "crema_bmulti_actual_formal_identity_v1"
+                || record.formal_mapping_basis != "svf_formal_arg_index_v1"
+            {
+                return Err(format!(
+                    "ffi argument-identity invalid proof tuple at '{}' arg {}",
+                    record.node, record.arg_index
+                ));
+            }
+            if record.allocations.is_empty() {
+                return Err(format!(
+                    "ffi argument-identity record must carry at least one MAY allocation at '{}' arg {}",
+                    record.node, record.arg_index
+                ));
+            }
+            let mut seen_allocations = BTreeSet::new();
+            for allocation in &record.allocations {
+                if !allocations.contains_key(allocation) {
+                    return Err(format!("ffi argument-identity record references undeclared allocation '{}'", allocation));
+                }
+                if !seen_allocations.insert(allocation.clone()) {
+                    return Err(format!("ffi argument-identity record has duplicate allocation '{}'", allocation));
+                }
+            }
+            let mut pts = record.svf_may_points_to.clone();
+            pts.sort_unstable();
+            pts.dedup();
+            if pts != record.svf_may_points_to {
+                return Err(format!("ffi argument-identity SVF MAY set must be sorted/unique at '{}' arg {}", record.node, record.arg_index));
+            }
+            if !record.svf_may_points_to.is_empty()
+                && record.svf_points_to_basis.as_deref() != Some("svf_andersen_wave_diff_may_v1")
+            {
+                return Err(format!("ffi argument-identity nonempty SVF MAY set lacks Andersen basis at '{}' arg {}", record.node, record.arg_index));
+            }
+            if record.svf_points_to_basis.as_deref().is_some_and(|b| b != "svf_andersen_wave_diff_may_v1") {
+                return Err(format!("ffi argument-identity has unsupported SVF points-to basis at '{}' arg {}", record.node, record.arg_index));
+            }
+            let key = (record.node.clone(), record.arg_index);
+            if ffi_argument_identity.insert(key, record).is_some() {
+                return Err("duplicate ffi argument-identity record for node/arg_index".into());
             }
         }
 
@@ -787,7 +1166,8 @@ impl Kripke {
 
         Ok(Self {
             schema_version, entry: input.entry, capabilities, variables, allocations, nodes,
-            external_deallocation_effects, panic_lifecycle,
+            external_deallocation_effects, ffi_argument_identity,
+            llvm_memory_effects, svf_solved_points_to, panic_lifecycle,
         })
     }
 
@@ -932,6 +1312,14 @@ impl Kripke {
             allocations,
             nodes,
             external_deallocation_effects,
+            ffi_argument_identity: self
+                .ffi_argument_identity
+                .iter()
+                .filter(|((node, _), _)| retained.contains(node))
+                .map(|(key, record)| (key.clone(), record.clone()))
+                .collect(),
+            llvm_memory_effects: self.llvm_memory_effects.clone(),
+            svf_solved_points_to: self.svf_solved_points_to.clone(),
             panic_lifecycle,
         })
     }
@@ -944,6 +1332,15 @@ impl Kripke {
         node_id: &str,
     ) -> Option<&ExternalDeallocationEffectRecord> {
         self.external_deallocation_effects.get(node_id)
+    }
+
+    pub fn ffi_argument_identity_at(
+        &self,
+        node_id: &str,
+    ) -> impl Iterator<Item = &FfiArgumentIdentityRecord> {
+        self.ffi_argument_identity
+            .range((node_id.to_string(), 0)..=(node_id.to_string(), usize::MAX))
+            .map(|(_, record)| record)
     }
 
     /// Alias component at this concrete program point in the abstract Kripke.
@@ -1086,14 +1483,43 @@ impl Kripke {
 
 fn validate_external_deallocation_effect(
     record: &ExternalDeallocationEffectRecord,
+    has_llvm_memory_effects: bool,
 ) -> Result<(), String> {
+    let llvm_basis = matches!(
+        record.basis.as_str(),
+        "llvm16_explicit_nofree_v1"
+            | "llvm16_tli_nofree_v1"
+            | "llvm16_explicit_nonmodifying_memory_v1"
+            | "llvm16_tli_nonmodifying_memory_v1"
+            | "llvm16_explicit_allockind_deallocation_v1"
+            | "llvm16_tli_allockind_deallocation_v1"
+            | "llvm16_explicit_direct_callee_allockind_deallocation_v1"
+            | "llvm16_tli_direct_callee_allockind_deallocation_v1"
+    );
+    if llvm_basis && !has_llvm_memory_effects {
+        return Err(format!(
+            "external deallocation-effect basis '{}' requires artifact capability llvm_memory_effects_v1",
+            record.basis
+        ));
+    }
+
     let ok = match record.status {
-        ExternalDeallocationEffectStatus::CertifiedAbsent => {
-            record.basis == "svf_leaf_no_call_deallocation_v1"
-        }
-        ExternalDeallocationEffectStatus::ObservedMayDeallocate => {
-            record.basis == "structural_c_free_v1"
-        }
+        ExternalDeallocationEffectStatus::CertifiedAbsent => matches!(
+            record.basis.as_str(),
+            "svf_leaf_no_call_deallocation_v1"
+                | "llvm16_explicit_nofree_v1"
+                | "llvm16_tli_nofree_v1"
+                | "llvm16_explicit_nonmodifying_memory_v1"
+                | "llvm16_tli_nonmodifying_memory_v1"
+            ),
+        ExternalDeallocationEffectStatus::ObservedMayDeallocate => matches!(
+            record.basis.as_str(),
+            "structural_c_free_v1"
+                | "llvm16_explicit_allockind_deallocation_v1"
+                | "llvm16_tli_allockind_deallocation_v1"
+                | "llvm16_explicit_direct_callee_allockind_deallocation_v1"
+                | "llvm16_tli_direct_callee_allockind_deallocation_v1"
+            ),
         ExternalDeallocationEffectStatus::Unresolved => matches!(
             record.basis.as_str(),
             "svf_call_effect_unresolved_v1" | "svf_body_unavailable_v1"
@@ -1104,6 +1530,68 @@ fn validate_external_deallocation_effect(
             "invalid external deallocation-effect tuple: status={:?} basis={}",
             record.status, record.basis
         ));
+    }
+
+    let mut previous: Option<&str> = None;
+    let mut seen = BTreeSet::new();
+    for corroborating in &record.corroborating_bases {
+        if corroborating == &record.basis {
+            return Err("external deallocation-effect corroborating basis duplicates primary basis".into());
+        }
+        if !seen.insert(corroborating.as_str()) {
+            return Err("external deallocation-effect has duplicate corroborating basis".into());
+        }
+        if previous.is_some_and(|p| p >= corroborating.as_str()) {
+            return Err("external deallocation-effect corroborating bases must be sorted unique".into());
+        }
+        previous = Some(corroborating.as_str());
+
+        let llvm_corroborating = matches!(
+            corroborating.as_str(),
+            "llvm16_explicit_nofree_v1"
+                | "llvm16_tli_nofree_v1"
+                | "llvm16_explicit_nonmodifying_memory_v1"
+                | "llvm16_tli_nonmodifying_memory_v1"
+                | "llvm16_explicit_allockind_deallocation_v1"
+                | "llvm16_tli_allockind_deallocation_v1"
+                | "llvm16_explicit_direct_callee_allockind_deallocation_v1"
+                | "llvm16_tli_direct_callee_allockind_deallocation_v1"
+        );
+        if !llvm_corroborating {
+            return Err(format!(
+                "unsupported external deallocation-effect corroborating basis '{}'",
+                corroborating
+            ));
+        }
+        if !has_llvm_memory_effects {
+            return Err(format!(
+                "external deallocation-effect corroborating basis '{}' requires artifact capability llvm_memory_effects_v1",
+                corroborating
+            ));
+        }
+        let compatible = match record.status {
+            ExternalDeallocationEffectStatus::CertifiedAbsent => matches!(
+                corroborating.as_str(),
+                "llvm16_explicit_nofree_v1"
+                    | "llvm16_tli_nofree_v1"
+                    | "llvm16_explicit_nonmodifying_memory_v1"
+                    | "llvm16_tli_nonmodifying_memory_v1"
+            ),
+            ExternalDeallocationEffectStatus::ObservedMayDeallocate => matches!(
+                corroborating.as_str(),
+                "llvm16_explicit_allockind_deallocation_v1"
+                    | "llvm16_tli_allockind_deallocation_v1"
+                    | "llvm16_explicit_direct_callee_allockind_deallocation_v1"
+                    | "llvm16_tli_direct_callee_allockind_deallocation_v1"
+            ),
+            ExternalDeallocationEffectStatus::Unresolved => false,
+        };
+        if !compatible {
+            return Err(format!(
+                "external deallocation-effect corroborating basis '{}' is incompatible with status {:?}",
+                corroborating, record.status
+            ));
+        }
     }
     Ok(())
 }
@@ -1278,10 +1766,84 @@ mod tests {
         }] }
     }
 
+    fn valid_efx1_memory(readwrite: bool) -> LlvmMemoryAccessEvidenceV1 {
+        LlvmMemoryAccessEvidenceV1 {
+            argmem: if readwrite { "readwrite" } else { "none" }.into(),
+            inaccessiblemem: if readwrite { "readwrite" } else { "none" }.into(),
+            other: "none".into(),
+            encoded: 0,
+        }
+    }
+
+    fn valid_efx1_evidence() -> LlvmMemoryEffectsEvidenceV1 {
+        let explicit = LlvmFunctionEffectsEvidenceV1 {
+            memory: valid_efx1_memory(true),
+            formals: vec![LlvmFormalEffectsEvidenceV1 {
+                index: 0,
+                pointer_typed: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let inferred = LlvmFunctionEffectsEvidenceV1 {
+            willreturn: true,
+            memory_explicit: true,
+            memory: valid_efx1_memory(true),
+            alloc_kind: vec!["free".into()],
+            alloc_family: Some("malloc".into()),
+            formals: vec![LlvmFormalEffectsEvidenceV1 {
+                index: 0,
+                pointer_typed: true,
+                nocapture: true,
+                allocptr: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        LlvmMemoryEffectsEvidenceV1 {
+            schema: "llvm_memory_effects_v1".into(),
+            llvm_version: "16.0.4".into(),
+            explicit_basis: "llvm16_explicit_input_ir_v1".into(),
+            tli_basis: "llvm16_tli_libfunc_attrs_v1".into(),
+            modules: vec![LlvmEffectsModuleEvidenceV1 {
+                input: "fixture.ll".into(),
+                target_triple: "x86_64-pc-linux-gnu".into(),
+                input_ir_verified: true,
+                tli_clone_verified: true,
+                functions: vec![LlvmFunctionEffectsRecordEvidenceV1 {
+                    name: "free".into(),
+                    is_declaration: true,
+                    origin_explicit: "explicit_input_ir".into(),
+                    explicit,
+                    tli_recognized: true,
+                    tli_libfunc: Some("free".into()),
+                    origin_inferred: "llvm_tli_inferred".into(),
+                    tli_inferred: inferred,
+                    tli_changed: true,
+                }],
+                callsites_explicit: vec![],
+                callsites_tli_inferred: vec![],
+            }],
+        }
+    }
+
+    fn valid_pts_evidence() -> SvfSolvedPointsToEvidenceV1 {
+        SvfSolvedPointsToEvidenceV1 {
+            schema: "svf_solved_points_to_v1".into(),
+            analysis: "AndersenWaveDiff".into(),
+            semantics: "may".into(),
+            formal_mapping_schema: "svf_formal_arg_index_v1".into(),
+            functions: vec![],
+        }
+    }
+
     fn base() -> AnnotatedIcfg {
         AnnotatedIcfg {
             schema_version: 1,
             capabilities: vec![],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ffi_argument_identity: vec![],
             entry: "b0".into(),
             variables: vec![
                 ProgramVariable { id: "rust::x".into(), language: ProgramLanguage::Rust, display: None, function: None },
@@ -1553,6 +2115,9 @@ mod tests {
         let input = AnnotatedIcfg {
             schema_version: 2,
             capabilities: vec![],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ffi_argument_identity: vec![],
             entry: "rust::main::bb0".into(),
             variables: vec![
                 ProgramVariable { id: "rust::main::Local(_1)".into(), language: ProgramLanguage::Rust, display: None, function: Some("main".into()) },
@@ -1604,6 +2169,9 @@ mod tests {
         let input = AnnotatedIcfg {
             schema_version: 1,
             capabilities: vec![],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ffi_argument_identity: vec![],
             entry: "rust::main::bb0".into(),
             variables: vec![ProgramVariable { id: "rust::x".into(), language: ProgramLanguage::Rust, display: None, function: Some("main".into()) }],
             allocations: vec![],
@@ -1626,6 +2194,9 @@ mod tests {
         let input = AnnotatedIcfg {
             schema_version: 1,
             capabilities: vec![],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ffi_argument_identity: vec![],
             entry: "rust::main::bb0".into(),
             variables: vec![ProgramVariable { id: "v".into(), language: ProgramLanguage::Rust, display: None, function: None }],
             allocations: vec![],
@@ -1998,12 +2569,75 @@ mod tests {
             callee: "touch_second".into(),
             status: ExternalDeallocationEffectStatus::CertifiedAbsent,
             basis: "svf_leaf_no_call_deallocation_v1".into(),
+            corroborating_bases: vec![],
         }];
         let k = Kripke::from_annotated_icfg(input).unwrap();
         assert_eq!(
             k.external_deallocation_effect_at("dummyCall::x").unwrap().status,
             ExternalDeallocationEffectStatus::CertifiedAbsent
         );
+    }
+
+    #[test]
+    fn r2_accepts_closed_ffi_argument_identity_certificate() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec!["ffi_argument_identity_v1".into()];
+        input.entry = "dummyCall::x".into();
+        input.nodes[0].id = "dummyCall::x".into();
+        input.allocations = vec![AbstractAllocation {
+            id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None,
+        }];
+        input.ffi_argument_identity = vec![FfiArgumentIdentityRecord {
+            node: "dummyCall::x".into(),
+            callee: "c_free_i32".into(),
+            callsite: "rust::main::bb3".into(),
+            arg_index: 0,
+            actual_variable: "rust::x".into(),
+            formal_variable: "c::p".into(),
+            allocations: vec!["A".into()],
+            certainty: "may_abstract".into(),
+            basis: "crema_bmulti_actual_formal_identity_v1".into(),
+            formal_mapping_basis: "svf_formal_arg_index_v1".into(),
+            svf_may_points_to: vec![],
+            svf_points_to_basis: Some("svf_andersen_wave_diff_may_v1".into()),
+        }];
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        let rows = k.ffi_argument_identity_at("dummyCall::x").collect::<Vec<_>>();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].arg_index, 0);
+        assert_eq!(rows[0].allocations, vec!["A"]);
+    }
+
+    #[test]
+    fn r2_rejects_ffi_identity_capability_payload_mismatch() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec!["ffi_argument_identity_v1".into()];
+        let err = Kripke::from_annotated_icfg(input).unwrap_err();
+        assert!(err.contains("ffi_argument_identity_v1 capability and evidence records"));
+    }
+
+    #[test]
+    fn r2_rejects_nonempty_svf_may_set_without_andersen_basis() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec!["ffi_argument_identity_v1".into()];
+        input.entry = "dummyCall::x".into();
+        input.nodes[0].id = "dummyCall::x".into();
+        input.allocations = vec![AbstractAllocation {
+            id: "A".into(), display: None, site: None, context: vec![], allocator_contract: None,
+        }];
+        input.ffi_argument_identity = vec![FfiArgumentIdentityRecord {
+            node: "dummyCall::x".into(), callee: "f".into(), callsite: "rust::main::bb0".into(),
+            arg_index: 0, actual_variable: "rust::x".into(), formal_variable: "c::p".into(),
+            allocations: vec!["A".into()], certainty: "may_abstract".into(),
+            basis: "crema_bmulti_actual_formal_identity_v1".into(),
+            formal_mapping_basis: "svf_formal_arg_index_v1".into(),
+            svf_may_points_to: vec![6], svf_points_to_basis: None,
+        }];
+        let err = Kripke::from_annotated_icfg(input).unwrap_err();
+        assert!(err.contains("nonempty SVF MAY set lacks Andersen basis"));
     }
 
     #[test]
@@ -2018,9 +2652,135 @@ mod tests {
             callee: "touch_second".into(),
             status: ExternalDeallocationEffectStatus::CertifiedAbsent,
             basis: "unresolved".into(),
+            corroborating_bases: vec![],
         }];
         let err = Kripke::from_annotated_icfg(input).unwrap_err();
         assert!(err.contains("invalid external deallocation-effect tuple"));
+    }
+
+    #[test]
+    fn efx1_external_effect_basis_requires_llvm_capability() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec!["external_deallocation_effects_v1".into()];
+        input.nodes[0].id = "dummyCall::x".into();
+        input.entry = "dummyCall::x".into();
+        input.external_deallocation_effects = vec![ExternalDeallocationEffectRecord {
+            node: "dummyCall::x".into(),
+            callee: "free".into(),
+            status: ExternalDeallocationEffectStatus::ObservedMayDeallocate,
+            basis: "llvm16_tli_allockind_deallocation_v1".into(),
+            corroborating_bases: vec![],
+        }];
+        let err = Kripke::from_annotated_icfg(input).unwrap_err();
+        assert!(err.contains("requires artifact capability llvm_memory_effects_v1"));
+    }
+
+    #[test]
+    fn efx1_capability_requires_embedded_payload() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec!["llvm_memory_effects_v1".into()];
+        let err = Kripke::from_annotated_icfg(input).unwrap_err();
+        assert!(err.contains("capability and embedded evidence must appear together"));
+    }
+
+    #[test]
+    fn efx1_embedded_payload_requires_capability() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.llvm_memory_effects = Some(valid_efx1_evidence());
+        let err = Kripke::from_annotated_icfg(input).unwrap_err();
+        assert!(err.contains("capability and embedded evidence must appear together"));
+    }
+
+    #[test]
+    fn bpta_capability_and_payload_are_atomic() {
+        let mut missing = base();
+        missing.schema_version = 2;
+        missing.capabilities = vec!["svf_solved_points_to_v1".into()];
+        assert!(Kripke::from_annotated_icfg(missing).unwrap_err().contains("capability and embedded evidence must appear together"));
+
+        let mut naked = base();
+        naked.schema_version = 2;
+        naked.svf_solved_points_to = Some(valid_pts_evidence());
+        assert!(Kripke::from_annotated_icfg(naked).unwrap_err().contains("capability and embedded evidence must appear together"));
+    }
+
+    #[test]
+    fn efx1_external_effect_basis_is_accepted_with_llvm_capability() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec![
+            "external_deallocation_effects_v1".into(),
+            "llvm_memory_effects_v1".into(),
+        ];
+        input.llvm_memory_effects = Some(valid_efx1_evidence());
+        input.nodes[0].id = "dummyCall::x".into();
+        input.entry = "dummyCall::x".into();
+        input.external_deallocation_effects = vec![ExternalDeallocationEffectRecord {
+            node: "dummyCall::x".into(),
+            callee: "free".into(),
+            status: ExternalDeallocationEffectStatus::ObservedMayDeallocate,
+            basis: "llvm16_tli_allockind_deallocation_v1".into(),
+            corroborating_bases: vec![],
+        }];
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        assert_eq!(
+            k.external_deallocation_effect_at("dummyCall::x").unwrap().status,
+            ExternalDeallocationEffectStatus::ObservedMayDeallocate
+        );
+    }
+
+
+    #[test]
+    fn r2_external_effect_accepts_sorted_llvm_corroboration() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec![
+            "external_deallocation_effects_v1".into(),
+            "llvm_memory_effects_v1".into(),
+        ];
+        input.llvm_memory_effects = Some(valid_efx1_evidence());
+        input.nodes[0].id = "dummyCall::x".into();
+        input.entry = "dummyCall::x".into();
+        input.external_deallocation_effects = vec![ExternalDeallocationEffectRecord {
+            node: "dummyCall::x".into(),
+            callee: "wrapper".into(),
+            status: ExternalDeallocationEffectStatus::ObservedMayDeallocate,
+            basis: "structural_c_free_v1".into(),
+            corroborating_bases: vec![
+                "llvm16_tli_direct_callee_allockind_deallocation_v1".into(),
+            ],
+        }];
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        assert_eq!(
+            k.external_deallocation_effect_at("dummyCall::x")
+                .unwrap()
+                .corroborating_bases,
+            vec!["llvm16_tli_direct_callee_allockind_deallocation_v1"]
+        );
+    }
+
+    #[test]
+    fn r2_external_effect_rejects_corroboration_without_llvm_capability() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec!["external_deallocation_effects_v1".into()];
+        input.nodes[0].id = "dummyCall::x".into();
+        input.entry = "dummyCall::x".into();
+        input.external_deallocation_effects = vec![ExternalDeallocationEffectRecord {
+            node: "dummyCall::x".into(),
+            callee: "wrapper".into(),
+            status: ExternalDeallocationEffectStatus::ObservedMayDeallocate,
+            basis: "structural_c_free_v1".into(),
+            corroborating_bases: vec![
+                "llvm16_tli_direct_callee_allockind_deallocation_v1".into(),
+            ],
+        }];
+        let err = Kripke::from_annotated_icfg(input).unwrap_err();
+        assert!(err.contains("corroborating basis"));
+        assert!(err.contains("requires artifact capability llvm_memory_effects_v1"));
     }
 
 }

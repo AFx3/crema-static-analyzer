@@ -4221,6 +4221,8 @@ mod phase6b_interprocedural_protocol_tests {
     #[test]
     fn return_matching_is_by_callee_not_lifo_order() {
         let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: Vec::new(),
             icfg_edges: Vec::new(),
             rust_functions: BTreeMap::new(),
@@ -4243,6 +4245,8 @@ mod phase6b_interprocedural_protocol_tests {
         let mut b = call("rust::main::bb5", "impl_b::new", "dummyRet::main::bb5::instance1");
         b.dummy_call_node = "dummyCall::main::bb5::instance1".into();
         let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: Vec::new(),
             icfg_edges: Vec::new(),
             rust_functions: BTreeMap::new(),
@@ -4306,6 +4310,8 @@ mod phase6b_interprocedural_protocol_tests {
         // higher-order library summary (spawn/consumer) whose canonical callback
         // relation is carried solely by `rust_calls`.
         let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![(
                 "rust::main::bb0".to_string(),
                 GlobalICFGNode::Mir(MirBasicBlock {
@@ -6921,6 +6927,8 @@ mod phase5_c_origin_ffi_tests {
     #[test]
     fn inlined_c_free_then_reachable_rust_use_is_uaf() {
         let g = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: Vec::new(),
             icfg_edges: vec![
                 edge("alloc", "c_free"),
@@ -6942,6 +6950,8 @@ mod phase5_c_origin_ffi_tests {
     #[test]
     fn use_before_inlined_c_free_is_not_uaf() {
         let g = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: Vec::new(),
             icfg_edges: vec![
                 edge("alloc", "rust_use"),
@@ -6962,6 +6972,8 @@ mod phase5_c_origin_ffi_tests {
     #[test]
     fn mutually_exclusive_free_and_use_are_not_ordered_by_source_position() {
         let g = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: Vec::new(),
             icfg_edges: vec![
                 edge("entry", "c_free"),

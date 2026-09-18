@@ -1,0 +1,885 @@
+{
+  "schema": "CREMA Allocation Identity v6G",
+  "by_point": [
+    {
+      "node": "rust::main::bb0",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb1",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb2",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb3",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb4",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb5",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb6",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb7",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::terminate",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    }
+  ],
+  "by_node": [
+    {
+      "node": "rust::main::bb0",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb1",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb2",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb3",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb4",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb5",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb6",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb7",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::terminate",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    }
+  ],
+  "event_by_point": [
+    {
+      "node": "rust::main::bb0",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb1",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb2",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb3",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb4",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb5",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb6",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb7",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::terminate",
+      "context": [],
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    }
+  ],
+  "event_by_node": [
+    {
+      "node": "rust::main::bb0",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb1",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb2",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb3",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb4",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb5",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb6",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::bb7",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    },
+    {
+      "node": "rust::main::terminate",
+      "memory": {
+        "points_to": [],
+        "stack_refs": [
+          {
+            "variable": {
+              "kind": "rust",
+              "function": "main",
+              "local": 4
+            },
+            "canonical_variable": "rust::main::Local(_4)",
+            "places": [
+              {
+                "base": {
+                  "kind": "rust",
+                  "function": "main",
+                  "local": 1
+                },
+                "projection": []
+              }
+            ]
+          }
+        ],
+        "place_points_to": [],
+        "place_stack_refs": []
+      }
+    }
+  ]
+}

@@ -52,6 +52,19 @@
       "items": {
         "$ref": "#/$defs/externalDeallocationEffectRecord"
       }
+    },
+    "llvm_memory_effects": {
+      "$ref": "#/$defs/llvmMemoryEffectsEvidenceV1"
+    },
+    "svf_solved_points_to": {
+      "$ref": "#/$defs/svfSolvedPointsToEvidenceV1"
+    },
+    "ffi_argument_identity": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/ffiArgumentIdentityRecord"
+      }
     }
   },
   "$defs": {
@@ -1060,10 +1073,585 @@
             "svf_leaf_no_call_deallocation_v1",
             "structural_c_free_v1",
             "svf_call_effect_unresolved_v1",
-            "svf_body_unavailable_v1"
+            "svf_body_unavailable_v1",
+            "llvm16_explicit_nofree_v1",
+            "llvm16_tli_nofree_v1",
+            "llvm16_explicit_nonmodifying_memory_v1",
+            "llvm16_tli_nonmodifying_memory_v1",
+            "llvm16_explicit_allockind_deallocation_v1",
+            "llvm16_tli_allockind_deallocation_v1",
+            "llvm16_explicit_direct_callee_allockind_deallocation_v1",
+            "llvm16_tli_direct_callee_allockind_deallocation_v1"
           ]
+        },
+        "corroborating_bases": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "llvm16_explicit_nofree_v1",
+              "llvm16_tli_nofree_v1",
+              "llvm16_explicit_nonmodifying_memory_v1",
+              "llvm16_tli_nonmodifying_memory_v1",
+              "llvm16_explicit_allockind_deallocation_v1",
+              "llvm16_tli_allockind_deallocation_v1",
+              "llvm16_explicit_direct_callee_allockind_deallocation_v1",
+              "llvm16_tli_direct_callee_allockind_deallocation_v1"
+            ]
+          },
+          "uniqueItems": true
         }
       }
+    },
+    "efx1Access": {
+      "enum": [
+        "none",
+        "read",
+        "write",
+        "readwrite"
+      ]
+    },
+    "efx1Memory": {
+      "type": "object",
+      "required": [
+        "argmem",
+        "inaccessiblemem",
+        "other",
+        "encoded"
+      ],
+      "properties": {
+        "argmem": {
+          "$ref": "#/$defs/efx1Access"
+        },
+        "inaccessiblemem": {
+          "$ref": "#/$defs/efx1Access"
+        },
+        "other": {
+          "$ref": "#/$defs/efx1Access"
+        },
+        "encoded": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 63
+        }
+      },
+      "additionalProperties": false
+    },
+    "efx1Formal": {
+      "type": "object",
+      "required": [
+        "index",
+        "pointer_typed",
+        "nofree",
+        "nocapture",
+        "returned",
+        "readnone",
+        "readonly",
+        "writeonly",
+        "allocptr",
+        "allocalign"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pointer_typed": {
+          "type": "boolean"
+        },
+        "nofree": {
+          "type": "boolean"
+        },
+        "nocapture": {
+          "type": "boolean"
+        },
+        "returned": {
+          "type": "boolean"
+        },
+        "readnone": {
+          "type": "boolean"
+        },
+        "readonly": {
+          "type": "boolean"
+        },
+        "writeonly": {
+          "type": "boolean"
+        },
+        "allocptr": {
+          "type": "boolean"
+        },
+        "allocalign": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "efx1Snapshot": {
+      "type": "object",
+      "required": [
+        "nofree",
+        "nosync",
+        "willreturn",
+        "nobuiltin",
+        "optnone",
+        "memory_explicit",
+        "memory",
+        "alloc_kind",
+        "alloc_family",
+        "return_noalias",
+        "alloc_size",
+        "formals"
+      ],
+      "properties": {
+        "nofree": {
+          "type": "boolean"
+        },
+        "nosync": {
+          "type": "boolean"
+        },
+        "willreturn": {
+          "type": "boolean"
+        },
+        "nobuiltin": {
+          "type": "boolean"
+        },
+        "optnone": {
+          "type": "boolean"
+        },
+        "memory_explicit": {
+          "type": "boolean"
+        },
+        "memory": {
+          "$ref": "#/$defs/efx1Memory"
+        },
+        "alloc_kind": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "alloc",
+              "realloc",
+              "free",
+              "uninitialized",
+              "zeroed",
+              "aligned"
+            ]
+          }
+        },
+        "alloc_family": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "return_noalias": {
+          "type": "boolean"
+        },
+        "alloc_size": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "element_size_arg",
+                "num_elements_arg"
+              ],
+              "properties": {
+                "element_size_arg": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "num_elements_arg": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "formals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/efx1Formal"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "efx1Function": {
+      "type": "object",
+      "required": [
+        "name",
+        "is_declaration",
+        "origin_explicit",
+        "explicit",
+        "tli_recognized",
+        "tli_libfunc",
+        "origin_inferred",
+        "tli_inferred",
+        "tli_changed"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "is_declaration": {
+          "type": "boolean"
+        },
+        "origin_explicit": {
+          "const": "explicit_input_ir"
+        },
+        "explicit": {
+          "$ref": "#/$defs/efx1Snapshot"
+        },
+        "tli_recognized": {
+          "type": "boolean"
+        },
+        "tli_libfunc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "origin_inferred": {
+          "const": "llvm_tli_inferred"
+        },
+        "tli_inferred": {
+          "$ref": "#/$defs/efx1Snapshot"
+        },
+        "tli_changed": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "tli_recognized": {
+                "const": true
+              }
+            },
+            "required": [
+              "tli_recognized"
+            ]
+          },
+          "then": {
+            "properties": {
+              "tli_libfunc": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "tli_recognized": {
+                "const": false
+              }
+            },
+            "required": [
+              "tli_recognized"
+            ]
+          },
+          "then": {
+            "properties": {
+              "tli_libfunc": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "efx1Callsite": {
+      "type": "object",
+      "required": [
+        "caller",
+        "ordinal",
+        "direct",
+        "callee",
+        "callsite_memory_explicit",
+        "effective_memory"
+      ],
+      "properties": {
+        "caller": {
+          "type": "string"
+        },
+        "ordinal": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "direct": {
+          "type": "boolean"
+        },
+        "callee": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "callsite_memory_explicit": {
+          "type": "boolean"
+        },
+        "effective_memory": {
+          "$ref": "#/$defs/efx1Memory"
+        }
+      },
+      "additionalProperties": false
+    },
+    "efx1Module": {
+      "type": "object",
+      "required": [
+        "input",
+        "target_triple",
+        "functions",
+        "callsites_explicit",
+        "callsites_tli_inferred",
+        "input_ir_verified",
+        "tli_clone_verified"
+      ],
+      "properties": {
+        "input": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_triple": {
+          "type": "string"
+        },
+        "functions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/efx1Function"
+          }
+        },
+        "callsites_explicit": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/efx1Callsite"
+          }
+        },
+        "callsites_tli_inferred": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/efx1Callsite"
+          }
+        },
+        "input_ir_verified": {
+          "const": true
+        },
+        "tli_clone_verified": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "llvmMemoryEffectsEvidenceV1": {
+      "type": "object",
+      "required": [
+        "schema",
+        "llvm_version",
+        "explicit_basis",
+        "tli_basis",
+        "modules"
+      ],
+      "properties": {
+        "schema": {
+          "const": "llvm_memory_effects_v1"
+        },
+        "llvm_version": {
+          "const": "16.0.4"
+        },
+        "explicit_basis": {
+          "const": "llvm16_explicit_input_ir_v1"
+        },
+        "tli_basis": {
+          "const": "llvm16_tli_libfunc_attrs_v1"
+        },
+        "modules": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/efx1Module"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "svfSolvedPointsToEvidenceV1": {
+      "type": "object",
+      "required": [
+        "schema",
+        "analysis",
+        "semantics",
+        "formal_mapping_schema",
+        "functions"
+      ],
+      "properties": {
+        "schema": {
+          "const": "svf_solved_points_to_v1"
+        },
+        "analysis": {
+          "const": "AndersenWaveDiff"
+        },
+        "semantics": {
+          "const": "may"
+        },
+        "formal_mapping_schema": {
+          "const": "svf_formal_arg_index_v1"
+        },
+        "functions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "function",
+              "formals"
+            ],
+            "properties": {
+              "function": {
+                "type": "string",
+                "minLength": 1
+              },
+              "formals": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "formal_index",
+                    "svf_var_id",
+                    "points_to"
+                  ],
+                  "properties": {
+                    "formal_index": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "svf_var_id": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "points_to": {
+                      "type": "array",
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ffiArgumentIdentityRecord": {
+      "type": "object",
+      "required": [
+        "node",
+        "callee",
+        "callsite",
+        "arg_index",
+        "actual_variable",
+        "formal_variable",
+        "allocations",
+        "certainty",
+        "basis",
+        "formal_mapping_basis",
+        "svf_may_points_to"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "node": {
+          "type": "string",
+          "pattern": "^dummyCall::",
+          "minLength": 1
+        },
+        "callee": {
+          "type": "string",
+          "minLength": 1
+        },
+        "callsite": {
+          "type": "string",
+          "pattern": "^rust::",
+          "minLength": 1
+        },
+        "arg_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "actual_variable": {
+          "type": "string",
+          "pattern": "^rust::",
+          "minLength": 1
+        },
+        "formal_variable": {
+          "type": "string",
+          "pattern": "^c::",
+          "minLength": 1
+        },
+        "allocations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "certainty": {
+          "const": "may_abstract"
+        },
+        "basis": {
+          "const": "crema_bmulti_actual_formal_identity_v1"
+        },
+        "formal_mapping_basis": {
+          "const": "svf_formal_arg_index_v1"
+        },
+        "svf_may_points_to": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "uniqueItems": true
+        },
+        "svf_points_to_basis": {
+          "const": "svf_andersen_wave_diff_may_v1"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "svf_may_points_to": {
+                "minItems": 1
+              }
+            },
+            "required": [
+              "svf_may_points_to"
+            ]
+          },
+          "then": {
+            "required": [
+              "svf_points_to_basis"
+            ]
+          }
+        }
+      ]
     }
   },
   "allOf": [
@@ -1365,6 +1953,120 @@
               "required": [
                 "panic_lifecycle"
               ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "llvm_memory_effects_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "required": [
+          "llvm_memory_effects"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "llvm_memory_effects"
+        ]
+      },
+      "then": {
+        "required": [
+          "capabilities"
+        ],
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "llvm_memory_effects_v1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "svf_solved_points_to_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "required": [
+          "svf_solved_points_to"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "svf_solved_points_to"
+        ]
+      },
+      "then": {
+        "required": [
+          "capabilities"
+        ],
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "svf_solved_points_to_v1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "ffi_argument_identity_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "required": [
+          "ffi_argument_identity"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "ffi_argument_identity"
+        ]
+      },
+      "then": {
+        "required": [
+          "capabilities"
+        ],
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "ffi_argument_identity_v1"
             }
           }
         }

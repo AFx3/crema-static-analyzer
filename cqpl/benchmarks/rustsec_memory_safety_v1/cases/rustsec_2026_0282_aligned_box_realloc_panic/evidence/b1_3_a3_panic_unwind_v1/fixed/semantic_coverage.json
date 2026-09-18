@@ -1,0 +1,106 @@
+{
+  "schema_version": 3,
+  "semantics": "observational_coverage_of_a3_panic_unwind_lifecycle_v1_over_mir_semantics_v2",
+  "telemetry_only": true,
+  "transfer_profile": "panic_unwind_lifecycle_v1_edge_sensitive_over_mir_semantics_v2",
+  "package_name": "b1_2_harness_fixed",
+  "package_version": "0.0.0",
+  "package_source": null,
+  "target_name": "reproducer",
+  "target_kind": "bin",
+  "target_triple": null,
+  "resolved_package_features": [],
+  "resolved_package_features_source": "manifest_feature_closure_v1",
+  "roots": [
+    {
+      "requested_root": "main",
+      "selected_entry": "rust::main::bb0",
+      "rust_functions": 15,
+      "rust_mir_blocks": 176,
+      "statements": {
+        "total": 180,
+        "precise": 65,
+        "conservative": 115,
+        "unmodeled": 0
+      },
+      "rvalues": {
+        "total": 180,
+        "precise": 65,
+        "conservative": 115,
+        "unmodeled": 0
+      },
+      "terminators": {
+        "total": 176,
+        "precise": 96,
+        "conservative": 80,
+        "unmodeled": 0
+      },
+      "calls": {
+        "total": 91,
+        "resolved_local": 11,
+        "external_summary": 17,
+        "unresolved": 0,
+        "external_opaque": 63,
+        "mixed_local_external": 0
+      },
+      "statement_kind_histogram": {
+        "Assign": 180
+      },
+      "rvalue_family_histogram": {
+        "address_of": 7,
+        "aggregate": 29,
+        "binary_op": 20,
+        "checked_binary_op": 3,
+        "const": 11,
+        "copy_for_deref": 6,
+        "discriminant": 10,
+        "len": 1,
+        "nullary_op": 4,
+        "other": 5,
+        "ptr_metadata": 1,
+        "ref": 19,
+        "use": 64
+      },
+      "terminator_kind_histogram": {
+        "Assert": 10,
+        "Call": 91,
+        "Drop": 8,
+        "Goto": 23,
+        "Return": 14,
+        "SwitchInt": 21,
+        "Unreachable": 6,
+        "UnwindResume": 3
+      },
+      "unmodeled_statement_kinds": {},
+      "unmodeled_rvalue_families": {},
+      "external_opaque_callees": {
+        "std::alloc::Layout::align": 2,
+        "std::alloc::Layout::from_size_align": 2,
+        "std::alloc::Layout::from_size_align_unchecked": 1,
+        "std::fmt::Arguments::<'a>::new_const": 2,
+        "std::io::_eprint": 1,
+        "std::iter::IntoIterator::into_iter": 5,
+        "std::iter::Iterator::next": 5,
+        "std::iter::Iterator::rev": 1,
+        "std::mem::ManuallyDrop::<T>::new": 5,
+        "std::mem::ManuallyDrop::<T>::take": 2,
+        "std::mem::align_of": 2,
+        "std::mem::size_of": 5,
+        "std::ops::Deref::deref": 1,
+        "std::ops::Fn::call": 1,
+        "std::ops::FromResidual::from_residual": 5,
+        "std::ops::Try::branch": 5,
+        "std::process::exit": 1,
+        "std::ptr::mut_ptr::<impl *mut T>::add": 4,
+        "std::ptr::mut_ptr::<impl *mut T>::is_null": 3,
+        "std::result::Result::<T, E>::map_err": 2,
+        "std::result::Result::<T, E>::unwrap": 1,
+        "std::rt::panic_fmt": 1,
+        "std::slice::from_raw_parts_mut": 4,
+        "std::sync::atomic::AtomicBool::swap": 1,
+        "std::sync::atomic::AtomicU32::fetch_add": 1
+      },
+      "unresolved_control_flow_summaries": {}
+    }
+  ]
+}

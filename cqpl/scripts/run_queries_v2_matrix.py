@@ -115,14 +115,14 @@ def main():
     unknown_complete=(len(unknown_explanations)==unknown_expected and not explanation_failures)
     with (args.out/'unknown-explanations.tsv').open('w',newline='') as f:
         fields=[
-            'group','target','artifact','query','result','explanation','reason_frontier',
+            'group','target','artifact','query','result','subresult','direction','strength','assessment_schema','assessment_basis','assessment_caveats','explanation','reason_frontier',
             'witnesses','supporting_findings','supporting_finding_kinds','supporting_finding_strengths',
         ]
         w=csv.DictWriter(f,delimiter='\t',fieldnames=fields)
         w.writeheader()
         for record in unknown_explanations:
             row=dict(record)
-            for key in ['reason_frontier','supporting_finding_kinds','supporting_finding_strengths']:
+            for key in ['reason_frontier','supporting_finding_kinds','supporting_finding_strengths','assessment_basis','assessment_caveats']:
                 row[key]=';'.join(row[key])
             w.writerow({key:row.get(key,'') for key in fields})
     unknown_summary={

@@ -48,7 +48,7 @@ records unless `allocation_disposition_v2` is declared.
 
 A MAY leak/UAF/DF result may remain `unk`.  When a CString disposition is on the
 relevant witness, the explanation must preserve its producer-certified basis
-(e.g. `producer_certified_cstring_into_raw`) rather than replacing the MAY with
+(e.g. `producer_certified_c_string_into_raw`) rather than replacing the MAY with
 a stronger conclusion.
 
 The diagnostic projection uses `allocation_disposition_witness_v1` and two

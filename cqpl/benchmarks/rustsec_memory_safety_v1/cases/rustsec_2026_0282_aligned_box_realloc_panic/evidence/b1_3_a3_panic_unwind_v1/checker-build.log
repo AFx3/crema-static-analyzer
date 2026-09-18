@@ -1,0 +1,21 @@
+warning: unused import: `StructuralLabelKind`
+ --> src/model_checker.rs:1:106
+  |
+1 | ...ntifier, QueryDocument, StateFormula, StructuralLabelKind};
+  |                                          ^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: method `merge` is never used
+   --> src/explain.rs:412:8
+    |
+390 | impl Trace {
+    | ---------- method in this implementation
+...
+412 |     fn merge(&mut self, other: Trace) {
+    |        ^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `cqpl_checker` (lib) generated 2 warnings (run `cargo fix --lib -p cqpl_checker` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s

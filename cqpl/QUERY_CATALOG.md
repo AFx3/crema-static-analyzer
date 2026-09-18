@@ -2,24 +2,30 @@
 
 Questo documento spiega **che cosa chiede realmente ogni file** in `queries_v2/`. Le query memory/allocator sono formule su informazione MAY: `unk` significa “non refutabile con l'astrazione corrente”, non “bug concretamente provato”.
 
-## Riepilogo freeze final112
+## Riepilogo freeze FINAL112 corrente
 
 | Query | ff | unk | tt |
 |---|---:|---:|---:|
-| allocator_mismatch_ub | 70 | 42 | 0 |
-| allocator_mismatch_ub_v2 | 70 | 42 | 0 |
-| double_free_alloc | 63 | 49 | 0 |
-| double_free_alloc_state | 63 | 49 | 0 |
+| allocator_mismatch_ub | 91 | 21 | 0 |
+| allocator_mismatch_ub_v2 | 91 | 21 | 0 |
+| double_free_alloc | 64 | 48 | 0 |
+| double_free_alloc_state | 64 | 48 | 0 |
 | leak_alloc | 7 | 105 | 0 |
 | leak_alloc_state | 7 | 105 | 0 |
 | mir_rvalue_presence | 101 | 0 | 11 |
 | mir_statement_presence | 9 | 0 | 103 |
-| mir_structural_allocator_example | 98 | 14 | 0 |
+| mir_structural_allocator_example | 107 | 5 | 0 |
 | mir_terminator_presence | 0 | 0 | 112 |
-| use_after_free_alloc | 81 | 31 | 0 |
-| use_after_free_alloc_state | 81 | 31 | 0 |
+| use_after_free_alloc | 82 | 30 | 0 |
+| use_after_free_alloc_state | 82 | 30 | 0 |
 
-Le coppie event/state e allocator v1/v2 coincidono sui 112 soggetti della freeze. È un **regression fact**, non un teorema universale.
+Totale:
+
+```text
+ff=705  unk=413  tt=226
+```
+
+R2 non modifica queste formule. Per i 413 UNKNOWN aggiunge soltanto assessment/explanation: `273 unk_true`, `140 unk_unoriented`.
 
 ---
 

@@ -1,0 +1,6 @@
+{
+  "result": "tt",
+  "entry": "rust::main::bb0",
+  "scope": "reachable",
+  "query_file": "/home/af/Documenti/a-phd/cqpl/queries_v2/mir_statement_presence.cqpl"
+}

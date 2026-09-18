@@ -19,16 +19,315 @@ The icfg outputs are located in the 'output' directory, in DOT and JSON formats.
 #include "SVFIR/SVFType.h"
 #include "Graphs/GenericGraph.h"
 
+// EFX1: inspect LLVM 16 contracts structurally and keep library inference
+// isolated from the SVF analysis module.
+#include "llvm/ADT/Triple.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/IR/Attributes.h"
+#include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/IRReader/IRReader.h"
+#include "llvm/Support/ModRef.h"
+#include "llvm/Support/SourceMgr.h"
+#include "llvm/Transforms/Utils/BuildLibCalls.h"
+#include "llvm/Transforms/Utils/Cloning.h"
+#include "llvm/Config/llvm-config.h"
+
+#include <algorithm>
+#include <cstdint>
 #include <fstream>
+#include <memory>
+#include <optional>
 #include <json/json.h> 
 #include <iterator>
 #include <cstdlib>
 #include <filesystem>
+#include <string>
+#include <vector>
 
 
 using namespace llvm;
 using namespace std;
 using namespace SVF;
+
+////////////////////////////////////////////////////////////////////////////////////////// EFX1 LLVM EFFECT / PTA EVIDENCE
+
+static std::string efxModRefName(llvm::ModRefInfo mr) {
+    switch (mr) {
+        case llvm::ModRefInfo::NoModRef: return "none";
+        case llvm::ModRefInfo::Ref: return "read";
+        case llvm::ModRefInfo::Mod: return "write";
+        case llvm::ModRefInfo::ModRef: return "readwrite";
+    }
+    return "readwrite"; // exhaustive defensive default for future enum changes
+}
+
+static Json::Value efxMemoryEffectsJson(const llvm::MemoryEffects& me) {
+    Json::Value out;
+    out["argmem"] = efxModRefName(me.getModRef(llvm::MemoryEffects::ArgMem));
+    out["inaccessiblemem"] = efxModRefName(me.getModRef(llvm::MemoryEffects::InaccessibleMem));
+    out["other"] = efxModRefName(me.getModRef(llvm::MemoryEffects::Other));
+    out["encoded"] = static_cast<Json::UInt>(me.toIntValue());
+    return out;
+}
+
+static Json::Value efxAllocKindJson(const llvm::Function& f) {
+    Json::Value out(Json::arrayValue);
+    if (!f.hasFnAttribute(llvm::Attribute::AllocKind)) return out;
+    const auto bits = static_cast<uint64_t>(f.getFnAttribute(llvm::Attribute::AllocKind).getAllocKind());
+    auto add = [&](llvm::AllocFnKind k, const char* name) {
+        if (bits & static_cast<uint64_t>(k)) out.append(name);
+    };
+    add(llvm::AllocFnKind::Alloc, "alloc");
+    add(llvm::AllocFnKind::Realloc, "realloc");
+    add(llvm::AllocFnKind::Free, "free");
+    add(llvm::AllocFnKind::Uninitialized, "uninitialized");
+    add(llvm::AllocFnKind::Zeroed, "zeroed");
+    add(llvm::AllocFnKind::Aligned, "aligned");
+    return out;
+}
+
+static Json::Value efxFunctionSnapshot(const llvm::Function& f) {
+    Json::Value out;
+    out["nofree"] = f.hasFnAttribute(llvm::Attribute::NoFree);
+    out["nosync"] = f.hasFnAttribute(llvm::Attribute::NoSync);
+    out["willreturn"] = f.hasFnAttribute(llvm::Attribute::WillReturn);
+    out["nobuiltin"] = f.hasFnAttribute(llvm::Attribute::NoBuiltin);
+    out["optnone"] = f.hasFnAttribute(llvm::Attribute::OptimizeNone);
+    out["memory_explicit"] = f.hasFnAttribute(llvm::Attribute::Memory);
+    out["memory"] = efxMemoryEffectsJson(f.getMemoryEffects());
+    out["alloc_kind"] = efxAllocKindJson(f);
+    out["return_noalias"] = f.hasRetAttribute(llvm::Attribute::NoAlias);
+
+    if (f.hasFnAttribute("alloc-family")) {
+        const llvm::Attribute a = f.getFnAttribute("alloc-family");
+        out["alloc_family"] = a.getValueAsString().str();
+    } else {
+        out["alloc_family"] = Json::Value(Json::nullValue);
+    }
+
+    if (f.hasFnAttribute(llvm::Attribute::AllocSize)) {
+        const auto args = f.getFnAttribute(llvm::Attribute::AllocSize).getAllocSizeArgs();
+        Json::Value as;
+        as["element_size_arg"] = args.first;
+        if (args.second) as["num_elements_arg"] = *args.second;
+        else as["num_elements_arg"] = Json::Value(Json::nullValue);
+        out["alloc_size"] = as;
+    } else {
+        out["alloc_size"] = Json::Value(Json::nullValue);
+    }
+
+    Json::Value formals(Json::arrayValue);
+    for (unsigned i = 0; i < f.arg_size(); ++i) {
+        const llvm::Argument* a = f.getArg(i);
+        Json::Value formal;
+        formal["index"] = i;
+        formal["pointer_typed"] = a && a->getType()->isPointerTy();
+        formal["nofree"] = f.hasParamAttribute(i, llvm::Attribute::NoFree);
+        formal["nocapture"] = f.hasParamAttribute(i, llvm::Attribute::NoCapture);
+        formal["returned"] = f.hasParamAttribute(i, llvm::Attribute::Returned);
+        formal["readnone"] = f.hasParamAttribute(i, llvm::Attribute::ReadNone);
+        formal["readonly"] = f.hasParamAttribute(i, llvm::Attribute::ReadOnly);
+        formal["writeonly"] = f.hasParamAttribute(i, llvm::Attribute::WriteOnly);
+        formal["allocptr"] = f.hasParamAttribute(i, llvm::Attribute::AllocatedPointer);
+        formal["allocalign"] = f.hasParamAttribute(i, llvm::Attribute::AllocAlign);
+        formals.append(formal);
+    }
+    out["formals"] = formals;
+    return out;
+}
+
+static Json::Value efxCallsites(const llvm::Module& m) {
+    Json::Value calls(Json::arrayValue);
+    for (const llvm::Function& f : m) {
+        unsigned ordinal = 0;
+        for (const llvm::BasicBlock& bb : f) {
+            for (const llvm::Instruction& inst : bb) {
+                const auto* cb = llvm::dyn_cast<llvm::CallBase>(&inst);
+                if (!cb) continue;
+                Json::Value c;
+                c["caller"] = f.getName().str();
+                c["ordinal"] = ordinal++;
+                c["direct"] = cb->getCalledFunction() != nullptr;
+                if (const llvm::Function* callee = cb->getCalledFunction())
+                    c["callee"] = callee->getName().str();
+                else
+                    c["callee"] = Json::Value(Json::nullValue);
+                c["callsite_memory_explicit"] = cb->getAttributes().hasFnAttr(llvm::Attribute::Memory);
+                c["effective_memory"] = efxMemoryEffectsJson(cb->getMemoryEffects());
+                calls.append(c);
+            }
+        }
+    }
+    return calls;
+}
+
+// Produce two logically separate views from the exact input IR:
+//   explicit_input_ir      : attributes that were present on input;
+//   llvm16_tli_inferred    : result of LLVM's name+prototype TargetLibraryInfo
+//                            inference on a clone, never on the SVF analysis module.
+static bool exportLlvmMemoryEffectsSidecar(
+    const std::vector<std::string>& moduleNames,
+    const std::string& outputFileName
+) {
+    Json::Value root;
+    root["schema"] = "llvm_memory_effects_v1";
+    root["llvm_version"] = LLVM_VERSION_STRING;
+    root["explicit_basis"] = "llvm16_explicit_input_ir_v1";
+    root["tli_basis"] = "llvm16_tli_libfunc_attrs_v1";
+    Json::Value modules(Json::arrayValue);
+
+    bool ok = true;
+    for (const std::string& moduleName : moduleNames) {
+        llvm::LLVMContext ctx;
+        llvm::SMDiagnostic diag;
+        std::unique_ptr<llvm::Module> original = llvm::parseIRFile(moduleName, diag, ctx);
+        if (!original) {
+            errs() << "EFX1: failed to parse original module for effect evidence: " << moduleName << "\n";
+            diag.print("svf-example", errs());
+            ok = false;
+            continue;
+        }
+        if (llvm::verifyModule(*original, &errs())) {
+            errs() << "EFX1: refusing invalid input IR for effect evidence: " << moduleName << "\n";
+            ok = false;
+            continue;
+        }
+
+        std::unique_ptr<llvm::Module> inferred = llvm::CloneModule(*original);
+        const llvm::Triple triple(original->getTargetTriple());
+        llvm::TargetLibraryInfoImpl tliImpl(triple);
+
+        for (llvm::Function& f : *inferred) {
+            if (!f.isDeclaration() || f.hasFnAttribute(llvm::Attribute::OptimizeNone) || f.hasFnAttribute(llvm::Attribute::NoBuiltin))
+                continue;
+            // Mirror the TLI/BuildLibCalls portion of LLVM16 InferFunctionAttrs with a per-function TargetLibraryInfo
+            // view (including target-specific no-builtin controls), but apply
+            // it only to the cloned evidence module.
+            llvm::TargetLibraryInfo functionTli(tliImpl, std::optional<const llvm::Function*>{&f});
+            (void)llvm::inferNonMandatoryLibFuncAttrs(f, functionTli);
+        }
+
+        if (llvm::verifyModule(*inferred, &errs())) {
+            errs() << "EFX1: TLI evidence clone failed LLVM verification: " << moduleName << "\n";
+            ok = false;
+            continue;
+        }
+
+        Json::Value moduleJson;
+        moduleJson["input"] = std::filesystem::path(moduleName).filename().string();
+        moduleJson["target_triple"] = original->getTargetTriple();
+        moduleJson["input_ir_verified"] = true;
+        moduleJson["tli_clone_verified"] = true;
+        Json::Value functions(Json::arrayValue);
+
+        for (const llvm::Function& f : *original) {
+            Json::Value record;
+            record["name"] = f.getName().str();
+            record["is_declaration"] = f.isDeclaration();
+            record["origin_explicit"] = "explicit_input_ir";
+            const Json::Value explicitSnapshot = efxFunctionSnapshot(f);
+            record["explicit"] = explicitSnapshot;
+
+            llvm::TargetLibraryInfo functionTli(tliImpl, std::optional<const llvm::Function*>{&f});
+            llvm::LibFunc lf;
+            const bool inferenceEligible =
+                f.isDeclaration() &&
+                !f.hasFnAttribute(llvm::Attribute::OptimizeNone) &&
+                !f.hasFnAttribute(llvm::Attribute::NoBuiltin);
+            const bool recognized = inferenceEligible && functionTli.getLibFunc(f, lf) && functionTli.has(lf);
+            record["tli_recognized"] = recognized;
+            if (recognized) record["tli_libfunc"] = functionTli.getName(lf).str();
+            else record["tli_libfunc"] = Json::Value(Json::nullValue);
+
+            if (const llvm::Function* inf = inferred->getFunction(f.getName())) {
+                record["origin_inferred"] = "llvm_tli_inferred";
+                const Json::Value inferredSnapshot = efxFunctionSnapshot(*inf);
+                record["tli_inferred"] = inferredSnapshot;
+                // This flag is deliberately scoped to the evidence vocabulary
+                // exported by llvm_memory_effects_v1. LLVM's libfunc inference
+                // can also add unrelated attributes; those must not masquerade
+                // as a memory/effect delta that CREMA/CQPL can consume.
+                record["tli_changed"] = (explicitSnapshot != inferredSnapshot);
+            }
+            functions.append(record);
+        }
+        moduleJson["functions"] = functions;
+        moduleJson["callsites_explicit"] = efxCallsites(*original);
+        moduleJson["callsites_tli_inferred"] = efxCallsites(*inferred);
+        modules.append(moduleJson);
+    }
+
+    root["modules"] = modules;
+    std::ofstream file(outputFileName);
+    if (!file.is_open()) return false;
+    file << root.toStyledString();
+    return ok;
+}
+
+static bool exportSvfPointsToSidecar(
+    const SVF::SVFModule* svfModule,
+    SVF::SVFIR* pag,
+    SVF::Andersen* ander,
+    const std::string& outputFileName
+) {
+    if (!svfModule || !pag || !ander) return false;
+    Json::Value root;
+    root["schema"] = "svf_solved_points_to_v1";
+    root["analysis"] = "AndersenWaveDiff";
+    root["semantics"] = "may";
+    root["formal_mapping_schema"] = "svf_formal_arg_index_v1";
+    Json::Value functions(Json::arrayValue);
+
+    std::vector<const SVF::SVFFunction*> orderedFunctions;
+    for (const SVF::SVFFunction* func : svfModule->getSVFModule()->getFunctionSet())
+        if (func) orderedFunctions.push_back(func);
+    std::sort(orderedFunctions.begin(), orderedFunctions.end(),
+              [](const SVF::SVFFunction* lhs, const SVF::SVFFunction* rhs) {
+                  if (lhs->getName() != rhs->getName())
+                      return lhs->getName() < rhs->getName();
+                  return lhs->arg_size() < rhs->arg_size();
+              });
+
+    for (const SVF::SVFFunction* func : orderedFunctions) {
+        // Keep Bpta-R1 aligned with the producer-certified formal mapping.
+        // SVFIRBuilder creates formal argument value nodes for body-backed
+        // functions; declarations are library/summary boundaries and have no
+        // per-function ICFG artifact in the current producer.
+        if (func->getBasicBlockList().empty()) continue;
+        Json::Value fj;
+        fj["function"] = func->getName();
+        Json::Value formals(Json::arrayValue);
+        for (u32_t i = 0; i < func->arg_size(); ++i) {
+            const SVF::SVFArgument* arg = func->getArg(i);
+            if (!arg) continue;
+            const SVF::NodeID varId = pag->getValueNode(arg);
+            Json::Value formal;
+            formal["formal_index"] = i;
+            formal["svf_var_id"] = static_cast<Json::UInt64>(varId);
+            Json::Value pts(Json::arrayValue);
+            std::vector<SVF::NodeID> ids;
+            const auto& solvedPts = ander->getPts(varId);
+            for (auto it = solvedPts.begin(), e = solvedPts.end(); it != e; ++it)
+                ids.push_back(*it);
+            std::sort(ids.begin(), ids.end());
+            ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+            for (SVF::NodeID id : ids) pts.append(static_cast<Json::UInt64>(id));
+            formal["points_to"] = pts;
+            formals.append(formal);
+        }
+        fj["formals"] = formals;
+        functions.append(fj);
+    }
+    root["functions"] = functions;
+
+    std::ofstream file(outputFileName);
+    if (!file.is_open()) return false;
+    file << root.toStyledString();
+    return true;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////// UTILS
 
@@ -1001,6 +1300,20 @@ int main(int argc, char **argv) {
     std::vector<std::string> moduleNameVec = OptionBase::parseOptions(
         argc, argv, "Whole Program Points-to Analysis", "[options] <input-bitcode...>"
     );
+
+    // CREMA v6G isolates every analysis run. Establish the directory before
+    // preprocessing so EFX1 can archive evidence from the exact input IR.
+    const char* outputDirEnv = std::getenv("CREMA_SVF_OUTPUT_DIR");
+    std::string outputDir = (outputDirEnv && *outputDirEnv) ? outputDirEnv : "./output";
+    std::filesystem::create_directories(outputDir);
+    if (!outputDir.empty() && outputDir.back() != '/') outputDir.push_back('/');
+
+    if (!exportLlvmMemoryEffectsSidecar(
+            moduleNameVec, outputDir + "LLVM_MEMORY_EFFECTS_V1.json")) {
+        errs() << "EFX1 fatal: LLVM memory-effect evidence export was incomplete.\n";
+        return 2;
+    }
+
     // preprocess the LLVM IR (same as wpa does)
     LLVMModuleSet::preProcessBCs(moduleNameVec);
     // build the SVF module
@@ -1016,6 +1329,15 @@ int main(int argc, char **argv) {
     Andersen* ander = AndersenWaveDiff::createAndersenWaveDiff(pag);
     // dump points-to statistics (wpa)
     ander->dumpStat();
+    if (!exportSvfPointsToSidecar(
+            svfModule, pag, ander, outputDir + "SVF_SOLVED_POINTS_TO_V1.json")) {
+        errs() << "EFX1 fatal: solved Andersen MAY points-to export failed.\n";
+        AndersenWaveDiff::releaseAndersenWaveDiff();
+        SVFIR::releaseSVFIR();
+        SVF::LLVMModuleSet::releaseLLVMModuleSet();
+        llvm::llvm_shutdown();
+        return 3;
+    }
     ////////////////////////////////////////////////////////////////////////////////////////// CALL GRAPH
     // create and dump the call graph (wpa)
     PTACallGraph* callgraph = ander->getCallGraph();
@@ -1023,16 +1345,6 @@ int main(int argc, char **argv) {
     ////////////////////////////////////////////////////////////////////////////////////////// ICFG
     ICFG* icfg = pag->getICFG();
     // want see the icfg
-
-    // CREMA v6G isolates every analysis run.  The producer writes into the
-    // directory selected by the caller instead of a process-global ./output.
-    // Standalone SVF-example use keeps the historical ./output fallback.
-    const char* outputDirEnv = std::getenv("CREMA_SVF_OUTPUT_DIR");
-    std::string outputDir = (outputDirEnv && *outputDirEnv) ? outputDirEnv : "./output";
-    std::filesystem::create_directories(outputDir);
-    if (!outputDir.empty() && outputDir.back() != '/') {
-        outputDir.push_back('/');
-    }
 
     // iterate over all functions in the SVF module
     for (const SVF::SVFFunction* func : svfModule->getSVFModule()->getFunctionSet()) {

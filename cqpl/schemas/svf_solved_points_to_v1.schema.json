@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://crema-cqpl.local/schemas/svf_solved_points_to_v1.schema.json",
+  "title": "SVF solved Andersen MAY points-to evidence v1",
+  "type": "object",
+  "required": ["schema", "analysis", "semantics", "formal_mapping_schema", "functions"],
+  "properties": {
+    "schema": {"const": "svf_solved_points_to_v1"},
+    "analysis": {"const": "AndersenWaveDiff"},
+    "semantics": {"const": "may"},
+    "formal_mapping_schema": {"const": "svf_formal_arg_index_v1"},
+    "functions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["function", "formals"],
+        "properties": {
+          "function": {"type": "string", "minLength": 1},
+          "formals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["formal_index", "svf_var_id", "points_to"],
+              "properties": {
+                "formal_index": {"type": "integer", "minimum": 0},
+                "svf_var_id": {"type": "integer", "minimum": 0},
+                "points_to": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {"type": "integer", "minimum": 0}
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

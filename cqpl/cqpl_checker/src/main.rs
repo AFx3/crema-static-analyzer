@@ -1,4 +1,7 @@
-use cqpl_checker::{panic_lifecycle_overlay_from_json, parse_query_document, AnnotatedIcfg, Binding, Env, Kripke, ModelChecker};
+use cqpl_checker::{
+    panic_lifecycle_overlay_from_json, parse_query_document, AnnotatedIcfg, Binding, Env, Kripke,
+    ModelChecker, QueryResultAssessment,
+};
 use serde::Serialize;
 use serde_json::Value;
 use std::{env, fs, path::Path, process};
@@ -6,6 +9,7 @@ use std::{env, fs, path::Path, process};
 #[derive(Serialize)]
 struct JsonOutput<'a> {
     result: &'a str,
+    assessment: &'a QueryResultAssessment,
     entry: &'a str,
     scope: &'a str,
     query_file: &'a str,
@@ -546,6 +550,7 @@ fn run() -> Result<(), String> {
     let query = parse_query_document(&raw_query)?;
     let checker = ModelChecker::new(&k);
     let result = checker.evaluate_document(&query, &env0)?;
+    let assessment = checker.assess_document(&query, result);
 
     let need_explanation = explain_json.is_some() || (explain_unk_verbose && result.as_str() == "unk");
     let explanation_report = if need_explanation {
@@ -556,6 +561,9 @@ fn run() -> Result<(), String> {
                 result.as_str(),
                 report.result,
             ));
+        }
+        if report.assessment != assessment {
+            return Err("R2 explainability invariant violated: query assessment differs between direct result and explanation".into());
         }
         Some(report)
     } else {
@@ -572,6 +580,7 @@ fn run() -> Result<(), String> {
     if json {
         println!("{}", serde_json::to_string_pretty(&JsonOutput {
             result: result.as_str(),
+            assessment: &assessment,
             entry: &k.entry,
             scope: if intra { "intra" } else { "reachable" },
             query_file: query_path,
@@ -580,6 +589,8 @@ fn run() -> Result<(), String> {
         println!("CQPL entry: {}", k.entry);
         println!("CQPL scope: {}", if intra { "intra" } else { "reachable" });
         println!("CQPL result: {}", result.as_str());
+        println!("CQPL subresult: {}", assessment.subresult.as_str());
+        println!("CQPL strength: {}", assessment.strength.as_str());
         match result.as_str() {
             "ff" => println!("Interpretation: the current annotated abstraction refutes the queried pattern within the modeled predicates."),
             "unk" => println!("Interpretation: the current abstraction cannot refute or establish the queried pattern."),

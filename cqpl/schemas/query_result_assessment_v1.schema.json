@@ -1,0 +1,263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://crema.local/schemas/cqpl-result-assessment-v1.json",
+  "title": "CQPL query result assessment v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "result",
+    "subresult",
+    "direction",
+    "strength",
+    "basis",
+    "caveats"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "cqpl_result_assessment_v1"
+    },
+    "result": {
+      "enum": [
+        "tt",
+        "ff",
+        "unk"
+      ]
+    },
+    "subresult": {
+      "enum": [
+        "tt",
+        "ff",
+        "unk_true",
+        "unk_false",
+        "unk_mixed",
+        "unk_unoriented"
+      ]
+    },
+    "direction": {
+      "enum": [
+        "true",
+        "false",
+        "mixed",
+        "none"
+      ]
+    },
+    "strength": {
+      "enum": [
+        "abstract_established",
+        "strong_abstract_evidence",
+        "observational_candidate",
+        "unresolved"
+      ]
+    },
+    "basis": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "minItems": 1
+    },
+    "caveats": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "tt"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "subresult": {
+            "const": "tt"
+          },
+          "direction": {
+            "const": "true"
+          },
+          "strength": {
+            "const": "abstract_established"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "ff"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "subresult": {
+            "const": "ff"
+          },
+          "direction": {
+            "const": "false"
+          },
+          "strength": {
+            "const": "abstract_established"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "unk"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "subresult": {
+            "enum": [
+              "unk_true",
+              "unk_false",
+              "unk_mixed",
+              "unk_unoriented"
+            ]
+          },
+          "strength": {
+            "enum": [
+              "strong_abstract_evidence",
+              "observational_candidate",
+              "unresolved"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "subresult": {
+            "const": "unk_true"
+          }
+        },
+        "required": [
+          "subresult"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "const": "unk"
+          },
+          "direction": {
+            "const": "true"
+          },
+          "strength": {
+            "enum": [
+              "strong_abstract_evidence",
+              "observational_candidate"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "subresult": {
+            "const": "unk_false"
+          }
+        },
+        "required": [
+          "subresult"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "const": "unk"
+          },
+          "direction": {
+            "const": "false"
+          },
+          "strength": {
+            "enum": [
+              "strong_abstract_evidence",
+              "observational_candidate"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "subresult": {
+            "const": "unk_mixed"
+          }
+        },
+        "required": [
+          "subresult"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "const": "unk"
+          },
+          "direction": {
+            "const": "mixed"
+          },
+          "strength": {
+            "enum": [
+              "strong_abstract_evidence",
+              "observational_candidate"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "subresult": {
+            "const": "unk_unoriented"
+          }
+        },
+        "required": [
+          "subresult"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "const": "unk"
+          },
+          "direction": {
+            "const": "none"
+          },
+          "strength": {
+            "const": "unresolved"
+          }
+        }
+      }
+    }
+  ]
+}

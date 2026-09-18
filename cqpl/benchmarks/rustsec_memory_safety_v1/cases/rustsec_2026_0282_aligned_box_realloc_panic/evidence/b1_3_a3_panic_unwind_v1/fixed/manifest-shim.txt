@@ -1,0 +1,2 @@
+analysis-only shim: edition=2024 -> edition=2021 in copied subject manifest
+canonical_manifest=/home/af/Documenti/a-phd/cqpl/benchmarks/rustsec_memory_safety_v1/cases/rustsec_2026_0282_aligned_box_realloc_panic/fixed/Cargo.toml

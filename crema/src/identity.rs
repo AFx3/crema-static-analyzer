@@ -2181,6 +2181,8 @@ mod tests {
         let main_ret = return_block(1, Vec::new());
         let foo_ret = return_block(0, Vec::new());
         let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![
                 ("rust::main::bb0".to_string(), GlobalICFGNode::Mir(main_call)),
                 ("rust::main::bb1".to_string(), GlobalICFGNode::Mir(main_ret)),
@@ -2248,6 +2250,8 @@ mod tests {
         let dummy_call = "dummyCall::main::bb1";
         let dummy_ret = "dummyRet::main::bb1";
         let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![
                 ("rust::main::bb0".to_string(), GlobalICFGNode::Mir(main_alloc)),
                 ("rust::main::bb1".to_string(), GlobalICFGNode::Mir(main_call)),
@@ -2332,6 +2336,8 @@ mod tests {
         let dr1 = "dummyRet::main::bb0::instance1";
 
         let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![
                 ("rust::main::bb0".into(), GlobalICFGNode::Mir(main_call)),
                 internal_dummy_call(dc0, "rust::main::bb0", "rust::foo::bb0"),
@@ -2463,6 +2469,8 @@ mod tests {
         ];
 
         let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![
                 ("rust::main::bb0".to_string(), GlobalICFGNode::Mir(main_entry)),
                 ("rust::main::bb1".to_string(), GlobalICFGNode::Mir(main_call_1)),
@@ -3105,6 +3113,8 @@ mod tests {
         let dummy_call = "dummyCall::main::bb2";
         let dummy_ret = "dummyRet::main::bb2";
         let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![
                 ("rust::main::bb0".to_string(), GlobalICFGNode::Mir(main_alloc)),
                 ("rust::main::bb1".to_string(), GlobalICFGNode::Mir(main_into_raw)),
@@ -3253,8 +3263,8 @@ mod tests {
             mir_var: Some("_1".into()),
             llvm_var: Some("7@rust::main::bb5".into()),
             argument_bindings: vec![
-                DummyArgumentBinding { arg_index: 0, mir_var: "_1".into(), llvm_var: "7@rust::main::bb5".into() },
-                DummyArgumentBinding { arg_index: 1, mir_var: "_2".into(), llvm_var: "9@rust::main::bb5".into() },
+                DummyArgumentBinding { arg_index: 0, mir_var: "_1".into(), llvm_var: "7@rust::main::bb5".into(), svf_may_points_to: vec![], svf_points_to_basis: None },
+                DummyArgumentBinding { arg_index: 1, mir_var: "_2".into(), llvm_var: "9@rust::main::bb5".into(), svf_may_points_to: vec![], svf_points_to_basis: None },
             ],
             is_internal: Some(false),
         };
@@ -3289,8 +3299,8 @@ mod tests {
             mir_var: Some(x.into()),
             llvm_var: Some(format!("7@rust::main::bb{bb}")),
             argument_bindings: vec![
-                DummyArgumentBinding { arg_index: 0, mir_var: x.into(), llvm_var: format!("7@rust::main::bb{bb}") },
-                DummyArgumentBinding { arg_index: 1, mir_var: y.into(), llvm_var: format!("9@rust::main::bb{bb}") },
+                DummyArgumentBinding { arg_index: 0, mir_var: x.into(), llvm_var: format!("7@rust::main::bb{bb}"), svf_may_points_to: vec![], svf_points_to_basis: None },
+                DummyArgumentBinding { arg_index: 1, mir_var: y.into(), llvm_var: format!("9@rust::main::bb{bb}"), svf_may_points_to: vec![], svf_points_to_basis: None },
             ],
             is_internal: Some(false),
         };
@@ -3382,6 +3392,8 @@ mod tests {
         let dummy_ret_id = "dummyRet::rust::main::bb1::ffi";
 
         let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
             ordered_nodes: vec![
                 ("rust::main::bb0".to_string(), GlobalICFGNode::Mir(main_call)),
                 (
