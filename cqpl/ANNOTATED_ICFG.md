@@ -329,3 +329,10 @@ allocation_post for the pointee must NOT become FREED because of that call
 ```
 
 Questo segue la Rust Reference: dropping a raw pointer does not affect the lifecycle of the pointee. `ptr::drop_in_place` è un'operazione distinta e non viene reinterpretata come allocator deallocation.
+
+
+## Typed edge-flow preservation (`typed_edge_flow_v1`)
+
+Schema v2 may declare `typed_edge_flow_v1`. When declared, the top-level `typed_edges` payload preserves the canonical CREMA ICFG edge relation, including the original edge labels and an explicit `normal`/`unwind` classification. Its `(source,destination)` projection must equal the legacy `nodes[*].successors` relation exactly.
+
+A/R2 is deliberately semantics-neutral: CQPL temporal operators still use `successors`. The typed payload exists so later outcome-sensitive analyses do not need to reconstruct or guess control-flow semantics after export. Event outcome scoping is not part of this capability.

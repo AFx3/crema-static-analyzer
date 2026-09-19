@@ -3508,6 +3508,47 @@ fn validate_svf_solved_points_to_artifact(
     Ok(())
 }
 
+/// Cross-check the per-function positional certificate embedded in each final
+/// ICFG against the solved Andersen artifact.  Both are producer evidence from
+/// the same run; disagreement is a producer-integrity error, not uncertainty.
+fn validate_svf_formal_certificate_consistency(
+    functions: &HashMap<String, LlvmFunction>,
+    artifact: &crate::structs::SvfSolvedPointsToArtifactV1,
+) -> Result<(), String> {
+    for record in &artifact.functions {
+        let Some(function) = functions.get(&record.function) else {
+            // Some body-backed helper functions may have no materialized ICFG
+            // nodes in the current exporter.  There is nothing to correlate in
+            // CREMA for those functions, so absence is not itself an error.
+            continue;
+        };
+
+        if function.formal_param_mapping_schema.as_deref()
+            != Some("svf_formal_arg_index_v1")
+        {
+            return Err(format!(
+                "{}: final ICFG lacks svf_formal_arg_index_v1 certificate",
+                record.function
+            ));
+        }
+
+        let expected = record
+            .formals
+            .iter()
+            .map(|formal| formal.svf_var_id)
+            .collect::<Vec<_>>();
+        if function.formal_param_var_ids != expected {
+            return Err(format!(
+                "{}: final ICFG formal VarIDs {:?} disagree with solved-PTA certificate {:?}",
+                record.function,
+                function.formal_param_var_ids,
+                expected
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn load_all_llvm_json(dir: &str) -> Result<LlvmRepresentation, Box<dyn Error>> {
     let mut combined_functions: HashMap<String, LlvmFunction> = HashMap::new();
     let mut combined_global_edges: Vec<LlvmEdge> = Vec::new();
@@ -3566,6 +3607,8 @@ pub fn load_all_llvm_json(dir: &str) -> Result<LlvmRepresentation, Box<dyn Error
         let artifact: crate::structs::SvfSolvedPointsToArtifactV1 = serde_json::from_str(&text)?;
         validate_svf_solved_points_to_artifact(&artifact)
             .map_err(|e| format!("invalid solved PTA artifact {}: {e}", pts_path.display()))?;
+        validate_svf_formal_certificate_consistency(&combined_functions, &artifact)
+            .map_err(|e| format!("inconsistent SVF positional certificate {}: {e}", pts_path.display()))?;
         Some(artifact)
     } else {
         None
@@ -3935,8 +3978,13 @@ mod phase6k_callee_resolution_tests {
 mod phase5_ffi_bridge_tests {
     use super::{
         svf_certified_formal_param_var_ids, svf_first_formal_param_var_id,
-        svf_function_return_var_id, LlvmFunction, LlvmJsonNode, SvfStatement,
+        svf_function_return_var_id, validate_svf_formal_certificate_consistency,
+        LlvmFunction, LlvmJsonNode, SvfStatement,
     };
+    use crate::structs::{
+        SvfFormalPointsToV1, SvfFunctionPointsToV1, SvfSolvedPointsToArtifactV1,
+    };
+    use std::collections::HashMap;
 
     fn stmt(
         stmt_type: &str,
@@ -4070,6 +4118,88 @@ mod phase5_ffi_bridge_tests {
         f.formal_param_mapping_schema = Some("svf_formal_arg_index_v1".into());
         f.formal_param_var_ids = vec![7, 7, 11];
         assert_eq!(svf_certified_formal_param_var_ids(&f, 3), None);
+    }
+
+    #[test]
+    fn solved_pta_and_final_icfg_formal_certificates_must_match() {
+        let mut f = function(vec![node("FunEntryBlock", vec![])]);
+        f.formal_param_var_ids = vec![7, 9];
+        f.formal_param_mapping_schema = Some("svf_formal_arg_index_v1".into());
+        let functions = HashMap::from([("f".to_string(), f)]);
+        let artifact = SvfSolvedPointsToArtifactV1 {
+            schema: "svf_solved_points_to_v1".into(),
+            analysis: "AndersenWaveDiff".into(),
+            semantics: "may".into(),
+            formal_mapping_schema: "svf_formal_arg_index_v1".into(),
+            functions: vec![SvfFunctionPointsToV1 {
+                function: "f".into(),
+                formals: vec![
+                    SvfFormalPointsToV1 {
+                        formal_index: 0,
+                        svf_var_id: 7,
+                        points_to: Vec::new(),
+                    },
+                    SvfFormalPointsToV1 {
+                        formal_index: 1,
+                        svf_var_id: 9,
+                        points_to: Vec::new(),
+                    },
+                ],
+            }],
+        };
+
+        validate_svf_formal_certificate_consistency(&functions, &artifact).unwrap();
+    }
+
+    #[test]
+    fn solved_pta_and_final_icfg_formal_disagreement_is_rejected() {
+        let mut f = function(vec![node("FunEntryBlock", vec![])]);
+        f.formal_param_var_ids = vec![7, 8];
+        f.formal_param_mapping_schema = Some("svf_formal_arg_index_v1".into());
+        let functions = HashMap::from([("f".to_string(), f)]);
+        let artifact = SvfSolvedPointsToArtifactV1 {
+            schema: "svf_solved_points_to_v1".into(),
+            analysis: "AndersenWaveDiff".into(),
+            semantics: "may".into(),
+            formal_mapping_schema: "svf_formal_arg_index_v1".into(),
+            functions: vec![SvfFunctionPointsToV1 {
+                function: "f".into(),
+                formals: vec![
+                    SvfFormalPointsToV1 {
+                        formal_index: 0,
+                        svf_var_id: 7,
+                        points_to: Vec::new(),
+                    },
+                    SvfFormalPointsToV1 {
+                        formal_index: 1,
+                        svf_var_id: 9,
+                        points_to: Vec::new(),
+                    },
+                ],
+            }],
+        };
+
+        let error = validate_svf_formal_certificate_consistency(&functions, &artifact).unwrap_err();
+        assert!(error.contains("disagree"), "{error}");
+    }
+
+    #[test]
+    fn solved_pta_requires_final_icfg_mapping_schema_when_function_is_loaded() {
+        let f = function(vec![node("FunEntryBlock", vec![])]);
+        let functions = HashMap::from([("f".to_string(), f)]);
+        let artifact = SvfSolvedPointsToArtifactV1 {
+            schema: "svf_solved_points_to_v1".into(),
+            analysis: "AndersenWaveDiff".into(),
+            semantics: "may".into(),
+            formal_mapping_schema: "svf_formal_arg_index_v1".into(),
+            functions: vec![SvfFunctionPointsToV1 {
+                function: "f".into(),
+                formals: vec![],
+            }],
+        };
+
+        let error = validate_svf_formal_certificate_consistency(&functions, &artifact).unwrap_err();
+        assert!(error.contains("lacks svf_formal_arg_index_v1"), "{error}");
     }
 
     #[test]

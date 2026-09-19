@@ -1,7 +1,7 @@
 use crate::abstract_domain::{AbstractMemory, AbstractState, CellValue, Name};
 use crate::identity::{AllocationIdentityMemory, AllocationIdentityState};
 use crate::mir_semantics::{mir_semantics_v2_enabled, semantic_labels_for_block};
-use crate::panic_unwind::panic_unwind_lifecycle_v1_enabled;
+use crate::panic_unwind::{edge_flow_kind, panic_unwind_lifecycle_v1_enabled, EdgeFlowKind};
 use crate::panic_lifecycle_domain::{fixed_point_real_panic_lifecycle, PanicLifecycleMemory};
 use crate::memory_events;
 use crate::structs::{
@@ -35,6 +35,11 @@ struct AnnotatedIcfg {
     entry: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     capabilities: Option<Vec<&'static str>>,
+    /// A/R2 exact typed copy of the canonical CREMA ICFG edge relation.
+    /// This payload is additive: legacy CQPL semantics still traverse only
+    /// `nodes[*].successors` until a later capability explicitly consumes flow.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    typed_edges: Option<Vec<TypedEdgeRecord>>,
     variables: Vec<ProgramVariable>,
     #[serde(skip_serializing_if = "Option::is_none")]
     allocations: Option<Vec<AbstractAllocationRecord>>,
@@ -114,6 +119,16 @@ struct ExternalDeallocationEffectRecord {
     /// historical primary basis.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     corroborating_bases: Vec<&'static str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct TypedEdgeRecord {
+    source: String,
+    destination: String,
+    flow: &'static str,
+    label: Option<String>,
+    source_label: Option<String>,
+    destination_label: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -438,6 +453,14 @@ fn export_cqpl_annotated_icfg_versioned(
     // relation.  Validate the metadata/edge agreement instead.
     validate_canonical_internal_rust_edges(icfg, &successors)?;
 
+    let typed_edges = if schema_version == 2 {
+        let records = typed_edge_records(icfg);
+        validate_typed_edge_projection(&records, &successors)?;
+        Some(records)
+    } else {
+        None
+    };
+
     let reachable = reachable_from(entry, &successors);
     if schema_version == 2 {
         for edge in &icfg.icfg_edges {
@@ -675,6 +698,7 @@ fn export_cqpl_annotated_icfg_versioned(
         entry: entry.to_string(),
         capabilities: if schema_version == 2 {
             let mut caps = vec![
+                "typed_edge_flow_v1",
                 "allocation_contracts_v1",
                 "allocation_contracts_v2",
                 // Bcontract-DROP1: additive proof vocabulary for exact
@@ -716,6 +740,7 @@ fn export_cqpl_annotated_icfg_versioned(
         } else {
             None
         },
+        typed_edges,
         variables,
         allocations,
         external_deallocation_effects,
@@ -727,6 +752,54 @@ fn export_cqpl_annotated_icfg_versioned(
 
     let file = File::create(output_path)?;
     serde_json::to_writer_pretty(file, &output)?;
+    Ok(())
+}
+
+fn typed_edge_records(icfg: &GlobalICFGOrdered) -> Vec<TypedEdgeRecord> {
+    let mut records: Vec<_> = icfg
+        .icfg_edges
+        .iter()
+        .map(|edge| TypedEdgeRecord {
+            source: edge.source.clone(),
+            destination: edge.destination.clone(),
+            flow: match edge_flow_kind(edge) {
+                EdgeFlowKind::Normal => "normal",
+                EdgeFlowKind::Unwind => "unwind",
+            },
+            label: edge.label.clone(),
+            source_label: edge.source_label.clone(),
+            destination_label: edge.destination_label.clone(),
+        })
+        .collect();
+    records.sort();
+    records.dedup();
+    records
+}
+
+fn validate_typed_edge_projection(
+    typed_edges: &[TypedEdgeRecord],
+    successors: &BTreeMap<String, BTreeSet<String>>,
+) -> Result<(), Box<dyn Error>> {
+    let mut projected: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for edge in typed_edges {
+        projected
+            .entry(edge.source.clone())
+            .or_default()
+            .insert(edge.destination.clone());
+    }
+    let mut sources = BTreeSet::new();
+    sources.extend(successors.keys().cloned());
+    sources.extend(projected.keys().cloned());
+    for source in sources {
+        let legacy = successors.get(&source).cloned().unwrap_or_default();
+        let typed = projected.get(&source).cloned().unwrap_or_default();
+        if legacy != typed {
+            return Err(format!(
+                "typed_edge_flow_v1 projection mismatch at '{source}': successors={legacy:?} typed={typed:?}"
+            )
+            .into());
+        }
+    }
     Ok(())
 }
 
@@ -2581,6 +2654,48 @@ mod tests {
         assert_eq!(value["nodes"][0]["successors"][0], "rust::main::bb1");
         assert_eq!(value["nodes"][0]["pre"]["cells"].as_array().unwrap().len(), 0);
         assert_eq!(value["nodes"][0]["post"]["cells"][0]["value"], "ALLOC");
+    }
+
+    #[test]
+    fn schema_v2_preserves_typed_edge_flow_and_original_labels_additively() {
+        let n0 = GlobalICFGNode::Mir(MirBasicBlock { block_id: 0, statements: vec![], terminator: None });
+        let n1 = GlobalICFGNode::Mir(MirBasicBlock { block_id: 1, statements: vec![], terminator: None });
+        let edge = IcfgEdge {
+            source: "rust::main::bb0".into(),
+            destination: "rust::main::bb1".into(),
+            label: Some("Call unwind".into()),
+            source_label: Some("call-site".into()),
+            destination_label: Some("cleanup".into()),
+        };
+        let g = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ordered_nodes: vec![("rust::main::bb0".into(), n0), ("rust::main::bb1".into(), n1)],
+            icfg_edges: vec![edge],
+            rust_functions: Default::default(),
+            rust_calls: Vec::new(),
+        };
+        let mut state = AbstractState::default();
+        let mut memory = AbstractMemory::default();
+        memory.set_cell_value(&"Local(_1)".to_string(), CellValue::TOP);
+        state.insert("rust::main::bb0".into(), memory);
+        let identity = AllocationIdentityState::default();
+
+        let path = std::env::temp_dir().join(format!("crema-cqpl-typed-edge-{}.json", std::process::id()));
+        export_cqpl_annotated_icfg_with_identity(&g, &state, &identity, "rust::main::bb0", 2, &path).unwrap();
+        let value: serde_json::Value = serde_json::from_reader(File::open(&path).unwrap()).unwrap();
+        let _ = std::fs::remove_file(path);
+
+        assert!(value["capabilities"].as_array().unwrap().iter().any(|c| c.as_str() == Some("typed_edge_flow_v1")));
+        assert_eq!(value["nodes"][0]["successors"], serde_json::json!(["rust::main::bb1"]));
+        assert_eq!(value["typed_edges"].as_array().unwrap().len(), 1);
+        let typed = &value["typed_edges"][0];
+        assert_eq!(typed["source"], "rust::main::bb0");
+        assert_eq!(typed["destination"], "rust::main::bb1");
+        assert_eq!(typed["flow"], "unwind");
+        assert_eq!(typed["label"], "Call unwind");
+        assert_eq!(typed["source_label"], "call-site");
+        assert_eq!(typed["destination_label"], "cleanup");
     }
 
     #[test]

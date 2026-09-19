@@ -66,6 +66,24 @@ pub struct EventLabel {
     pub variable: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TypedEdgeFlow {
+    Normal,
+    Unwind,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct TypedEdgeRecord {
+    pub source: String,
+    pub destination: String,
+    pub flow: TypedEdgeFlow,
+    pub label: Option<String>,
+    pub source_label: Option<String>,
+    pub destination_label: Option<String>,
+}
+
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AllocationEventCertainty {
@@ -375,6 +393,78 @@ pub fn panic_lifecycle_overlay_from_json(root: &serde_json::Value) -> Result<Pan
     Ok(overlay)
 }
 
+/// Parse the A/R2 typed canonical edge payload without changing the frozen
+/// AnnotatedIcfg serde struct used by legacy/unit-test constructors.
+pub fn typed_edge_overlay_from_json(
+    root: &serde_json::Value,
+) -> Result<Option<Vec<TypedEdgeRecord>>, String> {
+    let Some(raw_edges) = root.get("typed_edges") else {
+        return Ok(None);
+    };
+    let edges: Vec<TypedEdgeRecord> = serde_json::from_value(raw_edges.clone())
+        .map_err(|err| format!("invalid typed_edges payload: {err}"))?;
+    Ok(Some(edges))
+}
+
+fn expected_typed_edge_flow(label: Option<&str>) -> TypedEdgeFlow {
+    match label {
+        Some("Call unwind")
+        | Some("Drop unwind")
+        | Some("Assert unwind")
+        | Some("InlineAsm unwind")
+        | Some("Rust unwind propagate")
+        | Some("Rust drop unwind propagate") => TypedEdgeFlow::Unwind,
+        _ => TypedEdgeFlow::Normal,
+    }
+}
+
+fn validate_typed_edge_relation(
+    edges: &[TypedEdgeRecord],
+    nodes: &BTreeMap<String, AnnotatedNode>,
+) -> Result<(), String> {
+    let mut seen = BTreeSet::new();
+    let mut projected: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for edge in edges {
+        if edge.source.is_empty() || edge.destination.is_empty() {
+            return Err("typed_edge_flow_v1 contains an empty edge endpoint".into());
+        }
+        if !nodes.contains_key(&edge.source) || !nodes.contains_key(&edge.destination) {
+            return Err(format!(
+                "typed_edge_flow_v1 edge '{}' -> '{}' is not closed over the node domain",
+                edge.source, edge.destination
+            ));
+        }
+        if !seen.insert(edge.clone()) {
+            return Err(format!(
+                "typed_edge_flow_v1 contains duplicate canonical edge '{}' -> '{}' ({:?})",
+                edge.source, edge.destination, edge.flow
+            ));
+        }
+        let expected = expected_typed_edge_flow(edge.label.as_deref());
+        if edge.flow != expected {
+            return Err(format!(
+                "typed_edge_flow_v1 flow/label mismatch on '{}' -> '{}': label={:?} flow={:?} expected={:?}",
+                edge.source, edge.destination, edge.label, edge.flow, expected
+            ));
+        }
+        projected
+            .entry(edge.source.clone())
+            .or_default()
+            .insert(edge.destination.clone());
+    }
+
+    for (node_id, node) in nodes {
+        let legacy: BTreeSet<String> = node.successors.iter().cloned().collect();
+        let typed = projected.get(node_id).cloned().unwrap_or_default();
+        if legacy != typed {
+            return Err(format!(
+                "typed_edge_flow_v1 projection mismatch at '{node_id}': successors={legacy:?} typed={typed:?}"
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AllocationDispositionKind {
@@ -565,6 +655,9 @@ pub struct Kripke {
     pub variables: BTreeMap<String, ProgramVariable>,
     pub allocations: BTreeMap<String, AbstractAllocation>,
     pub nodes: BTreeMap<String, AnnotatedNode>,
+    /// A/R2 exact typed copy of the canonical CREMA edge relation. CQPL
+    /// temporal semantics still traverse `AnnotatedNode::successors` in R2.
+    pub typed_edges: Vec<TypedEdgeRecord>,
     pub external_deallocation_effects: BTreeMap<String, ExternalDeallocationEffectRecord>,
     pub ffi_argument_identity: BTreeMap<(String, usize), FfiArgumentIdentityRecord>,
     pub llvm_memory_effects: Option<LlvmMemoryEffectsEvidenceV1>,
@@ -784,12 +877,24 @@ fn validate_embedded_svf_pts(evidence: &SvfSolvedPointsToEvidenceV1) -> Result<(
 
 impl Kripke {
     pub fn from_annotated_icfg(input: AnnotatedIcfg) -> Result<Self, String> {
-        Self::from_annotated_icfg_with_panic_lifecycle(input, PanicLifecycleOverlay::new())
+        Self::from_annotated_icfg_with_overlays(
+            input,
+            PanicLifecycleOverlay::new(),
+            None,
+        )
     }
 
     pub fn from_annotated_icfg_with_panic_lifecycle(
         input: AnnotatedIcfg,
         panic_lifecycle: PanicLifecycleOverlay,
+    ) -> Result<Self, String> {
+        Self::from_annotated_icfg_with_overlays(input, panic_lifecycle, None)
+    }
+
+    pub fn from_annotated_icfg_with_overlays(
+        input: AnnotatedIcfg,
+        panic_lifecycle: PanicLifecycleOverlay,
+        typed_edges: Option<Vec<TypedEdgeRecord>>,
     ) -> Result<Self, String> {
         if !matches!(input.schema_version, 1 | 2) {
             return Err(format!(
@@ -811,6 +916,13 @@ impl Kripke {
         let has_llvm_memory_effects = capabilities.contains("llvm_memory_effects_v1");
         let has_svf_solved_points_to = capabilities.contains("svf_solved_points_to_v1");
         let has_ffi_argument_identity = capabilities.contains("ffi_argument_identity_v1");
+        let has_typed_edge_flow = capabilities.contains("typed_edge_flow_v1");
+        if has_typed_edge_flow != typed_edges.is_some() {
+            return Err("typed_edge_flow_v1 capability and typed_edges payload must appear together".into());
+        }
+        if has_typed_edge_flow && schema_version != 2 {
+            return Err("typed_edge_flow_v1 requires annotated ICFG schema v2".into());
+        }
         if has_ffi_argument_identity != !input.ffi_argument_identity.is_empty() {
             return Err("ffi_argument_identity_v1 capability and evidence records must appear together".into());
         }
@@ -1043,6 +1155,11 @@ impl Kripke {
         if !has_external_deallocation_effects && !input.external_deallocation_effects.is_empty() {
             return Err("external deallocation-effect records require capability external_deallocation_effects_v1".into());
         }
+        let typed_edges = typed_edges.unwrap_or_default();
+        if has_typed_edge_flow {
+            validate_typed_edge_relation(&typed_edges, &nodes)?;
+        }
+
         let mut external_deallocation_effects = BTreeMap::new();
         for record in input.external_deallocation_effects {
             if !nodes.contains_key(&record.node) {
@@ -1166,7 +1283,7 @@ impl Kripke {
 
         Ok(Self {
             schema_version, entry: input.entry, capabilities, variables, allocations, nodes,
-            external_deallocation_effects, ffi_argument_identity,
+            typed_edges, external_deallocation_effects, ffi_argument_identity,
             llvm_memory_effects, svf_solved_points_to, panic_lifecycle,
         })
     }
@@ -1311,6 +1428,12 @@ impl Kripke {
             variables,
             allocations,
             nodes,
+            typed_edges: self
+                .typed_edges
+                .iter()
+                .filter(|edge| retained.contains(&edge.source) && retained.contains(&edge.destination))
+                .cloned()
+                .collect(),
             external_deallocation_effects,
             ffi_argument_identity: self
                 .ffi_argument_identity
@@ -2781,6 +2904,78 @@ mod tests {
         let err = Kripke::from_annotated_icfg(input).unwrap_err();
         assert!(err.contains("corroborating basis"));
         assert!(err.contains("requires artifact capability llvm_memory_effects_v1"));
+    }
+
+    fn typed_edge_test_input() -> AnnotatedIcfg {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities.push("typed_edge_flow_v1".into());
+        input.nodes[0].successors = vec!["b1".into()];
+        let mut b1 = input.nodes[0].clone();
+        b1.id = "b1".into();
+        b1.successors.clear();
+        b1.labels.clear();
+        input.nodes.push(b1);
+        input
+    }
+
+    #[test]
+    fn typed_edge_flow_accepts_exact_legacy_projection_without_changing_traversal() {
+        let input = typed_edge_test_input();
+        let edges = vec![TypedEdgeRecord {
+            source: "b0".into(),
+            destination: "b1".into(),
+            flow: TypedEdgeFlow::Unwind,
+            label: Some("Call unwind".into()),
+            source_label: Some("call".into()),
+            destination_label: Some("cleanup".into()),
+        }];
+        let k = Kripke::from_annotated_icfg_with_overlays(
+            input,
+            PanicLifecycleOverlay::new(),
+            Some(edges.clone()),
+        )
+        .unwrap();
+        assert_eq!(k.typed_edges, edges);
+        assert_eq!(k.nodes["b0"].successors, vec!["b1".to_string()]);
+    }
+
+    #[test]
+    fn typed_edge_flow_rejects_projection_mismatch() {
+        let input = typed_edge_test_input();
+        let err = Kripke::from_annotated_icfg_with_overlays(
+            input,
+            PanicLifecycleOverlay::new(),
+            Some(vec![]),
+        )
+        .unwrap_err();
+        assert!(err.contains("projection mismatch"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn typed_edge_flow_rejects_flow_label_disagreement() {
+        let input = typed_edge_test_input();
+        let err = Kripke::from_annotated_icfg_with_overlays(
+            input,
+            PanicLifecycleOverlay::new(),
+            Some(vec![TypedEdgeRecord {
+                source: "b0".into(),
+                destination: "b1".into(),
+                flow: TypedEdgeFlow::Normal,
+                label: Some("Call unwind".into()),
+                source_label: None,
+                destination_label: None,
+            }]),
+        )
+        .unwrap_err();
+        assert!(err.contains("flow/label mismatch"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn typed_edge_flow_requires_payload_when_capability_is_declared() {
+        let input = typed_edge_test_input();
+        let err = Kripke::from_annotated_icfg(input).unwrap_err();
+        assert!(err.contains("capability and typed_edges payload"), "unexpected error: {err}");
     }
 
 }

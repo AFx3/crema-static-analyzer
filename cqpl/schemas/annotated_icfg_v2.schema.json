@@ -65,9 +65,49 @@
       "items": {
         "$ref": "#/$defs/ffiArgumentIdentityRecord"
       }
+    },
+    "typed_edges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/typedEdgeRecord"
+      }
     }
   },
   "$defs": {
+    "typedEdgeRecord": {
+      "type": "object",
+      "required": [
+        "source",
+        "destination",
+        "flow",
+        "label",
+        "source_label",
+        "destination_label"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "destination": {
+          "type": "string",
+          "minLength": 1
+        },
+        "flow": {
+          "enum": ["normal", "unwind"]
+        },
+        "label": {
+          "type": ["string", "null"]
+        },
+        "source_label": {
+          "type": ["string", "null"]
+        },
+        "destination_label": {
+          "type": ["string", "null"]
+        }
+      }
+    },
     "programVariable": {
       "type": "object",
       "required": [
@@ -2067,6 +2107,44 @@
           "capabilities": {
             "contains": {
               "const": "ffi_argument_identity_v1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "typed_edge_flow_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "required": [
+          "typed_edges"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "typed_edges"
+        ]
+      },
+      "then": {
+        "required": [
+          "capabilities"
+        ],
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "typed_edge_flow_v1"
             }
           }
         }

@@ -11,6 +11,21 @@ if [[ ! -x "$SVF_EXAMPLE" ]]; then
   exit 2
 fi
 
+# Live-producer contract preflight.  A stale binary can still exit 0 and emit
+# legacy *_A_FINAL_ICFG.json files, so executable presence alone is not enough.
+for marker in \
+  'LLVM_MEMORY_EFFECTS_V1.json' \
+  'SVF_SOLVED_POINTS_TO_V1.json' \
+  'formal_param_mapping_schema' \
+  'svf_formal_arg_index_v1'
+do
+  if ! grep -aFq "$marker" "$SVF_EXAMPLE"; then
+    echo "EFX1 fixtures: stale/incompatible SVF producer; binary lacks marker '$marker': $SVF_EXAMPLE" >&2
+    echo "Perform a clean rebuild of target svf-example before running the fixtures." >&2
+    exit 3
+  fi
+done
+
 TMP="${TMPDIR:-/tmp}/crema-efx1-fixtures-$$"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP"
@@ -91,5 +106,37 @@ assert funcs['malloc']['tli_libfunc'] is None, funcs['malloc']
 assert funcs['malloc']['tli_changed'] is False, funcs['malloc']
 print('EFX1_NEGATIVE_TLI_FIXTURE: PASS')
 PY
+
+# Gate A/Bmulti: two source-language formals must retain declaration-order
+# identity in both the final ICFG and solved Andersen sidecar.  This is the
+# minimal producer fixture that detects a legacy first-formal-only binary.
+FORMAL_OUT="$TMP/formal_two_args"
+mkdir -p "$FORMAL_OUT"
+"$CLANG14" -S -c -fno-discard-value-names -emit-llvm \
+  "$FIXTURES/formal_two_args.c" -o "$FORMAL_OUT/formal_two_args.ll"
+(
+  cd "$FORMAL_OUT"
+  CREMA_SVF_OUTPUT_DIR="$FORMAL_OUT" "$SVF_EXAMPLE" "$FORMAL_OUT/formal_two_args.ll" \
+    >/dev/null 2>"$FORMAL_OUT/stderr.log"
+)
+python3 "$VALIDATOR" \
+  --effects "$FORMAL_OUT/LLVM_MEMORY_EFFECTS_V1.json" \
+  --pts "$FORMAL_OUT/SVF_SOLVED_POINTS_TO_V1.json"
+python3 - \
+  "$FORMAL_OUT/free_second_A_FINAL_ICFG.json" \
+  "$FORMAL_OUT/SVF_SOLVED_POINTS_TO_V1.json" <<'PYFORMAL'
+import json, sys
+icfg=json.load(open(sys.argv[1]))
+pts=json.load(open(sys.argv[2]))
+assert icfg.get('formal_param_mapping_schema') == 'svf_formal_arg_index_v1', icfg.keys()
+ids=icfg.get('formal_param_var_ids')
+assert isinstance(ids, list) and len(ids) == 2 and len(set(ids)) == 2, ids
+funcs={f['function']: f for f in pts['functions']}
+assert 'free_second' in funcs, funcs.keys()
+formals=funcs['free_second']['formals']
+assert [f['formal_index'] for f in formals] == [0, 1], formals
+assert [f['svf_var_id'] for f in formals] == ids, (formals, ids)
+print('BMULTI_PRODUCER_POSITIONAL_CERTIFICATE: PASS')
+PYFORMAL
 
 echo "EFX1_PRODUCER_FIXTURES: PASS"

@@ -211,6 +211,15 @@ def extract_drop_contracts(path: Path) -> list[dict[str, Any]]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", type=Path, required=True)
+    ap.add_argument(
+        "--tests-root",
+        type=Path,
+        default=None,
+        help=(
+            "Corpus root containing Cargo targets. "
+            "Defaults to <root>/tests_and_target_repos."
+        ),
+    )
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--schema-version", type=int, choices=[1, 2], required=True)
     ap.add_argument("--contract-capability", choices=["v1", "v2"], required=True)
@@ -231,7 +240,11 @@ def main() -> int:
 
     root = args.root.resolve()
     out = args.out.resolve()
-    tests = (root / "tests_and_target_repos").resolve()
+    tests = (
+        args.tests_root.resolve()
+        if args.tests_root is not None
+        else (root / "tests_and_target_repos").resolve()
+    )
     crema = (root / "crema").resolve()
     cqpl = Path(os.environ.get("CREMA_CQPL_DIR", str(root / "cqpl"))).resolve()
     checker_manifest = cqpl / "cqpl_checker" / "Cargo.toml"
@@ -313,6 +326,7 @@ def main() -> int:
     environment: list[str] = [
         f"timestamp_utc={dt.datetime.now(dt.timezone.utc).isoformat()}",
         f"root={root}",
+        f"tests_root={tests}",
         f"schema_version={args.schema_version}",
         f"contract_capability={args.contract_capability}",
         f"toolchain={args.toolchain}",

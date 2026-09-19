@@ -1,5 +1,5 @@
 use cqpl_checker::{
-    panic_lifecycle_overlay_from_json, parse_query_document, AnnotatedIcfg, Binding, Env, Kripke,
+    panic_lifecycle_overlay_from_json, typed_edge_overlay_from_json, parse_query_document, AnnotatedIcfg, Binding, Env, Kripke,
     ModelChecker, QueryResultAssessment,
 };
 use serde::Serialize;
@@ -239,6 +239,17 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     let has_panic_unwind_lifecycle_v1 = capabilities.contains("panic_unwind_lifecycle_v1");
     let has_panic_lifecycle_state_v1 = capabilities.contains("panic_lifecycle_state_v1");
     let has_panic_lifecycle_state_v2 = capabilities.contains("panic_lifecycle_state_v2");
+    let has_typed_edge_flow = capabilities.contains("typed_edge_flow_v1");
+
+    let typed_edges_present = root.get("typed_edges").is_some();
+    if has_typed_edge_flow != typed_edges_present {
+        return Err("typed_edge_flow_v1 capability and typed_edges payload must appear together".into());
+    }
+    if let Some(typed_edges) = root.get("typed_edges") {
+        if !typed_edges.is_array() {
+            return Err("schema-v2 typed_edges must be an array".into());
+        }
+    }
 
     if has_allocation_contracts_v2 && !has_allocation_contracts {
         return Err("allocation_contracts_v2 refines allocation_contracts_v1; the artifact must declare both capabilities".into());
@@ -540,9 +551,10 @@ fn run() -> Result<(), String> {
         .map_err(|e| format!("invalid annotated ICFG JSON: {e}"))?;
     validate_boundary_requirements(&raw_value)?;
     let panic_lifecycle = panic_lifecycle_overlay_from_json(&raw_value)?;
+    let typed_edges = typed_edge_overlay_from_json(&raw_value)?;
     let annotated: AnnotatedIcfg = serde_json::from_value(raw_value)
         .map_err(|e| format!("invalid annotated ICFG JSON: {e}"))?;
-    let base_k = Kripke::from_annotated_icfg_with_panic_lifecycle(annotated, panic_lifecycle)?;
+    let base_k = Kripke::from_annotated_icfg_with_overlays(annotated, panic_lifecycle, typed_edges)?;
     let requested_entry = entry_override.as_deref().unwrap_or(&base_k.entry);
     let k = base_k.project_from_entry(requested_entry, intra)?;
 
@@ -911,5 +923,20 @@ mod tests {
         assert!(validate_boundary_requirements(&value).is_ok());
     }
 
+
+    #[test]
+    fn typed_edge_flow_boundary_requires_atomic_capability_and_payload() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["typed_edge_flow_v1"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("typed_edges payload"), "unexpected error: {err}");
+
+        value["typed_edges"] = json!([]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["capabilities"] = json!([]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("typed_edges payload"), "unexpected error: {err}");
+    }
 
 }

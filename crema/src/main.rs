@@ -1083,6 +1083,97 @@ fn crema_clang_program() -> String {
         .into_owned()
 }
 
+const REQUIRED_LIVE_SVF_SIDECARS: [&str; 2] = [
+    "LLVM_MEMORY_EFFECTS_V1.json",
+    "SVF_SOLVED_POINTS_TO_V1.json",
+];
+const SVF_FORMAL_MAPPING_SCHEMA: &str = "svf_formal_arg_index_v1";
+
+/// Validate the contract of the *live* SVF producer used by CREMA.
+///
+/// Historical archived ICFGs remain readable by the loaders, but a fresh run
+/// must not silently fall back to a pre-EFX1/pre-Bmulti producer.  Such a
+/// producer can exit successfully and still omit the evidence required for
+/// sound positional FFI identity.
+fn validate_live_svf_producer_contract(svf_output_dir: &Path) -> Result<(), String> {
+    for name in REQUIRED_LIVE_SVF_SIDECARS {
+        let path = svf_output_dir.join(name);
+        let metadata = fs::metadata(&path)
+            .map_err(|e| format!("missing required SVF artifact {}: {e}", path.display()))?;
+        if !metadata.is_file() || metadata.len() == 0 {
+            return Err(format!(
+                "required SVF artifact is not a non-empty file: {}",
+                path.display()
+            ));
+        }
+    }
+
+    let mut finals = fs::read_dir(svf_output_dir)
+        .map_err(|e| format!("failed to inspect SVF output {}: {e}", svf_output_dir.display()))?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.is_file()
+                && path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.ends_with("_A_FINAL_ICFG.json"))
+        })
+        .collect::<Vec<_>>();
+    finals.sort();
+
+    if finals.is_empty() {
+        return Err(format!(
+            "SVF produced no *_A_FINAL_ICFG.json in {}",
+            svf_output_dir.display()
+        ));
+    }
+
+    for path in finals {
+        let text = fs::read_to_string(&path)
+            .map_err(|e| format!("failed to read {}: {e}", path.display()))?;
+        let root: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|e| format!("failed to parse {}: {e}", path.display()))?;
+        let schema = root
+            .get("formal_param_mapping_schema")
+            .and_then(|value| value.as_str());
+        if schema != Some(SVF_FORMAL_MAPPING_SCHEMA) {
+            return Err(format!(
+                "{} lacks producer-certified formal mapping schema '{}'",
+                path.display(),
+                SVF_FORMAL_MAPPING_SCHEMA
+            ));
+        }
+        let formals = root
+            .get("formal_param_var_ids")
+            .and_then(|value| value.as_array())
+            .ok_or_else(|| {
+                format!(
+                    "{} lacks producer-certified formal_param_var_ids",
+                    path.display()
+                )
+            })?;
+        let mut ids = std::collections::BTreeSet::new();
+        for value in formals {
+            let id = value.as_u64().ok_or_else(|| {
+                format!(
+                    "{} contains a non-integer formal_param_var_id",
+                    path.display()
+                )
+            })?;
+            if !ids.insert(id) {
+                return Err(format!(
+                    "{} contains duplicate formal_param_var_id {}",
+                    path.display(),
+                    id
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 // compiles the first C file found into LLVM IR, runs the SVF driver;
 // compiles the C file into an object file, and creates a static library;
 // returns the path to the created library.
@@ -1158,21 +1249,13 @@ lexicographically: {}",
     if !svf_status.success() {
         panic!("svf-driver failed for isolated LLVM IR {}", output_llvm_cfile.display());
     }
-    let produced_final_icfg = fs::read_dir(svf_output_dir)
-        .unwrap_or_else(|e| panic!("Failed to inspect isolated SVF directory {}: {e}", svf_output_dir.display()))
-        .filter_map(Result::ok)
-        .any(|entry| {
-            entry.path().is_file()
-                && entry
-                    .file_name()
-                    .to_str()
-                    .is_some_and(|name| name.ends_with("_A_FINAL_ICFG.json"))
-        });
-    if !produced_final_icfg {
+    if let Err(error) = validate_live_svf_producer_contract(svf_output_dir) {
         panic!(
-            "SVF produced no *_A_FINAL_ICFG.json in isolated directory {}. \
-Rebuild SVF-example/src/svf-example from the v6G source before running CREMA.",
-            svf_output_dir.display()
+            "SVF live-producer contract failed for {}: {}. \
+The executable may be stale relative to SVF-example/src/svf-ex.cpp. \
+Perform a clean rebuild of target 'svf-example' before running CREMA.",
+            svf_output_dir.display(),
+            error
         );
     }
     println!("SVF artifacts isolated at: {}", svf_output_dir.display());
@@ -1204,7 +1287,7 @@ Rebuild SVF-example/src/svf-example from the v6G source before running CREMA.",
 
 #[cfg(test)]
 mod c_source_discovery_tests {
-    use super::find_c_files;
+    use super::{find_c_files, validate_live_svf_producer_contract};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1241,6 +1324,70 @@ mod c_source_discovery_tests {
             ]
         );
 
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    fn fresh_test_dir(prefix: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "{prefix}-{}-{}",
+            std::process::id(),
+            nonce
+        ));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn live_svf_contract_rejects_legacy_success_without_sidecars() {
+        let root = fresh_test_dir("crema-svf-contract-missing-sidecars");
+        fs::write(
+            root.join("free_second_A_FINAL_ICFG.json"),
+            r#"{"nodes":[],"edges":[]}"#,
+        )
+        .unwrap();
+
+        let error = validate_live_svf_producer_contract(&root).unwrap_err();
+        assert!(error.contains("LLVM_MEMORY_EFFECTS_V1.json"), "{error}");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn live_svf_contract_rejects_legacy_final_icfg_without_formal_certificate() {
+        let root = fresh_test_dir("crema-svf-contract-missing-formals");
+        fs::write(root.join("LLVM_MEMORY_EFFECTS_V1.json"), "{}\n").unwrap();
+        fs::write(root.join("SVF_SOLVED_POINTS_TO_V1.json"), "{}\n").unwrap();
+        fs::write(
+            root.join("free_second_A_FINAL_ICFG.json"),
+            r#"{"nodes":[],"edges":[]}"#,
+        )
+        .unwrap();
+
+        let error = validate_live_svf_producer_contract(&root).unwrap_err();
+        assert!(error.contains("formal mapping schema"), "{error}");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn live_svf_contract_accepts_sidecars_and_certified_formals() {
+        let root = fresh_test_dir("crema-svf-contract-current");
+        fs::write(root.join("LLVM_MEMORY_EFFECTS_V1.json"), "{}\n").unwrap();
+        fs::write(root.join("SVF_SOLVED_POINTS_TO_V1.json"), "{}\n").unwrap();
+        fs::write(
+            root.join("free_second_A_FINAL_ICFG.json"),
+            r#"{
+                "nodes": [],
+                "edges": [],
+                "formal_param_var_ids": [7, 9],
+                "formal_param_mapping_schema": "svf_formal_arg_index_v1"
+            }"#,
+        )
+        .unwrap();
+
+        validate_live_svf_producer_contract(&root).unwrap();
         fs::remove_dir_all(root).unwrap();
     }
 }
