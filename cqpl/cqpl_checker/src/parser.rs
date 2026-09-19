@@ -1,5 +1,5 @@
 use crate::ast::{
-    LabelPredicate, MayPredicate, PathFormula, PathQuantifier, QueryDocument, StateFormula, StructuralLabelKind,
+    AssessmentScope, LabelPredicate, MayPredicate, PathFormula, PathQuantifier, QueryDocument, StateFormula, StructuralLabelKind,
 };
 use std::collections::BTreeSet;
 
@@ -49,36 +49,63 @@ pub fn parse_query_document(input: &str) -> Result<QueryDocument, String> {
     let cleaned = strip_comments(input);
     let mut rest = cleaned.as_str();
     let mut required_capabilities = BTreeSet::new();
+    let mut assessment_scope = AssessmentScope::AllExecution;
+    let mut scope_declared = false;
 
     loop {
         rest = rest.trim_start();
-        if !rest.starts_with("requires") {
-            break;
-        }
-        let after = &rest["requires".len()..];
-        if after.chars().next().is_some_and(|c| !c.is_whitespace()) {
-            break;
-        }
-        let semi = after.find(';').ok_or_else(||
-            "capability declaration must end with ';' (e.g. requires allocation_contracts_v1;)".to_string()
-        )?;
-        let capability = after[..semi].trim();
-        if capability.is_empty()
-            || !capability.chars().enumerate().all(|(i,c)| c == '_' || c.is_ascii_alphanumeric() && (i > 0 || c.is_ascii_alphabetic()))
+        if rest.starts_with("requires")
+            && rest["requires".len()..].chars().next().is_some_and(|c| c.is_whitespace())
         {
-            return Err(format!("invalid CQPL capability name '{capability}'"));
+            let after = &rest["requires".len()..];
+            let semi = after.find(';').ok_or_else(||
+                "capability declaration must end with ';' (e.g. requires allocation_contracts_v1;)".to_string()
+            )?;
+            let capability = after[..semi].trim();
+            if capability.is_empty()
+                || !capability.chars().enumerate().all(|(i,c)| c == '_' || c.is_ascii_alphanumeric() && (i > 0 || c.is_ascii_alphabetic()))
+            {
+                return Err(format!("invalid CQPL capability name '{capability}'"));
+            }
+            if !required_capabilities.insert(capability.to_string()) {
+                return Err(format!("duplicate CQPL capability requirement '{capability}'"));
+            }
+            rest = &after[semi + 1..];
+            continue;
         }
-        if !required_capabilities.insert(capability.to_string()) {
-            return Err(format!("duplicate CQPL capability requirement '{capability}'"));
+
+        if rest.starts_with("assessment_scope")
+            && rest["assessment_scope".len()..].chars().next().is_some_and(|c| c.is_whitespace())
+        {
+            if scope_declared {
+                return Err("duplicate CQPL assessment_scope declaration".into());
+            }
+            let after = &rest["assessment_scope".len()..];
+            let semi = after.find(';').ok_or_else(||
+                "assessment_scope declaration must end with ';' (e.g. assessment_scope normal_execution;)".to_string()
+            )?;
+            assessment_scope = match after[..semi].trim() {
+                "all_execution" => AssessmentScope::AllExecution,
+                "normal_execution" => AssessmentScope::NormalExecution,
+                other => return Err(format!("unknown CQPL assessment_scope '{other}'")),
+            };
+            scope_declared = true;
+            rest = &after[semi + 1..];
+            continue;
         }
-        rest = &after[semi + 1..];
+        break;
     }
 
+    if assessment_scope == AssessmentScope::NormalExecution
+        && !required_capabilities.contains("typed_edge_flow_v1")
+    {
+        return Err("assessment_scope normal_execution requires explicit `requires typed_edge_flow_v1;`".into());
+    }
     if rest.trim().is_empty() {
         return Err("CQPL query document contains no formula".into());
     }
     let formula = parse_query(rest)?;
-    Ok(QueryDocument::new(required_capabilities, formula))
+    Ok(QueryDocument::new(required_capabilities, formula).with_assessment_scope(assessment_scope))
 }
 
 fn strip_comments(input: &str) -> String {
@@ -408,6 +435,29 @@ mod tests {
             "requires allocation_contracts_v1;\nexists_alloc a. EF allocator_mismatch_l(a)"
         ).unwrap();
         assert!(doc.required_capabilities.contains("allocation_contracts_v1"));
+    }
+
+    #[test]
+    fn parses_normal_execution_assessment_scope() {
+        let doc = parse_query_document(
+            "requires typed_edge_flow_v1; assessment_scope normal_execution; EF term_l(return)"
+        ).unwrap();
+        assert_eq!(doc.assessment_scope, AssessmentScope::NormalExecution);
+        assert!(doc.required_capabilities.contains("typed_edge_flow_v1"));
+    }
+
+    #[test]
+    fn normal_execution_scope_requires_typed_edge_flow_capability() {
+        let err = parse_query_document(
+            "assessment_scope normal_execution; EF term_l(return)"
+        ).unwrap_err();
+        assert!(err.contains("requires explicit `requires typed_edge_flow_v1;`"));
+    }
+
+    #[test]
+    fn default_assessment_scope_is_all_execution() {
+        let doc = parse_query_document("EF term_l(return)").unwrap();
+        assert_eq!(doc.assessment_scope, AssessmentScope::AllExecution);
     }
 
     #[test]

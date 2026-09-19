@@ -2,6 +2,8 @@
 # Same logical shape as the original variable-centric CQPL/paper formula,
 # with AbstractAllocId as the quantified domain.
 requires allocation_state_v1;
+requires typed_edge_flow_v1;
+assessment_scope normal_execution;
 
 exists_alloc a. EF (
   alloc(a) &&

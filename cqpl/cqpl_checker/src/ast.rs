@@ -1,6 +1,16 @@
 use std::collections::BTreeSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AssessmentScope {
+    AllExecution,
+    NormalExecution,
+}
+
+impl Default for AssessmentScope {
+    fn default() -> Self { Self::AllExecution }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MayPredicate {
     Alloc,
     Drop,
@@ -88,12 +98,18 @@ pub enum StateFormula {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryDocument {
     pub required_capabilities: BTreeSet<String>,
+    pub assessment_scope: AssessmentScope,
     pub formula: StateFormula,
 }
 
 impl QueryDocument {
     pub fn new(required_capabilities: BTreeSet<String>, formula: StateFormula) -> Self {
-        Self { required_capabilities, formula }
+        Self { required_capabilities, assessment_scope: AssessmentScope::AllExecution, formula }
+    }
+
+    pub fn with_assessment_scope(mut self, assessment_scope: AssessmentScope) -> Self {
+        self.assessment_scope = assessment_scope;
+        self
     }
 }
 

@@ -1,0 +1,13 @@
+gate=GATE_L1_NORMAL_EXECUTION_FINAL118
+schema=cqpl_gate_l1_normal_execution_v1
+baseline_commit=16bf2c8
+baseline_branch=cqpl2
+implementation_branch=cqpl3-unk-false-leak
+run=gate-l1-normal-execution-20260919T152848Z
+truth_universe=118x12=1416
+truth_delta=0/1416
+non_target_assessment_delta=0
+known_true_ml=34
+known_true_ml_to_unk_false=0
+clean_alloc_read_and_drop=unk_false
+boxed_bool__ml=unk_true

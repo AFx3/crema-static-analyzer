@@ -1,0 +1,30 @@
+{
+  "schema": "cqpl_gate_l1_normal_execution_v1",
+  "truth_delta_count": 0,
+  "non_target_assessment_delta_count": 0,
+  "known_true_ml_count": 34,
+  "known_true_ml_unk_false_count": 0,
+  "known_true_ml_unk_mixed_count": 0,
+  "clean_alloc_read_and_drop": {
+    "result": "unk",
+    "subresult": "unk_false",
+    "direction": "false",
+    "strength": "observational_candidate",
+    "assessment_basis": "assessment_scope:normal_execution;capability:typed_edge_flow_v1;cqpl_three_valued_model_check_v1;evidence:all_allocation_candidates_covered;evidence:all_allocation_origins_covered;evidence:modeled_freed_state_barrier;evidence:no_drop_free_cyclic_suffix;evidence:no_drop_free_terminal_suffix;finding:all_candidate_suffixes_cross_modeled_drop;finding_strength:observational_candidate"
+  },
+  "boxed_bool__ml": {
+    "result": "unk",
+    "subresult": "unk_true",
+    "direction": "true",
+    "strength": "strong_abstract_evidence",
+    "assessment_basis": "assessment_scope:normal_execution;capability:typed_edge_flow_v1;cqpl_three_valued_model_check_v1;disposition_basis:rustc_box_into_raw_v1;evidence:no_intervening_call_after_handoff;evidence:no_modeled_discharge_on_witness_path;evidence:normal_return_reachable;evidence:producer_certified_box_into_raw;finding:normal_return_open_manual_obligation;finding_strength:strong_abstract_evidence"
+  },
+  "criteria": {
+    "truth_delta_0_of_1416": true,
+    "non_target_assessment_delta_0": true,
+    "known_true_ml_to_unk_false_0": true,
+    "clean_is_unk_false": true,
+    "boxed_bool_ml_remains_unk_true": true
+  },
+  "status": "PASS"
+}

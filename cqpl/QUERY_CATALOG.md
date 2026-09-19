@@ -106,6 +106,8 @@ Non interpretare `unk` come “105 leak confermati”.
 
 ```cqpl
 requires allocation_state_v1;
+requires typed_edge_flow_v1;
+assessment_scope normal_execution;
 
 exists_alloc a. EF (
   alloc(a) &&
@@ -116,6 +118,9 @@ exists_alloc a. EF (
 Usa lo stato MAY allocation-centric sia per l'inizio (`alloc`) sia per la persistenza di non-freed (`!drop`).
 
 Freeze: identica a `leak_alloc` su 112/112 soggetti.
+
+
+`assessment_scope normal_execution` is diagnostic-only: the formula truth is still evaluated on the complete transition relation. Refuting/supporting leak findings used for UNKNOWN orientation traverse only typed `normal` edges. This is a conditional assessment view, not a redefinition of leak truth.
 
 ---
 

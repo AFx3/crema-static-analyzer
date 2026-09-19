@@ -149,6 +149,11 @@ def explain_unknown(
         raise UnknownExplanationError(
             f"supporting_findings must be an array in {explanation}"
         )
+    refuting = report.get("refuting_findings", [])
+    if not isinstance(refuting, list):
+        raise UnknownExplanationError(
+            f"refuting_findings must be an array in {explanation}"
+        )
 
     return {
         "query": query.stem,
@@ -168,5 +173,12 @@ def explain_unknown(
         }),
         "supporting_finding_strengths": sorted({
             str(f.get("strength")) for f in findings if isinstance(f, dict) and f.get("strength")
+        }),
+        "refuting_findings": len(refuting),
+        "refuting_finding_kinds": sorted({
+            str(f.get("kind")) for f in refuting if isinstance(f, dict) and f.get("kind")
+        }),
+        "refuting_finding_strengths": sorted({
+            str(f.get("strength")) for f in refuting if isinstance(f, dict) and f.get("strength")
         }),
     }

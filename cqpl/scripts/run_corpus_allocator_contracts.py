@@ -546,6 +546,9 @@ def main() -> int:
                     query_record["supporting_findings"] = explanation["supporting_findings"]
                     query_record["supporting_finding_kinds"] = explanation["supporting_finding_kinds"]
                     query_record["supporting_finding_strengths"] = explanation["supporting_finding_strengths"]
+                    query_record["refuting_findings"] = explanation["refuting_findings"]
+                    query_record["refuting_finding_kinds"] = explanation["refuting_finding_kinds"]
+                    query_record["refuting_finding_strengths"] = explanation["refuting_finding_strengths"]
                     query_record["subresult"] = explanation["subresult"]
                     query_record["direction"] = explanation["direction"]
                     query_record["strength"] = explanation["strength"]
@@ -563,7 +566,8 @@ def main() -> int:
                     print(
                         f"  {qpath.stem}=unk explanation={explain_path.name} "
                         f"reasons={';'.join(explanation['reason_frontier'])} "
-                        f"supporting_findings={explanation['supporting_findings']}",
+                        f"supporting_findings={explanation['supporting_findings']} "
+                        f"refuting_findings={explanation['refuting_findings']}",
                         flush=True,
                     )
             item["queries"][qname] = query_record
@@ -595,12 +599,17 @@ def main() -> int:
             "subresult", "direction", "strength", "assessment_schema", "assessment_basis", "assessment_caveats",
             "explanation", "reason_frontier", "witnesses", "supporting_findings",
             "supporting_finding_kinds", "supporting_finding_strengths",
+            "refuting_findings", "refuting_finding_kinds", "refuting_finding_strengths",
         ]
         w = csv.DictWriter(f, delimiter="\t", fieldnames=fields)
         w.writeheader()
         for record in unknown_explanations:
             row = dict(record)
-            for key_ in ["reason_frontier", "supporting_finding_kinds", "supporting_finding_strengths", "assessment_basis", "assessment_caveats"]:
+            for key_ in [
+                "reason_frontier", "supporting_finding_kinds", "supporting_finding_strengths",
+                "refuting_finding_kinds", "refuting_finding_strengths",
+                "assessment_basis", "assessment_caveats"
+            ]:
                 row[key_] = ";".join(row[key_])
             w.writerow({key_: row.get(key_, "") for key_ in fields})
     unknown_summary = {

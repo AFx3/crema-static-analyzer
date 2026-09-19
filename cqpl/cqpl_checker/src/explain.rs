@@ -1,8 +1,8 @@
-use crate::ast::{LabelPredicate, MayPredicate, PathFormula, PathQuantifier, QueryDocument, StateFormula, StructuralLabelKind};
+use crate::ast::{AssessmentScope, LabelPredicate, MayPredicate, PathFormula, PathQuantifier, QueryDocument, StateFormula, StructuralLabelKind};
 use crate::kripke::{
     AllocationContract, AllocationDispositionKind, AllocationDispositionRecord, AllocationEventCertainty,
     AllocationObligationEffect, CellValue, EventKind, ExternalDeallocationEffectRecord,
-    FfiArgumentIdentityRecord,
+    FfiArgumentIdentityRecord, TypedEdgeFlow,
 };
 use crate::model_checker::{Binding, Env, ModelChecker};
 use crate::truth::Truth;
@@ -84,6 +84,7 @@ impl QueryResultStrength {
 #[serde(rename_all = "snake_case")]
 pub enum AllocationObligationFindingKind {
     NormalReturnOpenManualObligation,
+    AllCandidateSuffixesCrossModeledDrop,
     DropThenUseWithoutReallocation,
     RepeatedDropWithoutReallocation,
     AllocatorFamilyMismatch,
@@ -120,12 +121,18 @@ pub enum AllocationObligationEvidence {
     AllocatorFamilyUnresolved,
     DeallocatorFamilyUnresolved,
     ProducerCertifiedDeallocatorContract,
+    AllAllocationCandidatesCovered,
+    AllAllocationOriginsCovered,
+    NoDropFreeTerminalSuffix,
+    NoDropFreeCyclicSuffix,
+    ModeledFreedStateBarrier,
 }
 
 impl AllocationObligationFindingKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::NormalReturnOpenManualObligation => "normal_return_open_manual_obligation",
+            Self::AllCandidateSuffixesCrossModeledDrop => "all_candidate_suffixes_cross_modeled_drop",
             Self::DropThenUseWithoutReallocation => "drop_then_use_without_reallocation",
             Self::RepeatedDropWithoutReallocation => "repeated_drop_without_reallocation",
             Self::AllocatorFamilyMismatch => "allocator_family_mismatch",
@@ -138,8 +145,12 @@ impl AllocationObligationFindingKind {
     /// An unresolved allocator/deallocator family is diagnostically relevant,
     /// but it is symmetric with respect to "families differ" versus "families
     /// match".  It therefore cannot orient an UNKNOWN result toward true.
-    fn supports_query_true(self) -> bool {
-        !matches!(self, Self::UnresolvedAllocatorContractCandidate)
+    fn query_direction(self) -> QueryEvidenceDirection {
+        match self {
+            Self::AllCandidateSuffixesCrossModeledDrop => QueryEvidenceDirection::False,
+            Self::UnresolvedAllocatorContractCandidate => QueryEvidenceDirection::None,
+            _ => QueryEvidenceDirection::True,
+        }
     }
 }
 
@@ -278,6 +289,11 @@ impl AllocationObligationEvidence {
             Self::AllocatorFamilyUnresolved => "allocator_family_unresolved",
             Self::DeallocatorFamilyUnresolved => "deallocator_family_unresolved",
             Self::ProducerCertifiedDeallocatorContract => "producer_certified_deallocator_contract",
+            Self::AllAllocationCandidatesCovered => "all_allocation_candidates_covered",
+            Self::AllAllocationOriginsCovered => "all_allocation_origins_covered",
+            Self::NoDropFreeTerminalSuffix => "no_drop_free_terminal_suffix",
+            Self::NoDropFreeCyclicSuffix => "no_drop_free_cyclic_suffix",
+            Self::ModeledFreedStateBarrier => "modeled_freed_state_barrier",
         }
     }
 }
@@ -484,6 +500,12 @@ pub struct ExplanationReport {
     /// ownership-obligation witness without being silently promoted to `tt`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub supporting_findings: Vec<AllocationObligationFinding>,
+    /// Directionally negative diagnostic evidence.  This is intentionally
+    /// separate from `supporting_findings`: absence of a positive finding is
+    /// never treated as refuting evidence, and these findings never change
+    /// CQPL truth.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub refuting_findings: Vec<AllocationObligationFinding>,
     pub witnesses: Vec<ExplanationWitness>,
     pub diagnostics: ExplanationDiagnostics,
 }
@@ -665,6 +687,32 @@ impl ExplanationReport {
                 for node in &finding.non_returning_discharge_nodes {
                     let _ = writeln!(out, "    - {node}");
                 }
+            }
+            let _ = writeln!(out);
+            let _ = writeln!(out, "  interpretation:");
+            let _ = writeln!(out, "    {}", finding.summary);
+        }
+
+        let _ = writeln!(out);
+        let _ = writeln!(out, "refuting findings:");
+        if self.refuting_findings.is_empty() {
+            let _ = writeln!(out, "  <none>");
+        }
+        for finding in &self.refuting_findings {
+            let _ = writeln!(out);
+            let _ = writeln!(out, "  kind       : {}", finding.kind.as_str());
+            let _ = writeln!(out, "  strength   : {}", finding.strength.as_str());
+            let _ = writeln!(out, "  allocation : {}", finding.allocation);
+            if let Some(node) = &finding.origin_node {
+                let _ = writeln!(out, "  origin     : {node}");
+            }
+            let _ = writeln!(out, "  path:");
+            for node in &finding.witness_path {
+                let _ = writeln!(out, "    -> {node}");
+            }
+            let _ = writeln!(out, "  evidence:");
+            for evidence in &finding.evidence {
+                let _ = writeln!(out, "    - {}", evidence.as_str());
             }
             let _ = writeln!(out);
             let _ = writeln!(out, "  interpretation:");
@@ -915,7 +963,10 @@ impl<'a> ModelChecker<'a> {
         }
 
         let supporting_findings = self.supporting_findings_for_document(document, result);
-        let assessment = self.assessment_from_findings(result, &supporting_findings);
+        let refuting_findings = self.refuting_findings_for_document(document, result);
+        let mut assessment_findings = supporting_findings.clone();
+        assessment_findings.extend(refuting_findings.iter().cloned());
+        let assessment = self.assessment_from_findings_for_document(document, result, &assessment_findings);
 
         Ok(ExplanationReport {
             schema: "cqpl_explanation_v1",
@@ -923,10 +974,15 @@ impl<'a> ModelChecker<'a> {
             result: result.as_str(),
             assessment,
             entry: self.k.entry.clone(),
-            scope_note: "explanations are over the already-projected annotated abstract Kripke model; they do not assert a concrete execution",
+            scope_note: if document.assessment_scope == AssessmentScope::NormalExecution {
+                "CQPL truth/explanation remains over the complete already-projected abstract Kripke model; directional assessment findings additionally use the typed normal-edge projection and do not assert a concrete execution"
+            } else {
+                "explanations are over the already-projected annotated abstract Kripke model; they do not assert a concrete execution"
+            },
             reason_frontier,
             reason_counts,
             supporting_findings,
+            refuting_findings,
             diagnostics: ExplanationDiagnostics {
                 witnesses_requested: max_witnesses,
                 witnesses_emitted: witnesses.len(),
@@ -952,8 +1008,24 @@ impl<'a> ModelChecker<'a> {
         document: &QueryDocument,
         result: Truth,
     ) -> QueryResultAssessment {
-        let findings = self.supporting_findings_for_document(document, result);
-        self.assessment_from_findings(result, &findings)
+        let mut findings = self.supporting_findings_for_document(document, result);
+        findings.extend(self.refuting_findings_for_document(document, result));
+        self.assessment_from_findings_for_document(document, result, &findings)
+    }
+
+    fn refuting_findings_for_document(
+        &self,
+        document: &QueryDocument,
+        result: Truth,
+    ) -> Vec<AllocationObligationFinding> {
+        if result != Truth::Unknown
+            || !document.required_capabilities.contains("allocation_state_v1")
+            || !formula_is_allocation_state_leak_shape(&document.formula)
+        {
+            return Vec::new();
+        }
+
+        self.leak_state_refuting_findings(result, document.assessment_scope)
     }
 
     fn supporting_findings_for_document(
@@ -963,7 +1035,7 @@ impl<'a> ModelChecker<'a> {
     ) -> Vec<AllocationObligationFinding> {
         let mut findings = Vec::new();
         if formula_contains_negated_drop(&document.formula) {
-            findings.extend(self.allocation_obligation_findings(result));
+            findings.extend(self.allocation_obligation_findings(result, document.assessment_scope));
         }
         if formula_is_use_after_free_shape(&document.formula) {
             findings.extend(self.use_after_free_findings(result));
@@ -1015,6 +1087,25 @@ impl<'a> ModelChecker<'a> {
         ext.dedup_by(|a, b| a.node == b.node);
         finding.ffi_argument_identity = ffi;
         finding.external_effects = ext;
+    }
+
+    fn assessment_from_findings_for_document(
+        &self,
+        document: &QueryDocument,
+        result: Truth,
+        findings: &[AllocationObligationFinding],
+    ) -> QueryResultAssessment {
+        let mut assessment = self.assessment_from_findings(result, findings);
+        if result == Truth::Unknown && document.assessment_scope == AssessmentScope::NormalExecution {
+            assessment.basis.push("assessment_scope:normal_execution".to_string());
+            assessment.basis.push("capability:typed_edge_flow_v1".to_string());
+            assessment.basis.sort();
+            assessment.basis.dedup();
+            assessment.caveats.push(
+                "directional assessment is restricted to typed normal edges; CQPL truth remains evaluated on the complete transition relation including unwind edges",
+            );
+        }
+        assessment
     }
 
     fn assessment_from_findings(
@@ -1076,9 +1167,18 @@ impl<'a> ModelChecker<'a> {
                 caveats: vec!["refuted within the modeled predicates and current abstraction"],
             },
             Truth::Unknown => {
-                let directional_findings = findings
+                let positive_findings = findings
                     .iter()
-                    .filter(|finding| finding.kind.supports_query_true())
+                    .filter(|finding| finding.kind.query_direction() == QueryEvidenceDirection::True)
+                    .collect::<Vec<_>>();
+                let negative_findings = findings
+                    .iter()
+                    .filter(|finding| finding.kind.query_direction() == QueryEvidenceDirection::False)
+                    .collect::<Vec<_>>();
+                let directional_findings = positive_findings
+                    .iter()
+                    .chain(negative_findings.iter())
+                    .copied()
                     .collect::<Vec<_>>();
                 let strength = if directional_findings
                     .iter()
@@ -1090,7 +1190,7 @@ impl<'a> ModelChecker<'a> {
                 } else {
                     QueryResultStrength::Unresolved
                 };
-                if directional_findings.is_empty() {
+                if positive_findings.is_empty() && negative_findings.is_empty() {
                     QueryResultAssessment {
                         schema: QUERY_RESULT_ASSESSMENT_VERSION,
                         result: result.as_str(),
@@ -1103,7 +1203,7 @@ impl<'a> ModelChecker<'a> {
                             "non-directional unresolved-contract candidates do not orient UNKNOWN toward true or false",
                         ],
                     }
-                } else {
+                } else if !positive_findings.is_empty() && negative_findings.is_empty() {
                     QueryResultAssessment {
                         schema: QUERY_RESULT_ASSESSMENT_VERSION,
                         result: result.as_str(),
@@ -1114,7 +1214,32 @@ impl<'a> ModelChecker<'a> {
                         caveats: vec![
                             "positive supporting evidence does not promote UNKNOWN to true",
                             "MAY evidence is never promoted to MUST",
-                            "unk_false and unk_mixed are reserved until explicit dual refuting evidence is implemented",
+                        ],
+                    }
+                } else if positive_findings.is_empty() && !negative_findings.is_empty() {
+                    QueryResultAssessment {
+                        schema: QUERY_RESULT_ASSESSMENT_VERSION,
+                        result: result.as_str(),
+                        subresult: QuerySubresult::UnkFalse,
+                        direction: QueryEvidenceDirection::False,
+                        strength,
+                        basis: basis.into_iter().collect(),
+                        caveats: vec![
+                            "refuting diagnostic evidence does not promote UNKNOWN to false",
+                            "modeled Freed-state barriers remain MAY evidence rather than MUST deallocation facts",
+                        ],
+                    }
+                } else {
+                    QueryResultAssessment {
+                        schema: QUERY_RESULT_ASSESSMENT_VERSION,
+                        result: result.as_str(),
+                        subresult: QuerySubresult::UnkMixed,
+                        direction: QueryEvidenceDirection::Mixed,
+                        strength,
+                        basis: basis.into_iter().collect(),
+                        caveats: vec![
+                            "conflicting positive and refuting diagnostic evidence leaves CQPL truth UNKNOWN",
+                            "MAY evidence is never promoted to MUST",
                         ],
                     }
                 }
@@ -1743,7 +1868,7 @@ impl<'a> ModelChecker<'a> {
         }
     }
 
-    fn allocation_obligation_findings(&self, result: Truth) -> Vec<AllocationObligationFinding> {
+    fn allocation_obligation_findings(&self, result: Truth, scope: AssessmentScope) -> Vec<AllocationObligationFinding> {
         if !self.k.capabilities.contains("allocation_disposition_v1")
             || !self.k.capabilities.contains("mir_semantic_labels_v1")
         {
@@ -1751,7 +1876,11 @@ impl<'a> ModelChecker<'a> {
         }
 
         let mut findings = Vec::new();
+        let reachable = self.reachable_nodes_in_scope(scope);
         for (handoff_node, node) in &self.k.nodes {
+            if !reachable.contains(handoff_node) {
+                continue;
+            }
             for record in &node.allocation_disposition {
                 let (handoff_evidence, handoff_name) = match record.kind {
                     AllocationDispositionKind::BoxIntoRaw
@@ -1773,7 +1902,7 @@ impl<'a> ModelChecker<'a> {
                 };
 
                 let allocation = record.allocation.clone();
-                let path = self.bfs_to(
+                let path = self.bfs_to_in_scope(scope,
                     handoff_node,
                     |candidate| self.is_normal_return_node(candidate),
                     |candidate| !self.blocks_open_manual_obligation(candidate, &allocation),
@@ -1797,6 +1926,9 @@ impl<'a> ModelChecker<'a> {
                 let mut non_returning_discharge_nodes: Vec<String> = self.k.nodes
                     .iter()
                     .filter_map(|(node_id, candidate)| {
+                        if !reachable.contains(node_id) {
+                            return None;
+                        }
                         let has_discharge = candidate.allocation_disposition.iter().any(|d| {
                             d.allocation == allocation
                                 && matches!(d.obligation_effect,
@@ -1807,7 +1939,7 @@ impl<'a> ModelChecker<'a> {
                         });
                         if has_discharge
                             && !witness_path.contains(node_id)
-                            && !self.can_reach_normal_return(node_id)
+                            && !self.can_reach_normal_return_in_scope(scope, node_id)
                         {
                             Some(node_id.clone())
                         } else {
@@ -1891,6 +2023,241 @@ impl<'a> ModelChecker<'a> {
                 .cmp(&(&b.allocation, &b.handoff_node, &b.return_node))
         });
         findings
+    }
+
+    /// Gate L1-R1: read-only negative orientation for the canonical
+    /// allocation-state leak query.
+    ///
+    /// Scientific contract:
+    /// - this routine is invoked only for an already-UNKNOWN query;
+    /// - it never changes CQPL truth;
+    /// - a barrier is accepted only when the allocation-state value is exactly
+    ///   `Freed` (not `Top`), so generic abstract uncertainty is not mistaken
+    ///   for deallocation evidence;
+    /// - every represented allocation candidate and every explicit allocation
+    ///   origin must be covered, otherwise the routine fails closed;
+    /// - any drop-free terminal/cycle, site reuse, unresolved external effect,
+    ///   or explicit ownership-preserving/escaping disposition blocks negative
+    ///   orientation.
+    fn leak_state_refuting_findings(&self, result: Truth, scope: AssessmentScope) -> Vec<AllocationObligationFinding> {
+        if result != Truth::Unknown || !self.k.capabilities.contains("allocation_state_v1") {
+            return Vec::new();
+        }
+
+        let reachable = self.reachable_nodes_in_scope(scope);
+        let candidates = self
+            .k
+            .allocation_ids()
+            .filter(|allocation| {
+                self.k.nodes.keys().filter(|node_id| reachable.contains(*node_id)).any(|node_id| {
+                    self.k.allocation_may_hold(
+                        node_id.as_str(),
+                        allocation.as_str(),
+                        MayPredicate::Alloc,
+                    )
+                        != Truth::False
+                })
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if candidates.is_empty() {
+            return Vec::new();
+        }
+
+        let mut findings = Vec::new();
+        for allocation in &candidates {
+            let origins = self
+                .k
+                .nodes
+                .keys()
+                .filter(|node_id| reachable.contains(*node_id))
+                .filter(|node_id| {
+                    self.node_has_allocation_event(
+                        node_id.as_str(),
+                        allocation.as_str(),
+                        EventKind::Alloc,
+                    )
+                        && self.k.nodes.get(*node_id).is_some_and(|node| {
+                            node.allocation_post.as_ref().is_some_and(|post| {
+                                post.value_of(allocation.as_str()) == CellValue::Alloc
+                            })
+                        })
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+
+            // State-only MAY allocation evidence without an exact allocation
+            // origin is not sufficient for a negative certificate.
+            if origins.is_empty() {
+                return Vec::new();
+            }
+
+            // Re-execution of the same abstract allocation site means one
+            // AbstractAllocId may summarize multiple concrete instances.
+            if origins
+                .iter()
+                .any(|origin| self.node_can_recur_in_scope(scope, origin.as_str()))
+            {
+                return Vec::new();
+            }
+
+            let mut representative_path = Vec::new();
+            for origin in &origins {
+                if self.drop_free_suffix_can_escape(scope, origin.as_str(), allocation.as_str()) {
+                    return Vec::new();
+                }
+
+                if representative_path.is_empty() {
+                    representative_path = self
+                        .bfs_to_in_scope(scope,
+                            origin.as_str(),
+                            |candidate| self.is_exact_freed_state(candidate, allocation.as_str()),
+                            |candidate| {
+                                candidate == origin.as_str()
+                                    || !self.node_blocks_negative_leak_orientation(
+                                        candidate,
+                                        allocation.as_str(),
+                                    )
+                                    || self.is_exact_freed_state(candidate, allocation.as_str())
+                            },
+                        )
+                        .unwrap_or_else(|| vec![origin.clone()]);
+                }
+            }
+
+            findings.push(AllocationObligationFinding {
+                taxonomy: MEMORY_ERROR_DIAGNOSTICS_VERSION,
+                kind: AllocationObligationFindingKind::AllCandidateSuffixesCrossModeledDrop,
+                strength: AllocationObligationFindingStrength::ObservationalCandidate,
+                allocation: allocation.clone(),
+                query_result: result.as_str(),
+                witness_path: representative_path,
+                evidence: vec![
+                    AllocationObligationEvidence::AllAllocationCandidatesCovered,
+                    AllocationObligationEvidence::AllAllocationOriginsCovered,
+                    AllocationObligationEvidence::NoDropFreeTerminalSuffix,
+                    AllocationObligationEvidence::NoDropFreeCyclicSuffix,
+                    AllocationObligationEvidence::ModeledFreedStateBarrier,
+                ],
+                origin_node: origins.first().cloned(),
+                handoff_node: None,
+                return_node: None,
+                first_drop_node: None,
+                second_drop_node: None,
+                use_node: None,
+                mismatch_node: None,
+                allocator_family: None,
+                deallocator_family: None,
+                contracts: Vec::new(),
+                dispositions: Vec::new(),
+                ffi_argument_identity: Vec::new(),
+                external_effects: Vec::new(),
+                non_returning_discharge_nodes: Vec::new(),
+                summary: format!(
+                    "For allocation {allocation}, every explicit allocation origin in the projected abstract graph is structurally cut by an exact Freed-state barrier before any drop-free maximal terminal or cyclic suffix is reachable. This is negative observational evidence only: Freed membership is still interpreted as MAY by CQPL, so the query remains {}.",
+                    result.as_str(),
+                ),
+            });
+        }
+
+        findings
+    }
+
+    fn is_exact_freed_state(&self, node_id: &str, allocation: &str) -> bool {
+        self.k.nodes.get(node_id).is_some_and(|node| {
+            node.allocation_post.as_ref().is_some_and(|post| {
+                post.value_of(allocation) == CellValue::Freed
+            })
+        })
+    }
+
+    fn node_blocks_negative_leak_orientation(&self, node_id: &str, allocation: &str) -> bool {
+        let Some(node) = self.k.nodes.get(node_id) else {
+            return true;
+        };
+
+        if self.k.external_deallocation_effect_at(node_id).is_some_and(|record| {
+            record.status == crate::kripke::ExternalDeallocationEffectStatus::Unresolved
+        }) {
+            return true;
+        }
+
+        node.allocation_disposition.iter().any(|record| {
+            if record.allocation != allocation {
+                return false;
+            }
+            matches!(
+                record.obligation_effect,
+                AllocationObligationEffect::PreserveManualObligation
+                    | AllocationObligationEffect::PreservePersistentObligation
+                    | AllocationObligationEffect::PreserveUnreclaimedObligation
+                    | AllocationObligationEffect::MayEscapeToCaller
+            ) || (record.obligation_effect == AllocationObligationEffect::MayDischarge
+                && !self.is_exact_freed_state(node_id, allocation))
+        })
+    }
+
+    /// Return true when an explicit allocation origin has at least one
+    /// successor suffix that can remain drop-free to a terminal/cycle, or when
+    /// the suffix crosses evidence that makes a negative orientation unsafe.
+    fn drop_free_suffix_can_escape(&self, scope: AssessmentScope, origin: &str, allocation: &str) -> bool {
+        let successors = self.successors_in_scope(scope, origin);
+        if successors.is_empty() {
+            // `EX` is false at a terminal origin, so this origin cannot witness
+            // the leak suffix.  It is therefore covered for this diagnostic.
+            return false;
+        }
+
+        let mut color: BTreeMap<String, u8> = BTreeMap::new();
+        successors.into_iter().any(|successor| {
+            self.drop_free_dfs_can_escape(scope, &successor, allocation, &mut color)
+        })
+    }
+
+    fn drop_free_dfs_can_escape(
+        &self,
+        scope: AssessmentScope,
+        node_id: &str,
+        allocation: &str,
+        color: &mut BTreeMap<String, u8>,
+    ) -> bool {
+        if self.node_blocks_negative_leak_orientation(node_id, allocation) {
+            return true;
+        }
+        if self.is_exact_freed_state(node_id, allocation) {
+            return false;
+        }
+
+        match color.get(node_id).copied() {
+            Some(1) => return true,  // reachable drop-free cycle
+            Some(2) => return false, // already proved closed by barriers
+            _ => {}
+        }
+
+        let Some(_node) = self.k.nodes.get(node_id) else {
+            return true;
+        };
+        let successors = self.successors_in_scope(scope, node_id);
+        if successors.is_empty() {
+            return true; // drop-free maximal finite suffix in the assessment projection
+        }
+
+        color.insert(node_id.to_string(), 1);
+        for successor in &successors {
+            if self.drop_free_dfs_can_escape(scope, successor, allocation, color) {
+                return true;
+            }
+        }
+        color.insert(node_id.to_string(), 2);
+        false
+    }
+
+    fn node_can_recur_in_scope(&self, scope: AssessmentScope, node_id: &str) -> bool {
+        self.successors_in_scope(scope, node_id).into_iter().any(|successor| {
+            self.bfs_to_in_scope(scope, &successor, |candidate| candidate == node_id, |_| true)
+                .is_some()
+        })
     }
 
     fn use_after_free_findings(&self, result: Truth) -> Vec<AllocationObligationFinding> {
@@ -2451,6 +2818,11 @@ impl<'a> ModelChecker<'a> {
         })
     }
 
+    fn can_reach_normal_return_in_scope(&self, scope: AssessmentScope, start: &str) -> bool {
+        self.bfs_to_in_scope(scope, start, |node| self.is_normal_return_node(node), |_| true)
+            .is_some()
+    }
+
     fn can_reach_normal_return(&self, start: &str) -> bool {
         self.bfs_to(start, |node| self.is_normal_return_node(node), |_| true)
             .is_some()
@@ -2476,6 +2848,67 @@ impl<'a> ModelChecker<'a> {
         node.allocation_post.as_ref().is_some_and(|post| {
             post.value_of(allocation) == CellValue::Freed
         })
+    }
+
+    fn reachable_nodes_in_scope(&self, scope: AssessmentScope) -> BTreeSet<String> {
+        let mut reachable = BTreeSet::new();
+        let mut queue = VecDeque::from([self.k.entry.clone()]);
+        while let Some(node) = queue.pop_front() {
+            if !reachable.insert(node.clone()) {
+                continue;
+            }
+            for succ in self.successors_in_scope(scope, &node) {
+                if !reachable.contains(&succ) {
+                    queue.push_back(succ);
+                }
+            }
+        }
+        reachable
+    }
+
+    fn successors_in_scope(&self, scope: AssessmentScope, node: &str) -> Vec<String> {
+        match scope {
+            AssessmentScope::AllExecution => self.successors(node),
+            AssessmentScope::NormalExecution => self.k.typed_edges.iter()
+                .filter(|edge| edge.source == node && edge.flow == TypedEdgeFlow::Normal)
+                .map(|edge| edge.destination.clone())
+                .collect(),
+        }
+    }
+
+    fn bfs_to_in_scope<Goal, Allowed>(
+        &self,
+        scope: AssessmentScope,
+        start: &str,
+        goal: Goal,
+        allowed: Allowed,
+    ) -> Option<Vec<String>>
+    where
+        Goal: Fn(&str) -> bool,
+        Allowed: Fn(&str) -> bool,
+    {
+        if !allowed(start) { return None; }
+        let mut queue = VecDeque::from([start.to_string()]);
+        let mut parent: BTreeMap<String, Option<String>> = BTreeMap::from([(start.to_string(), None)]);
+        while let Some(node) = queue.pop_front() {
+            if goal(&node) {
+                let mut path = vec![node.clone()];
+                let mut current = node;
+                while let Some(Some(prev)) = parent.get(&current) {
+                    path.push(prev.clone());
+                    current = prev.clone();
+                }
+                path.reverse();
+                return Some(path);
+            }
+            for succ in self.successors_in_scope(scope, &node) {
+                if !parent.contains_key(&succ) && allowed(&succ) {
+                    parent.insert(succ.clone(), Some(node.clone()));
+                    queue.push_back(succ);
+                }
+            }
+        }
+        None
     }
 
     fn successors(&self, node: &str) -> Vec<String> {
@@ -2567,6 +3000,68 @@ fn formula_contains_negated_drop(formula: &StateFormula) -> bool {
         | StateFormula::Label { .. }
         | StateFormula::StructuralLabel { .. } => false,
     }
+}
+
+/// Exact Gate L1 scope matcher for the canonical allocation-state leak query:
+///
+/// `exists_alloc a. EF (alloc(a) && EX EG !drop(a))`
+///
+/// The conjunction order is intentionally accepted in either direction, but
+/// no event-label variant or logically different formula is matched.
+fn formula_is_allocation_state_leak_shape(formula: &StateFormula) -> bool {
+    fn is_alloc_atom(formula: &StateFormula, logic_var: &str) -> bool {
+        matches!(
+            formula,
+            StateFormula::May {
+                predicate: MayPredicate::Alloc,
+                logic_var: var,
+            } if var == logic_var
+        )
+    }
+
+    fn is_ex_eg_not_drop(formula: &StateFormula, logic_var: &str) -> bool {
+        let StateFormula::Path {
+            quantifier: PathQuantifier::Exists,
+            formula: PathFormula::Next(next),
+        } = formula
+        else {
+            return false;
+        };
+        let StateFormula::Path {
+            quantifier: PathQuantifier::Exists,
+            formula: PathFormula::Globally(globally),
+        } = next.as_ref()
+        else {
+            return false;
+        };
+        let StateFormula::Not(inner) = globally.as_ref() else {
+            return false;
+        };
+        matches!(
+            inner.as_ref(),
+            StateFormula::May {
+                predicate: MayPredicate::Drop,
+                logic_var: var,
+            } if var == logic_var
+        )
+    }
+
+    let StateFormula::ExistsAlloc { logic_var, body } = formula else {
+        return false;
+    };
+    let StateFormula::Path {
+        quantifier: PathQuantifier::Exists,
+        formula: PathFormula::Eventually(eventually),
+    } = body.as_ref()
+    else {
+        return false;
+    };
+    let StateFormula::And(left, right) = eventually.as_ref() else {
+        return false;
+    };
+
+    (is_alloc_atom(left, logic_var) && is_ex_eg_not_drop(right, logic_var))
+        || (is_alloc_atom(right, logic_var) && is_ex_eg_not_drop(left, logic_var))
 }
 
 fn formula_positive_label_count(formula: &StateFormula, predicate: LabelPredicate) -> usize {
@@ -2705,10 +3200,10 @@ fn merge_witness(current: &mut ExplanationWitness, other: ExplanationWitness) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{PathFormula, PathQuantifier, QueryDocument, StateFormula};
+    use crate::ast::{AssessmentScope, PathFormula, PathQuantifier, QueryDocument, StateFormula};
     use crate::kripke::{
         AbstractAllocation, AbstractAllocationCell, AbstractAllocationMemoryAnnotation, AbstractMemoryAnnotation, AllocationContract, AllocationDispositionRecord, AllocationEventLabel, AnnotatedIcfg, AnnotatedNode,
-        Kripke, NodeIdentityAnnotation, ProgramLanguage, ProgramVariable,
+        Kripke, NodeIdentityAnnotation, ProgramLanguage, ProgramVariable, TypedEdgeFlow, TypedEdgeRecord,
     };
     use crate::parser::parse_query_document;
     use std::collections::BTreeSet;
@@ -2784,6 +3279,36 @@ mod tests {
         }
     }
 
+    fn minimal_refuting_finding() -> AllocationObligationFinding {
+        AllocationObligationFinding {
+            taxonomy: MEMORY_ERROR_DIAGNOSTICS_VERSION,
+            kind: AllocationObligationFindingKind::AllCandidateSuffixesCrossModeledDrop,
+            strength: AllocationObligationFindingStrength::ObservationalCandidate,
+            allocation: "A".into(),
+            query_result: "unk",
+            witness_path: vec!["b0".into(), "b1".into()],
+            evidence: vec![
+                AllocationObligationEvidence::AllAllocationCandidatesCovered,
+                AllocationObligationEvidence::ModeledFreedStateBarrier,
+            ],
+            origin_node: Some("b0".into()),
+            handoff_node: None,
+            return_node: None,
+            first_drop_node: None,
+            second_drop_node: None,
+            use_node: None,
+            mismatch_node: None,
+            allocator_family: None,
+            deallocator_family: None,
+            contracts: vec![],
+            dispositions: vec![],
+            ffi_argument_identity: vec![],
+            external_effects: vec![],
+            non_returning_discharge_nodes: vec![],
+            summary: "test refuting finding".into(),
+        }
+    }
+
     #[test]
     fn cstring_evidence_wire_name_matches_assessment_basis_token() {
         for evidence in [
@@ -2852,6 +3377,252 @@ mod tests {
         assert!(assessment.basis.iter().any(|b| {
             b == "external_effect_corroborating_basis:llvm16_tli_direct_callee_allockind_deallocation_v1"
         }));
+    }
+
+    #[test]
+    fn dual_assessment_maps_negative_only_and_mixed_evidence_without_changing_truth() {
+        let k = one_allocation_graph();
+        let checker = ModelChecker::new(&k);
+
+        let negative = checker.assessment_from_findings(
+            Truth::Unknown,
+            &[minimal_refuting_finding()],
+        );
+        assert_eq!(negative.result, "unk");
+        assert_eq!(negative.subresult, QuerySubresult::UnkFalse);
+        assert_eq!(negative.direction, QueryEvidenceDirection::False);
+        assert_eq!(negative.strength, QueryResultStrength::ObservationalCandidate);
+
+        let mixed = checker.assessment_from_findings(
+            Truth::Unknown,
+            &[minimal_directional_finding(), minimal_refuting_finding()],
+        );
+        assert_eq!(mixed.result, "unk");
+        assert_eq!(mixed.subresult, QuerySubresult::UnkMixed);
+        assert_eq!(mixed.direction, QueryEvidenceDirection::Mixed);
+        assert_eq!(mixed.strength, QueryResultStrength::ObservationalCandidate);
+    }
+
+    fn canonical_leak_state_document() -> QueryDocument {
+        parse_query_document(
+            "requires allocation_state_v1;\nexists_alloc a. EF (alloc(a) && EX EG !drop(a))",
+        )
+        .unwrap()
+    }
+
+    fn normal_scoped_leak_state_document() -> QueryDocument {
+        parse_query_document(
+            "requires allocation_state_v1;\nrequires typed_edge_flow_v1;\nassessment_scope normal_execution;\nexists_alloc a. EF (alloc(a) && EX EG !drop(a))",
+        )
+        .unwrap()
+    }
+
+    fn clean_linear_allocation_graph() -> Kripke {
+        let mut k = one_allocation_graph();
+        k.capabilities.insert("allocation_state_v1".into());
+        {
+            let b0 = k.nodes.get_mut("b0").unwrap();
+            b0.successors = vec!["b1".into()];
+            b0.allocation_post = Some(AbstractAllocationMemoryAnnotation {
+                cells: vec![AbstractAllocationCell {
+                    allocation: "A".into(),
+                    value: CellValue::Alloc,
+                }],
+            });
+        }
+        k.nodes.insert(
+            "b1".into(),
+            AnnotatedNode {
+                id: "b1".into(),
+                successors: vec!["b2".into()],
+                labels: vec![],
+                semantic_labels: vec!["term:drop".into()],
+                allocation_labels: vec![AllocationEventLabel {
+                    predicate: EventKind::Drop,
+                    allocation: "A".into(),
+                    certainty: AllocationEventCertainty::MayAbstract,
+                    deallocator_contract: None,
+                }],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: Some(AbstractAllocationMemoryAnnotation {
+                    cells: vec![AbstractAllocationCell {
+                        allocation: "A".into(),
+                        value: CellValue::Freed,
+                    }],
+                }),
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        k.nodes.insert(
+            "b2".into(),
+            AnnotatedNode {
+                id: "b2".into(),
+                successors: vec![],
+                labels: vec![],
+                semantic_labels: vec!["term:return".into()],
+                allocation_labels: vec![],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: Some(AbstractAllocationMemoryAnnotation {
+                    cells: vec![AbstractAllocationCell {
+                        allocation: "A".into(),
+                        value: CellValue::Freed,
+                    }],
+                }),
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        k
+    }
+
+    #[test]
+    fn l1_clean_linear_state_leak_unknown_is_oriented_false_only() {
+        let k = clean_linear_allocation_graph();
+        let checker = ModelChecker::new(&k);
+        let doc = canonical_leak_state_document();
+        let truth = checker.evaluate_document(&doc, &Env::new()).unwrap();
+        assert_eq!(truth, Truth::Unknown);
+
+        let assessment = checker.assess_document(&doc, truth);
+        assert_eq!(assessment.result, "unk");
+        assert_eq!(assessment.subresult, QuerySubresult::UnkFalse);
+        assert_eq!(assessment.direction, QueryEvidenceDirection::False);
+        assert_eq!(assessment.strength, QueryResultStrength::ObservationalCandidate);
+        assert!(assessment
+            .basis
+            .iter()
+            .any(|basis| basis == "finding:all_candidate_suffixes_cross_modeled_drop"));
+
+        let report = checker.explain_document(&doc, &Env::new(), 4).unwrap();
+        assert_eq!(report.result, "unk");
+        assert!(report.supporting_findings.is_empty());
+        assert_eq!(report.refuting_findings.len(), 1);
+        assert_eq!(
+            report.refuting_findings[0].kind,
+            AllocationObligationFindingKind::AllCandidateSuffixesCrossModeledDrop,
+        );
+    }
+
+    #[test]
+    fn normal_execution_scope_filters_only_unwind_edges_for_assessment_not_truth() {
+        let mut k = clean_linear_allocation_graph();
+        k.capabilities.insert("typed_edge_flow_v1".into());
+        k.nodes.get_mut("b0").unwrap().successors.push("unwind".into());
+        k.nodes.insert(
+            "unwind".into(),
+            AnnotatedNode {
+                id: "unwind".into(),
+                successors: vec![],
+                labels: vec![],
+                semantic_labels: vec!["term:unwind_resume".into()],
+                allocation_labels: vec![],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: Some(AbstractAllocationMemoryAnnotation {
+                    cells: vec![AbstractAllocationCell {
+                        allocation: "A".into(),
+                        value: CellValue::Top,
+                    }],
+                }),
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        k.typed_edges = vec![
+            TypedEdgeRecord {
+                source: "b0".into(), destination: "b1".into(), flow: TypedEdgeFlow::Normal,
+                label: Some("Call return".into()), source_label: None, destination_label: None,
+            },
+            TypedEdgeRecord {
+                source: "b0".into(), destination: "unwind".into(), flow: TypedEdgeFlow::Unwind,
+                label: Some("Call unwind".into()), source_label: None, destination_label: None,
+            },
+            TypedEdgeRecord {
+                source: "b1".into(), destination: "b2".into(), flow: TypedEdgeFlow::Normal,
+                label: Some("Drop return".into()), source_label: None, destination_label: None,
+            },
+        ];
+
+        let checker = ModelChecker::new(&k);
+        let all_doc = canonical_leak_state_document();
+        let normal_doc = normal_scoped_leak_state_document();
+        let all_truth = checker.evaluate_document(&all_doc, &Env::new()).unwrap();
+        let normal_truth = checker.evaluate_document(&normal_doc, &Env::new()).unwrap();
+        assert_eq!(all_truth, Truth::Unknown);
+        assert_eq!(normal_truth, all_truth, "assessment scope must not change CQPL truth");
+
+        let all_assessment = checker.assess_document(&all_doc, all_truth);
+        assert_ne!(all_assessment.subresult, QuerySubresult::UnkFalse);
+
+        let normal_assessment = checker.assess_document(&normal_doc, normal_truth);
+        assert_eq!(normal_assessment.subresult, QuerySubresult::UnkFalse);
+        assert!(normal_assessment.basis.iter().any(|b| b == "assessment_scope:normal_execution"));
+        assert!(normal_assessment.caveats.iter().any(|c| c.contains("complete transition relation")));
+    }
+
+    #[test]
+    fn l1_drop_or_leak_branch_never_orients_unknown_false() {
+        let mut k = clean_linear_allocation_graph();
+        k.nodes.get_mut("b0").unwrap().successors.push("leak".into());
+        k.nodes.insert(
+            "leak".into(),
+            AnnotatedNode {
+                id: "leak".into(),
+                successors: vec![],
+                labels: vec![],
+                semantic_labels: vec!["term:return".into()],
+                allocation_labels: vec![],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: Some(AbstractAllocationMemoryAnnotation {
+                    cells: vec![AbstractAllocationCell {
+                        allocation: "A".into(),
+                        value: CellValue::Alloc,
+                    }],
+                }),
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+
+        let checker = ModelChecker::new(&k);
+        let doc = canonical_leak_state_document();
+        let truth = checker.evaluate_document(&doc, &Env::new()).unwrap();
+        assert_eq!(truth, Truth::Unknown);
+        let assessment = checker.assess_document(&doc, truth);
+        assert_ne!(assessment.subresult, QuerySubresult::UnkFalse);
+        assert!(checker.refuting_findings_for_document(&doc, truth).is_empty());
+    }
+
+    #[test]
+    fn l1_allocation_site_reuse_cycle_fails_closed() {
+        let mut k = clean_linear_allocation_graph();
+        k.nodes.get_mut("b1").unwrap().successors = vec!["b0".into()];
+
+        let checker = ModelChecker::new(&k);
+        let doc = canonical_leak_state_document();
+        let truth = checker.evaluate_document(&doc, &Env::new()).unwrap();
+        assert_eq!(truth, Truth::Unknown);
+        assert!(checker.refuting_findings_for_document(&doc, truth).is_empty());
+    }
+
+    #[test]
+    fn l1_event_leak_query_is_out_of_scope() {
+        let k = clean_linear_allocation_graph();
+        let checker = ModelChecker::new(&k);
+        let doc = parse_query_document(
+            "exists_alloc a. EF (alloc_l(a) && EX EG !drop_l(a))",
+        )
+        .unwrap();
+        let truth = checker.evaluate_document(&doc, &Env::new()).unwrap();
+        assert!(checker.refuting_findings_for_document(&doc, truth).is_empty());
     }
 
     #[test]
@@ -3048,7 +3819,7 @@ mod tests {
             pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
         });
 
-        let findings = ModelChecker::new(&k).allocation_obligation_findings(Truth::Unknown);
+        let findings = ModelChecker::new(&k).allocation_obligation_findings(Truth::Unknown, AssessmentScope::AllExecution);
         let finding = findings.iter().find(|f| {
             f.evidence.contains(&AllocationObligationEvidence::ProducerCertifiedCStringIntoRaw)
         }).expect("CString::into_raw leak finding");

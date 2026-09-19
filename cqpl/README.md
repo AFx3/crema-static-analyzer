@@ -60,6 +60,7 @@ Documenti principali:
 - [ANNOTATED_ICFG.md](ANNOTATED_ICFG.md) — boundary CREMA -> CQPL;
 - [EXPLAINABILITY.md](EXPLAINABILITY.md) — contratto explanation/assessment;
 - [QUERY_CATALOG.md](QUERY_CATALOG.md) — significato delle 12 query e conteggi frozen;
+- [ASSESSMENT_SCOPES.md](ASSESSMENT_SCOPES.md) — proiezioni esplicite usate solo dall’assessment (`all_execution`, `normal_execution`);
 - `capabilities/*.md` — contratti normativi delle evidence capability.
 
 ## Regola metodologica

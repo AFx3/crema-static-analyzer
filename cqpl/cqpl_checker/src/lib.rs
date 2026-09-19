@@ -5,7 +5,7 @@ pub mod model_checker;
 pub mod parser;
 pub mod truth;
 
-pub use ast::QueryDocument;
+pub use ast::{AssessmentScope, QueryDocument};
 pub use explain::{
     ExplanationReport, ExplanationWitness, QueryEvidenceDirection, QueryResultAssessment,
     QueryResultStrength, QuerySubresult, UncertaintyReason, EXPLAINABILITY_TAXONOMY_VERSION,

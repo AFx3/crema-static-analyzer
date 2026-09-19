@@ -1,0 +1,30 @@
+{
+  "result": "unk",
+  "assessment": {
+    "schema": "cqpl_result_assessment_v1",
+    "result": "unk",
+    "subresult": "unk_false",
+    "direction": "false",
+    "strength": "observational_candidate",
+    "basis": [
+      "assessment_scope:normal_execution",
+      "capability:typed_edge_flow_v1",
+      "cqpl_three_valued_model_check_v1",
+      "evidence:all_allocation_candidates_covered",
+      "evidence:all_allocation_origins_covered",
+      "evidence:modeled_freed_state_barrier",
+      "evidence:no_drop_free_cyclic_suffix",
+      "evidence:no_drop_free_terminal_suffix",
+      "finding:all_candidate_suffixes_cross_modeled_drop",
+      "finding_strength:observational_candidate"
+    ],
+    "caveats": [
+      "refuting diagnostic evidence does not promote UNKNOWN to false",
+      "modeled Freed-state barriers remain MAY evidence rather than MUST deallocation facts",
+      "directional assessment is restricted to typed normal edges; CQPL truth remains evaluated on the complete transition relation including unwind edges"
+    ]
+  },
+  "entry": "rust::main::bb0",
+  "scope": "reachable",
+  "query_file": "cqpl/queries_v2/leak_alloc_state.cqpl"
+}

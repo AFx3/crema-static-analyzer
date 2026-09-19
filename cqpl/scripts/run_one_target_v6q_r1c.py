@@ -225,7 +225,8 @@ def main() -> int:
                 f"{query.stem}=unk "
                 f"explanation={record['explanation']} "
                 f"reasons={';'.join(record['reason_frontier'])} "
-                f"supporting_findings={record['supporting_findings']}"
+                f"supporting_findings={record['supporting_findings']} "
+                f"refuting_findings={record['refuting_findings']}"
             )
         else:
             print(f"{query.stem}={result}")
@@ -245,12 +246,17 @@ def main() -> int:
             "target", "artifact", "query", "result", "subresult", "direction", "strength", "assessment_schema", "assessment_basis", "assessment_caveats", "explanation",
             "reason_frontier", "witnesses", "supporting_findings",
             "supporting_finding_kinds", "supporting_finding_strengths",
+            "refuting_findings", "refuting_finding_kinds", "refuting_finding_strengths",
         ]
         w = csv.DictWriter(f, delimiter="\t", fieldnames=fields)
         w.writeheader()
         for record in unknown_explanations:
             row = dict(record)
-            for key in ["reason_frontier", "supporting_finding_kinds", "supporting_finding_strengths", "assessment_basis", "assessment_caveats"]:
+            for key in [
+                "reason_frontier", "supporting_finding_kinds", "supporting_finding_strengths",
+                "refuting_finding_kinds", "refuting_finding_strengths",
+                "assessment_basis", "assessment_caveats"
+            ]:
                 row[key] = ";".join(row[key])
             w.writerow({key: row.get(key, "") for key in fields})
 
