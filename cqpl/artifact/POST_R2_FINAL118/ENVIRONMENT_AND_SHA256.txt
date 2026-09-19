@@ -1,0 +1,42 @@
+=== DATE ===
+2026-09-19T14:29:57,258579101+02:00
+
+=== RUST ===
+rustc 1.84.0-nightly (3fee0f12e 2024-11-20)
+binary: rustc
+commit-hash: 3fee0f12e4f595948f8f54f57c8b7a7a58127124
+commit-date: 2024-11-20
+host: x86_64-unknown-linux-gnu
+release: 1.84.0-nightly
+LLVM version: 19.1.3
+cargo 1.84.0-nightly (66221abde 2024-11-19)
+
+=== LLVM ===
+16.0.4
+
+=== SVF ===
+b24b391dfee82b777fe1bcb984fb528e09e9d2edc4d453d04b228a9068c657eb  /home/af/Documenti/a-phd/SVF-example/src/svf-ex.cpp
+415666fb66623e5b0a9ea1293d9aab1d519a08e1d7ff88d7e198db73c645eb49  /home/af/Documenti/a-phd/SVF-example/src/svf-example
+
+=== GATE A/R2 SOURCES ===
+dcdf9f78872cbc9774ecc4003e60c92121d93cd10d0f431be56e2e203c4be0b3  /home/af/Documenti/a-phd/crema/src/cqpl_export.rs
+ce865ccfbb0674e2ffa1d11e4cc24716372f804b618b0693f001c1b7b54cbdc8  /home/af/Documenti/a-phd/cqpl/cqpl_checker/src/kripke.rs
+87c0f7787dfbd7819456db9e53c63c40b7fcd29457ae8176b465c24e3f0dcaaa  /home/af/Documenti/a-phd/cqpl/cqpl_checker/src/main.rs
+8463bb59a4df9a6e68b85d3a98aeb2c9924320bf31dd9cf5188fee03aa6fcdb9  /home/af/Documenti/a-phd/cqpl/cqpl_checker/src/lib.rs
+64f3702dc8ff9a1c16561dabb7b48c6722fab08d7cca18823455b5e12a312a91  /home/af/Documenti/a-phd/cqpl/schemas/annotated_icfg_v2.schema.json
+906607e974f311fa0ec9333a87ae113bc3d23a275ab8031a7a85871503059242  /home/af/Documenti/a-phd/cqpl/capabilities/typed_edge_flow_v1.md
+c9455a2f2ceaff8bdf40e416696142ec40d792d1824092e7359faf857d62761c  /home/af/Documenti/a-phd/cqpl/scripts/run_corpus_allocator_contracts.py
+
+=== QUERIES ===
+8267af66ddfd3268b5042a71c5cb4869c7ba4d954bb0da0b7bae11322426d1bd  /home/af/Documenti/a-phd/cqpl/queries_v2/allocator_mismatch_ub.cqpl
+f7cd73debdbeba84a944f1e2926c529e3a811ec897878d7b792a63fa69f5621a  /home/af/Documenti/a-phd/cqpl/queries_v2/allocator_mismatch_ub_v2.cqpl
+2836e2bfb638bfdb13fa77764ca0d5f0367102e14e5815eb26324c8d8a9a7833  /home/af/Documenti/a-phd/cqpl/queries_v2/double_free_alloc.cqpl
+bf2aa3b95ca2f92eeef515afc531d7c38d5a43789070273975ad0bf85e1c3aba  /home/af/Documenti/a-phd/cqpl/queries_v2/double_free_alloc_state.cqpl
+a72c8d58e25539b8481d792f28f26acb93700c14ba31477be25eca9655474a3c  /home/af/Documenti/a-phd/cqpl/queries_v2/leak_alloc.cqpl
+e1ef5c74adf8ec5944e5595330ea0de27b3b6fa56f0df76a96f297d9314f3c74  /home/af/Documenti/a-phd/cqpl/queries_v2/leak_alloc_state.cqpl
+fab9fde19ebf7bcec466ae8202b2f80f1c27465cb555b70b781f0e9976215018  /home/af/Documenti/a-phd/cqpl/queries_v2/mir_rvalue_presence.cqpl
+8e741b721370fc3d78d26b39d2752a6f924531018a4a78b4d54b42676a61d91b  /home/af/Documenti/a-phd/cqpl/queries_v2/mir_statement_presence.cqpl
+65ffafbdcb6f9040872f745ee6e69c9de1b6eab308457d06c48b02bc547fa570  /home/af/Documenti/a-phd/cqpl/queries_v2/mir_structural_allocator_example.cqpl
+e141a2ba9056cf9d4e71c47c04810626c9b6f1075ea7649e19d9a19cc984bf37  /home/af/Documenti/a-phd/cqpl/queries_v2/mir_terminator_presence.cqpl
+202b3e39728564fa135022b3cb860b394dc05999f87c5cf37cacc2605f977eef  /home/af/Documenti/a-phd/cqpl/queries_v2/use_after_free_alloc.cqpl
+c0ec0edc20f149bdb9b26a34a24ffba12485e61d27fd9d5debf14c367d41c1c8  /home/af/Documenti/a-phd/cqpl/queries_v2/use_after_free_alloc_state.cqpl

@@ -1,0 +1,17 @@
+{
+  "capability_subject_counts": {
+    "allocation_state_v1": 118,
+    "external_deallocation_effects_v1": 118,
+    "ffi_argument_identity_v1": 23,
+    "llvm_memory_effects_v1": 36,
+    "svf_solved_points_to_v1": 36,
+    "typed_edge_flow_v1": 118
+  },
+  "schema": "post_r2_capability_edge_census_v1",
+  "subjects": 118,
+  "subjects_without_typed_edge_flow_v1": [],
+  "typed_edge_counts": {
+    "normal": 18460,
+    "unwind": 4388
+  }
+}

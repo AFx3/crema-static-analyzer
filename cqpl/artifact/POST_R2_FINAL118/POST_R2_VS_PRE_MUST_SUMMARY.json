@@ -1,0 +1,23 @@
+{
+  "attempts": 1416,
+  "changed_subject_count": 2,
+  "delta_count": 8,
+  "queries": 12,
+  "query_delta_counts": {
+    "allocator_mismatch_ub": 2,
+    "allocator_mismatch_ub_v2": 2,
+    "double_free_alloc": 1,
+    "double_free_alloc_state": 1,
+    "use_after_free_alloc": 1,
+    "use_after_free_alloc_state": 1
+  },
+  "schema": "post_r2_vs_pre_must_final118_v1",
+  "subject_delta_counts": {
+    "experimental/bmulti_df_second_ffi": 4,
+    "experimental/bmulti_uaf_second_ffi": 4
+  },
+  "subjects": 118,
+  "transition_counts": {
+    "ff->unk": 8
+  }
+}

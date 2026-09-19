@@ -1,0 +1,9 @@
+group	target	query	pre_must	post_r2	transition
+experimental	bmulti_df_second_ffi	allocator_mismatch_ub	ff	unk	ff->unk
+experimental	bmulti_df_second_ffi	allocator_mismatch_ub_v2	ff	unk	ff->unk
+experimental	bmulti_df_second_ffi	double_free_alloc	ff	unk	ff->unk
+experimental	bmulti_df_second_ffi	double_free_alloc_state	ff	unk	ff->unk
+experimental	bmulti_uaf_second_ffi	allocator_mismatch_ub	ff	unk	ff->unk
+experimental	bmulti_uaf_second_ffi	allocator_mismatch_ub_v2	ff	unk	ff->unk
+experimental	bmulti_uaf_second_ffi	use_after_free_alloc	ff	unk	ff->unk
+experimental	bmulti_uaf_second_ffi	use_after_free_alloc_state	ff	unk	ff->unk

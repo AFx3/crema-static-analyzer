@@ -1,0 +1,132 @@
+{
+  "artifact_sha256": {
+    "annotated_icfg_portable_manifest": "40b06c57e514ca6e26d6645ed095bd31091995de0e5d8bcb2f3bf32d4471b9d0",
+    "capability_edge_census": "f1f00ec15ea427cedf002ce35ef65135b9861c5e9f21f369b8bbbf1249fb5a48",
+    "environment_and_sha256": "f6c6ada9c7cb5bfb999df9516f699f0775e0f071c3808bb27eea8040e911a623",
+    "expected_experimental_targets": "5e484f36ea89eb1e75a620b1b63049e259fe48105722ae991916d24fc3955b6b",
+    "expected_main_targets": "8c874886d39777f97a0e4a609887955494dedf2e2ec080ed025ef38c2b840b06",
+    "experimental_source_manifest": "dff1bf4d35fe2331311137be947a4778764078bbde719e2dc78b39baacc91f98",
+    "historical_final112_matrix": "6cd6a66b818fd6a6efdd150633e0c67b06edcb18911801baa8a160897bed0bc8",
+    "main_source_manifest": "b76d92cc6a841291b3e16c9085316dda21b00522e0600541ee4e4e31bffd7eaa",
+    "post_r2_source_and_producer_manifest": "f69dee8acbc4d89fdd3acf4eb28b9fb5d780c76d95446d1f23bc60a6f1f082d1",
+    "post_r2_vs_pre_must": "8b1231a4261a566271b4e92abe7fcf0d333cef0ca93bb69c6e8282e0e7f68977",
+    "query_long": "8cbf846668aef7586919511ccb62db717223942d3600b51bea3c45a5c8e12d3e",
+    "query_wide": "50c044485d3f6dd6f7a27096801752f77d90b0dca922eaaff3791958874e741c",
+    "r2_neutrality": "a0b546afad8e6d50089b4c0f2b27fcf701704332f9dac83f282bc232cd7267e2",
+    "subjects": "6373d2a6bcbb5a71c1f00ec3fce7f2a43791e589cff84531b3fa72b9b9bda6fd",
+    "unknown_explanations": "1c3152d2e8eff20c7c42348e5b59b7363bad56e99c188248eedd28bbe04374f5"
+  },
+  "attempts": 1416,
+  "capability_edge_census": {
+    "capability_subject_counts": {
+      "allocation_state_v1": 118,
+      "external_deallocation_effects_v1": 118,
+      "ffi_argument_identity_v1": 23,
+      "llvm_memory_effects_v1": 36,
+      "svf_solved_points_to_v1": 36,
+      "typed_edge_flow_v1": 118
+    },
+    "schema": "post_r2_capability_edge_census_v1",
+    "subjects": 118,
+    "subjects_without_typed_edge_flow_v1": [],
+    "typed_edge_counts": {
+      "normal": 18460,
+      "unwind": 4388
+    }
+  },
+  "direction_counts": {
+    "none": 148,
+    "true": 295
+  },
+  "experimental_active": 4,
+  "git_head_before_post_r2_freeze_commit": "f5154ae005ee3b2c47fa9642835e26c24661aed1",
+  "historical_final112_truth_delta_count": 0,
+  "main_active": 111,
+  "new_subjects": [
+    {
+      "group": "corpus",
+      "target": "clean_alloc_read_and_drop"
+    },
+    {
+      "group": "corpus",
+      "target": "uaf-df-mail-lillo"
+    },
+    {
+      "group": "experimental",
+      "target": "bmulti_clean_two_args_ffi"
+    },
+    {
+      "group": "experimental",
+      "target": "bmulti_df_second_ffi"
+    },
+    {
+      "group": "experimental",
+      "target": "bmulti_leak_second_ffi"
+    },
+    {
+      "group": "experimental",
+      "target": "bmulti_uaf_second_ffi"
+    }
+  ],
+  "post_r2_vs_pre_must": {
+    "attempts": 1416,
+    "changed_subject_count": 2,
+    "delta_count": 8,
+    "queries": 12,
+    "query_delta_counts": {
+      "allocator_mismatch_ub": 2,
+      "allocator_mismatch_ub_v2": 2,
+      "double_free_alloc": 1,
+      "double_free_alloc_state": 1,
+      "use_after_free_alloc": 1,
+      "use_after_free_alloc_state": 1
+    },
+    "schema": "post_r2_vs_pre_must_final118_v1",
+    "subject_delta_counts": {
+      "experimental/bmulti_df_second_ffi": 4,
+      "experimental/bmulti_uaf_second_ffi": 4
+    },
+    "subjects": 118,
+    "transition_counts": {
+      "ff->unk": 8
+    }
+  },
+  "profile": "POST_R2_FINAL118",
+  "provenance_note": "The generation directory retains the historical pre-must-final118 prefix because the POST-R2 corpus was produced by a non-destructive copy of the PRE_MUST runner. The semantic profile and freeze identity are POST_R2.",
+  "queries": 12,
+  "query_manifest_sha256": "23f0758d8459c8482b75c6c6c85b1f41f708a0ce99da505b90e4c6f782086a95",
+  "r2_neutrality": {
+    "attempts": 1416,
+    "queries": 12,
+    "schema": "gate_a_r2_final118_neutrality_v1",
+    "status": "PASS",
+    "subjects": 118,
+    "truth_or_assessment_delta_count": 0,
+    "typed_edge_counts": {
+      "normal": 18460,
+      "unwind": 4388
+    }
+  },
+  "registry_subjects": 3,
+  "run": "/home/af/Documenti/a-phd/repro-results/pre-must-final118-20260919T120729Z",
+  "run_basename_at_generation": "pre-must-final118-20260919T120729Z",
+  "run_path_at_generation": "/home/af/Documenti/a-phd/repro-results/pre-must-final118-20260919T120729Z",
+  "schema": "cqpl_post_r2_final118_freeze_v1",
+  "semantic_profile": "schema-v2 + mir_semantics_v2 + allocation_state_v1 + allocation_contracts_v2 + restored live SVF evidence + typed_edge_flow_v1",
+  "status": "PASS",
+  "strength_counts": {
+    "observational_candidate": 212,
+    "strong_abstract_evidence": 83,
+    "unresolved": 148
+  },
+  "subjects": 118,
+  "subresult_counts": {
+    "unk_true": 295,
+    "unk_unoriented": 148
+  },
+  "truth_counts": {
+    "ff": 738,
+    "tt": 235,
+    "unk": 443
+  }
+}

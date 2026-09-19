@@ -1,0 +1,12 @@
+{
+  "attempts": 1416,
+  "queries": 12,
+  "schema": "gate_a_r2_final118_neutrality_v1",
+  "status": "PASS",
+  "subjects": 118,
+  "truth_or_assessment_delta_count": 0,
+  "typed_edge_counts": {
+    "normal": 18460,
+    "unwind": 4388
+  }
+}
