@@ -97,20 +97,6 @@ impl AllocationIdentityMemory {
         out
     }
 
-    /// Conservative universe already represented at this program point.
-    /// Used only as a fail-closed MAY widening when a lifecycle subject cannot
-    /// be correlated more precisely; no fresh abstract allocation is created.
-    pub fn represented_allocations(&self) -> BTreeSet<AbstractAllocId> {
-        let mut out = BTreeSet::new();
-        for allocs in self.points_to.values() {
-            out.extend(allocs.iter().cloned());
-        }
-        for allocs in self.place_points_to.values() {
-            out.extend(allocs.iter().cloned());
-        }
-        out
-    }
-
     /// Strong overwrite of one variable's heap identity.
     pub fn assign_points_to(
         &mut self,
@@ -127,12 +113,6 @@ impl AllocationIdentityMemory {
     /// Strong overwrite with one fresh abstract allocation identity.
     pub fn assign_fresh(&mut self, var: ProgramVarId, alloc: AbstractAllocId) {
         self.points_to.insert(var, BTreeSet::from([alloc]));
-    }
-
-    /// Pointer/value copy: destination receives the source MAY points-to set.
-    pub fn copy_points_to(&mut self, from: &ProgramVarId, to: ProgramVarId) {
-        let allocs = self.points_to(from);
-        self.assign_points_to(to, allocs);
     }
 
     /// Strong overwrite of one variable's stack-reference targets.
@@ -174,6 +154,7 @@ impl AllocationIdentityMemory {
     }
 
     /// MAY alias is intersection of points-to sets, not equivalence closure.
+    #[cfg(test)]
     pub fn may_alias(&self, left: &ProgramVarId, right: &ProgramVarId) -> bool {
         let l = self.points_to(left);
         let r = self.points_to(right);
@@ -185,6 +166,7 @@ impl AllocationIdentityMemory {
     /// This is intentionally *not* called must-alias: singleton cardinality in
     /// the finite abstraction does not imply a unique concrete allocation in
     /// every concretization (e.g. repeated allocations at one site/context).
+    #[cfg(test)]
     pub fn same_singleton_abstract_id(&self, left: &ProgramVarId, right: &ProgramVarId) -> bool {
         let l = self.points_to(left);
         let r = self.points_to(right);
@@ -227,6 +209,7 @@ impl AllocationIdentityMemory {
     }
 
     /// Precision order for MAY components: subset means more precise.
+    #[cfg(test)]
     pub fn leq(&self, other: &Self) -> bool {
         let points_to_leq = self.points_to.iter().all(|(var, allocs)| {
             allocs.is_subset(&other.points_to(var))
@@ -775,6 +758,7 @@ fn method_terminal(callee: &str, method: &str) -> bool {
 /// Since identity is MAY information, the site may also be present on the
 /// abstract exceptional/error join; that can lose precision but cannot invent
 /// MUST certainty.
+#[cfg(test)]
 fn is_fresh_rust_allocator(callee: &str) -> bool {
     matches!(
         memory_events::rust_allocation_semantics(callee),
@@ -1067,6 +1051,7 @@ fn clear_destination(memory: &mut AllocationIdentityMemory, dest: &ProgramVarId)
     memory.forget_var(dest);
 }
 
+#[cfg(test)]
 fn transfer_statement(
     function: &str,
     stmt: &MirStatement,

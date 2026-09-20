@@ -46,10 +46,6 @@ pub fn edge_flow_kind(edge: &IcfgEdge) -> EdgeFlowKind {
     }
 }
 
-pub fn is_unwind_edge(edge: &IcfgEdge) -> bool {
-    edge_flow_kind(edge) == EdgeFlowKind::Unwind
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

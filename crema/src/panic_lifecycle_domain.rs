@@ -35,6 +35,7 @@ impl LifecycleValue {
         }
     }
 
+    #[cfg(test)]
     pub const fn owned() -> Self {
         Self {
             may_own: true,
@@ -62,6 +63,7 @@ impl LifecycleValue {
         self.may_complete
     }
 
+    #[cfg(test)]
     pub const fn leq(self, other: Self) -> bool {
         (!self.may_own || other.may_own)
             && (!self.may_partial_drop || other.may_partial_drop)
@@ -111,6 +113,7 @@ impl LifecycleValue {
     }
 
     /// Normal drop completion consumes this owner's destruction capability.
+    #[cfg(test)]
     pub const fn drop_return(mut self) -> Self {
         self.may_own = false;
         self.may_partial_drop = false;
@@ -121,6 +124,7 @@ impl LifecycleValue {
 
     /// Minimal A3.7 witness: after a partial drop, stale ownership may still
     /// authorize another destruction attempt of the same abstract resource.
+    #[cfg(test)]
     pub const fn may_repeat_drop(self) -> bool {
         self.may_own && self.may_partial_drop && self.may_stale_owner
     }
@@ -140,6 +144,7 @@ pub enum LifecycleCoverage {
 }
 
 impl LifecycleCoverage {
+    #[cfg(test)]
     pub const fn leq(self, other: Self) -> bool {
         matches!(
             (self, other),
@@ -200,6 +205,7 @@ impl PanicLifecycleMemory {
         }
     }
 
+    #[cfg(test)]
     pub fn mark_owned(&mut self, key: impl Into<String>) {
         self.strong_update(key, LifecycleValue::owned());
     }
@@ -216,6 +222,7 @@ impl PanicLifecycleMemory {
         self.strong_update(key.to_string(), self.get(key).drop_unwind());
     }
 
+    #[cfg(test)]
     pub fn drop_return(&mut self, key: &str) {
         self.strong_update(key.to_string(), self.get(key).drop_return());
     }
@@ -247,6 +254,7 @@ impl PanicLifecycleMemory {
         self.state.iter().map(|(key, value)| (key.as_str(), *value))
     }
 
+    #[cfg(test)]
     pub fn leq(&self, other: &Self) -> bool {
         let keys: BTreeSet<_> = self
             .state
@@ -383,6 +391,7 @@ where
 /// Identity-transfer specialization used before real MIR lifecycle events are
 /// wired in. It is useful as a regression oracle: facts already present at a
 /// program point must survive ordinary canonical ICFG propagation unchanged.
+#[cfg(test)]
 pub fn fixed_point_lifecycle_passthrough(
     icfg: &GlobalICFGOrdered,
     entry: &str,

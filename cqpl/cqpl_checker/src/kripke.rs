@@ -83,6 +83,47 @@ pub struct TypedEdgeRecord {
     pub destination_label: Option<String>,
 }
 
+/// W1 diagnostic-only source grounding.  These records are parsed as a side
+/// overlay so the historical AnnotatedNode serde boundary stays unchanged.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct ParsedSourceSpan {
+    pub file: String,
+    pub start_line: u32,
+    pub start_column: u32,
+    pub end_line: u32,
+    pub end_column: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct SourceAnchor {
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub statement_index: Option<usize>,
+    pub raw_span: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parsed_span: Option<ParsedSourceSpan>,
+    pub basis: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AllocationEventSourceRecord {
+    pub predicate: EventKind,
+    pub allocation: String,
+    pub certainty: AllocationEventCertainty,
+    #[serde(default)]
+    pub anchors: Vec<SourceAnchor>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeSourceProvenance {
+    pub language: String,
+    #[serde(default)]
+    pub anchors: Vec<SourceAnchor>,
+    #[serde(default)]
+    pub allocation_events: Vec<AllocationEventSourceRecord>,
+}
+
+pub type SourceProvenanceOverlay = BTreeMap<String, NodeSourceProvenance>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -406,6 +447,150 @@ pub fn typed_edge_overlay_from_json(
     Ok(Some(edges))
 }
 
+/// Parse W1 node-local source provenance without adding the field to the frozen
+/// AnnotatedNode serde type used by legacy constructors/tests.
+pub fn source_provenance_overlay_from_json(
+    root: &serde_json::Value,
+) -> Result<SourceProvenanceOverlay, String> {
+    let mut overlay = SourceProvenanceOverlay::new();
+    let Some(nodes) = root.get("nodes").and_then(serde_json::Value::as_array) else {
+        return Ok(overlay);
+    };
+    for (index, node) in nodes.iter().enumerate() {
+        let Some(object) = node.as_object() else { continue; };
+        let Some(node_id) = object.get("id").and_then(serde_json::Value::as_str) else { continue; };
+        let Some(raw) = object.get("source_provenance") else { continue; };
+        let record: NodeSourceProvenance = serde_json::from_value(raw.clone())
+            .map_err(|err| format!("invalid nodes[{index}].source_provenance: {err}"))?;
+        if overlay.insert(node_id.to_string(), record).is_some() {
+            return Err(format!("duplicate node id '{node_id}' while parsing source provenance"));
+        }
+    }
+    Ok(overlay)
+}
+
+fn validate_source_anchor(anchor: &SourceAnchor, where_: &str) -> Result<(), String> {
+    if anchor.raw_span.is_empty() {
+        return Err(format!("{where_}.raw_span must be non-empty"));
+    }
+    match (anchor.kind.as_str(), anchor.basis.as_str(), anchor.statement_index) {
+        ("mir_statement", "rustc_mir_source_info_v1", Some(_)) => {}
+        ("mir_terminator", "rustc_mir_source_info_v1", None) => {}
+        ("llvm_node", "svf_llvm_node_source_loc_v1", None) => {}
+        _ => {
+            return Err(format!(
+                "{where_} has unsupported source anchor tuple kind='{}' basis='{}' statement_index={:?}",
+                anchor.kind, anchor.basis, anchor.statement_index
+            ));
+        }
+    }
+    if let Some(span) = &anchor.parsed_span {
+        if span.file.is_empty()
+            || span.start_line == 0
+            || span.start_column == 0
+            || span.end_line == 0
+            || span.end_column == 0
+            || span.end_line < span.start_line
+            || (span.end_line == span.start_line && span.end_column < span.start_column)
+        {
+            return Err(format!("{where_}.parsed_span is not a valid non-empty source interval"));
+        }
+        if anchor.basis != "rustc_mir_source_info_v1" {
+            return Err(format!("{where_}.parsed_span is currently supported only for rustc MIR anchors"));
+        }
+    }
+    Ok(())
+}
+
+fn validate_source_provenance_overlay(
+    overlay: &SourceProvenanceOverlay,
+    nodes: &BTreeMap<String, AnnotatedNode>,
+    allocations: &BTreeMap<String, AbstractAllocation>,
+) -> Result<(), String> {
+    for node_id in nodes.keys() {
+        if !overlay.contains_key(node_id) {
+            return Err(format!(
+                "artifact declares source_provenance_v1 but node '{node_id}' is missing source_provenance"
+            ));
+        }
+    }
+    for (node_id, provenance) in overlay {
+        let node = nodes.get(node_id).ok_or_else(|| {
+            format!("source_provenance_v1 references unknown node '{node_id}'")
+        })?;
+        if !matches!(provenance.language.as_str(), "rust" | "c" | "synthetic") {
+            return Err(format!(
+                "node '{node_id}' source_provenance has unsupported language '{}'",
+                provenance.language
+            ));
+        }
+        let mut node_anchors = BTreeSet::new();
+        for (index, anchor) in provenance.anchors.iter().enumerate() {
+            validate_source_anchor(anchor, &format!("nodes['{node_id}'].source_provenance.anchors[{index}]"))?;
+            if !node_anchors.insert(anchor.clone()) {
+                return Err(format!("node '{node_id}' source_provenance contains a duplicate anchor"));
+            }
+        }
+        let mut event_keys = BTreeSet::new();
+        for (index, record) in provenance.allocation_events.iter().enumerate() {
+            if !allocations.contains_key(&record.allocation) {
+                return Err(format!(
+                    "node '{node_id}' source_provenance allocation_events[{index}] references undeclared allocation '{}'",
+                    record.allocation
+                ));
+            }
+            if record.certainty != AllocationEventCertainty::MayAbstract {
+                return Err(format!(
+                    "node '{node_id}' source_provenance allocation event must remain may_abstract"
+                ));
+            }
+            if !node.allocation_labels.iter().any(|label| {
+                label.allocation == record.allocation
+                    && label.predicate == record.predicate
+                    && label.certainty == record.certainty
+            }) {
+                return Err(format!(
+                    "node '{node_id}' source_provenance event {:?}('{}') has no matching allocation_label",
+                    record.predicate, record.allocation
+                ));
+            }
+            let predicate_key = match record.predicate {
+                EventKind::Alloc => "alloc",
+                EventKind::Drop => "drop",
+                EventKind::Read => "read",
+                EventKind::Write => "write",
+                EventKind::Use => "use",
+            };
+            if !event_keys.insert((predicate_key, record.allocation.clone())) {
+                return Err(format!(
+                    "node '{node_id}' source_provenance contains duplicate event provenance for {:?}('{}')",
+                    record.predicate, record.allocation
+                ));
+            }
+            let mut seen = BTreeSet::new();
+            for (anchor_index, anchor) in record.anchors.iter().enumerate() {
+                validate_source_anchor(
+                    anchor,
+                    &format!(
+                        "nodes['{node_id}'].source_provenance.allocation_events[{index}].anchors[{anchor_index}]"
+                    ),
+                )?;
+                if !seen.insert(anchor.clone()) {
+                    return Err(format!(
+                        "node '{node_id}' source_provenance event contains a duplicate anchor"
+                    ));
+                }
+                if !node_anchors.contains(anchor) {
+                    return Err(format!(
+                        "node '{node_id}' source_provenance event anchor is not present in the node anchor set"
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn expected_typed_edge_flow(label: Option<&str>) -> TypedEdgeFlow {
     match label {
         Some("Call unwind")
@@ -655,6 +840,9 @@ pub struct Kripke {
     pub variables: BTreeMap<String, ProgramVariable>,
     pub allocations: BTreeMap<String, AbstractAllocation>,
     pub nodes: BTreeMap<String, AnnotatedNode>,
+    /// W1 read-only source provenance, capability-gated and never consulted by
+    /// the temporal semantics or truth evaluation.
+    pub source_provenance: SourceProvenanceOverlay,
     /// A/R2 exact typed copy of the canonical CREMA edge relation. CQPL
     /// temporal semantics still traverse `AnnotatedNode::successors` in R2.
     pub typed_edges: Vec<TypedEdgeRecord>,
@@ -896,6 +1084,20 @@ impl Kripke {
         panic_lifecycle: PanicLifecycleOverlay,
         typed_edges: Option<Vec<TypedEdgeRecord>>,
     ) -> Result<Self, String> {
+        Self::from_annotated_icfg_with_all_overlays(
+            input,
+            panic_lifecycle,
+            typed_edges,
+            SourceProvenanceOverlay::new(),
+        )
+    }
+
+    pub fn from_annotated_icfg_with_all_overlays(
+        input: AnnotatedIcfg,
+        panic_lifecycle: PanicLifecycleOverlay,
+        typed_edges: Option<Vec<TypedEdgeRecord>>,
+        source_provenance: SourceProvenanceOverlay,
+    ) -> Result<Self, String> {
         if !matches!(input.schema_version, 1 | 2) {
             return Err(format!(
                 "unsupported annotated ICFG schema_version {}; expected 1 or 2",
@@ -917,11 +1119,18 @@ impl Kripke {
         let has_svf_solved_points_to = capabilities.contains("svf_solved_points_to_v1");
         let has_ffi_argument_identity = capabilities.contains("ffi_argument_identity_v1");
         let has_typed_edge_flow = capabilities.contains("typed_edge_flow_v1");
+        let has_source_provenance = capabilities.contains("source_provenance_v1");
         if has_typed_edge_flow != typed_edges.is_some() {
             return Err("typed_edge_flow_v1 capability and typed_edges payload must appear together".into());
         }
         if has_typed_edge_flow && schema_version != 2 {
             return Err("typed_edge_flow_v1 requires annotated ICFG schema v2".into());
+        }
+        if has_source_provenance && schema_version != 2 {
+            return Err("source_provenance_v1 requires annotated ICFG schema v2".into());
+        }
+        if has_source_provenance != !source_provenance.is_empty() {
+            return Err("source_provenance_v1 capability and node provenance overlay must appear together".into());
         }
         if has_ffi_argument_identity != !input.ffi_argument_identity.is_empty() {
             return Err("ffi_argument_identity_v1 capability and evidence records must appear together".into());
@@ -1152,6 +1361,12 @@ impl Kripke {
             }
         }
 
+        if has_source_provenance {
+            validate_source_provenance_overlay(&source_provenance, &nodes, &allocations)?;
+        } else if !source_provenance.is_empty() {
+            return Err("source provenance records require capability source_provenance_v1".into());
+        }
+
         if !has_external_deallocation_effects && !input.external_deallocation_effects.is_empty() {
             return Err("external deallocation-effect records require capability external_deallocation_effects_v1".into());
         }
@@ -1283,7 +1498,7 @@ impl Kripke {
 
         Ok(Self {
             schema_version, entry: input.entry, capabilities, variables, allocations, nodes,
-            typed_edges, external_deallocation_effects, ffi_argument_identity,
+            source_provenance, typed_edges, external_deallocation_effects, ffi_argument_identity,
             llvm_memory_effects, svf_solved_points_to, panic_lifecycle,
         })
     }
@@ -1414,6 +1629,13 @@ impl Kripke {
             .map(|(id, value)| (id.clone(), value.clone()))
             .collect();
 
+        let source_provenance = self
+            .source_provenance
+            .iter()
+            .filter(|(node, _)| retained.contains(*node))
+            .map(|(node, record)| (node.clone(), record.clone()))
+            .collect();
+
         let external_deallocation_effects = self
             .external_deallocation_effects
             .iter()
@@ -1428,6 +1650,7 @@ impl Kripke {
             variables,
             allocations,
             nodes,
+            source_provenance,
             typed_edges: self
                 .typed_edges
                 .iter()
@@ -1449,6 +1672,51 @@ impl Kripke {
 
     pub fn variable_ids(&self) -> impl Iterator<Item = &String> { self.variables.keys() }
     pub fn allocation_ids(&self) -> impl Iterator<Item = &String> { self.allocations.keys() }
+
+    pub fn source_provenance_at(&self, node_id: &str) -> Option<&NodeSourceProvenance> {
+        self.source_provenance.get(node_id)
+    }
+
+    pub fn allocation_event_source_anchors(
+        &self,
+        node_id: &str,
+        allocation: &str,
+        predicate: EventKind,
+    ) -> Vec<SourceAnchor> {
+        let Some(provenance) = self.source_provenance.get(node_id) else {
+            return Vec::new();
+        };
+        let mut anchors = provenance
+            .allocation_events
+            .iter()
+            .filter(|record| record.allocation == allocation && record.predicate == predicate)
+            .flat_map(|record| record.anchors.iter().cloned())
+            .collect::<Vec<_>>();
+        anchors.sort();
+        anchors.dedup();
+        anchors
+    }
+
+    /// Canonical producer allocation-site node, derived only from the
+    /// serialized AllocationSiteId object.  This is intentionally distinct
+    /// from an explanation algorithm's witness-entry/origin node.
+    pub fn allocation_site_node(&self, allocation: &str) -> Option<&str> {
+        self.allocations
+            .get(allocation)?
+            .site
+            .as_ref()?
+            .get("node_id")?
+            .as_str()
+    }
+
+    pub fn allocation_site_kind(&self, allocation: &str) -> Option<&str> {
+        self.allocations
+            .get(allocation)?
+            .site
+            .as_ref()?
+            .get("kind")?
+            .as_str()
+    }
 
     pub fn external_deallocation_effect_at(
         &self,
@@ -1987,6 +2255,163 @@ mod tests {
                 post: mem(&["rust::x", "c::p"], CellValue::Top),
             }],
         }
+    }
+
+    #[test]
+    fn w1_source_provenance_overlay_parses_structured_event_anchors() {
+        let raw = serde_json::json!({
+            "nodes": [{
+                "id": "b0",
+                "source_provenance": {
+                    "language": "rust",
+                    "anchors": [{
+                        "kind": "mir_terminator",
+                        "raw_span": "/tmp/project/src/main.rs:8:5: 8:14 (#1)",
+                        "parsed_span": {
+                            "file": "/tmp/project/src/main.rs",
+                            "start_line": 8,
+                            "start_column": 5,
+                            "end_line": 8,
+                            "end_column": 14
+                        },
+                        "basis": "rustc_mir_source_info_v1"
+                    }],
+                    "allocation_events": [{
+                        "predicate": "drop",
+                        "allocation": "A",
+                        "certainty": "may_abstract",
+                        "anchors": [{
+                            "kind": "mir_terminator",
+                            "raw_span": "/tmp/project/src/main.rs:8:5: 8:14 (#1)",
+                            "parsed_span": {
+                                "file": "/tmp/project/src/main.rs",
+                                "start_line": 8,
+                                "start_column": 5,
+                                "end_line": 8,
+                                "end_column": 14
+                            },
+                            "basis": "rustc_mir_source_info_v1"
+                        }]
+                    }]
+                }
+            }]
+        });
+        let overlay = source_provenance_overlay_from_json(&raw).unwrap();
+        let provenance = overlay.get("b0").unwrap();
+        assert_eq!(provenance.language, "rust");
+        assert_eq!(provenance.anchors.len(), 1);
+        assert_eq!(provenance.allocation_events.len(), 1);
+        assert_eq!(provenance.allocation_events[0].predicate, EventKind::Drop);
+        assert_eq!(provenance.allocation_events[0].certainty, AllocationEventCertainty::MayAbstract);
+    }
+
+    #[test]
+    fn w1_source_provenance_is_additive_and_must_match_existing_allocation_events() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec!["source_provenance_v1".into()];
+        input.allocations = vec![AbstractAllocation {
+            id: "A".into(),
+            display: None,
+            site: Some(serde_json::json!({
+                "kind": "rust_call",
+                "node_id": "b0",
+                "callee": "alloc::boxed::Box::<i32>::new"
+            })),
+            context: vec![],
+            allocator_contract: None,
+        }];
+        input.nodes[0].allocation_labels = vec![AllocationEventLabel {
+            predicate: EventKind::Drop,
+            allocation: "A".into(),
+            certainty: AllocationEventCertainty::MayAbstract,
+            deallocator_contract: None,
+        }];
+        let anchor = SourceAnchor {
+            kind: "mir_terminator".into(),
+            statement_index: None,
+            raw_span: "/tmp/project/src/main.rs:8:5: 8:14 (#1)".into(),
+            parsed_span: Some(ParsedSourceSpan {
+                file: "/tmp/project/src/main.rs".into(),
+                start_line: 8,
+                start_column: 5,
+                end_line: 8,
+                end_column: 14,
+            }),
+            basis: "rustc_mir_source_info_v1".into(),
+        };
+        let mut overlay = SourceProvenanceOverlay::new();
+        overlay.insert("b0".into(), NodeSourceProvenance {
+            language: "rust".into(),
+            anchors: vec![anchor.clone()],
+            allocation_events: vec![AllocationEventSourceRecord {
+                predicate: EventKind::Drop,
+                allocation: "A".into(),
+                certainty: AllocationEventCertainty::MayAbstract,
+                anchors: vec![anchor.clone()],
+            }],
+        });
+
+        let k = Kripke::from_annotated_icfg_with_all_overlays(
+            input.clone(),
+            PanicLifecycleOverlay::new(),
+            None,
+            overlay.clone(),
+        ).unwrap();
+        assert_eq!(
+            k.allocation_event_source_anchors("b0", "A", EventKind::Drop),
+            vec![anchor]
+        );
+
+        let mut bad = overlay;
+        bad.get_mut("b0").unwrap().allocation_events[0].predicate = EventKind::Alloc;
+        let err = Kripke::from_annotated_icfg_with_all_overlays(
+            input,
+            PanicLifecycleOverlay::new(),
+            None,
+            bad,
+        ).unwrap_err();
+        assert!(err.contains("has no matching allocation_label"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn w1_source_anchor_wire_format_matches_producer_optional_field_policy() {
+        let anchor = SourceAnchor {
+            kind: "mir_terminator".into(),
+            statement_index: None,
+            raw_span: "/tmp/project/src/main.rs:8:5: 8:14 (#1)".into(),
+            parsed_span: Some(ParsedSourceSpan {
+                file: "/tmp/project/src/main.rs".into(),
+                start_line: 8,
+                start_column: 5,
+                end_line: 8,
+                end_column: 14,
+            }),
+            basis: "rustc_mir_source_info_v1".into(),
+        };
+        let value = serde_json::to_value(&anchor).unwrap();
+        assert!(value.get("statement_index").is_none());
+        assert!(value.get("parsed_span").is_some());
+
+        let mut without_parsed = anchor;
+        without_parsed.parsed_span = None;
+        let value = serde_json::to_value(&without_parsed).unwrap();
+        assert!(value.get("statement_index").is_none());
+        assert!(value.get("parsed_span").is_none());
+    }
+
+    #[test]
+    fn w1_source_provenance_capability_and_payload_are_atomic() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec!["source_provenance_v1".into()];
+        let err = Kripke::from_annotated_icfg_with_all_overlays(
+            input,
+            PanicLifecycleOverlay::new(),
+            None,
+            SourceProvenanceOverlay::new(),
+        ).unwrap_err();
+        assert!(err.contains("capability and node provenance overlay"), "unexpected error: {err}");
     }
 
     #[test]

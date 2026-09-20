@@ -1,5 +1,5 @@
 use cqpl_checker::{
-    panic_lifecycle_overlay_from_json, typed_edge_overlay_from_json, parse_query_document, AnnotatedIcfg, Binding, Env, Kripke,
+    panic_lifecycle_overlay_from_json, source_provenance_overlay_from_json, typed_edge_overlay_from_json, parse_query_document, AnnotatedIcfg, Binding, Env, Kripke,
     ModelChecker, QueryResultAssessment,
 };
 use serde::Serialize;
@@ -240,6 +240,7 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     let has_panic_lifecycle_state_v1 = capabilities.contains("panic_lifecycle_state_v1");
     let has_panic_lifecycle_state_v2 = capabilities.contains("panic_lifecycle_state_v2");
     let has_typed_edge_flow = capabilities.contains("typed_edge_flow_v1");
+    let has_source_provenance = capabilities.contains("source_provenance_v1");
 
     let typed_edges_present = root.get("typed_edges").is_some();
     if has_typed_edge_flow != typed_edges_present {
@@ -345,6 +346,16 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
         if has_allocation_disposition && !object.contains_key("allocation_disposition") {
             return Err(format!(
                 "artifact declares allocation_disposition_v1 but schema-v2 nodes[{index}] is missing allocation_disposition"
+            ));
+        }
+        if has_source_provenance && !object.contains_key("source_provenance") {
+            return Err(format!(
+                "artifact declares source_provenance_v1 but schema-v2 nodes[{index}] is missing source_provenance"
+            ));
+        }
+        if !has_source_provenance && object.contains_key("source_provenance") {
+            return Err(format!(
+                "schema-v2 nodes[{index}] contains source_provenance without capability source_provenance_v1"
             ));
         }
         if has_panic_lifecycle_state_v1 && !object.contains_key("panic_lifecycle") {
@@ -552,9 +563,15 @@ fn run() -> Result<(), String> {
     validate_boundary_requirements(&raw_value)?;
     let panic_lifecycle = panic_lifecycle_overlay_from_json(&raw_value)?;
     let typed_edges = typed_edge_overlay_from_json(&raw_value)?;
+    let source_provenance = source_provenance_overlay_from_json(&raw_value)?;
     let annotated: AnnotatedIcfg = serde_json::from_value(raw_value)
         .map_err(|e| format!("invalid annotated ICFG JSON: {e}"))?;
-    let base_k = Kripke::from_annotated_icfg_with_overlays(annotated, panic_lifecycle, typed_edges)?;
+    let base_k = Kripke::from_annotated_icfg_with_all_overlays(
+        annotated,
+        panic_lifecycle,
+        typed_edges,
+        source_provenance,
+    )?;
     let requested_entry = entry_override.as_deref().unwrap_or(&base_k.entry);
     let k = base_k.project_from_entry(requested_entry, intra)?;
 
@@ -566,7 +583,15 @@ fn run() -> Result<(), String> {
 
     let need_explanation = explain_json.is_some() || (explain_unk_verbose && result.as_str() == "unk");
     let explanation_report = if need_explanation {
-        let report = checker.explain_document(&query, &env0, explain_max_witnesses)?;
+        let mut report = checker.explain_document(&query, &env0, explain_max_witnesses)?;
+        let query_id = Path::new(query_path)
+            .file_stem()
+            .and_then(|name| name.to_str())
+            .unwrap_or(query_path)
+            .to_string();
+        for certificate in &mut report.diagnostic_certificates {
+            certificate.query = Some(query_id.clone());
+        }
         if report.result != result.as_str() {
             return Err(format!(
                 "v6R explainability invariant violated: semantic result {} != explanation result {}",
@@ -923,6 +948,25 @@ mod tests {
         assert!(validate_boundary_requirements(&value).is_ok());
     }
 
+
+    #[test]
+    fn source_provenance_boundary_requires_atomic_capability_and_payload() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["source_provenance_v1"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("missing source_provenance"), "unexpected error: {err}");
+
+        value["nodes"][0]["source_provenance"] = json!({
+            "language": "synthetic",
+            "anchors": [],
+            "allocation_events": []
+        });
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["capabilities"] = json!([]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("without capability source_provenance_v1"), "unexpected error: {err}");
+    }
 
     #[test]
     fn typed_edge_flow_boundary_requires_atomic_capability_and_payload() {

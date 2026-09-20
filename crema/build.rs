@@ -35,10 +35,9 @@ fn main() {
         found = true;
     }
 
-    // only compile if we found any C files
+    // Only compile if we found any C files. Rust-only targets are expected,
+    // so absence of C input is a normal condition rather than a Cargo warning.
     if found {
         build.compile("all_c_files");
-    } else {
-        println!("cargo:warning=No C source files found; skipping static library generation");
     }
 }

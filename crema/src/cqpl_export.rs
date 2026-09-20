@@ -6,8 +6,8 @@ use crate::panic_lifecycle_domain::{fixed_point_real_panic_lifecycle, PanicLifec
 use crate::memory_events;
 use crate::structs::{
     AbstractAllocId, AllocationSiteId, GlobalICFGNode, GlobalICFGOrdered, MirTerminator,
-    PlaceId, PlaceProjection, ProgramVarId, RustDropAllocatorEvidence, RustDropAllocatorEvidenceKind,
-    RustCallDeallocatorEvidence, RustCallDeallocatorEvidenceKind, RustAllocationDispositionEvidence, RustAllocationDispositionEvidenceKind, SvfStatement,
+    PlaceId, PlaceProjection, ProgramVarId, RustDropAllocatorEvidenceKind,
+    RustCallDeallocatorEvidenceKind, RustAllocationDispositionEvidenceKind, SvfStatement,
     LlvmMemoryEffectsArtifactV1, LlvmFunctionEffectsRecordV1, LlvmFunctionEffectsSnapshotV1,
     SvfSolvedPointsToArtifactV1,
 };
@@ -26,9 +26,6 @@ use once_cell::sync::Lazy;
 /// taint state, or legacy memory-error detector state. It only serializes
 /// information already produced by CREMA plus syntactic labels obtained by
 /// inspecting the existing ICFG nodes.
-pub const CQPL_ANNOTATED_ICFG_SCHEMA_VERSION: u32 = 1;
-pub const CQPL_ANNOTATED_ICFG_IDENTITY_SCHEMA_VERSION: u32 = 2;
-
 #[derive(Debug, Clone, Serialize)]
 struct AnnotatedIcfg {
     schema_version: u32,
@@ -200,6 +197,13 @@ struct AnnotatedNode {
     /// not an invented statement ordering inside the block.
     #[serde(skip_serializing_if = "Option::is_none")]
     semantic_labels: Option<Vec<String>>,
+    /// W1 read-only source provenance.  This payload is diagnostic-only and is
+    /// never consumed by CREMA abstract interpretation or CQPL truth semantics.
+    /// Event anchors are tied to the same raw syntactic events used to build
+    /// allocation_labels, so source reporting does not reconstruct semantics
+    /// from node names or pretty-printed source text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_provenance: Option<NodeSourceProvenance>,
     /// Allocation-centric event labels derived from the canonical identity
     /// fixed point.  Present only in schema v2.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -342,6 +346,46 @@ struct EventLabel {
     variable: String,
 }
 
+/// W1 source-grounding payload.  These records are deliberately orthogonal to
+/// the abstract state and event semantics: they explain where producer facts
+/// came from, but they never create or strengthen a fact.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct ParsedSourceSpan {
+    file: String,
+    start_line: u32,
+    start_column: u32,
+    end_line: u32,
+    end_column: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct SourceAnchor {
+    kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    statement_index: Option<usize>,
+    raw_span: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parsed_span: Option<ParsedSourceSpan>,
+    basis: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct AllocationEventSourceRecord {
+    predicate: &'static str,
+    allocation: String,
+    certainty: &'static str,
+    anchors: Vec<SourceAnchor>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct NodeSourceProvenance {
+    language: &'static str,
+    anchors: Vec<SourceAnchor>,
+    allocation_events: Vec<AllocationEventSourceRecord>,
+}
+
+type EventSourceMap = BTreeMap<EventLabel, BTreeSet<SourceAnchor>>;
+
 static MIR_LOCAL_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"Local\(_[0-9]+\)|_[0-9]+").expect("valid MIR local regex"));
 static MIR_DEREF_RE: Lazy<Regex> =
@@ -358,6 +402,10 @@ static LLVM_IR_LHS_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"%([0-9]+)\s*=").expect("valid LLVM lhs regex"));
 static LLVM_FREE_ARG_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"@free\([^%]*%([0-9]+)").expect("valid LLVM free regex"));
+static RUST_SOURCE_SPAN_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^(?P<file>.+):(?P<sl>[0-9]+):(?P<sc>[0-9]+):\s*(?P<el>[0-9]+):(?P<ec>[0-9]+)(?:\s+\(#[0-9]+\))?$")
+        .expect("valid rust source span regex")
+});
 
 pub fn export_cqpl_annotated_icfg(
     icfg: &GlobalICFGOrdered,
@@ -368,6 +416,7 @@ pub fn export_cqpl_annotated_icfg(
     export_cqpl_annotated_icfg_versioned(icfg, abs_state, None, None, entry, 1, output_path)
 }
 
+#[cfg(test)]
 pub fn export_cqpl_annotated_icfg_with_identity(
     icfg: &GlobalICFGOrdered,
     abs_state: &AbstractState,
@@ -528,14 +577,26 @@ fn export_cqpl_annotated_icfg_versioned(
         // Preserve the raw syntactic events for schema-v2 allocation binding.
         // The historical closure-event expansion remains v1 compatibility only;
         // allocation-centric labels are resolved through AllocationIdentityState
-        // and therefore do not depend on that workaround.
-        let raw_labels = labels_for_node(node_id, node, &llvm_names, &ffi_functions);
-        let allocation_labels = if schema_version == 2 {
-            let event_mem = identity_state
+        // and therefore do not depend on that workaround.  W1 source provenance
+        // is produced from the very same event-occurrence map, so reporting
+        // cannot silently drift from the semantic event vocabulary.
+        let event_sources = event_sources_for_node(node_id, node, &llvm_names, &ffi_functions);
+        let raw_labels: Vec<EventLabel> = event_sources.keys().cloned().collect();
+        let event_mem = if schema_version == 2 {
+            identity_state
                 .and_then(|state| state.event_by_node.get(node_id))
                 .cloned()
-                .unwrap_or_default();
+                .unwrap_or_default()
+        } else {
+            AllocationIdentityMemory::default()
+        };
+        let allocation_labels = if schema_version == 2 {
             Some(allocation_labels_for_node(node_id, node, &raw_labels, &event_mem, &ffi_functions, schema_version))
+        } else {
+            None
+        };
+        let source_provenance = if schema_version == 2 {
+            Some(node_source_provenance(node_id, node, &event_sources, &event_mem))
         } else {
             None
         };
@@ -649,6 +710,7 @@ fn export_cqpl_annotated_icfg_versioned(
                 .collect(),
             labels,
             semantic_labels,
+            source_provenance,
             allocation_labels,
             allocation_disposition,
             panic_lifecycle,
@@ -699,6 +761,9 @@ fn export_cqpl_annotated_icfg_versioned(
         capabilities: if schema_version == 2 {
             let mut caps = vec![
                 "typed_edge_flow_v1",
+                // W1 diagnostic-only source grounding.  The checker consumes
+                // this capability exclusively for explanation certificates.
+                "source_provenance_v1",
                 "allocation_contracts_v1",
                 "allocation_contracts_v2",
                 // Bcontract-DROP1: additive proof vocabulary for exact
@@ -2088,44 +2153,155 @@ fn collect_program_variables(node_id: &str, node: &GlobalICFGNode) -> BTreeSet<N
     vars
 }
 
-fn labels_for_node(
+fn parse_rust_source_span(raw: &str) -> Option<ParsedSourceSpan> {
+    let caps = RUST_SOURCE_SPAN_RE.captures(raw.trim())?;
+    Some(ParsedSourceSpan {
+        file: caps.name("file")?.as_str().to_string(),
+        start_line: caps.name("sl")?.as_str().parse().ok()?,
+        start_column: caps.name("sc")?.as_str().parse().ok()?,
+        end_line: caps.name("el")?.as_str().parse().ok()?,
+        end_column: caps.name("ec")?.as_str().parse().ok()?,
+    })
+}
+
+fn mir_statement_source_anchor(index: usize, stmt: &crate::structs::MirStatement) -> Option<SourceAnchor> {
+    let raw_span = stmt.source_info.span.trim();
+    if raw_span.is_empty() {
+        return None;
+    }
+    Some(SourceAnchor {
+        kind: "mir_statement",
+        statement_index: Some(index),
+        raw_span: raw_span.to_string(),
+        parsed_span: parse_rust_source_span(raw_span),
+        basis: "rustc_mir_source_info_v1",
+    })
+}
+
+fn mir_terminator_source_info(term: &MirTerminator) -> &str {
+    match term {
+        MirTerminator::Goto { source_info, .. }
+        | MirTerminator::SwitchInt { source_info, .. }
+        | MirTerminator::UnwindResume { source_info, .. }
+        | MirTerminator::UnwindTerminate { source_info, .. }
+        | MirTerminator::Return { source_info, .. }
+        | MirTerminator::Unreachable { source_info, .. }
+        | MirTerminator::Drop { source_info, .. }
+        | MirTerminator::Call { source_info, .. }
+        | MirTerminator::TailCall { source_info, .. }
+        | MirTerminator::Assert { source_info, .. }
+        | MirTerminator::Yield { source_info, .. }
+        | MirTerminator::CoroutineDrop { source_info, .. }
+        | MirTerminator::FalseEdge { source_info, .. }
+        | MirTerminator::FalseUnwind { source_info, .. }
+        | MirTerminator::InlineAsm { source_info, .. }
+        | MirTerminator::Unhandled { source_info, .. } => source_info,
+    }
+}
+
+fn mir_terminator_source_anchor(term: &MirTerminator) -> Option<SourceAnchor> {
+    let raw_span = mir_terminator_source_info(term).trim();
+    if raw_span.is_empty() {
+        return None;
+    }
+    Some(SourceAnchor {
+        kind: "mir_terminator",
+        statement_index: None,
+        parsed_span: parse_rust_source_span(raw_span),
+        raw_span: raw_span.to_string(),
+        basis: "rustc_mir_source_info_v1",
+    })
+}
+
+fn llvm_node_source_anchor(llvm: &crate::structs::LlvmJsonNode) -> Option<SourceAnchor> {
+    let raw_span = llvm.node_source_loc.trim();
+    if raw_span.is_empty() {
+        return None;
+    }
+    Some(SourceAnchor {
+        kind: "llvm_node",
+        statement_index: None,
+        raw_span: raw_span.to_string(),
+        parsed_span: None,
+        basis: "svf_llvm_node_source_loc_v1",
+    })
+}
+
+fn insert_event_source(
+    events: &mut EventSourceMap,
+    label: EventLabel,
+    anchor: Option<SourceAnchor>,
+) {
+    let anchors = events.entry(label).or_default();
+    if let Some(anchor) = anchor {
+        anchors.insert(anchor);
+    }
+}
+
+/// Exact source occurrences for the raw syntactic events used by the CQPL
+/// exporter.  `labels_for_node` is intentionally a projection of this map, so
+/// diagnostic provenance cannot drift from the event vocabulary that feeds
+/// allocation_labels.
+fn event_sources_for_node(
     node_id: &str,
     node: &GlobalICFGNode,
     llvm_names: &LlvmNameResolver,
     ffi_functions: &HashSet<String>,
-) -> Vec<EventLabel> {
-    let mut labels = BTreeSet::new();
+) -> EventSourceMap {
+    let mut events = EventSourceMap::new();
     match node {
         GlobalICFGNode::Mir(bb) => {
-            for stmt in &bb.statements {
+            for (statement_index, stmt) in bb.statements.iter().enumerate() {
+                let anchor = mir_statement_source_anchor(statement_index, stmt);
                 // A dereference/projection read is a syntactic memory read.
                 if let Some(rvalue) = &stmt.rvalue {
                     for v in mir_deref_locals(rvalue) {
-                        labels.insert(EventLabel { predicate: "read", variable: v });
+                        insert_event_source(
+                            &mut events,
+                            EventLabel { predicate: "read", variable: v },
+                            anchor.clone(),
+                        );
                     }
                 }
                 // A write through a dereferenced place is a syntactic memory write.
                 if let Some(place) = &stmt.place {
                     for v in mir_deref_locals(place) {
-                        labels.insert(EventLabel { predicate: "write", variable: v });
+                        insert_event_source(
+                            &mut events,
+                            EventLabel { predicate: "write", variable: v },
+                            anchor.clone(),
+                        );
                     }
                 }
                 // Some rustc textual dumps expose the place only in `details`.
                 if let Some((lhs, rhs)) = stmt.details.split_once('=') {
                     for v in mir_deref_locals(lhs) {
-                        labels.insert(EventLabel { predicate: "write", variable: v });
+                        insert_event_source(
+                            &mut events,
+                            EventLabel { predicate: "write", variable: v },
+                            anchor.clone(),
+                        );
                     }
                     for v in mir_deref_locals(rhs) {
-                        labels.insert(EventLabel { predicate: "read", variable: v });
+                        insert_event_source(
+                            &mut events,
+                            EventLabel { predicate: "read", variable: v },
+                            anchor.clone(),
+                        );
                     }
                 }
             }
 
             if let Some(term) = &bb.terminator {
+                let anchor = mir_terminator_source_anchor(term);
                 match term {
                     MirTerminator::Drop { dropped_value, .. } => {
                         if let Some(v) = canonical_mir_local(dropped_value) {
-                            labels.insert(EventLabel { predicate: "drop", variable: v });
+                            insert_event_source(
+                                &mut events,
+                                EventLabel { predicate: "drop", variable: v },
+                                anchor,
+                            );
                         }
                     }
                     MirTerminator::Call {
@@ -2145,7 +2321,11 @@ fn labels_for_node(
 
                         if is_fresh_allocation_call(function_called, call_text, ffi_functions) {
                             if let Some(v) = ret {
-                                labels.insert(EventLabel { predicate: "alloc", variable: v });
+                                insert_event_source(
+                                    &mut events,
+                                    EventLabel { predicate: "alloc", variable: v },
+                                    anchor.clone(),
+                                );
                             }
                         }
 
@@ -2159,28 +2339,33 @@ fn labels_for_node(
                             && !certified_raw_pointer_drop
                         {
                             if let Some(v) = first_arg.clone() {
-                                labels.insert(EventLabel { predicate: "drop", variable: v });
+                                insert_event_source(
+                                    &mut events,
+                                    EventLabel { predicate: "drop", variable: v },
+                                    anchor.clone(),
+                                );
                             }
                         }
 
-                        // Some standard-library calls are deliberately not inlined into
-                        // CREMA's MIR ICFG, but their pinned implementation has a concrete
-                        // memory-access effect.  CString::from_raw is one such call: in
-                        // nightly-2024-11-21 it executes strlen(ptr) before reconstructing
-                        // ownership.  Export that omitted read as a summary label; the
-                        // later MIR Drop of the reconstructed CString remains the drop
-                        // event, so this does NOT turn from_raw itself into a deallocation.
                         if is_cstring_from_raw_read_summary(function_called)
                             || is_cstring_from_raw_read_summary(call_text)
                         {
                             if let Some(v) = first_arg.clone() {
-                                labels.insert(EventLabel { predicate: "read", variable: v });
+                                insert_event_source(
+                                    &mut events,
+                                    EventLabel { predicate: "read", variable: v },
+                                    anchor.clone(),
+                                );
                             }
                         }
 
                         if is_ptr_read_call(function_called) || is_ptr_read_call(call_text) {
                             if let Some(v) = first_arg.clone() {
-                                labels.insert(EventLabel { predicate: "read", variable: v });
+                                insert_event_source(
+                                    &mut events,
+                                    EventLabel { predicate: "read", variable: v },
+                                    anchor.clone(),
+                                );
                             }
                         }
                         if is_ptr_write_call(function_called)
@@ -2189,7 +2374,11 @@ fn labels_for_node(
                             || is_ptr_drop_in_place_call(call_text)
                         {
                             if let Some(v) = first_arg {
-                                labels.insert(EventLabel { predicate: "write", variable: v });
+                                insert_event_source(
+                                    &mut events,
+                                    EventLabel { predicate: "write", variable: v },
+                                    anchor,
+                                );
                             }
                         }
                     }
@@ -2198,14 +2387,19 @@ fn labels_for_node(
             }
         }
         GlobalICFGNode::Llvm(llvm) => {
+            let anchor = llvm_node_source_anchor(llvm);
             if llvm.node_kind_string == "FunCallBlock" && is_c_malloc_family_alloc_call(&llvm.info) {
                 for stmt in &llvm.svf_statements {
                     if stmt.stmt_type == "AddrStmt" {
                         if let Some(id) = stmt.lhs_var_id {
-                            labels.insert(EventLabel {
-                                predicate: "alloc",
-                                variable: llvm_names.resolve_svf(&scoped_svf_var(id, node_id)),
-                            });
+                            insert_event_source(
+                                &mut events,
+                                EventLabel {
+                                    predicate: "alloc",
+                                    variable: llvm_names.resolve_svf(&scoped_svf_var(id, node_id)),
+                                },
+                                anchor.clone(),
+                            );
                         }
                     }
                 }
@@ -2214,32 +2408,41 @@ fn labels_for_node(
             if llvm.node_kind_string == "FunCallBlock" && llvm.info.contains("@free(") {
                 if let Some(ir) = llvm_free_ir_argument_id(&llvm.info) {
                     let ir = scoped_ir_var(ir, node_id);
-                    labels.insert(EventLabel {
-                        predicate: "drop",
-                        variable: llvm_names.resolve_ir(&ir).unwrap_or(ir),
-                    });
+                    insert_event_source(
+                        &mut events,
+                        EventLabel {
+                            predicate: "drop",
+                            variable: llvm_names.resolve_ir(&ir).unwrap_or(ir),
+                        },
+                        anchor.clone(),
+                    );
                 }
             }
 
             for stmt in &llvm.svf_statements {
                 match stmt.stmt_type.as_str() {
-                    // Load reads through the rhs pointer/location.
                     "LoadStmt" => {
                         if let Some(rhs) = stmt.rhs_var_id {
-                            labels.insert(EventLabel {
-                                predicate: "read",
-                                variable: llvm_names.resolve_svf(&scoped_svf_var(rhs, node_id)),
-                            });
+                            insert_event_source(
+                                &mut events,
+                                EventLabel {
+                                    predicate: "read",
+                                    variable: llvm_names.resolve_svf(&scoped_svf_var(rhs, node_id)),
+                                },
+                                anchor.clone(),
+                            );
                         }
                     }
-                    // Store writes through the lhs pointer/location. The rhs is
-                    // a value flow, not necessarily a pointee memory access.
                     "StoreStmt" => {
                         if let Some(lhs) = stmt.lhs_var_id {
-                            labels.insert(EventLabel {
-                                predicate: "write",
-                                variable: llvm_names.resolve_svf(&scoped_svf_var(lhs, node_id)),
-                            });
+                            insert_event_source(
+                                &mut events,
+                                EventLabel {
+                                    predicate: "write",
+                                    variable: llvm_names.resolve_svf(&scoped_svf_var(lhs, node_id)),
+                                },
+                                anchor.clone(),
+                            );
                         }
                     }
                     _ => {}
@@ -2248,7 +2451,92 @@ fn labels_for_node(
         }
         GlobalICFGNode::DummyCall(_) | GlobalICFGNode::DummyRet(_) | GlobalICFGNode::Terminal(_) => {}
     }
-    labels.into_iter().collect()
+    events
+}
+
+#[cfg(test)]
+fn labels_for_node(
+    node_id: &str,
+    node: &GlobalICFGNode,
+    llvm_names: &LlvmNameResolver,
+    ffi_functions: &HashSet<String>,
+) -> Vec<EventLabel> {
+    event_sources_for_node(node_id, node, llvm_names, ffi_functions)
+        .into_keys()
+        .collect()
+}
+
+fn allocation_event_source_records_for_node(
+    node_id: &str,
+    node: &GlobalICFGNode,
+    event_sources: &EventSourceMap,
+    identity: &AllocationIdentityMemory,
+) -> Vec<AllocationEventSourceRecord> {
+    let mut grouped: BTreeMap<(&'static str, String), BTreeSet<SourceAnchor>> = BTreeMap::new();
+    for (label, anchors) in event_sources {
+        let Some(variable) = identity_var_for_event(node_id, node, &label.variable) else {
+            continue;
+        };
+        for allocation in identity.event_allocations(&variable) {
+            grouped
+                .entry((label.predicate, stable_allocation_id(&allocation)))
+                .or_default()
+                .extend(anchors.iter().cloned());
+        }
+    }
+    grouped
+        .into_iter()
+        .map(|((predicate, allocation), anchors)| AllocationEventSourceRecord {
+            predicate,
+            allocation,
+            certainty: "may_abstract",
+            anchors: anchors.into_iter().collect(),
+        })
+        .collect()
+}
+
+fn node_source_provenance(
+    node_id: &str,
+    node: &GlobalICFGNode,
+    event_sources: &EventSourceMap,
+    identity: &AllocationIdentityMemory,
+) -> NodeSourceProvenance {
+    let mut anchors = BTreeSet::new();
+    let language = match node {
+        GlobalICFGNode::Mir(bb) => {
+            for (index, stmt) in bb.statements.iter().enumerate() {
+                if let Some(anchor) = mir_statement_source_anchor(index, stmt) {
+                    anchors.insert(anchor);
+                }
+            }
+            if let Some(term) = &bb.terminator {
+                if let Some(anchor) = mir_terminator_source_anchor(term) {
+                    anchors.insert(anchor);
+                }
+            }
+            "rust"
+        }
+        GlobalICFGNode::Llvm(llvm) => {
+            if let Some(anchor) = llvm_node_source_anchor(llvm) {
+                anchors.insert(anchor);
+            }
+            "c"
+        }
+        GlobalICFGNode::DummyCall(_) | GlobalICFGNode::DummyRet(_) | GlobalICFGNode::Terminal(_) => {
+            "synthetic"
+        }
+    };
+
+    NodeSourceProvenance {
+        language,
+        anchors: anchors.into_iter().collect(),
+        allocation_events: allocation_event_source_records_for_node(
+            node_id,
+            node,
+            event_sources,
+            identity,
+        ),
+    }
 }
 
 fn is_fresh_allocation_call(
@@ -2274,21 +2562,6 @@ fn is_deallocation_call(
         || (is_explicit_mem_drop(function_called) || is_explicit_mem_drop(call_text))
             && !is_raw_pointer_mem_drop(function_called)
             && !is_raw_pointer_mem_drop(call_text)
-}
-
-fn is_box_new_call(s: &str) -> bool {
-    (s.contains("std::boxed::Box::<") || s.contains("alloc::boxed::Box::<"))
-        && s.contains(">::new")
-}
-
-fn is_raw_alloc_zeroed_call(s: &str) -> bool {
-    s.contains("std::alloc::alloc_zeroed") || s.contains("alloc::alloc::alloc_zeroed")
-}
-
-fn is_raw_alloc_call(s: &str) -> bool {
-    (s.contains("std::alloc::alloc") || s.contains("alloc::alloc::alloc"))
-        && !is_raw_alloc_zeroed_call(s)
-        && !s.contains("handle_alloc_error")
 }
 
 fn is_raw_dealloc_call(s: &str) -> bool {
@@ -2468,7 +2741,12 @@ impl LlvmNameResolver {
 mod tests {
     use super::*;
     use crate::abstract_domain::{Allocation, CellValue};
-    use crate::structs::{DummyNode, IcfgEdge, MirBasicBlock, MirCallArgument, SourceInfoData, MirStatement, RustCallMetadata, RustFunctionMetadata, TerminalNode, RustAllocationDispositionEvidence, RustAllocationDispositionEvidenceKind};
+    use crate::structs::{
+        DummyNode, IcfgEdge, MirBasicBlock, MirCallArgument, SourceInfoData, MirStatement,
+        RustAllocationDispositionEvidence, RustAllocationDispositionEvidenceKind,
+        RustCallDeallocatorEvidence, RustCallMetadata, RustDropAllocatorEvidence,
+        RustFunctionMetadata, TerminalNode,
+    };
 
     fn edge(a: &str, b: &str) -> IcfgEdge {
         IcfgEdge {
@@ -2628,6 +2906,110 @@ mod tests {
     }
 
     #[test]
+    fn w1_rust_source_span_is_structured_without_losing_raw_provenance() {
+        let raw = "/tmp/project/src/main.rs:12:17: 12:29 (#7)";
+        let span = parse_rust_source_span(raw).expect("structured rustc source span");
+        assert_eq!(span.file, "/tmp/project/src/main.rs");
+        assert_eq!(span.start_line, 12);
+        assert_eq!(span.start_column, 17);
+        assert_eq!(span.end_line, 12);
+        assert_eq!(span.end_column, 29);
+        assert!(parse_rust_source_span("synthetic span").is_none());
+    }
+
+    #[test]
+    fn w1_event_source_map_preserves_statement_and_terminator_occurrences() {
+        let statement_span = "/tmp/project/src/main.rs:12:5: 12:23 (#1)";
+        let drop_span = "/tmp/project/src/main.rs:13:5: 13:14 (#1)";
+        let node = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 0,
+            statements: vec![MirStatement {
+                source_info: SourceInfoData { span: statement_span.into(), scope: "0".into() },
+                kind: "Assign".into(),
+                details: "(*_1) = copy (*_2)".into(),
+                place: Some("(*_1)".into()),
+                is_mutable: Some(true),
+                rvalue: Some("copy (*_2)".into()),
+            }],
+            terminator: Some(MirTerminator::Drop {
+                details: "drop(_3)".into(),
+                source_info: drop_span.into(),
+                return_target: "bb1".into(),
+                unwind_target: "unreachable".into(),
+                dropped_value: "_3".into(),
+                is_mutable: false,
+                deallocator_evidence: None,
+            }),
+        });
+
+        let sources = event_sources_for_node(
+            "rust::main::bb0",
+            &node,
+            &LlvmNameResolver::default(),
+            &HashSet::new(),
+        );
+        let read = sources
+            .get(&EventLabel { predicate: "read", variable: "Local(_2)".into() })
+            .expect("read occurrence");
+        assert!(read.iter().any(|anchor| {
+            anchor.kind == "mir_statement"
+                && anchor.statement_index == Some(0)
+                && anchor.raw_span == statement_span
+        }));
+        let drop = sources
+            .get(&EventLabel { predicate: "drop", variable: "Local(_3)".into() })
+            .expect("drop occurrence");
+        assert!(drop.iter().any(|anchor| {
+            anchor.kind == "mir_terminator"
+                && anchor.statement_index.is_none()
+                && anchor.raw_span == drop_span
+        }));
+    }
+
+    #[test]
+    fn w1_allocation_event_source_is_joined_through_existing_event_identity_only() {
+        let drop_span = "/tmp/project/src/main.rs:21:5: 21:14 (#2)";
+        let node_id = "rust::main::bb0";
+        let node = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 0,
+            statements: vec![],
+            terminator: Some(MirTerminator::Drop {
+                details: "drop(_3)".into(),
+                source_info: drop_span.into(),
+                return_target: "bb1".into(),
+                unwind_target: "unreachable".into(),
+                dropped_value: "_3".into(),
+                is_mutable: false,
+                deallocator_evidence: None,
+            }),
+        });
+        let allocation = AbstractAllocId::new(
+            AllocationSiteId::Synthetic { scope: "test".into(), label: "A".into() },
+            Vec::new(),
+        );
+        let mut identity = AllocationIdentityMemory::default();
+        identity.assign_fresh(ProgramVarId::rust("main", "_3").unwrap(), allocation.clone());
+        let event_sources = event_sources_for_node(
+            node_id,
+            &node,
+            &LlvmNameResolver::default(),
+            &HashSet::new(),
+        );
+        let records = allocation_event_source_records_for_node(
+            node_id,
+            &node,
+            &event_sources,
+            &identity,
+        );
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].predicate, "drop");
+        assert_eq!(records[0].allocation, stable_allocation_id(&allocation));
+        assert_eq!(records[0].certainty, "may_abstract");
+        assert_eq!(records[0].anchors.len(), 1);
+        assert_eq!(records[0].anchors[0].raw_span, drop_span);
+    }
+
+    #[test]
     fn exporter_keeps_graph_successors_and_post_state_without_fabricating_pre() {
         let n0 = GlobalICFGNode::Mir(MirBasicBlock { block_id: 0, statements: vec![], terminator: None });
         let n1 = GlobalICFGNode::Mir(MirBasicBlock { block_id: 1, statements: vec![], terminator: None });
@@ -2687,6 +3069,9 @@ mod tests {
         let _ = std::fs::remove_file(path);
 
         assert!(value["capabilities"].as_array().unwrap().iter().any(|c| c.as_str() == Some("typed_edge_flow_v1")));
+        assert!(value["capabilities"].as_array().unwrap().iter().any(|c| c.as_str() == Some("source_provenance_v1")));
+        assert_eq!(value["nodes"][0]["source_provenance"]["language"], "rust");
+        assert_eq!(value["nodes"][0]["source_provenance"]["anchors"], serde_json::json!([]));
         assert_eq!(value["nodes"][0]["successors"], serde_json::json!(["rust::main::bb1"]));
         assert_eq!(value["typed_edges"].as_array().unwrap().len(), 1);
         let typed = &value["typed_edges"][0];

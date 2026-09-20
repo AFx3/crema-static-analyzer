@@ -130,6 +130,7 @@ impl CellValue {
     ///
     /// The only non-trivial incomparable pairs with a common lower bound
     /// strictly above BOTTOM are pairs among MB/IMMB/MV, whose GLB is ALLOC.
+    #[cfg(test)]
     pub fn meet(self, other: Self) -> Self {
         use CellValue::*;
 
@@ -148,9 +149,6 @@ impl CellValue {
         }
     }
 
-    pub fn is_default(self) -> bool {
-        self == CellValue::BOTTOM
-    }
 }
 
 // TRAIT 
@@ -672,38 +670,6 @@ fn join_taint_maps(
 
     joined
 }
-// method for taint state that takes as input a basic block and returns the taint state for that block
-// takes a reference to the global taint state (TaintState) and a basic block (GlobalICFGNode)
-
-//used for testing
-pub fn get_taint_state_for_block(taint_state: &TaintState, block: &GlobalICFGNode) -> TaintStateMap {
-    // build the key according to the node type:
-    let key = match block {
-        GlobalICFGNode::Mir(bb) => {
-            // MIR node: e.g., "rust::main::bb4"
-            format!("rust::main::bb{}", bb.block_id)
-        },
-        GlobalICFGNode::Llvm(llvm_node) => {
-            // LLVM nodes: e.g., "llvm::cast_and_free_pointer::node100582464396320"
-            format!("llvm::{}::node{}", llvm_node.node_kind_string, llvm_node.node_id)
-        },
-        GlobalICFGNode::DummyCall(dummy_call) => {
-            // dummy call nodes: e.g., "dummyCall::rust::main::bb2"
-            //format!("dummyCall::{}", dummy_call.id)
-            dummy_call.id.clone()
-        },
-        GlobalICFGNode::DummyRet(dummy_ret) => {
-            // dummy return nodes: e.g., "dummyRet::rust::main::bb3"
-            //format!("dummyRet::{}", dummy_ret.id)
-            dummy_ret.id.clone()
-        },
-        GlobalICFGNode::Terminal(terminal) => format!("terminal::{}", terminal.reason),
-    };
-
-    taint_state.get(&key).cloned().unwrap_or_default()
-}
-
-
 // ----------------------------------------------------------------------
 // TRANSFER FUNCTION DISPATCH
 // ----------------------------------------------------------------------
@@ -1342,43 +1308,6 @@ fn merge_closure_capture_vectors(
             .by_value_sources
             .extend(item.by_value_sources.iter().cloned());
     }
-}
-
-/// Find the actual closure entry reached from one closure call site using the
-/// GlobalICFG edges inserted by `icfg.rs`:
-///
-/// call-site -> dummyCall -> rust::<...{closure#N}>::bb0
-fn closure_entry_scope_for_call(
-    icfg: &GlobalICFGOrdered,
-    call_node_id: &str,
-) -> Option<String> {
-    let dummy = icfg
-        .icfg_edges
-        .iter()
-        .find(|e| {
-            e.source == call_node_id
-                && e.destination.starts_with("dummyCall")
-                && e.label
-                    .as_deref()
-                    .map(|l| l.contains("Closure Call"))
-                    .unwrap_or(false)
-        })?
-        .destination
-        .clone();
-
-    let entry = icfg
-        .icfg_edges
-        .iter()
-        .find(|e| {
-            e.source == dummy
-                && e.destination.starts_with("rust::")
-                && e.destination.contains("{closure#")
-                && e.destination.ends_with("::bb0")
-        })?
-        .destination
-        .clone();
-
-    mir_function_scope_from_node_id(&entry)
 }
 
 /// Precompute closure-capture semantics independently from detector traversal
@@ -5059,7 +4988,7 @@ pub fn detect_mem_issues(icfg: &GlobalICFGOrdered, taint_states: &TaintState, ab
                 }
 
 
-                if let Some(MirTerminator::Call {details, source_info, function_called, arguments, return_place, allocation_disposition_evidence, ..}) = &mir_block.terminator {
+                if let Some(MirTerminator::Call {source_info, function_called, arguments, return_place, allocation_disposition_evidence, ..}) = &mir_block.terminator {
                     if let Some(reason) =
                         c_malloc_rust_allocator_contract_warning(function_called)
                     {
@@ -6079,7 +6008,7 @@ mod lattice_law_tests {
 
 #[cfg(test)]
 mod abstract_memory_invariant_tests {
-    use super::{AbstractMemory, AbstractState, Allocation, CellValue};
+    use super::{AbstractMemory, AbstractState, CellValue};
     use std::cmp::Ordering;
 
     fn n(s: &str) -> String {

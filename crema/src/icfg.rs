@@ -881,6 +881,9 @@ impl MirExtractor {
     }
 
     // pass the local declarations here as well so that any place conversions can include mutability
+    // Keep the catch-all `Unhandled` arm as fail-closed telemetry for future
+    // rustc MIR variants, even though it is unreachable on the pinned nightly.
+    #[allow(unreachable_patterns)]
     pub fn convert_terminator<'tcx>(
         &self,
         terminator: &Option<Terminator<'tcx>>,
@@ -2501,7 +2504,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                     }
                 //////////////////////////////////////////////////////////////////////////////////////////////////////
                 // GOTO terminator
-                if let Some(MirTerminator::Goto { target, details, source_info }) = &block.terminator {
+                if let Some(MirTerminator::Goto { target, .. }) = &block.terminator {
                     let src = format!("rust::{}::bb{}", rust_func, block.block_id);
                     let dst = format!("rust::{}::{}", rust_func, target);
                     icfg_edges.push(IcfgEdge {
@@ -2817,7 +2820,6 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                 if let Some(MirTerminator::Call {
                     function_called,
                     callee_def_path,
-                    callee_is_local,
                     callback_def_paths,
                     higher_order_evidence,
                     resolved_instance_callees,

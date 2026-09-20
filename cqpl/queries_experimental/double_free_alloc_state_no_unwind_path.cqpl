@@ -1,0 +1,13 @@
+# Allocation-centric double-free pattern with normal-execution diagnostic assessment.
+# CQPL truth is still evaluated on the complete transition relation, including unwind.
+requires allocation_state_v1;
+requires typed_edge_flow_v1;
+assessment_scope normal_execution;
+
+exists_alloc a. EF (
+  alloc(a) &&
+  EX EF (
+    drop_l(a) &&
+    EX E[(!alloc_l(a)) U drop_l(a)]
+  )
+)

@@ -151,6 +151,7 @@ pub fn semantic_labels_for_block(block: &MirBasicBlock) -> Vec<String> {
     labels.into_iter().collect()
 }
 
+#[cfg(test)]
 pub fn is_option_map_or_def_path(path: &str) -> bool {
     path.starts_with("core::option::Option") && path.ends_with("::map_or")
 }

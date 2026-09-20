@@ -95,16 +95,28 @@
           "minLength": 1
         },
         "flow": {
-          "enum": ["normal", "unwind"]
+          "enum": [
+            "normal",
+            "unwind"
+          ]
         },
         "label": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "source_label": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "destination_label": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
@@ -658,6 +670,9 @@
           "items": {
             "$ref": "#/$defs/panicLifecycleRecord"
           }
+        },
+        "source_provenance": {
+          "$ref": "#/$defs/nodeSourceProvenance"
         }
       }
     },
@@ -1692,6 +1707,226 @@
           }
         }
       ]
+    },
+    "parsedSourceSpan": {
+      "type": "object",
+      "required": [
+        "file",
+        "start_line",
+        "start_column",
+        "end_line",
+        "end_column"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "start_column": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "sourceAnchor": {
+      "type": "object",
+      "required": [
+        "kind",
+        "raw_span",
+        "basis"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "mir_statement",
+            "mir_terminator",
+            "llvm_node"
+          ]
+        },
+        "statement_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "raw_span": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parsed_span": {
+          "$ref": "#/$defs/parsedSourceSpan"
+        },
+        "basis": {
+          "enum": [
+            "rustc_mir_source_info_v1",
+            "svf_llvm_node_source_loc_v1"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "mir_statement"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "statement_index"
+            ],
+            "properties": {
+              "basis": {
+                "const": "rustc_mir_source_info_v1"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "mir_terminator"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "basis": {
+                "const": "rustc_mir_source_info_v1"
+              }
+            },
+            "not": {
+              "required": [
+                "statement_index"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "llvm_node"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "basis": {
+                "const": "svf_llvm_node_source_loc_v1"
+              }
+            },
+            "not": {
+              "required": [
+                "statement_index"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "parsed_span"
+            ]
+          },
+          "then": {
+            "properties": {
+              "basis": {
+                "const": "rustc_mir_source_info_v1"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "allocationEventSourceRecord": {
+      "type": "object",
+      "required": [
+        "predicate",
+        "allocation",
+        "certainty",
+        "anchors"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "predicate": {
+          "enum": [
+            "alloc",
+            "drop",
+            "read",
+            "write",
+            "use"
+          ]
+        },
+        "allocation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "certainty": {
+          "const": "may_abstract"
+        },
+        "anchors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sourceAnchor"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "nodeSourceProvenance": {
+      "type": "object",
+      "required": [
+        "language",
+        "anchors",
+        "allocation_events"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "language": {
+          "enum": [
+            "rust",
+            "c",
+            "synthetic"
+          ]
+        },
+        "anchors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sourceAnchor"
+          },
+          "uniqueItems": true
+        },
+        "allocation_events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/allocationEventSourceRecord"
+          }
+        }
+      }
     }
   },
   "allOf": [
@@ -2145,6 +2380,59 @@
           "capabilities": {
             "contains": {
               "const": "typed_edge_flow_v1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "source_provenance_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "required": [
+                "source_provenance"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "nodes": {
+            "contains": {
+              "required": [
+                "source_provenance"
+              ]
+            }
+          }
+        },
+        "required": [
+          "nodes"
+        ]
+      },
+      "then": {
+        "required": [
+          "capabilities"
+        ],
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "source_provenance_v1"
             }
           }
         }
