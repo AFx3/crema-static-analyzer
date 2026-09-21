@@ -1090,10 +1090,12 @@ impl<'a> ModelChecker<'a> {
             result: result.as_str(),
             assessment,
             entry: self.k.entry.clone(),
-            scope_note: if document.assessment_scope == AssessmentScope::NormalExecution {
-                "CQPL truth/explanation remains over the complete already-projected abstract Kripke model; directional assessment findings additionally use the typed normal-edge projection and do not assert a concrete execution"
+            scope_note: if !self.truth_model_is_totalized() {
+                "temporary --intra compatibility mode: CQPL truth/formula witnesses retain the pre-cqpl4 maximal-finite-path semantics; diagnostics remain over the same scoped producer graph"
+            } else if document.assessment_scope == AssessmentScope::NormalExecution {
+                "CQPL truth/formula witnesses use the totalized already-projected abstract Kripke truth model with quiescent completion states; directional assessment findings remain over the original typed normal-edge program projection and do not assert a concrete execution"
             } else {
-                "explanations are over the already-projected annotated abstract Kripke model; they do not assert a concrete execution"
+                "CQPL truth/formula witnesses use the totalized already-projected abstract Kripke truth model with quiescent completion states; diagnostic findings remain over the original projected annotated ICFG and do not assert a concrete execution"
             },
             reason_frontier,
             reason_counts,
@@ -1724,7 +1726,7 @@ impl<'a> ModelChecker<'a> {
         depth: usize,
         seen: &mut BTreeSet<(String, String)>,
     ) -> Result<Vec<ExplanationWitness>, String> {
-        if depth > self.k.nodes.len().saturating_mul(4).max(64) {
+        if depth > self.truth_state_count().saturating_mul(4).max(64) {
             let mut trace = Trace::new(node, formula_kind(formula), target);
             trace.reasons.insert(UncertaintyReason::PathJoin);
             trace.complete = false;
@@ -1922,7 +1924,7 @@ impl<'a> ModelChecker<'a> {
         match path {
             PathFormula::State(phi) => self.explain_state(phi, env, node, target, limit, depth + 1, seen),
             PathFormula::Next(phi) => {
-                let successors = self.successors(node);
+                let successors = self.truth_successors(node);
                 if successors.is_empty() { return Ok(Vec::new()); }
                 let mut out = Vec::new();
                 for succ in successors {
@@ -1968,7 +1970,7 @@ impl<'a> ModelChecker<'a> {
         };
         let z = self.eval_all(&wrapped, env)?;
         let phi_v = self.eval_all(phi, env)?;
-        let path = self.bfs_to(start, |n| phi_v.get(n).copied() == Some(target), |n| {
+        let path = self.bfs_to_truth(start, |n| phi_v.get(n).copied() == Some(target), |n| {
             z.get(n).copied().unwrap_or(Truth::False) != Truth::False
         });
         let Some(path_nodes) = path else {
@@ -1982,7 +1984,7 @@ impl<'a> ModelChecker<'a> {
         for witness in &mut traces {
             prepend_path(witness, &path_nodes, "eventually", target);
             if quantifier == PathQuantifier::ForAll { witness.complete_dependency_trace = false; }
-            if target == Truth::Unknown && self.path_has_mixed_successor_truth(&z, &path_nodes) {
+            if target == Truth::Unknown && self.path_has_mixed_truth_successor_truth(&z, &path_nodes) {
                 push_reason(witness, UncertaintyReason::PathJoin);
             }
         }
@@ -2008,7 +2010,7 @@ impl<'a> ModelChecker<'a> {
         let phi_v = self.eval_all(phi, env)?;
 
         if target == Truth::Unknown {
-            if let Some(path_nodes) = self.bfs_to(start, |n| phi_v.get(n).copied() == Some(Truth::Unknown), |n| {
+            if let Some(path_nodes) = self.bfs_to_truth(start, |n| phi_v.get(n).copied() == Some(Truth::Unknown), |n| {
                 z.get(n).copied().unwrap_or(Truth::False) != Truth::False
             }) {
                 let end = path_nodes.last().unwrap().clone();
@@ -2016,7 +2018,7 @@ impl<'a> ModelChecker<'a> {
                 for witness in &mut traces {
                     prepend_path(witness, &path_nodes, "globally", target);
                     if quantifier == PathQuantifier::ForAll { witness.complete_dependency_trace = false; }
-                    if self.path_has_mixed_successor_truth(&z, &path_nodes) {
+                    if self.path_has_mixed_truth_successor_truth(&z, &path_nodes) {
                         push_reason(witness, UncertaintyReason::PathJoin);
                     }
                 }
@@ -2026,7 +2028,7 @@ impl<'a> ModelChecker<'a> {
 
         // For tt (or a conservative fallback), return a lasso/maximal prefix in
         // the non-refuted subgraph.  This is an abstract-model witness only.
-        let path_nodes = self.maximal_prefix(start, |n| {
+        let path_nodes = self.maximal_prefix_truth(start, |n| {
             let p = phi_v.get(n).copied().unwrap_or(Truth::False);
             let zv = z.get(n).copied().unwrap_or(Truth::False);
             p != Truth::False && zv != Truth::False
@@ -2061,7 +2063,7 @@ impl<'a> ModelChecker<'a> {
         };
         let z = self.eval_all(&wrapped, env)?;
         let rhs_v = self.eval_all(rhs, env)?;
-        if let Some(path_nodes) = self.bfs_to(start, |n| rhs_v.get(n).copied() == Some(target), |n| {
+        if let Some(path_nodes) = self.bfs_to_truth(start, |n| rhs_v.get(n).copied() == Some(target), |n| {
             z.get(n).copied().unwrap_or(Truth::False) != Truth::False
         }) {
             let end = path_nodes.last().unwrap().clone();
@@ -2075,7 +2077,7 @@ impl<'a> ModelChecker<'a> {
 
         let lhs_v = self.eval_all(lhs, env)?;
         if target == Truth::Unknown {
-            if let Some(path_nodes) = self.bfs_to(start, |n| lhs_v.get(n).copied() == Some(Truth::Unknown), |n| {
+            if let Some(path_nodes) = self.bfs_to_truth(start, |n| lhs_v.get(n).copied() == Some(Truth::Unknown), |n| {
                 z.get(n).copied().unwrap_or(Truth::False) != Truth::False
             }) {
                 let end = path_nodes.last().unwrap().clone();
@@ -2113,8 +2115,8 @@ impl<'a> ModelChecker<'a> {
             reasons.insert(may_reason(predicate));
         }
 
-        let node = self.k.nodes.get(node_id)
-            .ok_or_else(|| format!("explainability: missing node '{node_id}'"))?;
+        let node = self.temporal.nodes.get(node_id)
+            .ok_or_else(|| format!("explainability: missing truth-model node '{node_id}'"))?;
         match binding {
             Binding::ProgramVar(var) => {
                 let value = node.post.value_of(var);
@@ -2123,7 +2125,7 @@ impl<'a> ModelChecker<'a> {
                 if value == CellValue::Top {
                     reasons.insert(UncertaintyReason::AbstractTopState);
                 }
-                if self.k.aliases_at(node_id, var).len() > 1 {
+                if self.temporal.aliases_at(node_id, var).len() > 1 {
                     reasons.insert(UncertaintyReason::AliasJoin);
                 }
                 if identity_component_is_merged(node, Some(var), None) {
@@ -2133,7 +2135,7 @@ impl<'a> ModelChecker<'a> {
             Binding::Allocation(allocation) => {
                 detail.insert("allocation".into(), allocation.clone());
                 if predicate == MayPredicate::RepeatDrop {
-                    let matching = self.k.panic_lifecycle
+                    let matching = self.temporal.panic_lifecycle
                         .get(node_id)
                         .into_iter()
                         .flatten()
@@ -2150,9 +2152,9 @@ impl<'a> ModelChecker<'a> {
                         detail.insert("may_repeat_drop".into(), "true".into());
                         detail.insert("lifecycle_coverage".into(), format!(
                             "{:?}",
-                            self.k.panic_lifecycle.coverage_at(node_id)
+                            self.temporal.panic_lifecycle.coverage_at(node_id)
                         ));
-                    } else if self.k.panic_lifecycle.coverage_at(node_id)
+                    } else if self.temporal.panic_lifecycle.coverage_at(node_id)
                         == Some(crate::kripke::PanicLifecycleCoverage::Unresolved)
                     {
                         reasons.insert(UncertaintyReason::PanicLifecycleUnresolved);
@@ -2209,7 +2211,7 @@ impl<'a> ModelChecker<'a> {
         match binding {
             Binding::ProgramVar(var) => {
                 detail.insert("program_var".into(), var.clone());
-                let aliases = self.k.aliases_at(node_id, var);
+                let aliases = self.temporal.aliases_at(node_id, var);
                 detail.insert("alias_component_size".into(), aliases.len().to_string());
                 if truth == Truth::Unknown && aliases.len() > 1 {
                     reasons.insert(UncertaintyReason::AliasJoin);
@@ -2217,8 +2219,8 @@ impl<'a> ModelChecker<'a> {
             }
             Binding::Allocation(allocation) => {
                 detail.insert("allocation".into(), allocation.clone());
-                let node = self.k.nodes.get(node_id)
-                    .ok_or_else(|| format!("explainability: missing node '{node_id}'"))?;
+                let node = self.temporal.nodes.get(node_id)
+                    .ok_or_else(|| format!("explainability: missing truth-model node '{node_id}'"))?;
                 let matching: Vec<_> = node.allocation_labels.iter()
                     .filter(|label| allocation_label_matches(self, allocation, predicate, label))
                     .collect();
@@ -3730,6 +3732,62 @@ impl<'a> ModelChecker<'a> {
         None
     }
 
+    fn bfs_to_truth<Goal, Allowed>(&self, start: &str, goal: Goal, allowed: Allowed) -> Option<Vec<String>>
+    where
+        Goal: Fn(&str) -> bool,
+        Allowed: Fn(&str) -> bool,
+    {
+        if !allowed(start) { return None; }
+        let mut queue = VecDeque::from([start.to_string()]);
+        let mut parent: BTreeMap<String, Option<String>> = BTreeMap::from([(start.to_string(), None)]);
+        while let Some(node) = queue.pop_front() {
+            if goal(&node) {
+                let mut path = vec![node.clone()];
+                let mut current = node;
+                while let Some(Some(prev)) = parent.get(&current) {
+                    path.push(prev.clone());
+                    current = prev.clone();
+                }
+                path.reverse();
+                return Some(path);
+            }
+            for succ in self.truth_successors(&node) {
+                if allowed(&succ) && !parent.contains_key(&succ) {
+                    parent.insert(succ.clone(), Some(node.clone()));
+                    queue.push_back(succ);
+                }
+            }
+        }
+        None
+    }
+
+    fn maximal_prefix_truth<Allowed>(&self, start: &str, allowed: Allowed) -> Vec<String>
+    where
+        Allowed: Fn(&str) -> bool,
+    {
+        let mut path = Vec::new();
+        let mut seen = BTreeSet::new();
+        let mut current = start.to_string();
+        while allowed(&current) {
+            path.push(current.clone());
+            if !seen.insert(current.clone()) { break; }
+            let Some(next) = self.truth_successors(&current).into_iter().find(|s| allowed(s)) else { break; };
+            current = next;
+        }
+        path
+    }
+
+    fn path_has_mixed_truth_successor_truth(&self, z: &BTreeMap<String, Truth>, path: &[String]) -> bool {
+        path.iter().any(|node| {
+            let values: BTreeSet<_> = self.truth_successors(node).into_iter()
+                .filter_map(|s| z.get(&s).copied())
+                .collect();
+            values.len() > 1
+        })
+    }
+
+    /// Original producer successors.  Diagnostics, source-grounded findings,
+    /// and typed-edge certificates intentionally stay on this relation.
     fn successors(&self, node: &str) -> Vec<String> {
         self.k.nodes.get(node)
             .map(|n| n.successors.clone())
@@ -3765,30 +3823,7 @@ impl<'a> ModelChecker<'a> {
         None
     }
 
-    fn maximal_prefix<Allowed>(&self, start: &str, allowed: Allowed) -> Vec<String>
-    where
-        Allowed: Fn(&str) -> bool,
-    {
-        let mut path = Vec::new();
-        let mut seen = BTreeSet::new();
-        let mut current = start.to_string();
-        while allowed(&current) {
-            path.push(current.clone());
-            if !seen.insert(current.clone()) { break; }
-            let Some(next) = self.successors(&current).into_iter().find(|s| allowed(s)) else { break; };
-            current = next;
-        }
-        path
-    }
 
-    fn path_has_mixed_successor_truth(&self, z: &BTreeMap<String, Truth>, path: &[String]) -> bool {
-        path.iter().any(|node| {
-            let values: BTreeSet<_> = self.successors(node).into_iter()
-                .filter_map(|s| z.get(&s).copied())
-                .collect();
-            values.len() > 1
-        })
-    }
 }
 
 fn formula_contains_negated_drop(formula: &StateFormula) -> bool {

@@ -577,7 +577,14 @@ fn run() -> Result<(), String> {
 
     let raw_query = fs::read_to_string(query_path).map_err(|e| format!("cannot read CQPL query '{query_path}': {e}"))?;
     let query = parse_query_document(&raw_query)?;
-    let checker = ModelChecker::new(&k);
+    let checker = if intra {
+        // The cqpl4 total-transition feature is whole-program only for now;
+        // keep the existing finite-path semantics of --intra until its scope
+        // boundaries are specified separately.
+        ModelChecker::new_partial_for_intra(&k)
+    } else {
+        ModelChecker::new(&k)
+    };
     let result = checker.evaluate_document(&query, &env0)?;
     let assessment = checker.assess_document(&query, result);
 

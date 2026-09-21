@@ -1,5 +1,5 @@
 use crate::ast::{LabelPredicate, MayPredicate, PathFormula, PathQuantifier, QueryDocument, StateFormula};
-use crate::kripke::{CellValue, Kripke};
+use crate::kripke::{CellValue, CqplTruthModel, Kripke};
 use crate::truth::Truth;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -19,11 +19,28 @@ enum LogicSort {
 }
 
 pub struct ModelChecker<'a> {
+    /// Original projected producer model.  Diagnostics and provenance remain
+    /// anchored here and never treat CQPL completion edges as program edges.
     pub(crate) k: &'a Kripke,
+    /// Totalized truth model used only by CQPL state/path evaluation and its
+    /// formula witnesses.
+    pub(crate) temporal: CqplTruthModel,
+    pub(crate) truth_totalized: bool,
 }
 
 impl<'a> ModelChecker<'a> {
-    pub fn new(k: &'a Kripke) -> Self { Self { k } }
+    /// Standard CQPL checker: evaluate truth over the total Kripke relation
+    /// required by the theory.
+    pub fn new(k: &'a Kripke) -> Self {
+        Self { k, temporal: k.totalized_for_cqpl_truth(), truth_totalized: true }
+    }
+
+    /// Temporary compatibility constructor for the existing `--intra` mode.
+    /// Intraprocedural projection semantics are intentionally left unchanged in
+    /// the total-exit feature and will be specified separately.
+    pub fn new_partial_for_intra(k: &'a Kripke) -> Self {
+        Self { k, temporal: CqplTruthModel::partial_from(k), truth_totalized: false }
+    }
 
     /// Evaluate a legacy/formula-only query. Capability-gated predicates are
     /// deliberately rejected here so a missing `requires` declaration can
@@ -229,11 +246,11 @@ impl<'a> ModelChecker<'a> {
                     return Err(format!("logical variable '{logic_var}' is unbound"));
                 };
                 Ok(match binding {
-                    Binding::ProgramVar(program_var) => self.k.nodes.keys()
-                        .map(|n| (n.clone(), self.k.may_hold(n, program_var, *predicate)))
+                    Binding::ProgramVar(program_var) => self.temporal.nodes.keys()
+                        .map(|n| (n.clone(), self.temporal.may_hold(n, program_var, *predicate)))
                         .collect(),
-                    Binding::Allocation(allocation) => self.k.nodes.keys()
-                        .map(|n| (n.clone(), self.k.allocation_may_hold(n, allocation, *predicate)))
+                    Binding::Allocation(allocation) => self.temporal.nodes.keys()
+                        .map(|n| (n.clone(), self.temporal.allocation_may_hold(n, allocation, *predicate)))
                         .collect(),
                 })
             }
@@ -242,17 +259,17 @@ impl<'a> ModelChecker<'a> {
                     return Err(format!("logical variable '{logic_var}' is unbound"));
                 };
                 Ok(match binding {
-                    Binding::ProgramVar(program_var) => self.k.nodes.keys()
-                        .map(|n| (n.clone(), self.k.label_hold(n, program_var, *predicate)))
+                    Binding::ProgramVar(program_var) => self.temporal.nodes.keys()
+                        .map(|n| (n.clone(), self.temporal.label_hold(n, program_var, *predicate)))
                         .collect(),
-                    Binding::Allocation(allocation) => self.k.nodes.keys()
-                        .map(|n| (n.clone(), self.k.allocation_label_hold(n, allocation, *predicate)))
+                    Binding::Allocation(allocation) => self.temporal.nodes.keys()
+                        .map(|n| (n.clone(), self.temporal.allocation_label_hold(n, allocation, *predicate)))
                         .collect(),
                 })
             }
             StructuralLabel { kind, name } => {
-                Ok(self.k.nodes.keys()
-                    .map(|n| (n.clone(), self.k.structural_label_hold(n, *kind, name)))
+                Ok(self.temporal.nodes.keys()
+                    .map(|n| (n.clone(), self.temporal.structural_label_hold(n, *kind, name)))
                     .collect())
             }
             Not(inner) => Ok(map_unary(self.eval_all(inner, env)?, Truth::not)),
@@ -366,10 +383,17 @@ impl<'a> ModelChecker<'a> {
             PathFormula::Globally(phi) => {
                 let phi = self.eval_all(phi, env)?;
                 let mut z = self.constant(Truth::True); // greatest fixpoint
+                // Whole-program CQPL truth is evaluated on a total relation, so
+                // G uses the ordinary CTL predecessor. The weak terminal case
+                // remains only for the explicitly legacy --intra compatibility
+                // semantics, where the projected relation may still deadlock.
+                let mode = if self.truth_totalized {
+                    NextMode::Strong
+                } else {
+                    NextMode::WeakForGlobal
+                };
                 loop {
-                    // On a maximal finite path, G phi at a terminal node is exactly phi
-                    // at that node; therefore the continuation is vacuously tt.
-                    let next = map_binary(phi.clone(), self.pre(q, &z, NextMode::WeakForGlobal), Truth::meet);
+                    let next = map_binary(phi.clone(), self.pre(q, &z, mode), Truth::meet);
                     if next == z { return Ok(z); }
                     z = next;
                 }
@@ -443,16 +467,36 @@ impl<'a> ModelChecker<'a> {
     }
 
     fn constant(&self, value: Truth) -> Valuation {
-        self.k.nodes.keys().map(|n| (n.clone(), value)).collect()
+        self.temporal.nodes.keys().map(|n| (n.clone(), value)).collect()
+    }
+
+    pub(crate) fn truth_successors(&self, node: &str) -> Vec<String> {
+        self.temporal
+            .nodes
+            .get(node)
+            .map(|n| n.successors.clone())
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn truth_state_count(&self) -> usize {
+        self.temporal.nodes.len()
+    }
+
+    pub(crate) fn truth_model_is_totalized(&self) -> bool {
+        self.truth_totalized
     }
 
     fn pre(&self, q: PathQuantifier, values: &Valuation, mode: NextMode) -> Valuation {
-        self.k.nodes.iter().map(|(id, node)| {
+        self.temporal.nodes.iter().map(|(id, node)| {
             let value = if node.successors.is_empty() {
+                debug_assert!(
+                    !self.truth_totalized,
+                    "totalized CQPL truth model must not contain deadlocks"
+                );
                 match mode {
-                    // X is strong in the CQPL theory: no successor => ff for E and A.
+                    // Legacy finite-path behavior retained only by the temporary
+                    // --intra compatibility constructor.
                     NextMode::Strong => Truth::False,
-                    // G quantifies only over positions that actually exist on a maximal path.
                     NextMode::WeakForGlobal => Truth::True,
                 }
             } else {
@@ -775,7 +819,103 @@ mod tests {
     }
 
     #[test]
-    fn strong_next_is_false_at_terminal_nodes() {
+    fn next_at_terminal_observes_quiescent_completion_state() {
+        let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
+            schema_version: 1,
+            capabilities: vec![],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ffi_argument_identity: vec![],
+            entry: "b0".into(), variables: vec![var("rust::x", ProgramLanguage::Rust)],
+            allocations: vec![],
+            nodes: vec![node(
+                "b0", &[], vec![EventLabel { predicate: EventKind::Read, variable: "rust::x".into() }],
+                AbstractMemoryAnnotation::default(), mem(&[(&["rust::x"], CellValue::Alloc)]),
+            )],
+        };
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        let env = BTreeMap::from([("x".into(), Binding::ProgramVar("rust::x".into()))]);
+
+        // The terminating read is observed at b0, but is not replayed by the
+        // synthetic completion state.  X is interpreted normally because the
+        // truth relation is total.
+        assert_eq!(
+            ModelChecker::new(&k).evaluate(&parse_query("EX use_l(x)").unwrap(), &env).unwrap(),
+            Truth::False
+        );
+        assert_eq!(
+            ModelChecker::new(&k).evaluate(&parse_query("EX !use_l(x)").unwrap(), &env).unwrap(),
+            Truth::True
+        );
+        assert_eq!(
+            ModelChecker::new(&k).evaluate(&parse_query("AX !use_l(x)").unwrap(), &env).unwrap(),
+            Truth::True
+        );
+        assert_eq!(
+            ModelChecker::new(&k).evaluate(&parse_query("EX alloc(x)").unwrap(), &env).unwrap(),
+            Truth::Unknown,
+            "abstract post-state must be frozen into the completion state"
+        );
+    }
+
+    #[test]
+    fn next_duality_holds_at_totalized_terminal() {
+        let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
+            schema_version: 1,
+            capabilities: vec![],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ffi_argument_identity: vec![],
+            entry: "b0".into(), variables: vec![var("rust::x", ProgramLanguage::Rust)],
+            allocations: vec![],
+            nodes: vec![node(
+                "b0", &[], vec![EventLabel { predicate: EventKind::Read, variable: "rust::x".into() }],
+                AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default(),
+            )],
+        };
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        let mc = ModelChecker::new(&k);
+        let env = BTreeMap::from([("x".into(), Binding::ProgramVar("rust::x".into()))]);
+
+        let ax_use = mc.evaluate(&parse_query("AX use_l(x)").unwrap(), &env).unwrap();
+        let ex_not_use = mc.evaluate(&parse_query("EX !use_l(x)").unwrap(), &env).unwrap();
+        assert_eq!(ax_use, ex_not_use.not(), "AX phi = !EX !phi must hold at completion");
+
+        let ax_not_use = mc.evaluate(&parse_query("AX !use_l(x)").unwrap(), &env).unwrap();
+        let ex_use = mc.evaluate(&parse_query("EX use_l(x)").unwrap(), &env).unwrap();
+        assert_eq!(ax_not_use, ex_use.not(), "AX !phi = !EX phi must hold at completion");
+    }
+
+    #[test]
+    fn partial_intra_constructor_preserves_legacy_deadlock_next_semantics() {
+        let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
+            schema_version: 1,
+            capabilities: vec![],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ffi_argument_identity: vec![],
+            entry: "b0".into(), variables: vec![var("rust::x", ProgramLanguage::Rust)],
+            allocations: vec![],
+            nodes: vec![node(
+                "b0", &[], vec![],
+                AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default(),
+            )],
+        };
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        let env = BTreeMap::from([("x".into(), Binding::ProgramVar("rust::x".into()))]);
+        assert_eq!(
+            ModelChecker::new_partial_for_intra(&k)
+                .evaluate(&parse_query("EX !use_l(x)").unwrap(), &env)
+                .unwrap(),
+            Truth::False
+        );
+    }
+
+    #[test]
+    fn terminal_event_is_current_once_not_replayed_forever() {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
             schema_version: 1,
@@ -792,14 +932,21 @@ mod tests {
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();
         let env = BTreeMap::from([("x".into(), Binding::ProgramVar("rust::x".into()))]);
-        for text in ["EX use_l(x)", "AX use_l(x)"] {
-            let q = parse_query(text).unwrap();
-            assert_eq!(ModelChecker::new(&k).evaluate(&q, &env).unwrap(), Truth::False);
+        assert_eq!(
+            ModelChecker::new(&k).evaluate(&parse_query("EF use_l(x)").unwrap(), &env).unwrap(),
+            Truth::True
+        );
+        for text in ["EG use_l(x)", "AG use_l(x)"] {
+            assert_eq!(
+                ModelChecker::new(&k).evaluate(&parse_query(text).unwrap(), &env).unwrap(),
+                Truth::False,
+                "{text}"
+            );
         }
     }
 
     #[test]
-    fn global_at_terminal_checks_current_position_only() {
+    fn terminal_drop_is_not_replayed_as_a_second_drop_or_use() {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
             schema_version: 1,
@@ -810,15 +957,24 @@ mod tests {
             entry: "b0".into(), variables: vec![var("rust::x", ProgramLanguage::Rust)],
             allocations: vec![],
             nodes: vec![node(
-                "b0", &[], vec![EventLabel { predicate: EventKind::Read, variable: "rust::x".into() }],
+                "b0", &[], vec![
+                    EventLabel { predicate: EventKind::Drop, variable: "rust::x".into() },
+                    EventLabel { predicate: EventKind::Read, variable: "rust::x".into() },
+                ],
                 AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default(),
             )],
         };
         let k = Kripke::from_annotated_icfg(input).unwrap();
         let env = BTreeMap::from([("x".into(), Binding::ProgramVar("rust::x".into()))]);
-        for text in ["EG use_l(x)", "AG use_l(x)"] {
-            let q = parse_query(text).unwrap();
-            assert_eq!(ModelChecker::new(&k).evaluate(&q, &env).unwrap(), Truth::True);
+        for text in [
+            "EF (drop_l(x) && EX EF drop_l(x))",
+            "EF (drop_l(x) && EX EF use_l(x))",
+        ] {
+            assert_eq!(
+                ModelChecker::new(&k).evaluate(&parse_query(text).unwrap(), &env).unwrap(),
+                Truth::False,
+                "{text}"
+            );
         }
     }
 
@@ -932,8 +1088,10 @@ mod tests {
 
     #[test]
     fn existential_and_universal_globally_differ_on_branching_graph() {
-        // Every visited state on b0->b1 satisfies use_l(x), while b0->b2
-        // reaches a terminal state that does not. Hence EG=tt and AG=ff.
+        // EG requires an infinite path on which use_l(x) holds globally.
+        // The b1 branch is an explicit producer cycle carrying use_l(x), while
+        // b2 terminates and is extended by a quiescent completion state. Thus
+        // EG=tt by choosing b1 forever, whereas AG=ff because of the b2 branch.
         let use_x = || EventLabel { predicate: EventKind::Read, variable: "rust::x".into() };
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
@@ -947,7 +1105,7 @@ mod tests {
             allocations: vec![],
             nodes: vec![
                 node("b0", &["b1", "b2"], vec![use_x()], AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default()),
-                node("b1", &[], vec![use_x()], AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default()),
+                node("b1", &["b1"], vec![use_x()], AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default()),
                 node("b2", &[], vec![], AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default()),
             ],
         };
@@ -956,6 +1114,44 @@ mod tests {
         let mc = ModelChecker::new(&k);
         assert_eq!(mc.evaluate(&parse_query("EG use_l(x)").unwrap(), &env).unwrap(), Truth::True);
         assert_eq!(mc.evaluate(&parse_query("AG use_l(x)").unwrap(), &env).unwrap(), Truth::False);
+    }
+
+    #[test]
+    fn finite_all_use_prefix_is_not_an_eg_witness_after_quiescent_completion() {
+        // Under the theoretical infinite-path semantics, a finite producer path
+        // whose final block carries use_l(x) is extended by a quiescent state in
+        // which the event is absent. The finite prefix therefore does not
+        // witness EG use_l(x); this is intentionally different from the legacy
+        // maximal-finite-path semantics retained only by --intra.
+        let use_x = || EventLabel { predicate: EventKind::Read, variable: "rust::x".into() };
+        let input = AnnotatedIcfg {
+            external_deallocation_effects: vec![],
+            schema_version: 1,
+            capabilities: vec![],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ffi_argument_identity: vec![],
+            entry: "b0".into(),
+            variables: vec![var("rust::x", ProgramLanguage::Rust)],
+            allocations: vec![],
+            nodes: vec![
+                node("b0", &["b1"], vec![use_x()], AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default()),
+                node("b1", &[], vec![use_x()], AbstractMemoryAnnotation::default(), AbstractMemoryAnnotation::default()),
+            ],
+        };
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        let env = BTreeMap::from([("x".into(), Binding::ProgramVar("rust::x".into()))]);
+        assert_eq!(
+            ModelChecker::new(&k).evaluate(&parse_query("EG use_l(x)").unwrap(), &env).unwrap(),
+            Truth::False
+        );
+        assert_eq!(
+            ModelChecker::new_partial_for_intra(&k)
+                .evaluate(&parse_query("EG use_l(x)").unwrap(), &env)
+                .unwrap(),
+            Truth::True,
+            "legacy --intra finite-path semantics intentionally remains different"
+        );
     }
 
     #[test]

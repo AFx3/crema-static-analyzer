@@ -853,6 +853,21 @@ pub struct Kripke {
     pub panic_lifecycle: PanicLifecycleOverlay,
 }
 
+/// CQPL-only transition system used for state/path truth evaluation.
+///
+/// This type is deliberately separate from `Kripke`: it has no typed-edge,
+/// source-provenance, or external-effect evidence, because its completion
+/// edges are semantic stuttering edges rather than producer ICFG edges.
+/// Keeping the types separate prevents synthetic completion edges from ever
+/// being mistaken for `typed_edge_flow_v1` evidence.
+#[derive(Debug, Clone)]
+pub(crate) struct CqplTruthModel {
+    pub(crate) capabilities: BTreeSet<String>,
+    pub(crate) allocations: BTreeMap<String, AbstractAllocation>,
+    pub(crate) nodes: BTreeMap<String, AnnotatedNode>,
+    pub(crate) panic_lifecycle: PanicLifecycleOverlay,
+}
+
 fn rust_function_scope(node_id: &str) -> Option<&str> {
     if let Some((scope, bb)) = node_id.rsplit_once("::bb") {
         if scope.starts_with("rust::") && !bb.is_empty() && bb.chars().all(|c| c.is_ascii_digit()) {
@@ -1061,6 +1076,217 @@ fn validate_embedded_svf_pts(evidence: &SvfSolvedPointsToEvidenceV1) -> Result<(
         }
     }
     Ok(())
+}
+
+impl CqplTruthModel {
+    fn from_projected(k: &Kripke) -> Self {
+        Self {
+            capabilities: k.capabilities.clone(),
+            allocations: k.allocations.clone(),
+            nodes: k.nodes.clone(),
+            panic_lifecycle: k.panic_lifecycle.clone(),
+        }
+    }
+
+    /// Totalize the already-projected producer model by adding one fresh,
+    /// quiescent, state-preserving completion state per deadlock.
+    pub(crate) fn totalized_from(k: &Kripke) -> Self {
+        let mut total = Self::from_projected(k);
+        let terminals = k
+            .nodes
+            .iter()
+            .filter(|(_, node)| node.successors.is_empty())
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>();
+
+        let mut ordinal = 0usize;
+        for terminal_id in terminals {
+            let terminal = k
+                .nodes
+                .get(&terminal_id)
+                .expect("terminal collected from Kripke must exist")
+                .clone();
+
+            let completion_id = loop {
+                let candidate = format!("__cqpl_completion__::{ordinal}");
+                ordinal += 1;
+                if !total.nodes.contains_key(&candidate) {
+                    break candidate;
+                }
+            };
+
+            total
+                .nodes
+                .get_mut(&terminal_id)
+                .expect("terminal collected from Kripke must remain present")
+                .successors = vec![completion_id.clone()];
+
+            total.nodes.insert(
+                completion_id.clone(),
+                AnnotatedNode {
+                    id: completion_id.clone(),
+                    successors: vec![completion_id.clone()],
+                    labels: vec![],
+                    semantic_labels: vec![],
+                    allocation_labels: vec![],
+                    allocation_disposition: vec![],
+                    // `identity` is state-like points-to metadata used to
+                    // explain abstract component merges; freeze it together
+                    // with the post-state. `event_identity` is event-local and
+                    // must not be replayed after termination.
+                    identity: terminal.identity.clone(),
+                    event_identity: None,
+                    allocation_post: terminal.allocation_post.clone(),
+                    pre: terminal.post.clone(),
+                    post: terminal.post.clone(),
+                },
+            );
+
+            // `repeat_drop` is state-like MAY evidence backed by the lifecycle
+            // overlay, so it stutters with the frozen abstract memory state.
+            if let Some(records) = k.panic_lifecycle.get(&terminal_id) {
+                total
+                    .panic_lifecycle
+                    .insert(completion_id.clone(), records.clone());
+            }
+            if let Some(coverage) = k.panic_lifecycle.coverage_at(&terminal_id) {
+                total
+                    .panic_lifecycle
+                    .set_coverage(completion_id, coverage);
+            }
+        }
+
+        debug_assert!(total.nodes.values().all(|node| !node.successors.is_empty()));
+        total
+    }
+
+    /// Compatibility model for `--intra`: preserve the pre-cqpl4 partial
+    /// transition relation until intraprocedural scope boundaries are given a
+    /// separate formal treatment.
+    pub(crate) fn partial_from(k: &Kripke) -> Self {
+        Self::from_projected(k)
+    }
+
+    pub(crate) fn structural_label_hold(&self, node_id: &str, kind: StructuralLabelKind, name: &str) -> Truth {
+        let Some(node) = self.nodes.get(node_id) else { return Truth::False; };
+        let prefix = match kind {
+            StructuralLabelKind::Statement => "stmt",
+            StructuralLabelKind::Rvalue => "rvalue",
+            StructuralLabelKind::Terminator => "term",
+        };
+        let expected = format!("{prefix}:{name}");
+        if node.semantic_labels.iter().any(|label| label == &expected) { Truth::True } else { Truth::False }
+    }
+
+    pub(crate) fn aliases_at(&self, node_id: &str, var: &str) -> BTreeSet<String> {
+        let Some(node) = self.nodes.get(node_id) else {
+            return BTreeSet::from([var.to_string()]);
+        };
+        let mut aliases = node.pre.aliases_of(var);
+        aliases.extend(node.post.aliases_of(var));
+        aliases.insert(var.to_string());
+        aliases
+    }
+
+    pub(crate) fn may_hold(&self, node_id: &str, var: &str, p: MayPredicate) -> Truth {
+        let Some(node) = self.nodes.get(node_id) else { return Truth::False; };
+        let atom = match p {
+            MayPredicate::Alloc => CellValue::Alloc,
+            MayPredicate::Drop => CellValue::Freed,
+            MayPredicate::OwnForg => CellValue::Mv,
+            MayPredicate::RepeatDrop => return Truth::False,
+        };
+        if atom.leq(node.post.value_of(var)) { Truth::Unknown } else { Truth::False }
+    }
+
+    pub(crate) fn label_hold(&self, node_id: &str, var: &str, p: LabelPredicate) -> Truth {
+        let Some(node) = self.nodes.get(node_id) else { return Truth::False; };
+        let aliases = self.aliases_at(node_id, var);
+        let holds = node.labels.iter().any(|label| {
+            if !aliases.contains(&label.variable) { return false; }
+            match p {
+                LabelPredicate::Alloc => label.predicate == EventKind::Alloc,
+                LabelPredicate::Drop => label.predicate == EventKind::Drop,
+                LabelPredicate::Read => label.predicate == EventKind::Read,
+                LabelPredicate::Write => label.predicate == EventKind::Write,
+                LabelPredicate::Use => matches!(label.predicate, EventKind::Use | EventKind::Read | EventKind::Write),
+                LabelPredicate::AllocatorMismatch => false,
+            }
+        });
+        if holds { Truth::True } else { Truth::False }
+    }
+
+    pub(crate) fn allocation_may_hold(&self, node_id: &str, allocation: &str, p: MayPredicate) -> Truth {
+        let Some(node) = self.nodes.get(node_id) else { return Truth::False; };
+        if p == MayPredicate::RepeatDrop {
+            let has_may_witness = self.panic_lifecycle
+                .get(node_id)
+                .into_iter()
+                .flatten()
+                .any(|record| {
+                    record.allocation == allocation
+                        && record.certainty == AllocationEventCertainty::MayAbstract
+                        && record.may_repeat_drop()
+                });
+            if has_may_witness {
+                return Truth::Unknown;
+            }
+            if self.capabilities.contains("panic_lifecycle_state_v2")
+                && self.panic_lifecycle.coverage_at(node_id) == Some(PanicLifecycleCoverage::Unresolved)
+            {
+                return Truth::Unknown;
+            }
+            return Truth::False;
+        }
+        let Some(post) = node.allocation_post.as_ref() else { return Truth::False; };
+        let atom = match p {
+            MayPredicate::Alloc => CellValue::Alloc,
+            MayPredicate::Drop => CellValue::Freed,
+            MayPredicate::OwnForg => CellValue::Mv,
+            MayPredicate::RepeatDrop => unreachable!("handled above"),
+        };
+        if atom.leq(post.value_of(allocation)) { Truth::Unknown } else { Truth::False }
+    }
+
+    pub(crate) fn allocation_label_hold(&self, node_id: &str, allocation: &str, p: LabelPredicate) -> Truth {
+        let Some(node) = self.nodes.get(node_id) else { return Truth::False; };
+        let mut acc = Truth::False;
+        for label in &node.allocation_labels {
+            if label.allocation != allocation {
+                continue;
+            }
+            let matches = match p {
+                LabelPredicate::Alloc => label.predicate == EventKind::Alloc,
+                LabelPredicate::Drop => label.predicate == EventKind::Drop,
+                LabelPredicate::Read => label.predicate == EventKind::Read,
+                LabelPredicate::Write => label.predicate == EventKind::Write,
+                LabelPredicate::Use => matches!(label.predicate, EventKind::Use | EventKind::Read | EventKind::Write),
+                LabelPredicate::AllocatorMismatch => {
+                    if label.predicate != EventKind::Drop {
+                        false
+                    } else {
+                        let allocator = self.allocations
+                            .get(allocation)
+                            .and_then(|a| a.allocator_contract.as_ref())
+                            .map(|c| c.family.as_str())
+                            .unwrap_or("unknown");
+                        let deallocator = label.deallocator_contract.as_ref()
+                            .map(|c| c.family.as_str())
+                            .unwrap_or("unknown");
+                        allocator == "unknown" || deallocator == "unknown" || allocator != deallocator
+                    }
+                },
+            };
+            if !matches {
+                continue;
+            }
+            let value = match label.certainty {
+                AllocationEventCertainty::MayAbstract => Truth::Unknown,
+            };
+            acc = acc.join(value);
+        }
+        acc
+    }
 }
 
 impl Kripke {
@@ -1501,6 +1727,22 @@ impl Kripke {
             source_provenance, typed_edges, external_deallocation_effects, ffi_argument_identity,
             llvm_memory_effects, svf_solved_points_to, panic_lifecycle,
         })
+    }
+
+    /// Build the total transition system used by CQPL truth evaluation.
+    ///
+    /// The producer ICFG and its abstract fixed point are left untouched. For
+    /// every deadlock in the already-projected producer model, the CQPL truth
+    /// model adds one fresh quiescent completion state. The original terminal
+    /// block transitions once to that state and the completion state stutters
+    /// on itself forever. Abstract state is frozen; action and structural
+    /// labels are empty, so the terminating block's actions are not replayed.
+    ///
+    /// The returned type intentionally contains no producer typed-edge or
+    /// provenance overlays. Synthetic completion edges are CQPL-semantic edges
+    /// only and can never become diagnostic `typed_edge_flow_v1` evidence.
+    pub(crate) fn totalized_for_cqpl_truth(&self) -> CqplTruthModel {
+        CqplTruthModel::totalized_from(self)
     }
 
     /// Resolve a node id or Rust function name to exactly one Kripke entry.
@@ -2255,6 +2497,80 @@ mod tests {
                 post: mem(&["rust::x", "c::p"], CellValue::Top),
             }],
         }
+    }
+
+    #[test]
+    fn cqpl_truth_totalization_adds_quiescent_completion_without_mutating_source() {
+        let mut input = base();
+        input.nodes[0].identity = Some(NodeIdentityAnnotation::default());
+        input.nodes[0].event_identity = Some(NodeIdentityAnnotation::default());
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        assert!(k.nodes["b0"].successors.is_empty());
+        assert_eq!(k.nodes["b0"].labels.len(), 1);
+
+        let total = k.totalized_for_cqpl_truth();
+        assert!(k.nodes["b0"].successors.is_empty(), "source Kripke must remain unchanged");
+        assert_eq!(total.nodes["b0"].successors.len(), 1);
+        let completion_id = &total.nodes["b0"].successors[0];
+        let completion = &total.nodes[completion_id];
+
+        assert_eq!(completion.successors, vec![completion_id.clone()]);
+        assert!(completion.labels.is_empty());
+        assert!(completion.semantic_labels.is_empty());
+        assert!(completion.allocation_labels.is_empty());
+        assert!(completion.allocation_disposition.is_empty());
+        assert_eq!(completion.identity, k.nodes["b0"].identity);
+        assert!(completion.event_identity.is_none());
+        assert_eq!(&completion.pre, &k.nodes["b0"].post);
+        assert_eq!(&completion.post, &k.nodes["b0"].post);
+        assert!(total.nodes.values().all(|node| !node.successors.is_empty()));
+    }
+
+    #[test]
+    fn cqpl_truth_totalization_adds_exactly_one_completion_per_deadlock() {
+        let k = Kripke::from_annotated_icfg(base()).unwrap();
+        let deadlocks = k.nodes.values().filter(|node| node.successors.is_empty()).count();
+        let total = k.totalized_for_cqpl_truth();
+        assert_eq!(total.nodes.len(), k.nodes.len() + deadlocks);
+        assert!(total.nodes.values().all(|node| !node.successors.is_empty()));
+    }
+
+    #[test]
+    fn cqpl_truth_totalization_preserves_producer_typed_edges_and_freezes_lifecycle_state() {
+        let mut k = Kripke::from_annotated_icfg(base()).unwrap();
+        k.typed_edges = vec![TypedEdgeRecord {
+            source: "producer".into(),
+            destination: "consumer".into(),
+            flow: TypedEdgeFlow::Normal,
+            label: Some("test producer edge".into()),
+            source_label: None,
+            destination_label: None,
+        }];
+        k.panic_lifecycle.insert(
+            "b0".into(),
+            vec![PanicLifecycleRecord {
+                allocation: "A".into(),
+                certainty: AllocationEventCertainty::MayAbstract,
+                may_own: true,
+                may_partial_drop: true,
+                may_stale_owner: true,
+                may_committed: false,
+                may_complete: false,
+            }],
+        );
+        k.panic_lifecycle
+            .set_coverage("b0", PanicLifecycleCoverage::Unresolved);
+
+        let before_edges = k.typed_edges.clone();
+        let total = k.totalized_for_cqpl_truth();
+        let completion_id = total.nodes["b0"].successors[0].clone();
+
+        assert_eq!(k.typed_edges, before_edges, "truth totalization must not mutate producer typed edges");
+        assert_eq!(total.panic_lifecycle.get(&completion_id).map(Vec::len), Some(1));
+        assert_eq!(
+            total.panic_lifecycle.coverage_at(&completion_id),
+            Some(PanicLifecycleCoverage::Unresolved)
+        );
     }
 
     #[test]
