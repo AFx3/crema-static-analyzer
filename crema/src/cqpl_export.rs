@@ -45,7 +45,7 @@ struct AnnotatedIcfg {
     /// never interpreted as proof of absence.
     #[serde(skip_serializing_if = "Option::is_none")]
     external_deallocation_effects: Option<Vec<ExternalDeallocationEffectRecord>>,
-    /// EFM1: proof-carrying semantic memory effects for bodyless external calls.
+    /// EFM2: proof-carrying semantic memory effects for bodyless external calls.
     /// These records classify formal argument roles only; actual Rust allocation
     /// identity remains entirely producer-side and is never borrowed from SVF.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -157,10 +157,11 @@ struct ExternalFormalMemoryEffectRecord {
     event_variable: String,
     /// Function-scoped canonical Rust ProgramVarId for the same actual operand.
     actual_variable: String,
-    /// Optional byte-count/extent formal index. EFM1 suppresses an effect only
-    /// for a statically exact `const 0_usize`; all other extents remain MAY.
+    /// Closed EFM2 extent vocabulary: bytes_from_formal | c_string_until_nul.
+    extent_kind: &'static str,
+    /// Byte-count formal for bytes_from_formal; absent for c_string_until_nul.
     #[serde(skip_serializing_if = "Option::is_none")]
-    size_argument_index: Option<usize>,
+    extent_argument_index: Option<usize>,
     /// Primary producer proof basis, frozen as a closed vocabulary.
     basis: &'static str,
     /// Frozen provider/documentation semantics from which the CREMA contract was derived.
@@ -989,7 +990,7 @@ fn export_cqpl_annotated_icfg_versioned(
                 "external_deallocation_effects_v1",
             ];
             if external_formal_memory_effects.is_some() {
-                caps.push("external_formal_memory_effects_v1");
+                caps.push("external_formal_memory_effects_v2");
             }
             if icfg.llvm_memory_effects.is_some() {
                 caps.push("llvm_memory_effects_v1");
@@ -2904,7 +2905,7 @@ fn external_formal_memory_effect_records(
             arguments,
             ..
         }) = bb.terminator.as_ref() else { continue; };
-        let Some(contract) = external_function_memory_contract(
+        let Some(contract) = external_function_memory_contract_v2(
             function_called,
             arguments.len(),
             ffi_functions,
@@ -2914,7 +2915,7 @@ fn external_formal_memory_effect_records(
         let function = scope.strip_prefix("rust::").unwrap_or(&scope);
 
         for rule in contract.rules {
-            if !external_formal_memory_effect_rule_active(&rule, arguments) { continue; }
+            if !external_formal_memory_effect_rule_active_v2(&rule, arguments) { continue; }
             let Some(argument) = arguments.get(rule.formal_index) else { continue; };
             let Some(event_variable) = canonical_mir_local(&argument.arg) else { continue; };
             let Some(actual_variable) = ProgramVarId::rust(function, &argument.arg) else { continue; };
@@ -2926,7 +2927,8 @@ fn external_formal_memory_effect_records(
                 access: rule.access,
                 event_variable,
                 actual_variable: actual_variable.canonical_string(),
-                size_argument_index: rule.size_argument_index,
+                extent_kind: rule.extent.kind(),
+                extent_argument_index: rule.extent.argument_index(),
                 basis: rule.basis,
                 semantic_sources: rule.semantic_sources.to_vec(),
             });
@@ -3493,9 +3495,31 @@ fn llvm_node_source_anchor(llvm: &crate::structs::LlvmJsonNode) -> Option<Source
 struct ExternalFormalMemoryEffectRule {
     formal_index: usize,
     access: &'static str,
-    size_argument_index: Option<usize>,
+    extent: ExternalMemoryExtent,
     basis: &'static str,
     semantic_sources: &'static [&'static str],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExternalMemoryExtent {
+    BytesFromFormal(usize),
+    CStringUntilNul,
+}
+
+impl ExternalMemoryExtent {
+    fn kind(self) -> &'static str {
+        match self {
+            Self::BytesFromFormal(_) => "bytes_from_formal",
+            Self::CStringUntilNul => "c_string_until_nul",
+        }
+    }
+
+    fn argument_index(self) -> Option<usize> {
+        match self {
+            Self::BytesFromFormal(index) => Some(index),
+            Self::CStringUntilNul => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -3505,18 +3529,20 @@ struct ExternalFunctionMemoryContract {
     rules: Vec<ExternalFormalMemoryEffectRule>,
 }
 
-fn external_formal_memory_effect_rule_active(
+fn external_formal_memory_effect_rule_active_v2(
     rule: &ExternalFormalMemoryEffectRule,
     arguments: &[MirCallArgument],
 ) -> bool {
-    let Some(size_index) = rule.size_argument_index else { return true; };
+    let ExternalMemoryExtent::BytesFromFormal(size_index) = rule.extent else {
+        return true;
+    };
     let Some(size_argument) = arguments.get(size_index) else { return false; };
-    // EFM1 is a MAY summary for unknown/positive extents, but a statically exact
+    // EFM2 is a MAY summary for unknown/positive extents, but a statically exact
     // zero byte-count cannot dereference the byte range for the modeled APIs.
     !definitely_zero_usize_constant(&size_argument.arg)
 }
 
-/// EFM1 closed semantic boundary for declaration-only external functions.
+/// EFM2 closed semantic boundary for declaration-only external functions.
 ///
 /// Scientific separation invariant:
 /// - SVF/LLVM knowledge classifies the *external API formal role* only.
@@ -3533,13 +3559,20 @@ fn external_formal_memory_effect_rule_active(
 ///   https://llvm.org/doxygen/BuildLibCalls_8h.html
 ///   https://llvm.org/doxygen/classllvm_1_1MemoryLocation.html
 /// - POSIX write consumes bytes from buf: https://pubs.opengroup.org/onlinepubs/9690949599/functions/write.html
+/// - POSIX memmove copies n bytes from source to destination and memchr searches
+///   the first n bytes:
+///   https://pubs.opengroup.org/onlinepubs/9799919799/functions/memmove.html
+///   https://pubs.opengroup.org/onlinepubs/9799919799/functions/memchr.html
+/// - POSIX/ISO C strchr searches a NUL-terminated string.
+/// - LLVM 16 is the frozen corroborating library-semantics version:
+///   https://releases.llvm.org/16.0.0/docs/LangRef.html
 ///
 /// This function is deliberately closed and fail-closed at the current artifact boundary.
 /// It does not claim that SVF/TLI ran on this bodyless call: their documented semantics
-/// define the frozen CREMA contract. EFM1 v1 admits only an exact selected-crate
+/// define the frozen CREMA contract. EFM2 admits only an exact selected-crate
 /// foreign declaration name with exact arity; represented C bodies are excluded to avoid duplicating
 /// observed LLVM/SVF events. Prototype-level TLI validation is not reconstructed here.
-fn external_function_memory_contract(
+fn external_function_memory_contract_v2(
     function_called: &str,
     argument_count: usize,
     ffi_functions: &HashSet<String>,
@@ -3571,8 +3604,8 @@ fn external_function_memory_contract(
             vec![ExternalFormalMemoryEffectRule {
                 formal_index: 0,
                 access: "read",
-                size_argument_index: None,
-                basis: "crema_efm1_closed_contract_v1",
+                extent: ExternalMemoryExtent::CStringUntilNul,
+                basis: "crema_efm2_closed_contract_v1",
                 semantic_sources: &["svf_absextapi_strlen_semantics_v1", "llvm16_tli_strlen_argmem_read_semantics_v1"],
             }],
         ));
@@ -3584,8 +3617,8 @@ fn external_function_memory_contract(
             vec![ExternalFormalMemoryEffectRule {
                 formal_index: 0,
                 access: "write",
-                size_argument_index: Some(2),
-                basis: "crema_efm1_closed_contract_v1",
+                extent: ExternalMemoryExtent::BytesFromFormal(2),
+                basis: "crema_efm2_closed_contract_v1",
                 semantic_sources: &["svf_extapi_memset_semantics_v1", "llvm16_tli_memset_arg0_writeonly_semantics_v1"],
             }],
         ));
@@ -3598,15 +3631,15 @@ fn external_function_memory_contract(
                 ExternalFormalMemoryEffectRule {
                     formal_index: 0,
                     access: "write",
-                    size_argument_index: Some(2),
-                    basis: "crema_efm1_closed_contract_v1",
+                    extent: ExternalMemoryExtent::BytesFromFormal(2),
+                    basis: "crema_efm2_closed_contract_v1",
                     semantic_sources: &["svf_extapi_memcpy_semantics_v1", "llvm16_tli_memcpy_arg0_writeonly_semantics_v1"],
                 },
                 ExternalFormalMemoryEffectRule {
                     formal_index: 1,
                     access: "read",
-                    size_argument_index: Some(2),
-                    basis: "crema_efm1_closed_contract_v1",
+                    extent: ExternalMemoryExtent::BytesFromFormal(2),
+                    basis: "crema_efm2_closed_contract_v1",
                     semantic_sources: &["svf_extapi_memcpy_semantics_v1", "llvm16_tli_memcpy_arg1_readonly_semantics_v1"],
                 },
             ],
@@ -3620,15 +3653,15 @@ fn external_function_memory_contract(
                 ExternalFormalMemoryEffectRule {
                     formal_index: 0,
                     access: "read",
-                    size_argument_index: Some(2),
-                    basis: "crema_efm1_closed_contract_v1",
+                    extent: ExternalMemoryExtent::BytesFromFormal(2),
+                    basis: "crema_efm2_closed_contract_v1",
                     semantic_sources: &["llvm16_tli_memcmp_argmem_read_semantics_v1", "llvm16_memorylocation_memcmp_formal_semantics_v1"],
                 },
                 ExternalFormalMemoryEffectRule {
                     formal_index: 1,
                     access: "read",
-                    size_argument_index: Some(2),
-                    basis: "crema_efm1_closed_contract_v1",
+                    extent: ExternalMemoryExtent::BytesFromFormal(2),
+                    basis: "crema_efm2_closed_contract_v1",
                     semantic_sources: &["llvm16_tli_memcmp_argmem_read_semantics_v1", "llvm16_memorylocation_memcmp_formal_semantics_v1"],
                 },
             ],
@@ -3641,9 +3674,57 @@ fn external_function_memory_contract(
             vec![ExternalFormalMemoryEffectRule {
                 formal_index: 1,
                 access: "read",
-                size_argument_index: Some(2),
-                basis: "crema_efm1_closed_contract_v1",
+                extent: ExternalMemoryExtent::BytesFromFormal(2),
+                basis: "crema_efm2_closed_contract_v1",
                 semantic_sources: &["posix_write_buffer_semantics_v1", "llvm16_tli_write_arg1_readonly_semantics_v1"],
+            }],
+        ));
+    }
+    if argument_count == 3 && admitted(function_called, "memmove", ffi_functions, represented_c_functions) {
+        return Some(mk(
+            "memmove",
+            "memmove_v1",
+            vec![
+                ExternalFormalMemoryEffectRule {
+                    formal_index: 0,
+                    access: "write",
+                    extent: ExternalMemoryExtent::BytesFromFormal(2),
+                    basis: "crema_efm2_closed_contract_v1",
+                    semantic_sources: &["posix_memmove_n_byte_copy_semantics_v1", "llvm16_memmove_formal_semantics_v1", "llvm16_tli_memmove_recognition_v1"],
+                },
+                ExternalFormalMemoryEffectRule {
+                    formal_index: 1,
+                    access: "read",
+                    extent: ExternalMemoryExtent::BytesFromFormal(2),
+                    basis: "crema_efm2_closed_contract_v1",
+                    semantic_sources: &["posix_memmove_n_byte_copy_semantics_v1", "llvm16_memmove_formal_semantics_v1", "llvm16_tli_memmove_recognition_v1"],
+                },
+            ],
+        ));
+    }
+    if argument_count == 3 && admitted(function_called, "memchr", ffi_functions, represented_c_functions) {
+        return Some(mk(
+            "memchr",
+            "memchr_bounded_read_v1",
+            vec![ExternalFormalMemoryEffectRule {
+                formal_index: 0,
+                access: "read",
+                extent: ExternalMemoryExtent::BytesFromFormal(2),
+                basis: "crema_efm2_closed_contract_v1",
+                semantic_sources: &["posix_memchr_bounded_read_semantics_v1", "llvm16_tli_memchr_recognition_v1"],
+            }],
+        ));
+    }
+    if argument_count == 2 && admitted(function_called, "strchr", ffi_functions, represented_c_functions) {
+        return Some(mk(
+            "strchr",
+            "strchr_read_c_string_v1",
+            vec![ExternalFormalMemoryEffectRule {
+                formal_index: 0,
+                access: "read",
+                extent: ExternalMemoryExtent::CStringUntilNul,
+                basis: "crema_efm2_closed_contract_v1",
+                semantic_sources: &["posix_strchr_c_string_read_semantics_v1"],
             }],
         ));
     }
@@ -3823,18 +3904,18 @@ fn event_sources_for_node(
                             }
                         }
 
-                        // EFM1: declaration-only external semantic memory effects.
+                        // EFM2: declaration-only external semantic memory effects.
                         // The external API contract classifies formal positions; the
                         // actual memory object remains the Rust MIR operand resolved by
                         // CREMA's existing allocation-identity domain.
-                        if let Some(contract) = external_function_memory_contract(
+                        if let Some(contract) = external_function_memory_contract_v2(
                             function_called,
                             arguments.len(),
                             ffi_functions,
                             represented_c_functions,
                         ) {
                             for rule in contract.rules {
-                                if !external_formal_memory_effect_rule_active(&rule, arguments) { continue; }
+                                if !external_formal_memory_effect_rule_active_v2(&rule, arguments) { continue; }
                                 if let Some(argument) = arguments.get(rule.formal_index) {
                                     if let Some(v) = canonical_mir_local(&argument.arg) {
                                         insert_event_source(
@@ -4326,13 +4407,13 @@ mod tests {
         assert_eq!(canonical_mir_local("Local(_7) [mutable]"), Some("Local(_7)".into()));
     }
 
-    fn efm1_call(function_called: &str, args: &[&str]) -> GlobalICFGNode {
+    fn efm2_call(function_called: &str, args: &[&str]) -> GlobalICFGNode {
         GlobalICFGNode::Mir(MirBasicBlock {
             block_id: 0,
             statements: vec![],
             terminator: Some(MirTerminator::Call {
                 details: format!("call {function_called}"),
-                source_info: "<efm1-test>".into(),
+                source_info: "<efm2-test>".into(),
                 function_called: function_called.into(),
                 callee_def_path: Some(function_called.into()),
                 deallocator_evidence: None,
@@ -4359,38 +4440,62 @@ mod tests {
     }
 
     #[test]
-    fn efm1_classifier_is_ffi_gated_arity_closed_and_body_aware() {
-        let ffi = ["strlen", "memset", "memcpy", "memcmp", "write"]
+    fn efm2_classifier_is_exact_arity_closed_ffi_gated_and_body_aware() {
+        let ffi = [
+            "strlen", "memcmp", "memcpy", "memmove", "memset", "memchr", "strchr", "write",
+        ]
             .into_iter()
             .map(str::to_string)
             .collect::<HashSet<_>>();
         let represented = HashSet::new();
 
-        let memcpy = external_function_memory_contract("memcpy", 3, &ffi, &represented)
-            .expect("declared memcpy contract");
-        assert_eq!(memcpy.semantic_class, "memcpy_v1");
-        assert_eq!(memcpy.rules.len(), 2);
-        assert!(memcpy.rules.iter().any(|r| r.formal_index == 0 && r.access == "write"));
-        assert!(memcpy.rules.iter().any(|r| r.formal_index == 1 && r.access == "read"));
+        for (callee, arity, semantic_class, rules) in [
+            ("strlen", 1, "strlen_read_c_string_v1", vec![(0, "read", ExternalMemoryExtent::CStringUntilNul)]),
+            ("memcmp", 3, "memcmp_v1", vec![(0, "read", ExternalMemoryExtent::BytesFromFormal(2)), (1, "read", ExternalMemoryExtent::BytesFromFormal(2))]),
+            ("memcpy", 3, "memcpy_v1", vec![(0, "write", ExternalMemoryExtent::BytesFromFormal(2)), (1, "read", ExternalMemoryExtent::BytesFromFormal(2))]),
+            ("memmove", 3, "memmove_v1", vec![(0, "write", ExternalMemoryExtent::BytesFromFormal(2)), (1, "read", ExternalMemoryExtent::BytesFromFormal(2))]),
+            ("memset", 3, "memset_v1", vec![(0, "write", ExternalMemoryExtent::BytesFromFormal(2))]),
+            ("memchr", 3, "memchr_bounded_read_v1", vec![(0, "read", ExternalMemoryExtent::BytesFromFormal(2))]),
+            ("strchr", 2, "strchr_read_c_string_v1", vec![(0, "read", ExternalMemoryExtent::CStringUntilNul)]),
+            ("write", 3, "posix_write_v1", vec![(1, "read", ExternalMemoryExtent::BytesFromFormal(2))]),
+        ] {
+            let contract = external_function_memory_contract_v2(callee, arity, &ffi, &represented)
+                .unwrap_or_else(|| panic!("missing EFM2 contract for {callee}/{arity}"));
+            assert_eq!(contract.semantic_class, semantic_class);
+            assert_eq!(
+                contract.rules.iter().map(|rule| (rule.formal_index, rule.access, rule.extent)).collect::<Vec<_>>(),
+                rules,
+                "wrong formal roles for {callee}",
+            );
+            assert!(contract.rules.iter().all(|rule| rule.basis == "crema_efm2_closed_contract_v1"));
+        }
 
-        let memcmp = external_function_memory_contract("memcmp", 3, &ffi, &represented)
-            .expect("declared memcmp contract");
-        assert_eq!(memcmp.rules.iter().map(|r| (r.formal_index, r.access)).collect::<Vec<_>>(), vec![(0, "read"), (1, "read")]);
+        for (callee, wrong_arity) in [("memmove", 2), ("memchr", 2), ("strchr", 3)] {
+            assert!(external_function_memory_contract_v2(callee, wrong_arity, &ffi, &represented).is_none());
+        }
+        assert!(external_function_memory_contract_v2("memmove", 3, &HashSet::new(), &represented).is_none());
+        for (raw, arity) in [
+            ("libc::memmove", 3),
+            ("my_memmove", 3),
+            ("memmove_wrapper", 3),
+            ("foo_strchr", 2),
+        ] {
+            assert!(external_function_memory_contract_v2(raw, arity, &ffi, &represented).is_none());
+        }
+        assert!(external_function_memory_contract_v2("strcpy", 2, &ffi, &represented).is_none());
 
-        assert!(external_function_memory_contract("memcpy", 2, &ffi, &represented).is_none());
-        assert!(external_function_memory_contract("memcpy", 3, &HashSet::new(), &represented).is_none());
-
-        let represented_memcpy = ["memcpy".to_string()].into_iter().collect::<HashSet<_>>();
-        assert!(external_function_memory_contract("memcpy", 3, &ffi, &represented_memcpy).is_none());
-
-        // Dependency-path libc calls are deliberately outside EFM1 v1: the
-        // current artifact does not carry provider prototype/linkage evidence.
-        assert!(external_function_memory_contract("libc::memcpy", 3, &HashSet::new(), &represented).is_none());
+        for (callee, arity) in [
+            ("strlen", 1), ("memcmp", 3), ("memcpy", 3), ("memmove", 3),
+            ("memset", 3), ("memchr", 3), ("strchr", 2), ("write", 3),
+        ] {
+            let represented = [callee.to_string()].into_iter().collect::<HashSet<_>>();
+            assert!(external_function_memory_contract_v2(callee, arity, &ffi, &represented).is_none());
+        }
     }
 
     #[test]
-    fn efm1_bodyless_calls_emit_argument_specific_existing_use_labels() {
-        let ffi = ["strlen", "memset", "memcpy", "memcmp", "write"]
+    fn efm2_bodyless_calls_emit_only_argument_specific_existing_use_labels() {
+        let ffi = ["strlen", "memcmp", "memcpy", "memmove", "memset", "memchr", "strchr", "write"]
             .into_iter()
             .map(str::to_string)
             .collect::<HashSet<_>>();
@@ -4402,11 +4507,14 @@ mod tests {
             ("memset", vec!["Local(_1)", "const 0_i32", "const 8_usize"], vec![("write", "Local(_1)")]),
             ("memcpy", vec!["Local(_1)", "Local(_2)", "const 8_usize"], vec![("write", "Local(_1)"), ("read", "Local(_2)")]),
             ("memcmp", vec!["Local(_1)", "Local(_2)", "const 8_usize"], vec![("read", "Local(_1)"), ("read", "Local(_2)")]),
+            ("memmove", vec!["Local(_1)", "Local(_2)", "const 8_usize"], vec![("write", "Local(_1)"), ("read", "Local(_2)")]),
+            ("memchr", vec!["Local(_1)", "const 1_i32", "const 8_usize"], vec![("read", "Local(_1)")]),
+            ("strchr", vec!["Local(_1)", "const 1_i32"], vec![("read", "Local(_1)")]),
             ("write", vec!["const 1_i32", "Local(_2)", "const 8_usize"], vec![("read", "Local(_2)")]),
         ];
 
         for (callee, args, expected) in cases {
-            let call = efm1_call(callee, &args);
+            let call = efm2_call(callee, &args);
             let events = event_sources_for_node(
                 "rust::main::bb0",
                 &call,
@@ -4420,22 +4528,25 @@ mod tests {
                 .map(|e| (e.predicate, e.variable.as_str()))
                 .collect::<BTreeSet<_>>();
             let expected = expected.into_iter().collect::<BTreeSet<_>>();
-            assert_eq!(actual, expected, "wrong EFM1 labels for {callee}");
+            assert_eq!(actual, expected, "wrong EFM2 labels for {callee}");
         }
     }
 
     #[test]
-    fn efm1_definite_zero_extent_suppresses_memory_event_and_record() {
-        let ffi = ["memcpy".to_string(), "memcmp".to_string(), "memset".to_string(), "write".to_string()]
+    fn efm2_definite_zero_extent_suppresses_memory_event_and_record() {
+        let ffi = ["memcpy", "memcmp", "memmove", "memset", "memchr", "write"]
             .into_iter()
+            .map(str::to_string)
             .collect::<HashSet<_>>();
         let resolver = LlvmNameResolver::default();
         let represented = HashSet::new();
         let calls = [
-            efm1_call("memcpy", &["Local(_1)", "Local(_2)", "const 0_usize"]),
-            efm1_call("memcmp", &["Local(_1)", "Local(_2)", "const 0_usize"]),
-            efm1_call("memset", &["Local(_1)", "const 1_i32", "const 0_usize"]),
-            efm1_call("write", &["const 1_i32", "Local(_1)", "const 0_usize"]),
+            efm2_call("memcpy", &["Local(_1)", "Local(_2)", "const 0_usize"]),
+            efm2_call("memcmp", &["Local(_1)", "Local(_2)", "const 0_usize"]),
+            efm2_call("memmove", &["Local(_1)", "Local(_2)", "const 0_usize"]),
+            efm2_call("memset", &["Local(_1)", "const 1_i32", "const 0_usize"]),
+            efm2_call("memchr", &["Local(_1)", "const 1_i32", "const 0_usize"]),
+            efm2_call("write", &["const 1_i32", "Local(_1)", "const 0_usize"]),
         ];
         for call in &calls {
             let events = event_sources_for_node(
@@ -4444,24 +4555,23 @@ mod tests {
             assert!(events.keys().all(|e| !matches!(e.predicate, "read" | "write")));
         }
 
-        let icfg = GlobalICFGOrdered {
-            ordered_nodes: vec![("rust::main::bb0".into(), calls[0].clone())],
-            icfg_edges: vec![],
-            llvm_memory_effects: None,
-            svf_solved_points_to: None,
-            rust_functions: Default::default(),
-            rust_calls: vec![],
-        };
-        assert!(external_formal_memory_effect_records(&icfg, &ffi, &represented).is_empty());
+        for call in calls {
+            let icfg = GlobalICFGOrdered {
+                ordered_nodes: vec![("rust::main::bb0".into(), call)],
+                icfg_edges: vec![], llvm_memory_effects: None, svf_solved_points_to: None,
+                rust_functions: Default::default(), rust_calls: vec![],
+            };
+            assert!(external_formal_memory_effect_records(&icfg, &ffi, &represented).is_empty());
+        }
     }
 
     #[test]
-    fn efm1_records_preserve_formal_actual_separation() {
-        let ffi = ["memcpy".to_string()].into_iter().collect::<HashSet<_>>();
+    fn efm2_dynamic_extent_records_preserve_explicit_extent_and_formal_actual_separation() {
+        let ffi = ["memmove".to_string()].into_iter().collect::<HashSet<_>>();
         let icfg = GlobalICFGOrdered {
             ordered_nodes: vec![(
                 "rust::main::bb0".into(),
-                efm1_call("memcpy", &["Local(_1)", "Local(_2)", "const 8_usize"]),
+                efm2_call("memmove", &["Local(_1)", "Local(_2)", "Local(_3)"]),
             )],
             icfg_edges: vec![],
             llvm_memory_effects: None,
@@ -4476,15 +4586,30 @@ mod tests {
                 && r.access == "write"
                 && r.event_variable == "Local(_1)"
                 && r.actual_variable == "rust::main::Local(_1)"
-                && r.basis == "crema_efm1_closed_contract_v1"
+                && r.extent_kind == "bytes_from_formal"
+                && r.extent_argument_index == Some(2)
+                && r.basis == "crema_efm2_closed_contract_v1"
+                && r.semantic_sources == vec!["posix_memmove_n_byte_copy_semantics_v1", "llvm16_memmove_formal_semantics_v1", "llvm16_tli_memmove_recognition_v1"]
         }));
         assert!(records.iter().any(|r| {
             r.formal_index == 1
                 && r.access == "read"
                 && r.event_variable == "Local(_2)"
                 && r.actual_variable == "rust::main::Local(_2)"
-                && r.basis == "crema_efm1_closed_contract_v1"
+                && r.extent_kind == "bytes_from_formal"
+                && r.extent_argument_index == Some(2)
+                && r.basis == "crema_efm2_closed_contract_v1"
         }));
+
+        let events = event_sources_for_node(
+            "rust::main::bb0", &icfg.ordered_nodes[0].1, &LlvmNameResolver::default(),
+            &ffi, &HashSet::new(),
+        );
+        assert_eq!(
+            events.keys().filter(|event| matches!(event.predicate, "read" | "write")).count(),
+            2,
+            "dynamic extent must retain both MAY effects",
+        );
     }
 
     #[test]
@@ -6431,7 +6556,7 @@ mod tests {
     }
 
     #[test]
-    fn efm1_zero_usize_classifier_is_exact_and_closed() {
+    fn efm2_zero_usize_classifier_is_exact_and_closed() {
         assert!(definitely_zero_usize_constant("const 0_usize"));
         assert!(!definitely_zero_usize_constant("const 1_usize"));
         assert!(!definitely_zero_usize_constant("const 0_u64"));

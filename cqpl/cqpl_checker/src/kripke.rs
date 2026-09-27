@@ -181,9 +181,20 @@ pub struct ExternalFormalMemoryEffectRecord {
     pub actual_variable: String,
     #[serde(default)]
     pub size_argument_index: Option<usize>,
+    #[serde(default)]
+    pub extent_kind: Option<ExternalMemoryExtentKind>,
+    #[serde(default)]
+    pub extent_argument_index: Option<usize>,
     pub basis: String,
     #[serde(default)]
     pub semantic_sources: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExternalMemoryExtentKind {
+    BytesFromFormal,
+    CStringUntilNul,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1461,7 +1472,7 @@ pub struct AnnotatedIcfg {
     /// never interpreted as a negative certificate.
     #[serde(default)]
     pub external_deallocation_effects: Vec<ExternalDeallocationEffectRecord>,
-    /// EFM1 proof-carrying declaration-only external formal memory effects.
+    /// Versioned EFM1/EFM2 proof-carrying declaration-only formal memory effects.
     #[serde(default)]
     pub external_formal_memory_effects: Vec<ExternalFormalMemoryEffectRecord>,
     #[serde(default)]
@@ -2138,7 +2149,8 @@ impl Kripke {
         let has_allocation_disposition = capabilities.contains("allocation_disposition_v1");
         let has_allocation_disposition_v2 = capabilities.contains("allocation_disposition_v2");
         let has_external_deallocation_effects = capabilities.contains("external_deallocation_effects_v1");
-        let has_external_formal_memory_effects = capabilities.contains("external_formal_memory_effects_v1");
+        let has_external_formal_memory_effects_v1 = capabilities.contains("external_formal_memory_effects_v1");
+        let has_external_formal_memory_effects_v2 = capabilities.contains("external_formal_memory_effects_v2");
         let has_llvm_memory_effects = capabilities.contains("llvm_memory_effects_v1");
         let has_svf_solved_points_to = capabilities.contains("svf_solved_points_to_v1");
         let has_ffi_argument_identity = capabilities.contains("ffi_argument_identity_v1");
@@ -2250,13 +2262,18 @@ impl Kripke {
         if has_external_deallocation_effects && schema_version != 2 {
             return Err("external_deallocation_effects_v1 requires annotated ICFG schema v2".into());
         }
+        if has_external_formal_memory_effects_v1 && has_external_formal_memory_effects_v2 {
+            return Err("external_formal_memory_effects_v1 and external_formal_memory_effects_v2 are mutually exclusive".into());
+        }
+        let has_external_formal_memory_effects =
+            has_external_formal_memory_effects_v1 || has_external_formal_memory_effects_v2;
         if has_external_formal_memory_effects != !input.external_formal_memory_effects.is_empty() {
-            return Err("external_formal_memory_effects_v1 capability and evidence records must appear together".into());
+            return Err("exactly one external_formal_memory_effects_v1/v2 capability and evidence records must appear together".into());
         }
         if has_external_formal_memory_effects
             && (schema_version != 2 || !capabilities.contains("mir_semantics_v2"))
         {
-            return Err("external_formal_memory_effects_v1 requires annotated ICFG schema v2 and mir_semantics_v2".into());
+            return Err("external_formal_memory_effects_v1/v2 requires annotated ICFG schema v2 and mir_semantics_v2".into());
         }
         if has_llvm_memory_effects && schema_version != 2 {
             return Err("llvm_memory_effects_v1 requires annotated ICFG schema v2".into());
@@ -2484,8 +2501,18 @@ impl Kripke {
 
         let mut external_formal_memory_effects = Vec::new();
         let mut seen_external_formal_memory_effects = BTreeSet::new();
+        let external_formal_memory_effects_version = if has_external_formal_memory_effects_v2 {
+            ExternalFormalMemoryEffectsVersion::V2
+        } else {
+            ExternalFormalMemoryEffectsVersion::V1
+        };
         for record in input.external_formal_memory_effects {
-            validate_external_formal_memory_effect(&record, &variables, &nodes)?;
+            validate_external_formal_memory_effect(
+                &record,
+                external_formal_memory_effects_version,
+                &variables,
+                &nodes,
+            )?;
             let key = (
                 record.node.clone(),
                 record.callee.clone(),
@@ -3262,48 +3289,68 @@ fn validate_external_deallocation_effect(
 }
 
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExternalFormalMemoryEffectsVersion {
+    V1,
+    V2,
+}
+
 fn validate_external_formal_memory_effect(
     record: &ExternalFormalMemoryEffectRecord,
+    version: ExternalFormalMemoryEffectsVersion,
     variables: &BTreeMap<String, ProgramVariable>,
     nodes: &BTreeMap<String, AnnotatedNode>,
 ) -> Result<(), String> {
+    let capability = match version {
+        ExternalFormalMemoryEffectsVersion::V1 => "external_formal_memory_effects_v1",
+        ExternalFormalMemoryEffectsVersion::V2 => "external_formal_memory_effects_v2",
+    };
     let Some(node) = nodes.get(&record.node) else {
         return Err(format!(
-            "external_formal_memory_effects_v1 references unknown node '{}'",
+            "{capability} references unknown node '{}'",
             record.node
         ));
     };
     if !record.node.starts_with("rust::") {
-        return Err("external_formal_memory_effects_v1 must reference the real Rust MIR call node".into());
+        return Err(format!("{capability} must reference the real Rust MIR call node"));
     }
     if !node.semantic_labels.iter().any(|label| label == "term:call") {
-        return Err("external_formal_memory_effects_v1 must reference a MIR term:call node".into());
+        return Err(format!("{capability} must reference a MIR term:call node"));
     }
     let Some(actual) = variables.get(&record.actual_variable) else {
         return Err(format!(
-            "external_formal_memory_effects_v1 references undeclared actual variable '{}'",
+            "{capability} references undeclared actual variable '{}'",
             record.actual_variable
         ));
     };
     let Some(scope) = rust_function_scope(&record.node) else {
-        return Err("external_formal_memory_effects_v1 cannot recover Rust function scope".into());
+        return Err(format!("{capability} cannot recover Rust function scope"));
     };
     let expected_prefix = format!("{}::", scope);
     if actual.language != ProgramLanguage::Rust
         || !record.actual_variable.starts_with(&expected_prefix)
     {
         return Err(format!(
-            "external_formal_memory_effects_v1 actual variable '{}' is outside node scope '{}'",
+            "{capability} actual variable '{}' is outside node scope '{}'",
             record.actual_variable, scope
         ));
     }
     if !matches!(record.access.as_str(), "read" | "write") {
-        return Err("external_formal_memory_effects_v1 access must be read or write".into());
+        return Err(format!("{capability} access must be read or write"));
     }
-    let event_suffix = format!("::{}", record.event_variable);
-    if !record.actual_variable.ends_with(&event_suffix) {
+    let variables_match = match version {
+        // Preserve the frozen EFM1 acceptance rule exactly.
+        ExternalFormalMemoryEffectsVersion::V1 => record
+            .actual_variable
+            .ends_with(&format!("::{}", record.event_variable)),
+        // EFM2 requires the exact same scoped MIR local, not merely a suffix.
+        ExternalFormalMemoryEffectsVersion::V2 => {
+            record.actual_variable == format!("{scope}::{}", record.event_variable)
+        }
+    };
+    if !variables_match {
         return Err(format!(
-            "external_formal_memory_effects_v1 actual/event variable mismatch: '{}' vs '{}'",
+            "{capability} actual/event variable mismatch: '{}' vs '{}'",
             record.actual_variable, record.event_variable
         ));
     }
@@ -3316,11 +3363,24 @@ fn validate_external_formal_memory_effect(
         label.predicate == expected_event_kind && label.variable == record.event_variable
     }) {
         return Err(format!(
-            "external_formal_memory_effects_v1 record at '{}' lacks matching node event {}({})",
+            "{capability} record at '{}' lacks matching node event {}({})",
             record.node, record.access, record.event_variable
         ));
     }
 
+    match version {
+        ExternalFormalMemoryEffectsVersion::V1 => {
+            validate_external_formal_memory_effect_v1_tuple(record)
+        }
+        ExternalFormalMemoryEffectsVersion::V2 => {
+            validate_external_formal_memory_effect_v2_tuple(record)
+        }
+    }
+}
+
+fn validate_external_formal_memory_effect_v1_tuple(
+    record: &ExternalFormalMemoryEffectRecord,
+) -> Result<(), String> {
     let expected: (&str, usize, &str, Option<usize>, &str, &[&str]) =
         match (record.callee.as_str(), record.formal_index, record.access.as_str()) {
             ("strlen", 0, "read") => (
@@ -3363,6 +3423,8 @@ fn validate_external_formal_memory_effect(
         || record.formal_index != expected.1
         || record.access != expected.2
         || record.size_argument_index != expected.3
+        || record.extent_kind.is_some()
+        || record.extent_argument_index.is_some()
         || record.basis != expected.4
     {
         return Err(format!(
@@ -3374,6 +3436,115 @@ fn validate_external_formal_memory_effect(
     if record.semantic_sources != expected_sources {
         return Err(format!(
             "external_formal_memory_effects_v1 invalid semantic source set at '{}' for '{}'/arg{}",
+            record.node, record.callee, record.formal_index
+        ));
+    }
+    Ok(())
+}
+
+fn validate_external_formal_memory_effect_v2_tuple(
+    record: &ExternalFormalMemoryEffectRecord,
+) -> Result<(), String> {
+    let expected: (
+        &str,
+        usize,
+        &str,
+        ExternalMemoryExtentKind,
+        Option<usize>,
+        &str,
+        &[&str],
+    ) = match (record.callee.as_str(), record.formal_index, record.access.as_str()) {
+        ("strlen", 0, "read") => (
+            "strlen_read_c_string_v1", 0, "read",
+            ExternalMemoryExtentKind::CStringUntilNul, None,
+            "crema_efm2_closed_contract_v1",
+            &["svf_absextapi_strlen_semantics_v1", "llvm16_tli_strlen_argmem_read_semantics_v1"],
+        ),
+        ("memset", 0, "write") => (
+            "memset_v1", 0, "write",
+            ExternalMemoryExtentKind::BytesFromFormal, Some(2),
+            "crema_efm2_closed_contract_v1",
+            &["svf_extapi_memset_semantics_v1", "llvm16_tli_memset_arg0_writeonly_semantics_v1"],
+        ),
+        ("memcpy", 0, "write") => (
+            "memcpy_v1", 0, "write",
+            ExternalMemoryExtentKind::BytesFromFormal, Some(2),
+            "crema_efm2_closed_contract_v1",
+            &["svf_extapi_memcpy_semantics_v1", "llvm16_tli_memcpy_arg0_writeonly_semantics_v1"],
+        ),
+        ("memcpy", 1, "read") => (
+            "memcpy_v1", 1, "read",
+            ExternalMemoryExtentKind::BytesFromFormal, Some(2),
+            "crema_efm2_closed_contract_v1",
+            &["svf_extapi_memcpy_semantics_v1", "llvm16_tli_memcpy_arg1_readonly_semantics_v1"],
+        ),
+        ("memcmp", 0, "read") => (
+            "memcmp_v1", 0, "read",
+            ExternalMemoryExtentKind::BytesFromFormal, Some(2),
+            "crema_efm2_closed_contract_v1",
+            &["llvm16_tli_memcmp_argmem_read_semantics_v1", "llvm16_memorylocation_memcmp_formal_semantics_v1"],
+        ),
+        ("memcmp", 1, "read") => (
+            "memcmp_v1", 1, "read",
+            ExternalMemoryExtentKind::BytesFromFormal, Some(2),
+            "crema_efm2_closed_contract_v1",
+            &["llvm16_tli_memcmp_argmem_read_semantics_v1", "llvm16_memorylocation_memcmp_formal_semantics_v1"],
+        ),
+        ("write", 1, "read") => (
+            "posix_write_v1", 1, "read",
+            ExternalMemoryExtentKind::BytesFromFormal, Some(2),
+            "crema_efm2_closed_contract_v1",
+            &["posix_write_buffer_semantics_v1", "llvm16_tli_write_arg1_readonly_semantics_v1"],
+        ),
+        ("memmove", 0, "write") => (
+            "memmove_v1", 0, "write",
+            ExternalMemoryExtentKind::BytesFromFormal, Some(2),
+            "crema_efm2_closed_contract_v1",
+            &["posix_memmove_n_byte_copy_semantics_v1", "llvm16_memmove_formal_semantics_v1", "llvm16_tli_memmove_recognition_v1"],
+        ),
+        ("memmove", 1, "read") => (
+            "memmove_v1", 1, "read",
+            ExternalMemoryExtentKind::BytesFromFormal, Some(2),
+            "crema_efm2_closed_contract_v1",
+            &["posix_memmove_n_byte_copy_semantics_v1", "llvm16_memmove_formal_semantics_v1", "llvm16_tli_memmove_recognition_v1"],
+        ),
+        ("memchr", 0, "read") => (
+            "memchr_bounded_read_v1", 0, "read",
+            ExternalMemoryExtentKind::BytesFromFormal, Some(2),
+            "crema_efm2_closed_contract_v1",
+            &["posix_memchr_bounded_read_semantics_v1", "llvm16_tli_memchr_recognition_v1"],
+        ),
+        ("strchr", 0, "read") => (
+            "strchr_read_c_string_v1", 0, "read",
+            ExternalMemoryExtentKind::CStringUntilNul, None,
+            "crema_efm2_closed_contract_v1",
+            &["posix_strchr_c_string_read_semantics_v1"],
+        ),
+        _ => {
+            return Err(format!(
+                "external_formal_memory_effects_v2 unsupported closed tuple: callee={} formal={} access={}",
+                record.callee, record.formal_index, record.access
+            ));
+        }
+    };
+
+    if record.semantic_class != expected.0
+        || record.formal_index != expected.1
+        || record.access != expected.2
+        || record.size_argument_index.is_some()
+        || record.extent_kind != Some(expected.3)
+        || record.extent_argument_index != expected.4
+        || record.basis != expected.5
+    {
+        return Err(format!(
+            "external_formal_memory_effects_v2 invalid proof tuple at '{}' for '{}'/arg{}",
+            record.node, record.callee, record.formal_index
+        ));
+    }
+    let expected_sources = expected.6.iter().map(|source| source.to_string()).collect::<Vec<_>>();
+    if record.semantic_sources != expected_sources {
+        return Err(format!(
+            "external_formal_memory_effects_v2 invalid semantic source set at '{}' for '{}'/arg{}",
             record.node, record.callee, record.formal_index
         ));
     }
@@ -3687,9 +3858,83 @@ mod tests {
             event_variable: "Local(_1)".into(),
             actual_variable: "rust::main::Local(_1)".into(),
             size_argument_index: None,
+            extent_kind: None,
+            extent_argument_index: None,
             basis: "crema_efm1_closed_contract_v1".into(),
             semantic_sources: vec!["svf_absextapi_strlen_semantics_v1".into(), "llvm16_tli_strlen_argmem_read_semantics_v1".into()],
         }];
+        input
+    }
+
+    fn efm2_valid_memmove_input() -> AnnotatedIcfg {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec![
+            "mir_semantic_labels_v1".into(),
+            "mir_semantics_v2".into(),
+            "external_formal_memory_effects_v2".into(),
+        ];
+        input.entry = "rust::main::bb0".into();
+        for id in [
+            "Local(_1)",
+            "Local(_2)",
+            "rust::main::Local(_1)",
+            "rust::main::Local(_2)",
+        ] {
+            input.variables.push(ProgramVariable {
+                id: id.into(),
+                language: ProgramLanguage::Rust,
+                display: None,
+                function: None,
+            });
+        }
+        input.nodes[0].id = "rust::main::bb0".into();
+        input.nodes[0].semantic_labels = vec!["term:call".into()];
+        input.nodes[0].labels = vec![
+            EventLabel {
+                predicate: EventKind::Write,
+                variable: "Local(_1)".into(),
+            },
+            EventLabel {
+                predicate: EventKind::Read,
+                variable: "Local(_2)".into(),
+            },
+        ];
+        let sources = vec![
+            "posix_memmove_n_byte_copy_semantics_v1".into(),
+            "llvm16_memmove_formal_semantics_v1".into(),
+            "llvm16_tli_memmove_recognition_v1".into(),
+        ];
+        input.external_formal_memory_effects = vec![
+            ExternalFormalMemoryEffectRecord {
+                node: "rust::main::bb0".into(),
+                callee: "memmove".into(),
+                semantic_class: "memmove_v1".into(),
+                formal_index: 0,
+                access: "write".into(),
+                event_variable: "Local(_1)".into(),
+                actual_variable: "rust::main::Local(_1)".into(),
+                size_argument_index: None,
+                extent_kind: Some(ExternalMemoryExtentKind::BytesFromFormal),
+                extent_argument_index: Some(2),
+                basis: "crema_efm2_closed_contract_v1".into(),
+                semantic_sources: sources.clone(),
+            },
+            ExternalFormalMemoryEffectRecord {
+                node: "rust::main::bb0".into(),
+                callee: "memmove".into(),
+                semantic_class: "memmove_v1".into(),
+                formal_index: 1,
+                access: "read".into(),
+                event_variable: "Local(_2)".into(),
+                actual_variable: "rust::main::Local(_2)".into(),
+                size_argument_index: None,
+                extent_kind: Some(ExternalMemoryExtentKind::BytesFromFormal),
+                extent_argument_index: Some(2),
+                basis: "crema_efm2_closed_contract_v1".into(),
+                semantic_sources: sources,
+            },
+        ];
         input
     }
 
@@ -3699,6 +3944,104 @@ mod tests {
         let k = Kripke::from_annotated_icfg(input).expect("valid EFM1 record");
         assert_eq!(k.external_formal_memory_effects.len(), 1);
         assert_eq!(k.external_formal_memory_effects[0].formal_index, 0);
+    }
+
+    #[test]
+    fn efm2_accepts_closed_formal_effects_with_matching_existing_events() {
+        let input = efm2_valid_memmove_input();
+        let k = Kripke::from_annotated_icfg(input).expect("valid EFM2 records");
+        assert_eq!(k.external_formal_memory_effects.len(), 2);
+        assert_eq!(k.external_formal_memory_effects[0].extent_argument_index, Some(2));
+    }
+
+    #[test]
+    fn efm2_rejects_wrong_callee_semantic_class_formal_access_extent_basis_and_sources() {
+        let valid = efm2_valid_memmove_input();
+
+        let mut wrong_callee = valid.clone();
+        wrong_callee.external_formal_memory_effects[0].callee = "memmove_alias".into();
+        assert!(Kripke::from_annotated_icfg(wrong_callee).unwrap_err().contains("unsupported closed tuple"));
+
+        let mut wrong_class = valid.clone();
+        wrong_class.external_formal_memory_effects[0].semantic_class = "memcpy_v1".into();
+        assert!(Kripke::from_annotated_icfg(wrong_class).unwrap_err().contains("invalid proof tuple"));
+
+        let mut wrong_formal = valid.clone();
+        wrong_formal.external_formal_memory_effects[0].formal_index = 2;
+        assert!(Kripke::from_annotated_icfg(wrong_formal).unwrap_err().contains("unsupported closed tuple"));
+
+        let mut wrong_access = valid.clone();
+        wrong_access.external_formal_memory_effects[0].access = "execute".into();
+        assert!(Kripke::from_annotated_icfg(wrong_access).unwrap_err().contains("access must be read or write"));
+
+        let mut wrong_extent_kind = valid.clone();
+        wrong_extent_kind.external_formal_memory_effects[0].extent_kind =
+            Some(ExternalMemoryExtentKind::CStringUntilNul);
+        assert!(Kripke::from_annotated_icfg(wrong_extent_kind).unwrap_err().contains("invalid proof tuple"));
+
+        let mut wrong_extent_index = valid.clone();
+        wrong_extent_index.external_formal_memory_effects[0].extent_argument_index = Some(1);
+        assert!(Kripke::from_annotated_icfg(wrong_extent_index).unwrap_err().contains("invalid proof tuple"));
+
+        let mut wrong_basis = valid.clone();
+        wrong_basis.external_formal_memory_effects[0].basis = "crema_efm1_closed_contract_v1".into();
+        assert!(Kripke::from_annotated_icfg(wrong_basis).unwrap_err().contains("invalid proof tuple"));
+
+        let mut wrong_sources = valid;
+        wrong_sources.external_formal_memory_effects[0].semantic_sources.pop();
+        assert!(Kripke::from_annotated_icfg(wrong_sources).unwrap_err().contains("invalid semantic source set"));
+    }
+
+    #[test]
+    fn efm2_rejects_identity_event_node_and_duplicate_failures() {
+        let valid = efm2_valid_memmove_input();
+
+        let mut mismatched_actual = valid.clone();
+        mismatched_actual.external_formal_memory_effects[0].actual_variable =
+            "rust::main::Local(_2)".into();
+        assert!(Kripke::from_annotated_icfg(mismatched_actual).unwrap_err().contains("actual/event variable mismatch"));
+
+        let mut missing_event = valid.clone();
+        missing_event.nodes[0].labels.retain(|label| label.predicate != EventKind::Write);
+        assert!(Kripke::from_annotated_icfg(missing_event).unwrap_err().contains("lacks matching node event"));
+
+        let mut cross_function = valid.clone();
+        cross_function.variables.push(ProgramVariable {
+            id: "rust::other::Local(_1)".into(),
+            language: ProgramLanguage::Rust,
+            display: None,
+            function: None,
+        });
+        cross_function.external_formal_memory_effects[0].actual_variable =
+            "rust::other::Local(_1)".into();
+        assert!(Kripke::from_annotated_icfg(cross_function).unwrap_err().contains("outside node scope"));
+
+        let mut duplicate = valid.clone();
+        duplicate.external_formal_memory_effects.push(
+            duplicate.external_formal_memory_effects[0].clone(),
+        );
+        assert!(Kripke::from_annotated_icfg(duplicate).unwrap_err().contains("duplicate external formal"));
+
+        let mut unknown_node = valid.clone();
+        unknown_node.external_formal_memory_effects[0].node = "rust::main::bb99".into();
+        assert!(Kripke::from_annotated_icfg(unknown_node).unwrap_err().contains("unknown node"));
+
+        let mut non_call = valid;
+        non_call.nodes[0].semantic_labels.clear();
+        assert!(Kripke::from_annotated_icfg(non_call).unwrap_err().contains("term:call"));
+    }
+
+    #[test]
+    fn efm2_rejects_version_collision_and_legacy_extent_encoding() {
+        let mut both = efm2_valid_memmove_input();
+        both.capabilities.push("external_formal_memory_effects_v1".into());
+        assert!(Kripke::from_annotated_icfg(both).unwrap_err().contains("mutually exclusive"));
+
+        let mut legacy_extent = efm2_valid_memmove_input();
+        legacy_extent.external_formal_memory_effects[0].size_argument_index = Some(2);
+        legacy_extent.external_formal_memory_effects[0].extent_kind = None;
+        legacy_extent.external_formal_memory_effects[0].extent_argument_index = None;
+        assert!(Kripke::from_annotated_icfg(legacy_extent).unwrap_err().contains("invalid proof tuple"));
     }
 
     #[test]

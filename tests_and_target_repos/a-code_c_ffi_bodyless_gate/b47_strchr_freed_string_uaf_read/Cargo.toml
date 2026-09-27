@@ -1,0 +1,4 @@
+[package]
+name = "b47_strchr_freed_string_uaf_read"
+version = "0.1.0"
+edition = "2021"

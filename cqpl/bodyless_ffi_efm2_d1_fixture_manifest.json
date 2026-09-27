@@ -1,0 +1,80 @@
+{
+  "schema": "cqpl_bodyless_ffi_efm2_d1_fixture_manifest_v1",
+  "baseline_commit": "39886ed5cea289c1016e808d1c1e4348582c481c",
+  "capability": "external_formal_memory_effects_v2",
+  "directory": "tests_and_target_repos/a-code_c_ffi_bodyless_gate",
+  "fixtures": [
+    {
+      "id": "D1-F01",
+      "target": "b44_memmove_freed_src_uaf_read",
+      "callee": "memmove",
+      "expected_effects": [
+        {"formal_index": 0, "access": "write", "extent_kind": "bytes_from_formal", "extent_argument_index": 2},
+        {"formal_index": 1, "access": "read", "extent_kind": "bytes_from_formal", "extent_argument_index": 2}
+      ],
+      "uaf": {"truth": "unk", "subresult": "unk_true", "direction": "true", "strength": "strong_abstract_evidence"}
+    },
+    {
+      "id": "D1-F02",
+      "target": "b45_memmove_freed_dst_uaf_write",
+      "callee": "memmove",
+      "expected_effects": [
+        {"formal_index": 0, "access": "write", "extent_kind": "bytes_from_formal", "extent_argument_index": 2},
+        {"formal_index": 1, "access": "read", "extent_kind": "bytes_from_formal", "extent_argument_index": 2}
+      ],
+      "uaf": {"truth": "unk", "subresult": "unk_true", "direction": "true", "strength": "strong_abstract_evidence"}
+    },
+    {
+      "id": "D1-F03",
+      "target": "b46_memchr_freed_buffer_uaf_read",
+      "callee": "memchr",
+      "expected_effects": [
+        {"formal_index": 0, "access": "read", "extent_kind": "bytes_from_formal", "extent_argument_index": 2}
+      ],
+      "uaf": {"truth": "unk", "subresult": "unk_true", "direction": "true", "strength": "strong_abstract_evidence"}
+    },
+    {
+      "id": "D1-F04",
+      "target": "b47_strchr_freed_string_uaf_read",
+      "callee": "strchr",
+      "expected_effects": [
+        {"formal_index": 0, "access": "read", "extent_kind": "c_string_until_nul", "extent_argument_index": null}
+      ],
+      "uaf": {"truth": "unk", "subresult": "unk_true", "direction": "true", "strength": "strong_abstract_evidence"}
+    },
+    {
+      "id": "D1-F05",
+      "target": "b48_memmove_zero_extent_no_memory_event",
+      "callee": "memmove",
+      "expected_effects": [],
+      "zero_extent": true,
+      "call_node_span": {"start_line": 13, "start_column": 13, "end_line": 13, "end_column": 46}
+    },
+    {
+      "id": "D1-F06",
+      "target": "b49_memchr_zero_extent_no_memory_event",
+      "callee": "memchr",
+      "expected_effects": [],
+      "zero_extent": true,
+      "call_node_span": {"start_line": 11, "start_column": 26, "end_line": 11, "end_column": 55}
+    },
+    {
+      "id": "D1-F07",
+      "target": "b50_body_present_memmove_control",
+      "callee": "memmove",
+      "expected_effects": [],
+      "represented_body": true,
+      "call_node_span": {"start_line": 13, "start_column": 13, "end_line": 13, "end_column": 46}
+    },
+    {
+      "id": "D1-F08",
+      "target": "b51_memmove_dynamic_extent_may_effect",
+      "callee": "memmove",
+      "expected_effects": [
+        {"formal_index": 0, "access": "write", "extent_kind": "bytes_from_formal", "extent_argument_index": 2},
+        {"formal_index": 1, "access": "read", "extent_kind": "bytes_from_formal", "extent_argument_index": 2}
+      ],
+      "dynamic_extent": true
+    }
+  ]
+}

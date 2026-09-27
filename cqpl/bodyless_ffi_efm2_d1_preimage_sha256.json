@@ -1,0 +1,20 @@
+{
+  "schema": "cqpl_bodyless_ffi_efm2_d1_preimage_v1",
+  "recorded_before_source_edits": true,
+  "branch": "cqpl6-bodyless-ffi-effect-gate",
+  "baseline_commit": "39886ed5cea289c1016e808d1c1e4348582c481c",
+  "head_commit": "39886ed5cea289c1016e808d1c1e4348582c481c",
+  "baseline_is_head": true,
+  "initial_git_status_short": [
+    "?? cqpl/D1_EFM2_BODYLESS_FORMAL_MEMORY_EFFECTS_GATE.md"
+  ],
+  "source_preimages": {
+    "crema/src/cqpl_export.rs": "a60eb53b77ca742ee0f75ce99eff703d666d7bf4d39668c6928afc715b07559b",
+    "cqpl/cqpl_checker/src/kripke.rs": "3d3576d21e9f9c0bf23ae6d5accff82b747a19905efd9f138924eb49168702b7",
+    "cqpl/cqpl_checker/src/main.rs": "cf45f67f572697501e31c883653d9e436a5e476cadfc0807e59959d7760a239b",
+    "cqpl/schemas/annotated_icfg_v2.schema.json": "ffbf98f1349af1843c9be5d4adc64fbc8eff70783b6b2a8629d7ed348daafce7"
+  },
+  "frozen_compatibility_reference": {
+    "cqpl/capabilities/external_formal_memory_effects_v1.md": "695e5c1cec6b7cac3734398c2468aa2230ca7fd94846c27e3dea748cb96252c2"
+  }
+}

@@ -247,7 +247,8 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     let has_reallocation_boundaries_v2 = capabilities.contains("reallocation_boundaries_v2");
     let has_conditional_reallocations = capabilities.contains("conditional_reallocations_v1");
     let has_conditional_reallocations_v2 = capabilities.contains("conditional_reallocations_v2");
-    let has_external_formal_memory_effects = capabilities.contains("external_formal_memory_effects_v1");
+    let has_external_formal_memory_effects_v1 = capabilities.contains("external_formal_memory_effects_v1");
+    let has_external_formal_memory_effects_v2 = capabilities.contains("external_formal_memory_effects_v2");
 
     let guards_present = root.get("allocation_existence_guards").is_some();
     if has_allocation_existence_guards != guards_present {
@@ -327,18 +328,23 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     }
 
     let external_formal_memory_effects_present = root.get("external_formal_memory_effects").is_some();
+    if has_external_formal_memory_effects_v1 && has_external_formal_memory_effects_v2 {
+        return Err("external_formal_memory_effects_v1 and external_formal_memory_effects_v2 are mutually exclusive".into());
+    }
+    let has_external_formal_memory_effects =
+        has_external_formal_memory_effects_v1 || has_external_formal_memory_effects_v2;
     if has_external_formal_memory_effects != external_formal_memory_effects_present {
-        return Err("external_formal_memory_effects_v1 capability and external_formal_memory_effects payload must appear together".into());
+        return Err("exactly one external_formal_memory_effects_v1/v2 capability and external_formal_memory_effects payload must appear together".into());
     }
     if has_external_formal_memory_effects && !has_mir_semantics_v2 {
-        return Err("external_formal_memory_effects_v1 requires mir_semantics_v2".into());
+        return Err("external_formal_memory_effects_v1/v2 requires mir_semantics_v2".into());
     }
     if let Some(records) = root.get("external_formal_memory_effects") {
         let records = records.as_array().ok_or_else(|| {
             "schema-v2 external_formal_memory_effects must be an array".to_string()
         })?;
         if records.is_empty() {
-            return Err("external_formal_memory_effects_v1 payload must contain at least one record".into());
+            return Err("external_formal_memory_effects_v1/v2 payload must contain at least one record".into());
         }
     }
 
@@ -820,6 +826,50 @@ mod tests {
         }]);
         let err = validate_boundary_requirements(&value).unwrap_err();
         assert!(err.contains("requires mir_semantics_v2"));
+    }
+
+    #[test]
+    fn external_formal_memory_effect_v2_cli_guard_is_atomic_and_version_exclusive() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!([
+            "mir_semantic_labels_v1",
+            "mir_semantics_v2",
+            "external_formal_memory_effects_v2"
+        ]);
+        value["external_formal_memory_effects"] = json!([{
+            "node":"rust::main::bb0", "callee":"memmove",
+            "semantic_class":"memmove_v1", "formal_index":0,
+            "access":"write", "event_variable":"Local(_1)",
+            "actual_variable":"rust::main::Local(_1)",
+            "extent_kind":"bytes_from_formal", "extent_argument_index":2,
+            "basis":"crema_efm2_closed_contract_v1",
+            "semantic_sources":[
+                "posix_memmove_n_byte_copy_semantics_v1",
+                "llvm16_memmove_formal_semantics_v1",
+                "llvm16_tli_memmove_recognition_v1"
+            ]
+        }]);
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        assert!(
+            validate_boundary_requirements(&value).is_ok(),
+            "valid EFM2 raw boundary must be accepted: {:?}",
+            validate_boundary_requirements(&value),
+        );
+
+        value["capabilities"].as_array_mut().unwrap().push(
+            json!("external_formal_memory_effects_v1"),
+        );
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("mutually exclusive"));
+
+        let mut missing = minimal_v2_node();
+        missing["capabilities"] = json!([
+            "mir_semantic_labels_v1",
+            "mir_semantics_v2",
+            "external_formal_memory_effects_v2"
+        ]);
+        let err = validate_boundary_requirements(&missing).unwrap_err();
+        assert!(err.contains("v1/v2 capability"));
     }
 
     #[test]

@@ -57,7 +57,14 @@
       "type": "array",
       "minItems": 1,
       "items": {
-        "$ref": "#/$defs/externalFormalMemoryEffectRecord"
+        "oneOf": [
+          {
+            "$ref": "#/$defs/externalFormalMemoryEffectRecordV1"
+          },
+          {
+            "$ref": "#/$defs/externalFormalMemoryEffectRecordV2"
+          }
+        ]
       }
     },
     "llvm_memory_effects": {
@@ -2233,7 +2240,7 @@
         }
       }
     },
-    "externalFormalMemoryEffectRecord": {
+    "externalFormalMemoryEffectRecordV1": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -2318,6 +2325,149 @@
           }
         }
       }
+    },
+    "externalFormalMemoryEffectRecordV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "node",
+        "callee",
+        "semantic_class",
+        "formal_index",
+        "access",
+        "event_variable",
+        "actual_variable",
+        "extent_kind",
+        "basis",
+        "semantic_sources"
+      ],
+      "properties": {
+        "node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "callee": {
+          "enum": [
+            "strlen",
+            "memcmp",
+            "memcpy",
+            "memmove",
+            "memset",
+            "memchr",
+            "strchr",
+            "write"
+          ]
+        },
+        "semantic_class": {
+          "enum": [
+            "strlen_read_c_string_v1",
+            "memcmp_v1",
+            "memcpy_v1",
+            "memmove_v1",
+            "memset_v1",
+            "memchr_bounded_read_v1",
+            "strchr_read_c_string_v1",
+            "posix_write_v1"
+          ]
+        },
+        "formal_index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "access": {
+          "enum": [
+            "read",
+            "write"
+          ]
+        },
+        "event_variable": {
+          "type": "string",
+          "pattern": "^Local\\(_[0-9]+\\)$"
+        },
+        "actual_variable": {
+          "type": "string",
+          "pattern": "^rust::.+::Local\\(_[0-9]+\\)$"
+        },
+        "extent_kind": {
+          "enum": [
+            "bytes_from_formal",
+            "c_string_until_nul"
+          ]
+        },
+        "extent_argument_index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "basis": {
+          "const": "crema_efm2_closed_contract_v1"
+        },
+        "semantic_sources": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "svf_absextapi_strlen_semantics_v1",
+              "llvm16_tli_strlen_argmem_read_semantics_v1",
+              "svf_extapi_memset_semantics_v1",
+              "llvm16_tli_memset_arg0_writeonly_semantics_v1",
+              "svf_extapi_memcpy_semantics_v1",
+              "llvm16_tli_memcpy_arg0_writeonly_semantics_v1",
+              "llvm16_tli_memcpy_arg1_readonly_semantics_v1",
+              "llvm16_tli_memcmp_argmem_read_semantics_v1",
+              "llvm16_memorylocation_memcmp_formal_semantics_v1",
+              "posix_write_buffer_semantics_v1",
+              "llvm16_tli_write_arg1_readonly_semantics_v1",
+              "posix_memmove_n_byte_copy_semantics_v1",
+              "llvm16_memmove_formal_semantics_v1",
+              "llvm16_tli_memmove_recognition_v1",
+              "posix_memchr_bounded_read_semantics_v1",
+              "llvm16_tli_memchr_recognition_v1",
+              "posix_strchr_c_string_read_semantics_v1"
+            ]
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "extent_kind": {
+                "const": "bytes_from_formal"
+              }
+            },
+            "required": [
+              "extent_kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "extent_argument_index"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "extent_kind": {
+                "const": "c_string_until_nul"
+              }
+            },
+            "required": [
+              "extent_kind"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "extent_argument_index"
+              ]
+            }
+          }
+        }
+      ]
     }
   },
   "allOf": [
@@ -3175,7 +3325,72 @@
       "then": {
         "required": [
           "external_formal_memory_effects"
+        ],
+        "properties": {
+          "capabilities": {
+            "allOf": [
+              {
+                "contains": {
+                  "const": "mir_semantics_v2"
+                }
+              },
+              {
+                "not": {
+                  "contains": {
+                    "const": "external_formal_memory_effects_v2"
+                  }
+                }
+              }
+            ]
+          },
+          "external_formal_memory_effects": {
+            "items": {
+              "$ref": "#/$defs/externalFormalMemoryEffectRecordV1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "external_formal_memory_effects_v2"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
         ]
+      },
+      "then": {
+        "required": [
+          "external_formal_memory_effects"
+        ],
+        "properties": {
+          "capabilities": {
+            "allOf": [
+              {
+                "contains": {
+                  "const": "mir_semantics_v2"
+                }
+              },
+              {
+                "not": {
+                  "contains": {
+                    "const": "external_formal_memory_effects_v1"
+                  }
+                }
+              }
+            ]
+          },
+          "external_formal_memory_effects": {
+            "items": {
+              "$ref": "#/$defs/externalFormalMemoryEffectRecordV2"
+            }
+          }
+        }
       }
     },
     {
@@ -3190,34 +3405,43 @@
         ],
         "properties": {
           "capabilities": {
-            "contains": {
-              "const": "external_formal_memory_effects_v1"
-            }
+            "oneOf": [
+              {
+                "contains": {
+                  "const": "external_formal_memory_effects_v1"
+                }
+              },
+              {
+                "contains": {
+                  "const": "external_formal_memory_effects_v2"
+                }
+              }
+            ]
           }
         }
       }
     },
     {
-      "if": {
+      "not": {
         "properties": {
           "capabilities": {
-            "contains": {
-              "const": "external_formal_memory_effects_v1"
-            }
+            "allOf": [
+              {
+                "contains": {
+                  "const": "external_formal_memory_effects_v1"
+                }
+              },
+              {
+                "contains": {
+                  "const": "external_formal_memory_effects_v2"
+                }
+              }
+            ]
           }
         },
         "required": [
           "capabilities"
         ]
-      },
-      "then": {
-        "properties": {
-          "capabilities": {
-            "contains": {
-              "const": "mir_semantics_v2"
-            }
-          }
-        }
       }
     }
   ]

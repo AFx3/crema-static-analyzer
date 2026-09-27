@@ -1,0 +1,4 @@
+[package]
+name = "b51_memmove_dynamic_extent_may_effect"
+version = "0.1.0"
+edition = "2021"
