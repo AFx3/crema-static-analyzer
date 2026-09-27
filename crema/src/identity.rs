@@ -4,6 +4,128 @@ use crate::utils::load_ffi_functions;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ExternalReturnContract {
+    pub semantic_class: &'static str,
+    pub relation_kind: &'static str,
+    pub nullability: &'static str,
+    pub ownership: &'static str,
+    pub semantic_source: &'static str,
+}
+
+pub(crate) fn external_return_contract(
+    callee: &str, arity: usize, represented_body: bool, exact_zero: bool,
+    ffi: &HashSet<String>,
+) -> Option<ExternalReturnContract> {
+    let name = callee.trim();
+    if represented_body || !ffi.contains(name) { return None; }
+    let (semantic_class, relation_kind, semantic_source) = match (name, arity) {
+        ("memcpy", 3) => ("memcpy_return_dst_v1", "exact_argument_alias", "posix_memcpy_returns_destination_v1"),
+        ("memmove", 3) => ("memmove_return_dst_v1", "exact_argument_alias", "posix_memmove_returns_destination_v1"),
+        ("memset", 3) => ("memset_return_dst_v1", "exact_argument_alias", "posix_memset_returns_destination_v1"),
+        ("memchr", 3) if !exact_zero => ("memchr_return_derived_v1", "nullable_derived_alias", "posix_memchr_nullable_derived_return_v1"),
+        ("strchr", 2) => ("strchr_return_derived_v1", "nullable_derived_alias", "posix_strchr_nullable_derived_return_v1"),
+        ("getenv", 1) => ("getenv_borrowed_environment_v1", "nullable_borrowed_external", "posix_getenv_nullable_borrowed_environment_v1"),
+        _ => return None,
+    };
+    Some(ExternalReturnContract {
+        semantic_class, relation_kind, semantic_source,
+        nullability: if relation_kind == "exact_argument_alias" { "same_as_source" } else { "nullable" },
+        ownership: if name == "getenv" { "borrowed_external" } else { "alias_existing" },
+    })
+}
+
+#[cfg(test)]
+mod err1_tests {
+    use super::*;
+
+    #[test]
+    fn err1_closed_classifier_and_zero_orthogonality() {
+        let ffi = ["memcpy", "memmove", "memset", "memchr", "strchr", "getenv"]
+            .into_iter().map(str::to_string).collect();
+        for (name, arity, kind) in [
+            ("memcpy", 3, "exact_argument_alias"), ("memmove", 3, "exact_argument_alias"),
+            ("memset", 3, "exact_argument_alias"), ("memchr", 3, "nullable_derived_alias"),
+            ("strchr", 2, "nullable_derived_alias"), ("getenv", 1, "nullable_borrowed_external"),
+        ] {
+            assert_eq!(external_return_contract(name, arity, false, false, &ffi).unwrap().relation_kind, kind);
+            assert!(external_return_contract(name, arity + 1, false, false, &ffi).is_none());
+            assert!(external_return_contract(name, arity, true, false, &ffi).is_none());
+            assert!(external_return_contract(name, arity, false, false, &HashSet::new()).is_none());
+        }
+        for (name, arity) in [("my_memmove", 3), ("foo_strchr", 2), ("getenv_wrapper", 1), ("libc::memcpy", 3)] {
+            assert!(external_return_contract(name, arity, false, false, &ffi).is_none());
+        }
+        for name in ["memcpy", "memmove", "memset"] {
+            assert!(external_return_contract(name, 3, false, true, &ffi).is_some());
+        }
+        assert!(external_return_contract("memchr", 3, false, true, &ffi).is_none());
+        assert!(external_return_contract("memchr", 3, false, false, &ffi).is_some());
+    }
+
+    #[test]
+    fn err1_aliases_preserve_candidates_without_granting_derived_base_frees() {
+        let ffi = ["memcpy", "memmove", "memset", "memchr", "strchr", "getenv"]
+            .into_iter().map(str::to_string).collect();
+        let source = local("main", "Local(_1)").unwrap();
+        let result = local("main", "Local(_4)").unwrap();
+        let allocs: BTreeSet<_> = ["a", "b"].into_iter().map(|node| AbstractAllocId::new(
+            AllocationSiteId::RustCall { node_id: node.into(), callee: "Box::new".into() }, vec![]
+        )).collect();
+        let args = ["Local(_1)", "Local(_2)", "const 8_usize"].map(|arg| crate::structs::MirCallArgument { arg: arg.into(), is_mutable: None });
+        for callee in ["memcpy", "memmove", "memset", "memchr", "strchr", "getenv"] {
+            let mut memory = AllocationIdentityMemory::default();
+            memory.assign_points_to(source.clone(), allocs.clone());
+            let arity = if callee == "getenv" { 1 } else if callee == "strchr" { 2 } else { 3 };
+            transfer_library_call_with_external_context("rust::main::bb0", "main", &[], callee, "", &args[..arity], "Local(_4)", false, false, &ffi, &mut memory);
+            if ["memcpy", "memmove", "memset"].contains(&callee) {
+                assert_eq!(memory.points_to(&result), allocs);
+                assert_eq!(memory.deallocation_allocations(&result), allocs);
+            } else if callee == "getenv" {
+                assert!(memory.event_allocations(&result).is_empty());
+            } else {
+                assert_eq!(memory.event_allocations(&result), allocs);
+                assert!(memory.points_to(&result).is_empty());
+                assert!(memory.deallocation_allocations(&result).is_empty());
+                // Exact-return equality and pointer copies preserve access-only provenance.
+                let mut exact_args = args.clone(); exact_args[0].arg = "Local(_4)".into();
+                transfer_library_call_with_external_context("rust::main::bb1", "main", &[], "memmove", "", &exact_args, "Local(_5)", false, false, &ffi, &mut memory);
+                let exact = local("main", "Local(_5)").unwrap();
+                assert_eq!(memory.event_allocations(&exact), allocs);
+                assert!(memory.deallocation_allocations(&exact).is_empty());
+                let copied = local("main", "Local(_6)").unwrap();
+                copy_binding(&mut memory, &exact, copied.clone());
+                assert_eq!(memory.event_allocations(&copied), allocs);
+                assert!(memory.deallocation_allocations(&copied).is_empty());
+            }
+            let catalog: BTreeSet<_> = memory.points_to.values().chain(memory.access_bases.values()).flatten().cloned().collect();
+            assert_eq!(catalog, allocs, "ERR1 cannot add allocations");
+        }
+    }
+
+    #[test]
+    fn err1_unknown_zero_and_interior_source_provenance() {
+        let ffi = ["memmove", "memchr"].into_iter().map(str::to_string).collect();
+        let source = local("main", "Local(_1)").unwrap();
+        let result = local("main", "Local(_4)").unwrap();
+        let allocation = AbstractAllocId::new(AllocationSiteId::RustCall { node_id:"a".into(), callee:"Box::new".into() }, vec![]);
+        let mut memory = AllocationIdentityMemory::default();
+        let args = ["Local(_1)", "Local(_2)", "const 0_usize"].map(|arg| crate::structs::MirCallArgument { arg:arg.into(), is_mutable:None });
+        transfer_library_call_with_external_context("rust::main::bb0", "main", &[], "memmove", "", &args, "Local(_4)", false, false, &ffi, &mut memory);
+        assert!(memory.event_allocations(&result).is_empty());
+        memory.assign_fresh(source.clone(), allocation.clone());
+        transfer_library_call_with_external_context("rust::main::bb0", "main", &[], "memmove", "", &args, "Local(_4)", false, false, &ffi, &mut memory);
+        assert_eq!(memory.deallocation_allocations(&result), BTreeSet::from([allocation.clone()]));
+        transfer_library_call_with_external_context("rust::main::bb0", "main", &[], "memchr", "", &args, "Local(_4)", false, false, &ffi, &mut memory);
+        assert!(memory.event_allocations(&result).is_empty(), "zero clears stale result");
+        transfer_library_call_with_external_context("rust::main::bb1", "main", &[], "std::ptr::mut_ptr::<impl *mut u8>::add", "", &args[..2], "Local(_1)", false, false, &ffi, &mut memory);
+        assert!(memory.deallocation_allocations(&source).is_empty());
+        transfer_library_call_with_external_context("rust::main::bb2", "main", &[], "memmove", "", &args, "Local(_4)", false, false, &ffi, &mut memory);
+        assert_eq!(memory.event_allocations(&result), BTreeSet::from([allocation]));
+        assert!(memory.deallocation_allocations(&result).is_empty(), "exact aliases cannot upgrade interiors");
+    }
+}
+
 /// Additional implementation-level domain for canonical interprocedural
 /// allocation identity.
 ///
@@ -16,6 +138,9 @@ pub struct AllocationIdentityMemory {
     /// MAY points-to relation.  One program variable may denote several
     /// abstract allocation IDs after control-flow joins.
     pub points_to: BTreeMap<ProgramVarId, BTreeSet<AbstractAllocId>>,
+    /// ERR1 access-base association only. Never consulted to certify drops.
+    #[serde(default)]
+    pub access_bases: BTreeMap<ProgramVarId, BTreeSet<AbstractAllocId>>,
 
     /// MAY stack-place reference relation.  Kept distinct from heap points-to:
     /// `&x` denotes a stack place, not the allocation denoted by x.
@@ -63,6 +188,10 @@ impl AllocationIdentityMemory {
     /// equivalence: every returned allocation is justified by a points-to edge
     /// or by a stack-reference/place edge already present in this memory.
     pub fn allocations_for_place(&self, start: PlaceId) -> BTreeSet<AbstractAllocId> {
+        self.allocations_for_place_kind(start, true)
+    }
+
+    fn allocations_for_place_kind(&self, start: PlaceId, access: bool) -> BTreeSet<AbstractAllocId> {
         let mut out = BTreeSet::new();
         let mut pending = vec![start];
         let mut seen = BTreeSet::new();
@@ -73,6 +202,9 @@ impl AllocationIdentityMemory {
             }
 
             out.extend(self.points_to_place(&place));
+            if access && place.projection.is_empty() {
+                out.extend(self.access_bases.get(&place.base).into_iter().flatten().cloned());
+            }
             pending.extend(self.stack_refs_place(&place));
 
             // A projected place whose base is itself a reference denotes the
@@ -92,10 +224,24 @@ impl AllocationIdentityMemory {
 
     pub fn event_allocations(&self, var: &ProgramVarId) -> BTreeSet<AbstractAllocId> {
         let mut out = self.points_to(var);
+        out.extend(self.access_bases.get(var).into_iter().flatten().cloned());
         for place in self.stack_refs(var) {
             out.extend(self.allocations_for_place(place));
         }
         out
+    }
+
+    pub fn deallocation_allocations(&self, var: &ProgramVarId) -> BTreeSet<AbstractAllocId> {
+        let mut out = self.points_to(var);
+        for place in self.stack_refs(var) {
+            out.extend(self.allocations_for_place_kind(place, false));
+        }
+        out
+    }
+
+    fn assign_access_bases(&mut self, var: ProgramVarId, allocs: BTreeSet<AbstractAllocId>) {
+        if allocs.is_empty() { self.access_bases.remove(&var); }
+        else { self.access_bases.insert(var, allocs); }
     }
 
     /// Strong overwrite of one variable's heap identity.
@@ -104,6 +250,7 @@ impl AllocationIdentityMemory {
         var: ProgramVarId,
         allocs: BTreeSet<AbstractAllocId>,
     ) {
+        self.access_bases.remove(&var);
         if allocs.is_empty() {
             self.points_to.remove(&var);
         } else {
@@ -113,6 +260,7 @@ impl AllocationIdentityMemory {
 
     /// Strong overwrite with one fresh abstract allocation identity.
     pub fn assign_fresh(&mut self, var: ProgramVarId, alloc: AbstractAllocId) {
+        self.access_bases.remove(&var);
         self.points_to.insert(var, BTreeSet::from([alloc]));
     }
 
@@ -148,6 +296,7 @@ impl AllocationIdentityMemory {
     }
 
     pub fn forget_var(&mut self, var: &ProgramVarId) {
+        self.access_bases.remove(var);
         self.points_to.remove(var);
         self.stack_refs.remove(var);
         self.place_points_to.retain(|place, _| &place.base != var);
@@ -177,6 +326,9 @@ impl AllocationIdentityMemory {
     /// Pointwise MAY join.  This does not manufacture transitive aliases.
     pub fn join(&self, other: &Self) -> Self {
         let mut out = self.clone();
+        for (var, allocs) in &other.access_bases {
+            out.access_bases.entry(var.clone()).or_default().extend(allocs.iter().cloned());
+        }
 
         for (var, allocs) in &other.points_to {
             out.points_to
@@ -228,7 +380,10 @@ impl AllocationIdentityMemory {
             refs.is_subset(&other.stack_refs_place(place))
         });
 
-        points_to_leq && refs_leq && place_points_to_leq && place_refs_leq
+        let access_leq = self.access_bases.iter().all(|(var, allocs)| {
+            allocs.is_subset(&other.access_bases.get(var).cloned().unwrap_or_default())
+        });
+        points_to_leq && refs_leq && place_points_to_leq && place_refs_leq && access_leq
     }
 }
 
@@ -1392,6 +1547,40 @@ fn transfer_library_call_with_external_context(
 ) {
     let Some(dest) = local(function, return_place) else { return; };
 
+    if let Some(contract) = external_return_contract(
+        callee, arguments.len(), represented_external_body,
+        arguments.get(2).is_some_and(|arg| arg.arg.trim() == "const 0_usize"),
+        ffi_functions,
+    ) {
+        let Some(dest) = direct_assignment_local(function, return_place) else { return; };
+        let source = arguments.first().and_then(|arg| direct_assignment_local(function, &arg.arg));
+        match contract.relation_kind {
+            "exact_argument_alias" => {
+                if let Some(source) = source {
+                    let snapshot = memory.clone();
+                    clear_destination(memory, &dest);
+                    memory.assign_points_to(dest.clone(), snapshot.points_to(&source));
+                    memory.assign_stack_refs(dest.clone(), snapshot.stack_refs(&source));
+                    memory.assign_access_bases(dest, snapshot.access_bases.get(&source).cloned().unwrap_or_default());
+                } else { clear_destination(memory, &dest); }
+            }
+            "nullable_derived_alias" => {
+                let bases = source.as_ref().map(|source| memory.event_allocations(source)).unwrap_or_default();
+                clear_destination(memory, &dest);
+                memory.assign_access_bases(dest, bases);
+            }
+            "nullable_borrowed_external" => clear_destination(memory, &dest),
+            _ => unreachable!(),
+        }
+        return;
+    }
+    // A zero-byte memchr has no positive result association, including stale bindings.
+    if !represented_external_body && callee.trim() == "memchr" && ffi_functions.contains("memchr")
+        && arguments.len() == 3 && arguments[2].arg.trim() == "const 0_usize" {
+        clear_destination(memory, &dest);
+        return;
+    }
+
     // Phase B-minimal: a bodyless foreign malloc/calloc/strdup call has no LLVM/SVF
     // AddrStmt from which Phase 6E could derive a CCall identity.  Materialize
     // the same finite allocation-site abstraction at the real MIR callsite.
@@ -1451,9 +1640,11 @@ fn transfer_library_call_with_external_context(
             .first()
             .and_then(|arg| first_local_operand(function, &arg.arg))
         {
-            let allocs = memory.event_allocations(&source);
+            let allocs = memory.deallocation_allocations(&source);
+            let access: BTreeSet<_> = memory.event_allocations(&source).difference(&allocs).cloned().collect();
             clear_destination(memory, &dest);
-            memory.assign_points_to(dest, allocs);
+            memory.assign_points_to(dest.clone(), allocs);
+            memory.assign_access_bases(dest, access);
         }
         return;
     }
@@ -1547,9 +1738,11 @@ fn transfer_library_call_with_external_context(
             {
                 let allocs = memory.points_to(&source);
                 let refs = memory.stack_refs(&source);
+                let access = memory.access_bases.get(&source).cloned().unwrap_or_default();
                 clear_destination(memory, &dest);
                 memory.assign_points_to(dest.clone(), allocs);
-                memory.assign_stack_refs(dest, refs);
+                memory.assign_stack_refs(dest.clone(), refs);
+                memory.assign_access_bases(dest, access);
             }
             return;
         }
@@ -1600,9 +1793,16 @@ fn transfer_library_call_with_external_context(
         {
             let allocs = memory.points_to(&source);
             let refs = memory.stack_refs(&source);
+            let mut access = memory.access_bases.get(&source).cloned().unwrap_or_default();
+            // Existing offset summaries preserve allocation-base association,
+            // but no offset operation is a base-pointer validity certificate.
+            let offset = ["wrapping_offset", "offset", "add", "sub"].iter().any(|method| method_terminal(callee, method));
+            let allocs = if offset { access.extend(memory.event_allocations(&source)); BTreeSet::new() } else { allocs };
+            let refs = if offset { BTreeSet::new() } else { refs };
             clear_destination(memory, &dest);
             memory.assign_points_to(dest.clone(), allocs);
-            memory.assign_stack_refs(dest, refs);
+            memory.assign_stack_refs(dest.clone(), refs);
+            memory.assign_access_bases(dest, access);
         }
     }
 
@@ -1678,8 +1878,10 @@ fn copy_binding(
 ) {
     let allocs = memory.points_to(source);
     let refs = memory.stack_refs(source);
+    let access = memory.access_bases.get(source).cloned().unwrap_or_default();
     memory.assign_points_to(destination.clone(), allocs);
     memory.assign_stack_refs(destination.clone(), refs);
+    memory.assign_access_bases(destination.clone(), access);
     copy_projected_fields(memory, source, &destination);
 }
 

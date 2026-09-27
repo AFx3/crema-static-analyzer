@@ -1,0 +1,86 @@
+{
+  "schema": "cqpl_bodyless_ffi_err1_d2_fixture_manifest_v1",
+  "baseline_commit": "94a9834b7f36c1ebb63369130f6c669c50846a51",
+  "fixtures": [
+    {
+      "target": "b52_memcpy_return_exact_alias_uaf",
+      "callee": "memcpy",
+      "relation_kind": "exact_argument_alias",
+      "uaf": {
+        "truth": "unk",
+        "subresult": "unk_true",
+        "direction": "true",
+        "strength": "strong_abstract_evidence"
+      }
+    },
+    {
+      "target": "b53_memmove_return_exact_alias_uaf",
+      "callee": "memmove",
+      "relation_kind": "exact_argument_alias",
+      "uaf": {
+        "truth": "unk",
+        "subresult": "unk_true",
+        "direction": "true",
+        "strength": "strong_abstract_evidence"
+      }
+    },
+    {
+      "target": "b54_memset_return_exact_alias_uaf",
+      "callee": "memset",
+      "relation_kind": "exact_argument_alias",
+      "uaf": {
+        "truth": "unk",
+        "subresult": "unk_true",
+        "direction": "true",
+        "strength": "strong_abstract_evidence"
+      }
+    },
+    {
+      "target": "b55_memchr_return_derived_alias_uaf",
+      "callee": "memchr",
+      "relation_kind": "nullable_derived_alias",
+      "uaf": {
+        "truth": "unk",
+        "subresult": "unk_true",
+        "direction": "true",
+        "strength": "strong_abstract_evidence"
+      }
+    },
+    {
+      "target": "b56_strchr_return_derived_alias_uaf",
+      "callee": "strchr",
+      "relation_kind": "nullable_derived_alias",
+      "uaf": {
+        "truth": "unk",
+        "subresult": "unk_true",
+        "direction": "true",
+        "strength": "strong_abstract_evidence"
+      }
+    },
+    {
+      "target": "b57_getenv_borrowed_no_allocation",
+      "callee": "getenv",
+      "relation_kind": "nullable_borrowed_external"
+    },
+    {
+      "target": "b58_memmove_zero_extent_return_alias",
+      "callee": "memmove",
+      "relation_kind": "exact_argument_alias"
+    },
+    {
+      "target": "b59_memchr_zero_extent_no_derived_alias",
+      "callee": "memchr",
+      "relation_kind": null
+    },
+    {
+      "target": "b60_body_present_memmove_return_control",
+      "callee": "memmove",
+      "relation_kind": null
+    },
+    {
+      "target": "b61_unknown_pointer_return_fail_closed",
+      "callee": "opaque_ptr_fn",
+      "relation_kind": null
+    }
+  ]
+}

@@ -12,6 +12,20 @@
   ],
   "additionalProperties": false,
   "properties": {
+    "external_return_relations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/external_return_relation_record_v1"
+      }
+    },
+    "external_return_call_bindings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/external_return_call_binding_v1"
+      }
+    },
     "schema_version": {
       "const": 2
     },
@@ -109,6 +123,350 @@
     }
   },
   "$defs": {
+    "external_return_relation_record_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "node",
+        "callee",
+        "arity",
+        "semantic_class",
+        "relation_kind",
+        "result_variable",
+        "nullability",
+        "ownership",
+        "basis",
+        "semantic_sources"
+      ],
+      "properties": {
+        "node": {
+          "type": "string",
+          "pattern": "^rust::"
+        },
+        "callee": {
+          "enum": [
+            "memcpy",
+            "memmove",
+            "memset",
+            "memchr",
+            "strchr",
+            "getenv"
+          ]
+        },
+        "arity": {
+          "enum": [
+            1,
+            2,
+            3
+          ]
+        },
+        "semantic_class": {
+          "enum": [
+            "memcpy_return_dst_v1",
+            "memmove_return_dst_v1",
+            "memset_return_dst_v1",
+            "memchr_return_derived_v1",
+            "strchr_return_derived_v1",
+            "getenv_borrowed_environment_v1"
+          ]
+        },
+        "relation_kind": {
+          "enum": [
+            "exact_argument_alias",
+            "nullable_derived_alias",
+            "nullable_borrowed_external"
+          ]
+        },
+        "result_variable": {
+          "type": "string",
+          "pattern": "^rust::.+::Local\\(_[0-9]+\\)$"
+        },
+        "source_formal_index": {
+          "const": 0
+        },
+        "source_actual_variable": {
+          "type": "string",
+          "pattern": "^rust::.+::Local\\(_[0-9]+\\)$"
+        },
+        "nullability": {
+          "enum": [
+            "same_as_source",
+            "nullable"
+          ]
+        },
+        "ownership": {
+          "enum": [
+            "alias_existing",
+            "borrowed_external"
+          ]
+        },
+        "basis": {
+          "const": "crema_err1_closed_contract_v1"
+        },
+        "semantic_sources": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "enum": [
+              "posix_memcpy_returns_destination_v1",
+              "posix_memmove_returns_destination_v1",
+              "posix_memset_returns_destination_v1",
+              "posix_memchr_nullable_derived_return_v1",
+              "posix_strchr_nullable_derived_return_v1",
+              "posix_getenv_nullable_borrowed_environment_v1"
+            ]
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "callee": {
+              "const": "memcpy"
+            },
+            "arity": {
+              "const": 3
+            },
+            "semantic_class": {
+              "const": "memcpy_return_dst_v1"
+            },
+            "relation_kind": {
+              "const": "exact_argument_alias"
+            },
+            "nullability": {
+              "const": "same_as_source"
+            },
+            "ownership": {
+              "const": "alias_existing"
+            },
+            "semantic_sources": {
+              "const": [
+                "posix_memcpy_returns_destination_v1"
+              ]
+            }
+          },
+          "required": [
+            "source_formal_index",
+            "source_actual_variable"
+          ]
+        },
+        {
+          "properties": {
+            "callee": {
+              "const": "memmove"
+            },
+            "arity": {
+              "const": 3
+            },
+            "semantic_class": {
+              "const": "memmove_return_dst_v1"
+            },
+            "relation_kind": {
+              "const": "exact_argument_alias"
+            },
+            "nullability": {
+              "const": "same_as_source"
+            },
+            "ownership": {
+              "const": "alias_existing"
+            },
+            "semantic_sources": {
+              "const": [
+                "posix_memmove_returns_destination_v1"
+              ]
+            }
+          },
+          "required": [
+            "source_formal_index",
+            "source_actual_variable"
+          ]
+        },
+        {
+          "properties": {
+            "callee": {
+              "const": "memset"
+            },
+            "arity": {
+              "const": 3
+            },
+            "semantic_class": {
+              "const": "memset_return_dst_v1"
+            },
+            "relation_kind": {
+              "const": "exact_argument_alias"
+            },
+            "nullability": {
+              "const": "same_as_source"
+            },
+            "ownership": {
+              "const": "alias_existing"
+            },
+            "semantic_sources": {
+              "const": [
+                "posix_memset_returns_destination_v1"
+              ]
+            }
+          },
+          "required": [
+            "source_formal_index",
+            "source_actual_variable"
+          ]
+        },
+        {
+          "properties": {
+            "callee": {
+              "const": "memchr"
+            },
+            "arity": {
+              "const": 3
+            },
+            "semantic_class": {
+              "const": "memchr_return_derived_v1"
+            },
+            "relation_kind": {
+              "const": "nullable_derived_alias"
+            },
+            "nullability": {
+              "const": "nullable"
+            },
+            "ownership": {
+              "const": "alias_existing"
+            },
+            "semantic_sources": {
+              "const": [
+                "posix_memchr_nullable_derived_return_v1"
+              ]
+            }
+          },
+          "required": [
+            "source_formal_index",
+            "source_actual_variable"
+          ]
+        },
+        {
+          "properties": {
+            "callee": {
+              "const": "strchr"
+            },
+            "arity": {
+              "const": 2
+            },
+            "semantic_class": {
+              "const": "strchr_return_derived_v1"
+            },
+            "relation_kind": {
+              "const": "nullable_derived_alias"
+            },
+            "nullability": {
+              "const": "nullable"
+            },
+            "ownership": {
+              "const": "alias_existing"
+            },
+            "semantic_sources": {
+              "const": [
+                "posix_strchr_nullable_derived_return_v1"
+              ]
+            }
+          },
+          "required": [
+            "source_formal_index",
+            "source_actual_variable"
+          ]
+        },
+        {
+          "properties": {
+            "callee": {
+              "const": "getenv"
+            },
+            "arity": {
+              "const": 1
+            },
+            "semantic_class": {
+              "const": "getenv_borrowed_environment_v1"
+            },
+            "relation_kind": {
+              "const": "nullable_borrowed_external"
+            },
+            "nullability": {
+              "const": "nullable"
+            },
+            "ownership": {
+              "const": "borrowed_external"
+            },
+            "semantic_sources": {
+              "const": [
+                "posix_getenv_nullable_borrowed_environment_v1"
+              ]
+            }
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "source_formal_index"
+                ]
+              },
+              {
+                "required": [
+                  "source_actual_variable"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "external_return_call_binding_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "node",
+        "callee",
+        "arguments",
+        "result_variable",
+        "body_status",
+        "basis"
+      ],
+      "properties": {
+        "node": {
+          "type": "string",
+          "pattern": "^rust::"
+        },
+        "callee": {
+          "enum": [
+            "memcpy",
+            "memmove",
+            "memset",
+            "memchr",
+            "strchr",
+            "getenv"
+          ]
+        },
+        "arguments": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "result_variable": {
+          "type": "string",
+          "pattern": "^rust::.+::Local\\(_[0-9]+\\)$"
+        },
+        "body_status": {
+          "const": "bodyless"
+        },
+        "basis": {
+          "const": "rustc_mir_call_binding_v1"
+        }
+      }
+    },
     "typedEdgeRecord": {
       "type": "object",
       "required": [
@@ -491,6 +849,7 @@
       ],
       "additionalProperties": false,
       "properties": {
+        "access_bases": {"$ref": "#/$defs/identity/properties/points_to"},
         "points_to": {
           "type": "array",
           "items": {
@@ -2471,6 +2830,71 @@
     }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "external_return_relations_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "required": [
+          "external_return_relations",
+          "external_return_call_bindings"
+        ],
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "mir_semantics_v2"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "external_return_relations"
+        ]
+      },
+      "then": {
+        "required": [
+          "capabilities"
+        ],
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "external_return_relations_v1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "external_return_call_bindings"
+        ]
+      },
+      "then": {
+        "required": [
+          "capabilities"
+        ],
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "external_return_relations_v1"
+            }
+          }
+        }
+      }
+    },
     {
       "if": {
         "properties": {

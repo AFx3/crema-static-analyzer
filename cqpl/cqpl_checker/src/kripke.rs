@@ -748,6 +748,8 @@ pub struct IdentityPointsToRecord {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeIdentityAnnotation {
     #[serde(default)]
+    pub access_bases: Vec<IdentityPointsToRecord>,
+    #[serde(default)]
     pub points_to: Vec<IdentityPointsToRecord>,
     // Stack-reference records are exported for auditability by CREMA v2 but
     // are not needed by the checker after allocation_labels are materialized.
@@ -1459,6 +1461,10 @@ pub struct AnnotatedNode {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnnotatedIcfg {
+    #[serde(default)]
+    pub external_return_relations: Vec<ExternalReturnRelationRecord>,
+    #[serde(default)]
+    pub external_return_call_bindings: Vec<ExternalReturnCallBinding>,
     pub schema_version: u32,
     pub entry: String,
     #[serde(default)]
@@ -2151,6 +2157,14 @@ impl Kripke {
         let has_external_deallocation_effects = capabilities.contains("external_deallocation_effects_v1");
         let has_external_formal_memory_effects_v1 = capabilities.contains("external_formal_memory_effects_v1");
         let has_external_formal_memory_effects_v2 = capabilities.contains("external_formal_memory_effects_v2");
+        let has_err1 = capabilities.contains("external_return_relations_v1");
+        if has_err1 != !input.external_return_relations.is_empty()
+            || has_err1 != !input.external_return_call_bindings.is_empty() {
+            return Err("ERR1 capability, relations and call bindings must appear together".into());
+        }
+        if has_err1 && (schema_version != 2 || !capabilities.contains("mir_semantics_v2")) {
+            return Err("ERR1 requires schema v2 and mir_semantics_v2".into());
+        }
         let has_llvm_memory_effects = capabilities.contains("llvm_memory_effects_v1");
         let has_svf_solved_points_to = capabilities.contains("svf_solved_points_to_v1");
         let has_ffi_argument_identity = capabilities.contains("ffi_argument_identity_v1");
@@ -2436,7 +2450,7 @@ impl Kripke {
                 ("event_identity", node.event_identity.as_ref()),
             ] {
                 if let Some(identity) = identity {
-                    for relation in &identity.points_to {
+                    for relation in identity.points_to.iter().chain(&identity.access_bases) {
                         if !variables.contains_key(&relation.variable) {
                             return Err(format!(
                                 "node '{}' {kind} relation references undeclared variable '{}'",
@@ -2461,6 +2475,10 @@ impl Kripke {
         } else if !source_provenance.is_empty() {
             return Err("source provenance records require capability source_provenance_v1".into());
         }
+        validate_external_return_relations(
+            &input.external_return_relations, &input.external_return_call_bindings,
+            &variables, &nodes, &allocations,
+        )?;
 
         let allocation_existence_guards = allocation_existence_guards.unwrap_or_default();
         if has_allocation_existence_guards {
@@ -2771,7 +2789,7 @@ impl Kripke {
                 }
             }
             for identity in [node.identity.as_ref(), node.event_identity.as_ref()].into_iter().flatten() {
-                for relation in &identity.points_to {
+                for relation in identity.points_to.iter().chain(&identity.access_bases) {
                     used_variables.insert(relation.variable.clone());
                     used_allocations.extend(relation.allocations.iter().cloned());
                 }
@@ -3442,6 +3460,118 @@ fn validate_external_formal_memory_effect_v1_tuple(
     Ok(())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExternalReturnRelationRecord {
+    pub node: String,
+    pub callee: String,
+    pub arity: usize,
+    pub semantic_class: String,
+    pub relation_kind: String,
+    pub result_variable: String,
+    #[serde(default)]
+    pub source_formal_index: Option<usize>,
+    #[serde(default)]
+    pub source_actual_variable: Option<String>,
+    pub nullability: String,
+    pub ownership: String,
+    pub basis: String,
+    pub semantic_sources: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExternalReturnCallBinding {
+    pub node: String,
+    pub callee: String,
+    pub arguments: Vec<Option<String>>,
+    pub result_variable: String,
+    pub body_status: String,
+    pub basis: String,
+}
+
+fn validate_external_return_relations(
+    records: &[ExternalReturnRelationRecord], bindings: &[ExternalReturnCallBinding],
+    variables: &BTreeMap<String, ProgramVariable>, nodes: &BTreeMap<String, AnnotatedNode>,
+    allocations: &BTreeMap<String, AbstractAllocation>,
+) -> Result<(), String> {
+    let mut calls = BTreeMap::new();
+    for binding in bindings {
+        if binding.body_status != "bodyless" || binding.basis != "rustc_mir_call_binding_v1"
+            || calls.insert(binding.node.as_str(), binding).is_some() {
+            return Err("ERR1 invalid/duplicate bodyless call binding".into());
+        }
+    }
+    if calls.len() != records.len() { return Err("ERR1 binding/record closure mismatch".into()); }
+    let mut seen = BTreeSet::new();
+    for record in records {
+        let expected = match (record.callee.as_str(), record.arity) {
+            ("memcpy", 3) => ("memcpy_return_dst_v1", "exact_argument_alias", "posix_memcpy_returns_destination_v1"),
+            ("memmove", 3) => ("memmove_return_dst_v1", "exact_argument_alias", "posix_memmove_returns_destination_v1"),
+            ("memset", 3) => ("memset_return_dst_v1", "exact_argument_alias", "posix_memset_returns_destination_v1"),
+            ("memchr", 3) => ("memchr_return_derived_v1", "nullable_derived_alias", "posix_memchr_nullable_derived_return_v1"),
+            ("strchr", 2) => ("strchr_return_derived_v1", "nullable_derived_alias", "posix_strchr_nullable_derived_return_v1"),
+            ("getenv", 1) => ("getenv_borrowed_environment_v1", "nullable_borrowed_external", "posix_getenv_nullable_borrowed_environment_v1"),
+            _ => return Err("ERR1 unsupported callee/arity".into()),
+        };
+        let borrowed = record.callee == "getenv";
+        if record.semantic_class != expected.0 || record.relation_kind != expected.1
+            || record.nullability != if expected.1 == "exact_argument_alias" { "same_as_source" } else { "nullable" }
+            || record.ownership != if borrowed { "borrowed_external" } else { "alias_existing" }
+            || record.basis != "crema_err1_closed_contract_v1"
+            || record.semantic_sources != vec![expected.2.to_string()]
+            || record.source_formal_index != if borrowed { None } else { Some(0) }
+            || record.source_actual_variable.is_some() == borrowed {
+            return Err("ERR1 invalid closed tuple".into());
+        }
+        let node = nodes.get(&record.node).ok_or("ERR1 unknown call node")?;
+        if nodes.keys().any(|id| id.starts_with(&format!("llvm::{}::", record.callee))) {
+            return Err("ERR1 cannot summarize represented body".into());
+        }
+        let scope = rust_function_scope(&record.node).ok_or("ERR1 non-Rust call scope")?;
+        if !record.node.starts_with("rust::") || !node.semantic_labels.iter().any(|label| label == "term:call") {
+            return Err("ERR1 requires real Rust call node".into());
+        }
+        let same_scope = |id: &str| {
+            variables.get(id).is_some_and(|var| var.language == ProgramLanguage::Rust)
+                && id.strip_prefix(&format!("{scope}::")).is_some_and(|local| {
+                    local.strip_prefix("Local(_").and_then(|s| s.strip_suffix(')'))
+                        .is_some_and(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
+                })
+        };
+        if !same_scope(&record.result_variable) || record.source_actual_variable.as_ref().is_some_and(|id| !same_scope(id)) {
+            return Err("ERR1 result/source must be declared same-scope Rust locals".into());
+        }
+        let call = calls.get(record.node.as_str()).ok_or("ERR1 missing call binding")?;
+        if call.callee != record.callee || call.arguments.len() != record.arity
+            || call.result_variable != record.result_variable
+            || (!borrowed && call.arguments.first().and_then(|a| a.as_ref()) != record.source_actual_variable.as_ref()) {
+            return Err("ERR1 result/source does not match MIR call binding".into());
+        }
+        if !seen.insert((&record.node, &record.callee, &record.result_variable, &record.relation_kind)) {
+            return Err("ERR1 duplicate relation".into());
+        }
+        if allocations.values().any(|allocation| allocation.site.as_ref().and_then(|site| site.get("node_id")).and_then(serde_json::Value::as_str) == Some(record.node.as_str()))
+            || node.allocation_labels.iter().any(|label| label.predicate == EventKind::Alloc) {
+            return Err("ERR1 cannot create fresh allocation".into());
+        }
+        let result_bases: BTreeSet<_> = node.identity.as_ref().into_iter().flat_map(|identity| &identity.points_to)
+            .filter(|relation| relation.variable == record.result_variable).flat_map(|relation| &relation.allocations).collect();
+        if borrowed || record.relation_kind == "nullable_derived_alias" {
+            if !result_bases.is_empty() { return Err("ERR1 derived/borrowed result cannot certify base free".into()); }
+            if node.identity.as_ref().into_iter().flat_map(|identity| &identity.stack_refs)
+                .any(|reference| reference.get("variable").and_then(serde_json::Value::as_str) == Some(record.result_variable.as_str())) {
+                return Err("ERR1 derived/borrowed result cannot certify base free through stack reference".into());
+            }
+        }
+        if borrowed && node.identity.as_ref().into_iter().flat_map(|identity| &identity.access_bases)
+            .any(|relation| relation.variable == record.result_variable && !relation.allocations.is_empty()) {
+            return Err("ERR1 borrowed result cannot acquire caller allocation".into());
+        }
+    }
+    Ok(())
+}
+
 fn validate_external_formal_memory_effect_v2_tuple(
     record: &ExternalFormalMemoryEffectRecord,
 ) -> Result<(), String> {
@@ -3794,6 +3924,8 @@ mod tests {
 
     fn base() -> AnnotatedIcfg {
         AnnotatedIcfg {
+            external_return_relations: vec![],
+            external_return_call_bindings: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -3864,6 +3996,103 @@ mod tests {
             semantic_sources: vec!["svf_absextapi_strlen_semantics_v1".into(), "llvm16_tli_strlen_argmem_read_semantics_v1".into()],
         }];
         input
+    }
+
+    fn err1_valid_input() -> AnnotatedIcfg {
+        let mut input = base();
+        input.schema_version = 2;
+        input.entry = "rust::main::bb0".into();
+        input.capabilities = vec!["mir_semantic_labels_v1".into(), "mir_semantics_v2".into(), "external_return_relations_v1".into()];
+        input.nodes[0].id = input.entry.clone();
+        input.nodes[0].semantic_labels = vec!["term:call".into()];
+        input.nodes[0].labels.clear();
+        input.nodes[0].pre = Default::default();
+        input.nodes[0].post = Default::default();
+        input.variables = ["rust::main::Local(_1)", "rust::main::Local(_2)", "rust::main::Local(_3)"]
+            .into_iter().map(|id| ProgramVariable { id: id.into(), language: ProgramLanguage::Rust, display: None, function: None }).collect();
+        input.external_return_relations = serde_json::from_value(serde_json::json!([{
+            "node":"rust::main::bb0", "callee":"memmove", "arity":3,
+            "semantic_class":"memmove_return_dst_v1", "relation_kind":"exact_argument_alias",
+            "result_variable":"rust::main::Local(_3)", "source_formal_index":0,
+            "source_actual_variable":"rust::main::Local(_1)", "nullability":"same_as_source",
+            "ownership":"alias_existing", "basis":"crema_err1_closed_contract_v1",
+            "semantic_sources":["posix_memmove_returns_destination_v1"]
+        }])).unwrap();
+        input.external_return_call_bindings = serde_json::from_value(serde_json::json!([{
+            "node":"rust::main::bb0", "callee":"memmove", "arguments":["rust::main::Local(_1)","rust::main::Local(_2)",null],
+            "result_variable":"rust::main::Local(_3)", "body_status":"bodyless", "basis":"rustc_mir_call_binding_v1"
+        }])).unwrap();
+        input
+    }
+
+    #[test]
+    fn err1_accepts_and_rejects_closed_tuple_and_call_identity_attacks() {
+        assert!(Kripke::from_annotated_icfg(err1_valid_input()).is_ok());
+        let valid = serde_json::to_value(err1_valid_input()).unwrap();
+        for (field, value) in [
+            ("callee", serde_json::json!("my_memmove")), ("arity", serde_json::json!(2)),
+            ("semantic_class", serde_json::json!("memcpy_return_dst_v1")),
+            ("relation_kind", serde_json::json!("nullable_derived_alias")),
+            ("source_formal_index", serde_json::json!(1)), ("source_actual_variable", serde_json::Value::Null),
+            ("nullability", serde_json::json!("nullable")), ("ownership", serde_json::json!("borrowed_external")),
+            ("basis", serde_json::json!("wrong")), ("semantic_sources", serde_json::json!([])),
+            ("result_variable", serde_json::json!("rust::main::Local(_99)")),
+            ("result_variable", serde_json::json!("rust::other::Local(_3)")),
+            ("result_variable", serde_json::json!("rust::main::Local(_2)")),
+            ("source_actual_variable", serde_json::json!("rust::other::Local(_1)")),
+            ("source_actual_variable", serde_json::json!("rust::main::Local(_2)")),
+        ] {
+            let mut attacked = valid.clone(); attacked["external_return_relations"][0][field] = value;
+            let input = serde_json::from_value(attacked).unwrap();
+            assert!(Kripke::from_annotated_icfg(input).is_err(), "accepted malformed ERR1 {field}");
+        }
+        for mode in 0..5 {
+            let mut input = err1_valid_input();
+            match mode {
+                0 => input.external_return_relations.push(input.external_return_relations[0].clone()),
+                1 => input.capabilities.retain(|cap| cap != "external_return_relations_v1"),
+                2 => input.external_return_relations.clear(),
+                3 => input.external_return_call_bindings[0].body_status = "represented".into(),
+                _ => input.nodes[0].allocation_labels.push(AllocationEventLabel {
+                    predicate: EventKind::Alloc, allocation:"fabricated".into(), certainty:AllocationEventCertainty::MayAbstract, deallocator_contract:None,
+                }),
+            }
+            assert!(Kripke::from_annotated_icfg(input).is_err());
+        }
+    }
+
+    #[test]
+    fn err1_derived_and_borrowed_do_not_certify_base_deallocation() {
+        let mut input = err1_valid_input();
+        let record = &mut input.external_return_relations[0];
+        record.callee = "memchr".into(); record.semantic_class = "memchr_return_derived_v1".into();
+        record.relation_kind = "nullable_derived_alias".into(); record.nullability = "nullable".into();
+        record.semantic_sources = vec!["posix_memchr_nullable_derived_return_v1".into()];
+        input.external_return_call_bindings[0].callee = "memchr".into();
+        assert!(Kripke::from_annotated_icfg(input.clone()).is_ok());
+        input.nodes[0].identity = Some(NodeIdentityAnnotation { points_to:vec![IdentityPointsToRecord {
+            variable:"rust::main::Local(_3)".into(), allocations:vec!["A".into()],
+        }], ..Default::default() });
+        let node = &input.nodes[0];
+        let variables = input.variables.iter().cloned().map(|v| (v.id.clone(),v)).collect();
+        let nodes = BTreeMap::from([(node.id.clone(),node.clone())]);
+        assert!(validate_external_return_relations(&input.external_return_relations,&input.external_return_call_bindings,&variables,&nodes,&BTreeMap::new()).unwrap_err().contains("base free"));
+        input.nodes[0].identity = Some(NodeIdentityAnnotation { stack_refs:vec![serde_json::json!({
+            "variable":"rust::main::Local(_3)", "places":[{"base":{"kind":"rust","function":"main","local":1},"projection":[]}]
+        })], ..Default::default() });
+        let nodes = BTreeMap::from([(input.nodes[0].id.clone(),input.nodes[0].clone())]);
+        assert!(validate_external_return_relations(&input.external_return_relations,&input.external_return_call_bindings,&variables,&nodes,&BTreeMap::new()).unwrap_err().contains("stack reference"));
+
+        let mut input = err1_valid_input();
+        let record = &mut input.external_return_relations[0];
+        record.callee = "getenv".into(); record.arity = 1; record.semantic_class = "getenv_borrowed_environment_v1".into();
+        record.relation_kind = "nullable_borrowed_external".into(); record.nullability = "nullable".into(); record.ownership = "borrowed_external".into();
+        record.source_formal_index = None; record.source_actual_variable = None;
+        record.semantic_sources = vec!["posix_getenv_nullable_borrowed_environment_v1".into()];
+        let call = &mut input.external_return_call_bindings[0]; call.callee = "getenv".into(); call.arguments.truncate(1);
+        assert!(Kripke::from_annotated_icfg(input.clone()).is_ok());
+        input.external_return_relations[0].source_actual_variable = Some("rust::main::Local(_1)".into());
+        assert!(Kripke::from_annotated_icfg(input).is_err());
     }
 
     fn efm2_valid_memmove_input() -> AnnotatedIcfg {
@@ -4151,6 +4380,7 @@ mod tests {
             allocation_labels: vec![],
             allocation_disposition: vec![],
             identity: Some(NodeIdentityAnnotation {
+                access_bases: vec![],
                 points_to: vec![IdentityPointsToRecord {
                     variable: "rust::main::Local(_1)".into(),
                     allocations: vec!["A".into()],
@@ -4723,6 +4953,8 @@ mod tests {
     #[test]
     fn entry_projection_prunes_unreachable_nodes_and_quantifier_domains() {
         let input = AnnotatedIcfg {
+            external_return_relations: vec![],
+            external_return_call_bindings: vec![],
             schema_version: 2,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -4778,6 +5010,8 @@ mod tests {
     #[test]
     fn intra_projection_preserves_same_function_unwind_terminal() {
         let input = AnnotatedIcfg {
+            external_return_relations: vec![],
+            external_return_call_bindings: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -4804,6 +5038,8 @@ mod tests {
     #[test]
     fn intra_projection_is_same_function_induced_subgraph_and_stops_at_call_boundary() {
         let input = AnnotatedIcfg {
+            external_return_relations: vec![],
+            external_return_call_bindings: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,

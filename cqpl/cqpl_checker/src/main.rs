@@ -328,6 +328,23 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     }
 
     let external_formal_memory_effects_present = root.get("external_formal_memory_effects").is_some();
+    let has_err1 = capabilities.contains("external_return_relations_v1");
+    for field in ["external_return_relations", "external_return_call_bindings"] {
+        if has_err1 != root.get(field).is_some() {
+            return Err(format!("ERR1 capability and {field} must appear together"));
+        }
+        if let Some(payload) = root.get(field) {
+            if !payload.as_array().is_some_and(|records| !records.is_empty()) {
+                return Err(format!("ERR1 {field} must be a non-empty array"));
+            }
+        }
+    }
+    if has_err1 && !has_mir_semantics_v2 { return Err("ERR1 requires mir_semantics_v2".into()); }
+    if root.get("external_return_relations").and_then(Value::as_array).into_iter().flatten()
+        .any(|record| record.get("callee").and_then(Value::as_str) == Some("getenv")
+            && (record.get("source_formal_index").is_some() || record.get("source_actual_variable").is_some())) {
+        return Err("ERR1 borrowed getenv must omit source fields, including null fields".into());
+    }
     if has_external_formal_memory_effects_v1 && has_external_formal_memory_effects_v2 {
         return Err("external_formal_memory_effects_v1 and external_formal_memory_effects_v2 are mutually exclusive".into());
     }
@@ -826,6 +843,31 @@ mod tests {
         }]);
         let err = validate_boundary_requirements(&value).unwrap_err();
         assert!(err.contains("requires mir_semantics_v2"));
+    }
+
+    #[test]
+    fn err1_raw_boundary_is_atomic_nonempty_and_requires_mir() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["mir_semantic_labels_v1", "mir_semantics_v2", "external_return_relations_v1"]);
+        value["external_return_relations"] = json!([{}]);
+        value["external_return_call_bindings"] = json!([{}]);
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+        for field in ["external_return_relations", "external_return_call_bindings"] {
+            for payload in [json!([]), json!(null), json!({})] {
+                let mut bad = value.clone(); bad[field] = payload;
+                assert!(validate_boundary_requirements(&bad).is_err());
+            }
+            let mut bad = value.clone(); bad.as_object_mut().unwrap().remove(field);
+            assert!(validate_boundary_requirements(&bad).is_err());
+        }
+        let mut bad = value.clone(); bad["capabilities"] = json!(["mir_semantic_labels_v1", "mir_semantics_v2"]);
+        assert!(validate_boundary_requirements(&bad).is_err());
+        let mut borrowed = value.clone();
+        borrowed["external_return_relations"] = json!([{"callee":"getenv", "source_actual_variable":null}]);
+        assert!(validate_boundary_requirements(&borrowed).is_err());
+        value["capabilities"] = json!(["external_return_relations_v1"]);
+        assert!(validate_boundary_requirements(&value).is_err());
     }
 
     #[test]

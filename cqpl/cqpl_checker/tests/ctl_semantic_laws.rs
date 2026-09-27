@@ -181,6 +181,8 @@ fn synthetic_model(
     }
 
     Kripke::from_annotated_icfg(AnnotatedIcfg {
+            external_return_relations: vec![],
+            external_return_call_bindings: vec![],
         schema_version: 1,
         entry: format!("b{entry}"),
         capabilities: vec![],

@@ -4999,6 +4999,8 @@ mod tests {
 
     fn one_allocation_graph() -> Kripke {
         Kripke::from_annotated_icfg(AnnotatedIcfg {
+            external_return_relations: vec![],
+            external_return_call_bindings: vec![],
             external_deallocation_effects: vec![],
             external_formal_memory_effects: vec![],
             schema_version: 2,
