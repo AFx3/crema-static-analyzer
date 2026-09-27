@@ -2266,7 +2266,15 @@ pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place
             std::collections::HashSet::new()
         }
     };
+    transfer_call_with_ffi(mem, func_call_details, return_place, &ffi_functions)
+}
 
+fn transfer_call_with_ffi(
+    mem: &AbstractMemory,
+    func_call_details: &str,
+    return_place: &str,
+    ffi_functions: &HashSet<String>,
+) -> (CellValue, AbstractMemory) {
     // ALLOC 
     let mut new_mem = mem.clone();
     let ret_val = if is_box_new_call(func_call_details) {
@@ -2431,6 +2439,22 @@ pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place
         new_mem.assign_local_value(&full_ret, CellValue::ALLOC);
         CellValue::ALLOC
 
+    } else if c_malloc_family_allocator_from_call_text(
+        func_call_details,
+        ffi_functions,
+    ).is_some() {
+        // Bodyless malloc/calloc/strdup returns a nullable raw pointer.  Phase
+        // B-minimal deliberately reuses the frozen nullable abstraction used
+        // by Rust raw alloc APIs: TOP means NULL-or-live-allocation here.
+        let full_ret = full_local_name(return_place);
+        if let Some(old) = new_mem.get_allocation(&full_ret) {
+            new_mem.state.remove(&old);
+        }
+        new_mem
+            .state
+            .insert(Allocation::new(full_ret), CellValue::TOP);
+        CellValue::TOP
+
     } else if is_raw_alloc_call(func_call_details)
         || is_raw_alloc_zeroed_call(func_call_details)
     {
@@ -2455,7 +2479,7 @@ pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place
         }
         CellValue::BOXTIMES
 
-    } else if is_c_free_call_text(func_call_details, &ffi_functions) {
+    } else if is_c_free_call_text(func_call_details, ffi_functions) {
         // A Rust call site can still invoke the C malloc-family deallocator.
         //
         // Keep the primary abstract state conservative: a C-origin pointer is
@@ -2972,6 +2996,7 @@ pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term:
 
     match term {
         MirTerminator::Call {details, function_called, arguments, return_place, allocation_disposition_evidence, ..} => {
+            let ffi_functions = load_ffi_functions("./ffi_functions.json").unwrap_or_default();
             // CStr::from_ptr creates a borrowed C-string view. It does not
             // retake ownership of the pointed allocation.
             if is_cstr_from_ptr_call(function_called) {
@@ -3184,6 +3209,24 @@ pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term:
                         .or_default()
                         .insert(TAINT_ASSIGN.to_string());
 
+                } else if c_malloc_family_allocator_from_call_text(
+                    function_called,
+                    &ffi_functions,
+                ).is_some()
+                    || c_malloc_family_allocator_from_call_text(
+                        details,
+                        &ffi_functions,
+                    ).is_some()
+                {
+                    let full_ret = full_local_name(return_place);
+                    taint
+                        .entry(full_ret)
+                        .or_default()
+                        .extend([
+                            TAINT_ASSIGN.to_string(),
+                            TAINT_C_MALLOC_FAMILY.to_string(),
+                        ]);
+
                 } else if is_raw_dealloc_call(function_called) {
                     let full_ret = full_local_name(return_place);
                     taint.remove(&full_ret);
@@ -3340,6 +3383,42 @@ fn scoped_llvm_ir_var(ir_id: usize, node_id: &str) -> Name {
 
 fn is_c_malloc_family_alloc_call(info: &str) -> bool {
     info.contains("@malloc(") || info.contains("@calloc(")
+}
+
+fn c_malloc_family_allocator_from_call_text<'a>(
+    text: &str,
+    ffi_functions: &'a HashSet<String>,
+) -> Option<&'static str> {
+    let text = text.trim();
+    if (text == "malloc" || text.starts_with("malloc(") || text.contains(" malloc("))
+        && ffi_functions.contains("malloc")
+    {
+        Some("malloc")
+    } else if (text == "calloc"
+        || text.starts_with("calloc(")
+        || text.contains(" calloc("))
+        && ffi_functions.contains("calloc")
+    {
+        Some("calloc")
+    } else if text.contains("libc::")
+        && (text.ends_with("::malloc") || text.contains("::malloc("))
+    {
+        Some("malloc")
+    } else if ffi_functions.contains("strdup")
+        && (text == "strdup" || text.starts_with("strdup(") || text.contains(" strdup("))
+    {
+        Some("strdup")
+    } else if text.contains("libc::")
+        && (text.ends_with("::calloc") || text.contains("::calloc("))
+    {
+        Some("calloc")
+    } else if text.contains("libc::")
+        && (text.ends_with("::strdup") || text.contains("::strdup("))
+    {
+        Some("strdup")
+    } else {
+        None
+    }
 }
 
 
@@ -6514,7 +6593,9 @@ mod phase5_c_origin_ffi_tests {
         icfg_may_reach,
         llvm_provenance_flow_sources,
         preferred_provenance_source,
-        detector_pointer_cast_participants
+        detector_pointer_cast_participants,
+        c_malloc_family_allocator_from_call_text,
+        transfer_call_with_ffi
     };
     use std::collections::{BTreeMap, BTreeSet, HashSet};
     use crate::structs::{GlobalICFGOrdered, IcfgEdge, MirStatement, SourceInfoData};
@@ -7067,6 +7148,42 @@ mod phase5_c_origin_ffi_tests {
             .is_none()
         );
     }
+    #[test]
+    fn bodyless_c_malloc_classifier_is_foreign_decl_gated_and_exact() {
+        let ffi = HashSet::from(["malloc".to_string(), "calloc".to_string(), "strdup".to_string()]);
+        assert_eq!(c_malloc_family_allocator_from_call_text("malloc", &ffi), Some("malloc"));
+        assert_eq!(c_malloc_family_allocator_from_call_text("Call(_1 = malloc(8))", &ffi), Some("malloc"));
+        assert_eq!(c_malloc_family_allocator_from_call_text("calloc", &ffi), Some("calloc"));
+        assert_eq!(c_malloc_family_allocator_from_call_text("strdup", &ffi), Some("strdup"));
+        assert_eq!(c_malloc_family_allocator_from_call_text("strdup", &HashSet::new()), None);
+        assert_eq!(c_malloc_family_allocator_from_call_text("my_malloc", &ffi), None);
+        assert_eq!(c_malloc_family_allocator_from_call_text("malloc_wrapper", &ffi), None);
+        assert_eq!(c_malloc_family_allocator_from_call_text("malloc", &HashSet::new()), None);
+    }
+
+    #[test]
+    fn bodyless_c_malloc_uses_existing_nullable_top_abstraction() {
+        let ffi = HashSet::from(["malloc".to_string(), "strdup".to_string()]);
+        let (ret, mem) = transfer_call_with_ffi(
+            &AbstractMemory::default(),
+            "Call(_1 = malloc(32))",
+            "_1",
+            &ffi,
+        );
+        assert_eq!(ret, CellValue::TOP);
+        assert_eq!(mem.get_cell_value(&"Local(_1)".to_string()), CellValue::TOP);
+
+        let (ret, mem) = transfer_call_with_ffi(
+            &AbstractMemory::default(),
+            "Call(_1 = strdup(copy _2))",
+            "_1",
+            &ffi,
+        );
+        assert_eq!(ret, CellValue::TOP);
+        assert_eq!(mem.get_cell_value(&"Local(_1)".to_string()), CellValue::TOP);
+    }
+
+
 }
 
 

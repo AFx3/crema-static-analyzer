@@ -1,0 +1,4 @@
+[package]
+name = "b08b_c_malloc_then_rust_dealloc_mismatch"
+version = "0.1.0"
+edition = "2021"

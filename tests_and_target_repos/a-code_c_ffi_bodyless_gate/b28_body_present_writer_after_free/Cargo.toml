@@ -1,0 +1,5 @@
+[package]
+name = "b28_body_present_writer_after_free"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"

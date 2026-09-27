@@ -1,0 +1,5 @@
+[package]
+name = "b33_calloc_wrapper_free_clean"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"

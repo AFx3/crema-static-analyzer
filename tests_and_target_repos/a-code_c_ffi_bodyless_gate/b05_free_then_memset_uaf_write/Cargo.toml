@@ -1,0 +1,4 @@
+[package]
+name = "b05_free_then_memset_uaf_write"
+version = "0.1.0"
+edition = "2021"

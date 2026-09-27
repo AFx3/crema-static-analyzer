@@ -53,6 +53,13 @@
         "$ref": "#/$defs/externalDeallocationEffectRecord"
       }
     },
+    "external_formal_memory_effects": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/externalFormalMemoryEffectRecord"
+      }
+    },
     "llvm_memory_effects": {
       "$ref": "#/$defs/llvmMemoryEffectsEvidenceV1"
     },
@@ -70,6 +77,27 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/typedEdgeRecord"
+      }
+    },
+    "allocation_existence_guards": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/allocationExistenceGuardRecord"
+      }
+    },
+    "reallocation_boundaries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/reallocationBoundaryRecord"
+      }
+    },
+    "conditional_reallocations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/conditionalReallocationRecord"
       }
     }
   },
@@ -1927,6 +1955,369 @@
           }
         }
       }
+    },
+    "allocationExistenceGuardRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allocation",
+        "producer_call_node",
+        "predicate_call_node",
+        "switch_node",
+        "tested_variable",
+        "predicate_result_variable",
+        "null_successor",
+        "non_null_successor",
+        "callee_def_path",
+        "allocation_return_basis",
+        "basis"
+      ],
+      "properties": {
+        "allocation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "predicate_call_node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "switch_node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tested_variable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "predicate_result_variable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "null_successor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "non_null_successor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "callee_def_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "basis": {
+          "const": "rust_raw_pointer_is_null_switch_v1"
+        },
+        "producer_call_node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "allocation_return_basis": {
+          "enum": [
+            "rust_foreign_decl_c_malloc_contract_v1",
+            "svf_single_source_c_allocator_return_v1"
+          ]
+        }
+      }
+    },
+    "reallocationBoundaryRecord": {
+      "type": "object",
+      "required": [
+        "node",
+        "source_allocation",
+        "source_variable",
+        "result_variable",
+        "family",
+        "operation",
+        "certainty",
+        "status",
+        "basis"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_allocation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_variable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "result_variable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "family": {
+          "const": "c_malloc"
+        },
+        "operation": {
+          "const": "realloc"
+        },
+        "certainty": {
+          "const": "may_abstract"
+        },
+        "status": {
+          "const": "conditional_unmodeled"
+        },
+        "basis": {
+          "enum": [
+            "rust_foreign_decl_c_realloc_boundary_v1",
+            "rust_foreign_decl_c_realloc_allocptr_family_v2"
+          ]
+        }
+      }
+    },
+    "conditionalReallocationResultDeallocationRecord": {
+      "type": "object",
+      "required": [
+        "node",
+        "variable",
+        "callee_def_path",
+        "family",
+        "operation",
+        "basis"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "variable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "callee_def_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "family": {
+          "const": "c_malloc"
+        },
+        "operation": {
+          "const": "free"
+        },
+        "basis": {
+          "const": "rust_foreign_decl_c_free_result_v1"
+        },
+        "value_flow_basis": {
+          "type": "string",
+          "minLength": 1
+        },
+        "argument_variable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "argument_correlation_basis": {
+          "enum": [
+            "rust_mir_direct_result_operand_v1",
+            "rust_mir_single_local_copy_result_operand_v1"
+          ]
+        }
+      }
+    },
+    "conditionalReallocationRecord": {
+      "type": "object",
+      "required": [
+        "source_allocation",
+        "reallocation_node",
+        "source_variable",
+        "result_variable",
+        "source_existence_predicate_call_node",
+        "outcome_predicate_call_node",
+        "outcome_predicate_result_variable",
+        "outcome_switch_node",
+        "failure_successor",
+        "success_successor",
+        "reallocation_callee_def_path",
+        "outcome_callee_def_path",
+        "family",
+        "operation",
+        "certainty",
+        "size_semantics",
+        "status",
+        "basis",
+        "result_deallocations"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source_allocation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reallocation_node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_variable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "result_variable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_existence_predicate_call_node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outcome_predicate_call_node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outcome_predicate_result_variable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outcome_switch_node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "failure_successor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "success_successor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reallocation_callee_def_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outcome_callee_def_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "family": {
+          "const": "c_malloc"
+        },
+        "operation": {
+          "const": "realloc"
+        },
+        "certainty": {
+          "const": "may_abstract"
+        },
+        "size_semantics": {
+          "const": "positive_nonzero_constant"
+        },
+        "status": {
+          "const": "conditional_guarded"
+        },
+        "basis": {
+          "const": "rust_foreign_decl_c_realloc_is_null_switch_v1"
+        },
+        "result_deallocations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/conditionalReallocationResultDeallocationRecord"
+          }
+        },
+        "outcome_correlation_basis": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outcome_argument_variable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outcome_value_flow_basis": {
+          "enum": [
+            "rust_mir_direct_result_operand_v1",
+            "rust_mir_single_local_copy_result_operand_v1"
+          ]
+        }
+      }
+    },
+    "externalFormalMemoryEffectRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "node",
+        "callee",
+        "semantic_class",
+        "formal_index",
+        "access",
+        "event_variable",
+        "actual_variable",
+        "basis",
+        "semantic_sources"
+      ],
+      "properties": {
+        "node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "callee": {
+          "enum": [
+            "strlen",
+            "memset",
+            "memcpy",
+            "memcmp",
+            "write"
+          ]
+        },
+        "semantic_class": {
+          "enum": [
+            "strlen_read_c_string_v1",
+            "memset_v1",
+            "memcpy_v1",
+            "memcmp_v1",
+            "posix_write_v1"
+          ]
+        },
+        "formal_index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "access": {
+          "enum": [
+            "read",
+            "write"
+          ]
+        },
+        "event_variable": {
+          "type": "string",
+          "pattern": "^Local\\(_[0-9]+\\)$"
+        },
+        "actual_variable": {
+          "type": "string",
+          "pattern": "^rust::.+::Local\\(_[0-9]+\\)$"
+        },
+        "size_argument_index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "basis": {
+          "const": "crema_efm1_closed_contract_v1"
+        },
+        "semantic_sources": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "svf_absextapi_strlen_semantics_v1",
+              "llvm16_tli_strlen_argmem_read_semantics_v1",
+              "svf_extapi_memset_semantics_v1",
+              "llvm16_tli_memset_arg0_writeonly_semantics_v1",
+              "svf_extapi_memcpy_semantics_v1",
+              "llvm16_tli_memcpy_arg0_writeonly_semantics_v1",
+              "llvm16_tli_memcpy_arg1_readonly_semantics_v1",
+              "llvm16_tli_memcmp_argmem_read_semantics_v1",
+              "llvm16_memorylocation_memcmp_formal_semantics_v1",
+              "posix_write_buffer_semantics_v1",
+              "llvm16_tli_write_arg1_readonly_semantics_v1"
+            ]
+          }
+        }
+      }
     }
   },
   "allOf": [
@@ -2433,6 +2824,397 @@
           "capabilities": {
             "contains": {
               "const": "source_provenance_v1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "allocation_existence_guards_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "required": [
+          "allocation_existence_guards"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "allocation_existence_guards"
+        ]
+      },
+      "then": {
+        "required": [
+          "capabilities"
+        ],
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "allocation_existence_guards_v1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "allocation_existence_guards_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "properties": {
+          "capabilities": {
+            "allOf": [
+              {
+                "contains": {
+                  "const": "allocation_state_v1"
+                }
+              },
+              {
+                "contains": {
+                  "const": "mir_semantic_labels_v1"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "reallocation_boundaries_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "required": [
+          "reallocation_boundaries"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "reallocation_boundaries"
+        ]
+      },
+      "then": {
+        "required": [
+          "capabilities"
+        ],
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "reallocation_boundaries_v1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "reallocation_boundaries_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "allocation_state_v1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "reallocation_boundaries_v2"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "properties": {
+          "capabilities": {
+            "allOf": [
+              {
+                "contains": {
+                  "const": "reallocation_boundaries_v1"
+                }
+              },
+              {
+                "contains": {
+                  "const": "allocation_contracts_v1"
+                }
+              },
+              {
+                "contains": {
+                  "const": "mir_semantics_v2"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "reallocation_boundaries": {
+            "contains": {
+              "type": "object",
+              "properties": {
+                "basis": {
+                  "const": "rust_foreign_decl_c_realloc_allocptr_family_v2"
+                }
+              },
+              "required": [
+                "basis"
+              ]
+            }
+          }
+        },
+        "required": [
+          "reallocation_boundaries"
+        ]
+      },
+      "then": {
+        "required": [
+          "capabilities"
+        ],
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "reallocation_boundaries_v2"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "conditional_reallocations_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "required": [
+          "conditional_reallocations"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "conditional_reallocations"
+        ]
+      },
+      "then": {
+        "required": [
+          "capabilities"
+        ],
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "conditional_reallocations_v1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "conditional_reallocations_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "properties": {
+          "capabilities": {
+            "allOf": [
+              {
+                "contains": {
+                  "const": "reallocation_boundaries_v1"
+                }
+              },
+              {
+                "contains": {
+                  "const": "allocation_existence_guards_v1"
+                }
+              },
+              {
+                "contains": {
+                  "const": "allocation_state_v1"
+                }
+              },
+              {
+                "contains": {
+                  "const": "mir_semantic_labels_v1"
+                }
+              },
+              {
+                "contains": {
+                  "const": "typed_edge_flow_v1"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "conditional_reallocations_v2"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "conditional_reallocations_v1"
+            }
+          },
+          "conditional_reallocations": {
+            "items": {
+              "required": [
+                "outcome_correlation_basis",
+                "outcome_argument_variable",
+                "outcome_value_flow_basis"
+              ],
+              "properties": {
+                "result_deallocations": {
+                  "items": {
+                    "required": [
+                      "argument_variable",
+                      "argument_correlation_basis",
+                      "value_flow_basis"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "external_formal_memory_effects_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "required": [
+          "external_formal_memory_effects"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "external_formal_memory_effects"
+        ]
+      },
+      "then": {
+        "required": [
+          "capabilities"
+        ],
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "external_formal_memory_effects_v1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "external_formal_memory_effects_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "mir_semantics_v2"
             }
           }
         }

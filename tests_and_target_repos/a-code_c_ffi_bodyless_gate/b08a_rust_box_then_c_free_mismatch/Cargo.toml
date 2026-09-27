@@ -1,0 +1,4 @@
+[package]
+name = "b08a_rust_box_then_c_free_mismatch"
+version = "0.1.0"
+edition = "2021"

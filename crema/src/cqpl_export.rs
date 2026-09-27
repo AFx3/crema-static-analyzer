@@ -5,7 +5,7 @@ use crate::panic_unwind::{edge_flow_kind, panic_unwind_lifecycle_v1_enabled, Edg
 use crate::panic_lifecycle_domain::{fixed_point_real_panic_lifecycle, PanicLifecycleMemory};
 use crate::memory_events;
 use crate::structs::{
-    AbstractAllocId, AllocationSiteId, GlobalICFGNode, GlobalICFGOrdered, MirTerminator,
+    AbstractAllocId, AllocationSiteId, GlobalICFGNode, GlobalICFGOrdered, MirCallArgument, MirTerminator,
     PlaceId, PlaceProjection, ProgramVarId, RustDropAllocatorEvidenceKind,
     RustCallDeallocatorEvidenceKind, RustAllocationDispositionEvidenceKind, SvfStatement,
     LlvmMemoryEffectsArtifactV1, LlvmFunctionEffectsRecordV1, LlvmFunctionEffectsSnapshotV1,
@@ -45,6 +45,11 @@ struct AnnotatedIcfg {
     /// never interpreted as proof of absence.
     #[serde(skip_serializing_if = "Option::is_none")]
     external_deallocation_effects: Option<Vec<ExternalDeallocationEffectRecord>>,
+    /// EFM1: proof-carrying semantic memory effects for bodyless external calls.
+    /// These records classify formal argument roles only; actual Rust allocation
+    /// identity remains entirely producer-side and is never borrowed from SVF.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    external_formal_memory_effects: Option<Vec<ExternalFormalMemoryEffectRecord>>,
     /// EFX1 proof payload. This is the exact validated producer sidecar carried
     /// across the CREMA -> CQPL boundary, not merely a capability bit.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -57,6 +62,24 @@ struct AnnotatedIcfg {
     /// not create aliases or upgrade MAY evidence to MUST.
     #[serde(skip_serializing_if = "Option::is_none")]
     ffi_argument_identity: Option<Vec<FfiArgumentIdentityRecord>>,
+    /// AGE1: proof-carrying correlation between a raw-pointer `is_null` test
+    /// and the existence of one singleton abstract allocation identity.
+    /// Additive diagnostic evidence only; CQPL truth never consumes it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allocation_existence_guards: Option<Vec<AllocationExistenceGuardRecord>>,
+    /// RBF1: diagnostic-only proof boundary for a bodyless C realloc whose
+    /// success/failure split is not yet modeled allocation-centrically.
+    /// Consumers may fail closed across this boundary, but must not derive
+    /// truth or a deallocation event from it unless CR1 is also present.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reallocation_boundaries: Option<Vec<ReallocationBoundaryRecord>>,
+    /// CR1: proof-carrying conditional realloc outcome.  The payload certifies
+    /// a non-null source object, a positive non-zero size, an exact raw-pointer
+    /// `is_null` split of the realloc result, and direct compatible `free`
+    /// calls on that result where present.  It is exported as a sidecar; CREMA's
+    /// fixed point and allocation-state lattice remain unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    conditional_reallocations: Option<Vec<ConditionalReallocationRecord>>,
     nodes: Vec<AnnotatedNode>,
 }
 
@@ -119,6 +142,34 @@ struct ExternalDeallocationEffectRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct ExternalFormalMemoryEffectRecord {
+    /// Rust MIR call node on which the existing CQPL read/write event is emitted.
+    node: String,
+    /// Exact external function symbol admitted by the closed semantic contract.
+    callee: String,
+    /// Versioned semantic family; this is not an SVF variable or function object.
+    semantic_class: &'static str,
+    /// Zero-based formal parameter position carrying the memory effect.
+    formal_index: usize,
+    /// Closed event vocabulary reused by CQPL truth: read | write.
+    access: &'static str,
+    /// Raw MIR local used by the node-level event label.
+    event_variable: String,
+    /// Function-scoped canonical Rust ProgramVarId for the same actual operand.
+    actual_variable: String,
+    /// Optional byte-count/extent formal index. EFM1 suppresses an effect only
+    /// for a statically exact `const 0_usize`; all other extents remain MAY.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    size_argument_index: Option<usize>,
+    /// Primary producer proof basis, frozen as a closed vocabulary.
+    basis: &'static str,
+    /// Frozen provider/documentation semantics from which the CREMA contract was derived.
+    /// These are provenance references, not runtime-observed SVF/TLI facts.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    semantic_sources: Vec<&'static str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 struct TypedEdgeRecord {
     source: String,
     destination: String,
@@ -154,6 +205,88 @@ struct FfiArgumentIdentityRecord {
     svf_may_points_to: Vec<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     svf_points_to_basis: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct AllocationExistenceGuardRecord {
+    allocation: String,
+    producer_call_node: String,
+    predicate_call_node: String,
+    switch_node: String,
+    tested_variable: String,
+    predicate_result_variable: String,
+    null_successor: String,
+    non_null_successor: String,
+    callee_def_path: String,
+    allocation_return_basis: &'static str,
+    basis: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct ReallocationBoundaryRecord {
+    node: String,
+    source_allocation: String,
+    source_variable: String,
+    result_variable: String,
+    family: &'static str,
+    operation: &'static str,
+    certainty: &'static str,
+    status: &'static str,
+    basis: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct ConditionalReallocationResultDeallocationRecord {
+    node: String,
+    /// Logical realloc-result local whose allocation obligation is discharged.
+    variable: String,
+    /// MIR local actually passed to `free`. CR1-v2 keeps this distinct from
+    /// `variable` because rustc may materialize a one-step copy temporary.
+    argument_variable: String,
+    callee_def_path: String,
+    family: &'static str,
+    operation: &'static str,
+    basis: &'static str,
+    /// CR1-v2 producer proof that the observed free argument is either the
+    /// realloc-result local itself or one exact MIR `copy` of that local.
+    argument_correlation_basis: &'static str,
+    /// CR1-v2 producer proof: every CFG path from the certified success
+    /// successor to this free(q) keeps the realloc result local unchanged and
+    /// does not consume its allocation obligation first.
+    value_flow_basis: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct ConditionalReallocationRecord {
+    source_allocation: String,
+    reallocation_node: String,
+    source_variable: String,
+    result_variable: String,
+    source_existence_predicate_call_node: String,
+    outcome_predicate_call_node: String,
+    /// MIR local actually consumed by the `is_null` call. It may be the
+    /// realloc result itself or one exact rustc-generated copy temporary.
+    outcome_argument_variable: String,
+    outcome_predicate_result_variable: String,
+    outcome_switch_node: String,
+    failure_successor: String,
+    success_successor: String,
+    reallocation_callee_def_path: String,
+    outcome_callee_def_path: String,
+    family: &'static str,
+    operation: &'static str,
+    certainty: &'static str,
+    size_semantics: &'static str,
+    status: &'static str,
+    basis: &'static str,
+    /// CR1-v2 producer proof that q.is_null() is the immediate canonical CFG
+    /// successor of the realloc call.
+    outcome_correlation_basis: &'static str,
+    /// CR1-v2 producer proof that the `is_null` receiver is either the realloc
+    /// result local itself (without an intra-block redefinition) or one exact
+    /// MIR `copy` temporary derived from that unchanged result local.
+    outcome_value_flow_basis: &'static str,
+    result_deallocations: Vec<ConditionalReallocationResultDeallocationRecord>,
 }
 
 impl AllocationContract {
@@ -534,6 +667,7 @@ fn export_cqpl_annotated_icfg_versioned(
     // the same scoped SVF identifiers already used by CREMA's abstract state.
     let llvm_names = LlvmNameResolver::build(icfg);
     let ffi_functions = load_ffi_functions("./ffi_functions.json").unwrap_or_default();
+    let represented_c_functions = represented_c_function_names(icfg);
 
     // Closure bodies can materialize the same captured pointer into distinct MIR
     // temporaries at different uses. The legacy detector already reconstructs
@@ -580,8 +714,6 @@ fn export_cqpl_annotated_icfg_versioned(
         // and therefore do not depend on that workaround.  W1 source provenance
         // is produced from the very same event-occurrence map, so reporting
         // cannot silently drift from the semantic event vocabulary.
-        let event_sources = event_sources_for_node(node_id, node, &llvm_names, &ffi_functions);
-        let raw_labels: Vec<EventLabel> = event_sources.keys().cloned().collect();
         let event_mem = if schema_version == 2 {
             identity_state
                 .and_then(|state| state.event_by_node.get(node_id))
@@ -590,6 +722,11 @@ fn export_cqpl_annotated_icfg_versioned(
         } else {
             AllocationIdentityMemory::default()
         };
+        let mut event_sources = event_sources_for_node(node_id, node, &llvm_names, &ffi_functions, &represented_c_functions);
+        if schema_version == 2 {
+            add_realloc_null_allocation_event_source(node_id, node, &event_mem, &mut event_sources);
+        }
+        let raw_labels: Vec<EventLabel> = event_sources.keys().cloned().collect();
         let allocation_labels = if schema_version == 2 {
             Some(allocation_labels_for_node(node_id, node, &raw_labels, &event_mem, &ffi_functions, schema_version))
         } else {
@@ -723,6 +860,74 @@ fn export_cqpl_annotated_icfg_versioned(
         });
     }
 
+    let allocation_existence_guards = if schema_version == 2 && mir_semantics_v2_enabled() {
+        let records = allocation_existence_guard_records(
+            icfg,
+            identity_state.expect("checked schema-v2 identity state"),
+        );
+        if records.is_empty() { None } else { Some(records) }
+    } else {
+        None
+    };
+
+    let reallocation_boundaries = if schema_version == 2 {
+        let records = reallocation_boundary_records(
+            icfg,
+            identity_state.expect("checked schema-v2 identity state"),
+            &ffi_functions,
+        );
+        if records.is_empty() { None } else { Some(records) }
+    } else {
+        None
+    };
+
+    let conditional_reallocations = if schema_version == 2 && mir_semantics_v2_enabled() {
+        let records = conditional_reallocation_records(
+            icfg,
+            &ffi_functions,
+            reallocation_boundaries.as_deref().unwrap_or_default(),
+            allocation_existence_guards.as_deref().unwrap_or_default(),
+        );
+        if records.is_empty() { None } else { Some(records) }
+    } else {
+        None
+    };
+
+    let external_formal_memory_effects = if schema_version == 2 && mir_semantics_v2_enabled() {
+        let records = external_formal_memory_effect_records(
+            icfg,
+            &ffi_functions,
+            &represented_c_functions,
+        );
+        if records.is_empty() { None } else { Some(records) }
+    } else {
+        None
+    };
+
+    // AGE1 protocol closure: every program variable referenced by the
+    // diagnostic-only existence-guard sidecar must also be declared in the
+    // top-level variable catalog.  The predicate-result temporary is often a
+    // scalar MIR local and therefore need not occur in allocation identity or
+    // event labels; omitting it would make an otherwise valid proof-carrying
+    // record fail the checker boundary as an undeclared variable.
+    close_variable_catalog_over_allocation_existence_guards(
+        &mut variable_ids,
+        allocation_existence_guards.as_deref(),
+    );
+    close_variable_catalog_over_reallocation_boundaries(
+        &mut variable_ids,
+        reallocation_boundaries.as_deref(),
+    );
+    close_variable_catalog_over_conditional_reallocations(
+        &mut variable_ids,
+        conditional_reallocations.as_deref(),
+    );
+
+    close_variable_catalog_over_external_formal_memory_effects(
+        &mut variable_ids,
+        external_formal_memory_effects.as_deref(),
+    );
+
     if variable_ids.is_empty() {
         return Err("CQPL annotated ICFG contains no program variables".into());
     }
@@ -783,6 +988,9 @@ fn export_cqpl_annotated_icfg_versioned(
                 // capability-gated explicit/TLI LLVM16 contract.
                 "external_deallocation_effects_v1",
             ];
+            if external_formal_memory_effects.is_some() {
+                caps.push("external_formal_memory_effects_v1");
+            }
             if icfg.llvm_memory_effects.is_some() {
                 caps.push("llvm_memory_effects_v1");
             }
@@ -791,6 +999,25 @@ fn export_cqpl_annotated_icfg_versioned(
             }
             if ffi_argument_identity.is_some() {
                 caps.push("ffi_argument_identity_v1");
+            }
+            if allocation_existence_guards.is_some() {
+                caps.push("allocation_existence_guards_v1");
+            }
+            if let Some(records) = reallocation_boundaries.as_deref() {
+                // RBF2 extends the existing payload rather than replacing it:
+                // every non-empty payload remains an RBF1 surface, while the
+                // v2 capability is advertised only when at least one record
+                // uses the allocator-family-consumer basis.
+                caps.push("reallocation_boundaries_v1");
+                if records.iter().any(|record| {
+                    record.basis == "rust_foreign_decl_c_realloc_allocptr_family_v2"
+                }) {
+                    caps.push("reallocation_boundaries_v2");
+                }
+            }
+            if conditional_reallocations.is_some() {
+                caps.push("conditional_reallocations_v1");
+                caps.push("conditional_reallocations_v2");
             }
             if mir_semantics_v2_enabled() {
                 caps.push("mir_semantic_labels_v1");
@@ -809,15 +1036,977 @@ fn export_cqpl_annotated_icfg_versioned(
         variables,
         allocations,
         external_deallocation_effects,
+        external_formal_memory_effects,
         llvm_memory_effects: if schema_version == 2 { icfg.llvm_memory_effects.clone() } else { None },
         svf_solved_points_to: if schema_version == 2 { icfg.svf_solved_points_to.clone() } else { None },
         ffi_argument_identity,
+        allocation_existence_guards,
+        reallocation_boundaries,
+        conditional_reallocations,
         nodes,
     };
 
     let file = File::create(output_path)?;
     serde_json::to_writer_pretty(file, &output)?;
     Ok(())
+}
+
+fn close_variable_catalog_over_allocation_existence_guards(
+    variable_ids: &mut BTreeSet<Name>,
+    guards: Option<&[AllocationExistenceGuardRecord]>,
+) {
+    let Some(guards) = guards else { return; };
+    for guard in guards {
+        variable_ids.insert(guard.tested_variable.clone());
+        variable_ids.insert(guard.predicate_result_variable.clone());
+    }
+}
+
+fn close_variable_catalog_over_reallocation_boundaries(
+    variable_ids: &mut BTreeSet<Name>,
+    boundaries: Option<&[ReallocationBoundaryRecord]>,
+) {
+    let Some(boundaries) = boundaries else { return; };
+    for boundary in boundaries {
+        variable_ids.insert(boundary.source_variable.clone());
+        variable_ids.insert(boundary.result_variable.clone());
+    }
+}
+
+fn close_variable_catalog_over_conditional_reallocations(
+    variable_ids: &mut BTreeSet<Name>,
+    records: Option<&[ConditionalReallocationRecord]>,
+) {
+    let Some(records) = records else { return; };
+    for record in records {
+        variable_ids.insert(record.source_variable.clone());
+        variable_ids.insert(record.result_variable.clone());
+        variable_ids.insert(record.outcome_argument_variable.clone());
+        variable_ids.insert(record.outcome_predicate_result_variable.clone());
+        for deallocation in &record.result_deallocations {
+            variable_ids.insert(deallocation.variable.clone());
+            variable_ids.insert(deallocation.argument_variable.clone());
+        }
+    }
+}
+
+fn close_variable_catalog_over_external_formal_memory_effects(
+    variable_ids: &mut BTreeSet<Name>,
+    records: Option<&[ExternalFormalMemoryEffectRecord]>,
+) {
+    let Some(records) = records else { return; };
+    for record in records {
+        variable_ids.insert(record.actual_variable.clone());
+        variable_ids.insert(record.event_variable.clone());
+    }
+}
+
+fn is_raw_pointer_is_null_def_path(path: &str) -> bool {
+    let raw_pointer_impl = path.contains("::ptr::mut_ptr::<impl *mut ")
+        || path.contains("::ptr::const_ptr::<impl *const ");
+    raw_pointer_impl && path.ends_with(">::is_null")
+}
+
+fn canonical_rust_block_target(node_id: &str, raw_target: &str) -> Option<String> {
+    let scope = mir_function_scope_from_node_id(node_id)?;
+    let block = raw_target.trim();
+    let digits = block.strip_prefix("bb")?;
+    if digits.is_empty() || !digits.chars().all(|ch| ch.is_ascii_digit()) {
+        return None;
+    }
+    Some(format!("{scope}::{block}"))
+}
+
+fn parse_switch_target(raw: &str) -> Option<(u128, &str)> {
+    let inner = raw.trim().strip_prefix('(')?.strip_suffix(')')?;
+    let (value, block) = inner.split_once(',')?;
+    let value = value.trim().parse::<u128>().ok()?;
+    let block = block.trim();
+    if !block.starts_with("bb") || !block[2..].chars().all(|ch| ch.is_ascii_digit()) {
+        return None;
+    }
+    Some((value, block))
+}
+
+fn rust_call_producing_variable<'a>(
+    icfg: &'a GlobalICFGOrdered,
+    predicate_node_id: &str,
+    variable: &ProgramVarId,
+) -> Option<&'a str> {
+    let scope = mir_function_scope_from_node_id(predicate_node_id)?;
+    let function = scope.strip_prefix("rust::").unwrap_or(&scope);
+    let mut producers = Vec::new();
+    for (node_id, node) in &icfg.ordered_nodes {
+        if mir_function_scope_from_node_id(node_id).as_deref() != Some(scope.as_str()) {
+            continue;
+        }
+        let GlobalICFGNode::Mir(block) = node else { continue; };
+        let Some(MirTerminator::Call { return_place, .. }) = block.terminator.as_ref() else { continue; };
+        if ProgramVarId::rust(function, return_place).as_ref() == Some(variable) {
+            producers.push(node_id.as_str());
+        }
+    }
+    producers.sort_unstable();
+    producers.dedup();
+    if producers.len() == 1 { producers.into_iter().next() } else { None }
+}
+
+fn parse_svf_var_id(raw: &str) -> Option<usize> {
+    raw.split('@')
+        .next()?
+        .trim()
+        .trim_start_matches('%')
+        .parse::<usize>()
+        .ok()
+}
+
+fn llvm_function_from_global_node_id(node_id: &str) -> Option<&str> {
+    node_id
+        .strip_prefix("llvm::")?
+        .split_once("::node")
+        .map(|(function, _)| function)
+}
+
+fn exact_single_source_svf_flow(
+    definitions: &BTreeMap<usize, Vec<(String, Vec<usize>)>>,
+    current: usize,
+    source: usize,
+    visiting: &mut BTreeSet<usize>,
+) -> bool {
+    if current == source {
+        return true;
+    }
+    if !visiting.insert(current) {
+        return false;
+    }
+    let result = definitions.get(&current).is_some_and(|defs| {
+        if defs.len() != 1 {
+            return false;
+        }
+        let (kind, sources) = &defs[0];
+        matches!(kind.as_str(), "AssignStmt" | "CopyStmt" | "PhiStmt")
+            && sources.len() == 1
+            && exact_single_source_svf_flow(definitions, sources[0], source, visiting)
+    });
+    visiting.remove(&current);
+    result
+}
+
+/// Certify that a represented C wrapper returns exactly the value produced by
+/// this allocation site.  The proof is deliberately narrower than the normal
+/// MAY identity analysis: the C -> Rust DummyRet must target the tested MIR
+/// local and the SVF return value must have one unique, single-source value-flow
+/// chain back to the malloc/calloc result.  Any phi/select with multiple inputs,
+/// ambiguous definition, or unsupported memory flow fails closed.
+fn represented_c_allocator_exact_return(
+    icfg: &GlobalICFGOrdered,
+    allocation_site_node: &str,
+    producer_call_node: &str,
+    tested_variable: &ProgramVarId,
+) -> bool {
+    let Some(function) = llvm_function_from_global_node_id(allocation_site_node) else {
+        return false;
+    };
+    let Some(callsite) = llvm_call_suffix_from_global_node_id(allocation_site_node) else {
+        return false;
+    };
+    if callsite != producer_call_node {
+        return false;
+    }
+    let Some(GlobalICFGNode::Llvm(alloc_node)) = icfg
+        .ordered_nodes
+        .iter()
+        .find(|(id, _)| id == allocation_site_node)
+        .map(|(_, node)| node)
+    else {
+        return false;
+    };
+    let mut allocation_results: Vec<usize> = alloc_node
+        .svf_statements
+        .iter()
+        .filter(|stmt| stmt.stmt_type == "AddrStmt")
+        .filter_map(SvfStatement::result_var_id)
+        .collect();
+    allocation_results.sort_unstable();
+    allocation_results.dedup();
+    if allocation_results.len() != 1 {
+        return false;
+    }
+    let allocation_result = allocation_results[0];
+
+    let Some(scope) = mir_function_scope_from_node_id(producer_call_node) else {
+        return false;
+    };
+    let rust_function = scope.strip_prefix("rust::").unwrap_or(&scope);
+    let mut return_vars = Vec::new();
+    for (_, node) in &icfg.ordered_nodes {
+        let GlobalICFGNode::DummyRet(dummy) = node else { continue; };
+        if dummy.is_internal.unwrap_or(false) {
+            continue;
+        }
+        let Some(mir_var) = dummy.mir_var.as_deref() else { continue; };
+        if ProgramVarId::rust(rust_function, mir_var).as_ref() != Some(tested_variable) {
+            continue;
+        }
+        if llvm_function_from_global_node_id(&dummy.incoming_edge) != Some(function)
+            || llvm_call_suffix_from_global_node_id(&dummy.incoming_edge) != Some(callsite)
+        {
+            continue;
+        }
+        let Some(llvm_var) = dummy.llvm_var.as_deref().and_then(parse_svf_var_id) else {
+            continue;
+        };
+        return_vars.push(llvm_var);
+    }
+    return_vars.sort_unstable();
+    return_vars.dedup();
+    if return_vars.len() != 1 {
+        return false;
+    }
+
+    let mut definitions: BTreeMap<usize, Vec<(String, Vec<usize>)>> = BTreeMap::new();
+    for (node_id, node) in &icfg.ordered_nodes {
+        if llvm_function_from_global_node_id(node_id) != Some(function)
+            || llvm_call_suffix_from_global_node_id(node_id) != Some(callsite)
+        {
+            continue;
+        }
+        let GlobalICFGNode::Llvm(llvm) = node else { continue; };
+        for stmt in &llvm.svf_statements {
+            let Some(result) = stmt.result_var_id() else { continue; };
+            let mut sources = llvm_flow_sources(stmt);
+            sources.sort_unstable();
+            sources.dedup();
+            definitions
+                .entry(result)
+                .or_default()
+                .push((stmt.stmt_type.clone(), sources));
+        }
+    }
+
+    exact_single_source_svf_flow(
+        &definitions,
+        return_vars[0],
+        allocation_result,
+        &mut BTreeSet::new(),
+    )
+}
+
+fn c_malloc_origin_return_basis(
+    icfg: &GlobalICFGOrdered,
+    allocation: &AbstractAllocId,
+    producer_call_node: &str,
+    tested_variable: &ProgramVarId,
+) -> Option<&'static str> {
+    let AllocationSiteId::CCall { node_id, allocator } = &allocation.site else {
+        return None;
+    };
+    if !matches!(allocator.as_str(), "malloc" | "calloc" | "realloc") {
+        return None;
+    }
+    if node_id == producer_call_node {
+        // Phase-B bodyless contract materialization: the Rust call destination
+        // is the nullable allocator result itself.  RN1 is allowed here only
+        // because a CCall{allocator=realloc} site can be materialized by the
+        // identity producer solely after a MUST-null proof for formal 0.
+        return Some("rust_foreign_decl_c_malloc_contract_v1");
+    }
+    if allocator == "realloc" {
+        // Represented-C realloc remains outside AGE1: the current SVF return
+        // proof does not carry the independent MUST-null source certificate.
+        return None;
+    }
+    if node_id.ends_with(&format!("::{producer_call_node}"))
+        && represented_c_allocator_exact_return(
+            icfg,
+            node_id,
+            producer_call_node,
+            tested_variable,
+        )
+    {
+        return Some("svf_single_source_c_allocator_return_v1");
+    }
+    None
+}
+
+fn allocation_existence_guard_records(
+    icfg: &GlobalICFGOrdered,
+    identity_state: &AllocationIdentityState,
+) -> Vec<AllocationExistenceGuardRecord> {
+    let nodes: BTreeMap<&str, &GlobalICFGNode> = icfg
+        .ordered_nodes
+        .iter()
+        .map(|(id, node)| (id.as_str(), node))
+        .collect();
+    let canonical_edges: BTreeSet<(String, String)> = icfg
+        .icfg_edges
+        .iter()
+        .map(|edge| (edge.source.clone(), edge.destination.clone()))
+        .collect();
+    let mut records = BTreeSet::new();
+
+    for (call_node_id, node) in &icfg.ordered_nodes {
+        let GlobalICFGNode::Mir(block) = node else { continue; };
+        let Some(MirTerminator::Call {
+            callee_def_path: Some(callee_def_path),
+            arguments,
+            return_place,
+            return_target: Some(return_target),
+            ..
+        }) = block.terminator.as_ref() else { continue; };
+        if !is_raw_pointer_is_null_def_path(callee_def_path) || arguments.len() != 1 {
+            continue;
+        }
+
+        let Some(scope) = mir_function_scope_from_node_id(call_node_id) else { continue; };
+        let function = scope.strip_prefix("rust::").unwrap_or(&scope);
+        let Some(tested_variable) = ProgramVarId::rust(function, &arguments[0].arg) else { continue; };
+        let Some(predicate_result_variable) = ProgramVarId::rust(function, return_place) else { continue; };
+
+        let call_identity = identity_state
+            .by_node
+            .get(call_node_id)
+            .cloned()
+            .unwrap_or_default();
+        let allocations = call_identity.points_to(&tested_variable);
+        if allocations.len() != 1 {
+            continue;
+        }
+        let allocation = allocations.iter().next().expect("singleton checked");
+        let Some(producer_call_node) = rust_call_producing_variable(
+            icfg,
+            call_node_id,
+            &tested_variable,
+        ) else { continue; };
+        let Some(allocation_return_basis) = c_malloc_origin_return_basis(
+            icfg,
+            allocation,
+            producer_call_node,
+            &tested_variable,
+        ) else { continue; };
+
+        let Some(switch_node_id) = canonical_rust_block_target(call_node_id, return_target) else { continue; };
+        let Some(GlobalICFGNode::Mir(switch_block)) = nodes.get(switch_node_id.as_str()).copied() else { continue; };
+        let Some(MirTerminator::SwitchInt { discr, targets, otherwise, .. }) = switch_block.terminator.as_ref() else { continue; };
+        let Some(discr_variable) = ProgramVarId::rust(function, discr) else { continue; };
+        if discr_variable != predicate_result_variable {
+            continue;
+        }
+
+        let Some(otherwise) = otherwise.as_deref() else { continue; };
+        let Some(otherwise_node) = canonical_rust_block_target(&switch_node_id, otherwise) else { continue; };
+        let mut false_successor = None;
+        let mut true_successor = None;
+        for target in targets {
+            let Some((value, block)) = parse_switch_target(target) else { continue; };
+            let Some(target_node) = canonical_rust_block_target(&switch_node_id, block) else { continue; };
+            match value {
+                0 => false_successor = Some(target_node),
+                1 => true_successor = Some(target_node),
+                _ => {}
+            }
+        }
+
+        // A boolean SwitchInt may encode one explicit value plus `otherwise`.
+        // `is_null == true` is the null branch; false is the non-null branch.
+        let (null_successor, non_null_successor) = match (true_successor, false_successor) {
+            (Some(t), Some(f)) => (t, f),
+            (Some(t), None) => (t, otherwise_node),
+            (None, Some(f)) => (otherwise_node, f),
+            (None, None) => continue,
+        };
+        if null_successor == non_null_successor {
+            continue;
+        }
+        if !canonical_edges.contains(&(call_node_id.clone(), switch_node_id.clone()))
+            || !canonical_edges.contains(&(switch_node_id.clone(), null_successor.clone()))
+            || !canonical_edges.contains(&(switch_node_id.clone(), non_null_successor.clone()))
+        {
+            continue;
+        }
+
+        records.insert(AllocationExistenceGuardRecord {
+            allocation: stable_allocation_id(allocation),
+            producer_call_node: producer_call_node.to_string(),
+            predicate_call_node: call_node_id.clone(),
+            switch_node: switch_node_id,
+            tested_variable: tested_variable.canonical_string(),
+            predicate_result_variable: predicate_result_variable.canonical_string(),
+            null_successor,
+            non_null_successor,
+            callee_def_path: callee_def_path.clone(),
+            allocation_return_basis,
+            basis: "rust_raw_pointer_is_null_switch_v1",
+        });
+    }
+
+    records.into_iter().collect()
+}
+
+
+fn has_represented_external_body_at(icfg: &GlobalICFGOrdered, node_id: &str) -> bool {
+    icfg.ordered_nodes.iter().any(|(_, candidate)| {
+        matches!(
+            candidate,
+            GlobalICFGNode::DummyCall(dummy)
+                if !dummy.is_internal.unwrap_or(false)
+                    && dummy.incoming_edge == node_id
+                    && dummy.outgoing_edge.starts_with("llvm::")
+        )
+    })
+}
+
+fn is_bodyless_c_realloc_call(
+    function_called: &str,
+    call_text: &str,
+    callee_def_path: Option<&str>,
+    has_internal_rust_branch: bool,
+    ffi_functions: &HashSet<String>,
+) -> bool {
+    // A Rust foreign item declared in `extern "C" { ... }` has a DefId local
+    // to the selected crate.  `DefId::is_local()` therefore does *not* mean
+    // that a local MIR body exists.  Phase B already uses the correct
+    // proof boundary: exact foreign-declaration membership plus absence of an
+    // internal Rust call branch.  Reuse that boundary here.
+    if has_internal_rust_branch {
+        return false;
+    }
+
+    let function_called = function_called.trim();
+    let call_text = call_text.trim();
+    let declared = ffi_functions.contains("realloc")
+        && (function_called == "realloc"
+            || call_text == "realloc"
+            || call_text.starts_with("realloc(")
+            || call_text.contains(" realloc(")
+            || callee_def_path.is_some_and(|path| {
+                path == "realloc" || path.ends_with("::realloc")
+            }));
+    let libc = (function_called.contains("libc::") && function_called.contains("::realloc"))
+        || (call_text.contains("libc::") && call_text.contains("::realloc("))
+        || callee_def_path.is_some_and(|path| {
+            path.contains("libc::") && path.ends_with("::realloc")
+        });
+    declared || libc
+}
+
+fn reallocation_boundary_records(
+    icfg: &GlobalICFGOrdered,
+    identity_state: &AllocationIdentityState,
+    ffi_functions: &HashSet<String>,
+) -> Vec<ReallocationBoundaryRecord> {
+    let mut records = BTreeSet::new();
+
+    for (node_id, node) in &icfg.ordered_nodes {
+        let GlobalICFGNode::Mir(block) = node else { continue; };
+        let Some(MirTerminator::Call {
+            details,
+            function_called,
+            callee_def_path,
+            arguments,
+            return_place,
+            ..
+        }) = block.terminator.as_ref() else { continue; };
+        let has_internal_rust_branch = icfg
+            .rust_calls
+            .iter()
+            .any(|call| call.call_node == node_id.as_str());
+        if arguments.is_empty()
+            || !is_bodyless_c_realloc_call(
+                function_called,
+                details,
+                callee_def_path.as_deref(),
+                has_internal_rust_branch,
+                ffi_functions,
+            )
+            || has_represented_external_body_at(icfg, node_id)
+        {
+            continue;
+        }
+
+        let Some(scope) = mir_function_scope_from_node_id(node_id) else { continue; };
+        let function = scope.strip_prefix("rust::").unwrap_or(&scope);
+        let Some(source_variable) = ProgramVarId::rust(function, &arguments[0].arg) else { continue; };
+        let Some(result_variable) = ProgramVarId::rust(function, return_place) else { continue; };
+        let memory = identity_state.by_node.get(node_id).cloned().unwrap_or_default();
+
+        for allocation in memory.points_to(&source_variable) {
+            let source_contract = allocation_contract(&allocation);
+            let legacy_valid_source = source_contract.family == "c_malloc"
+                && matches!(source_contract.operation, "malloc" | "calloc" | "realloc");
+            records.insert(ReallocationBoundaryRecord {
+                node: node_id.clone(),
+                source_allocation: stable_allocation_id(&allocation),
+                source_variable: source_variable.canonical_string(),
+                result_variable: result_variable.canonical_string(),
+                // This field is the family required by the realloc consumer,
+                // not a reclassification of the source allocation.
+                family: "c_malloc",
+                operation: "realloc",
+                certainty: "may_abstract",
+                status: "conditional_unmodeled",
+                basis: if legacy_valid_source {
+                    "rust_foreign_decl_c_realloc_boundary_v1"
+                } else {
+                    "rust_foreign_decl_c_realloc_allocptr_family_v2"
+                },
+            });
+        }
+    }
+
+    records.into_iter().collect()
+}
+
+
+fn positive_nonzero_usize_constant(argument: &str) -> bool {
+    let t = argument.trim();
+    let Some(rest) = t.strip_prefix("const ") else { return false; };
+    let Some(digits) = rest.strip_suffix("_usize") else { return false; };
+    !digits.is_empty()
+        && digits.chars().all(|ch| ch.is_ascii_digit())
+        && digits.parse::<u128>().is_ok_and(|value| value > 0)
+}
+
+fn definitely_zero_usize_constant(argument: &str) -> bool {
+    let t = argument.trim();
+    let Some(rest) = t.strip_prefix("const ") else { return false; };
+    let Some(digits) = rest.strip_suffix("_usize") else { return false; };
+    !digits.is_empty()
+        && digits.chars().all(|ch| ch.is_ascii_digit())
+        && digits.parse::<u128>().is_ok_and(|value| value == 0)
+}
+
+fn exact_rust_local(function: &str, raw: &str) -> Option<ProgramVarId> {
+    let raw = raw.trim();
+    let digits = if let Some(rest) = raw.strip_prefix('_') {
+        rest
+    } else if let Some(rest) = raw.strip_prefix("Local(_") {
+        rest.strip_suffix(") [mutable]")
+            .or_else(|| rest.strip_suffix(')'))?
+    } else {
+        return None;
+    };
+    if digits.is_empty() || !digits.chars().all(|ch| ch.is_ascii_digit()) {
+        return None;
+    }
+    let local = digits.parse::<u32>().ok()?;
+    Some(ProgramVarId::Rust {
+        function: function.to_string(),
+        local,
+    })
+}
+
+fn exact_mir_copy_source(function: &str, rvalue: &str) -> Option<ProgramVarId> {
+    let source = rvalue.trim().strip_prefix("copy ")?;
+    exact_rust_local(function, source)
+}
+
+/// Certify the MIR-local relation between a logical result local and the
+/// actual operand consumed by a call terminator in the same basic block.
+///
+/// The accepted vocabulary is intentionally closed: either the call consumes
+/// the result local directly, or its operand local has exactly one definition
+/// in this block and that definition is `operand = copy result`.  No casts,
+/// projections, dereferences, moves, transitive copies, or pretty-source
+/// equivalence are accepted.
+fn rust_call_operand_correlation_basis(
+    block: &crate::structs::MirBasicBlock,
+    function: &str,
+    canonical_result: &str,
+    raw_argument: &str,
+) -> Option<(&'static str, String)> {
+    let argument = exact_rust_local(function, raw_argument)?;
+    let argument_canonical = argument.canonical_string();
+    if argument_canonical == canonical_result {
+        return Some(("rust_mir_direct_result_operand_v1", argument_canonical));
+    }
+
+    let mut defining_copy_count = 0usize;
+    for statement in &block.statements {
+        let Some(place) = statement
+            .place
+            .as_deref()
+            .and_then(|raw| exact_rust_local(function, raw))
+        else {
+            continue;
+        };
+        if place != argument {
+            continue;
+        }
+        let Some(source) = statement
+            .rvalue
+            .as_deref()
+            .and_then(|raw| exact_mir_copy_source(function, raw))
+        else {
+            return None;
+        };
+        if source.canonical_string() != canonical_result {
+            return None;
+        }
+        defining_copy_count += 1;
+    }
+    if defining_copy_count != 1 {
+        return None;
+    }
+
+    Some((
+        "rust_mir_single_local_copy_result_operand_v1",
+        argument_canonical,
+    ))
+}
+
+/// Outcome correlation is stricter than generic call-argument correlation:
+/// the logical result local must still denote the value returned by realloc
+/// throughout the predicate block.  This closes the same-basic-block gap that
+/// a direct CFG-edge proof alone cannot exclude.
+fn rust_realloc_outcome_operand_correlation_basis(
+    block: &crate::structs::MirBasicBlock,
+    function: &str,
+    canonical_result: &str,
+    raw_argument: &str,
+) -> Option<(&'static str, String)> {
+    if block.statements.iter().any(|statement| {
+        statement
+            .place
+            .as_deref()
+            .and_then(|raw| exact_rust_local(function, raw))
+            .is_some_and(|variable| variable.canonical_string() == canonical_result)
+    }) {
+        return None;
+    }
+    rust_call_operand_correlation_basis(block, function, canonical_result, raw_argument)
+}
+
+fn rust_node_redefines_canonical_variable(
+    node: &GlobalICFGNode,
+    function: &str,
+    canonical_variable: &str,
+) -> bool {
+    let GlobalICFGNode::Mir(block) = node else { return false; };
+    if block.statements.iter().any(|statement| {
+        statement.place.as_deref().and_then(|place| ProgramVarId::rust(function, place))
+            .is_some_and(|variable| variable.canonical_string() == canonical_variable)
+    }) {
+        return true;
+    }
+    matches!(
+        block.terminator.as_ref(),
+        Some(MirTerminator::Call { return_place, .. })
+            if ProgramVarId::rust(function, return_place)
+                .is_some_and(|variable| variable.canonical_string() == canonical_variable)
+    )
+}
+
+fn rust_node_consumes_result_obligation(
+    icfg: &GlobalICFGOrdered,
+    node_id: &str,
+    node: &GlobalICFGNode,
+    function: &str,
+    canonical_variable: &str,
+    ffi_functions: &HashSet<String>,
+) -> bool {
+    let GlobalICFGNode::Mir(block) = node else { return false; };
+    let Some(MirTerminator::Call {
+        details,
+        function_called,
+        callee_def_path,
+        arguments,
+        ..
+    }) = block.terminator.as_ref() else { return false; };
+    let Some(first) = arguments.first() else {
+        return false;
+    };
+    if rust_call_operand_correlation_basis(
+        block,
+        function,
+        canonical_variable,
+        &first.arg,
+    )
+    .is_none()
+    {
+        return false;
+    }
+    let has_internal_rust_branch = icfg.rust_calls.iter().any(|call| call.call_node == node_id);
+    let is_realloc = is_bodyless_c_realloc_call(
+        function_called,
+        details,
+        callee_def_path.as_deref(),
+        has_internal_rust_branch,
+        ffi_functions,
+    ) && !has_represented_external_body_at(icfg, node_id);
+    is_realloc || is_deallocation_call(function_called, details, ffi_functions)
+}
+
+fn result_value_flow_is_stable_to_deallocation(
+    icfg: &GlobalICFGOrdered,
+    nodes: &BTreeMap<&str, &GlobalICFGNode>,
+    successors: &BTreeMap<String, BTreeSet<String>>,
+    predecessors: &BTreeMap<String, BTreeSet<String>>,
+    start: &str,
+    target: &str,
+    function: &str,
+    canonical_variable: &str,
+    ffi_functions: &HashSet<String>,
+) -> bool {
+    let forward = reachable_from(start, successors);
+    if !forward.contains(target) {
+        return false;
+    }
+    let backward = reachable_from(target, predecessors);
+    for node_id in forward.intersection(&backward) {
+        let Some(node) = nodes.get(node_id.as_str()).copied() else { return false; };
+        // Statements execute before the terminator, including in the target
+        // block. Therefore a target-block assignment to the realloc-result
+        // local invalidates the proof even though the target terminator itself
+        // is the certified deallocation we are trying to justify.
+        if rust_node_redefines_canonical_variable(node, function, canonical_variable) {
+            return false;
+        }
+        // The target deallocation is the permitted final consumer. Any earlier
+        // free/realloc of the same logical result local invalidates the proof.
+        if node_id != target
+            && rust_node_consumes_result_obligation(
+                icfg,
+                node_id,
+                node,
+                function,
+                canonical_variable,
+                ffi_functions,
+            )
+        {
+            return false;
+        }
+    }
+    true
+}
+
+fn conditional_reallocation_records(
+    icfg: &GlobalICFGOrdered,
+    ffi_functions: &HashSet<String>,
+    boundaries: &[ReallocationBoundaryRecord],
+    existence_guards: &[AllocationExistenceGuardRecord],
+) -> Vec<ConditionalReallocationRecord> {
+    let nodes: BTreeMap<&str, &GlobalICFGNode> = icfg
+        .ordered_nodes
+        .iter()
+        .map(|(id, node)| (id.as_str(), node))
+        .collect();
+    let canonical_edges: BTreeSet<(String, String)> = icfg
+        .icfg_edges
+        .iter()
+        .map(|edge| (edge.source.clone(), edge.destination.clone()))
+        .collect();
+    let mut successors: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut predecessors: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for (source, destination) in &canonical_edges {
+        successors.entry(source.clone()).or_default().insert(destination.clone());
+        predecessors.entry(destination.clone()).or_default().insert(source.clone());
+    }
+    let mut records = BTreeSet::new();
+
+    for boundary in boundaries {
+        // CR1 is a valid-realloc outcome protocol.  RBF2 family-consumer
+        // records deliberately describe sources that are not certified as
+        // valid c_malloc realloc origins, so they must never seed CR1.
+        if boundary.basis != "rust_foreign_decl_c_realloc_boundary_v1" {
+            continue;
+        }
+        let Some(source_guard) = existence_guards.iter().find(|guard| {
+            guard.allocation == boundary.source_allocation
+                && guard.tested_variable == boundary.source_variable
+                && guard.non_null_successor == boundary.node
+        }) else { continue; };
+
+        let Some(GlobalICFGNode::Mir(realloc_block)) = nodes.get(boundary.node.as_str()).copied() else { continue; };
+        let Some(MirTerminator::Call {
+            callee_def_path: Some(reallocation_callee_def_path),
+            arguments,
+            ..
+        }) = realloc_block.terminator.as_ref() else { continue; };
+        if arguments.len() < 2 || !positive_nonzero_usize_constant(&arguments[1].arg) {
+            continue;
+        }
+        let Some(scope) = mir_function_scope_from_node_id(&boundary.node) else { continue; };
+        let function = scope.strip_prefix("rust::").unwrap_or(&scope);
+
+        let mut outcome_candidates = Vec::new();
+        for (predicate_node, candidate) in &icfg.ordered_nodes {
+            if mir_function_scope_from_node_id(predicate_node).as_deref() != Some(scope.as_str())
+                || !canonical_edges.contains(&(boundary.node.clone(), predicate_node.clone()))
+            {
+                continue;
+            }
+            let GlobalICFGNode::Mir(predicate_block) = candidate else { continue; };
+            let Some(MirTerminator::Call {
+                callee_def_path: Some(outcome_callee_def_path),
+                arguments,
+                return_place,
+                return_target: Some(return_target),
+                ..
+            }) = predicate_block.terminator.as_ref() else { continue; };
+            if !is_raw_pointer_is_null_def_path(outcome_callee_def_path) || arguments.len() != 1 {
+                continue;
+            }
+            let Some((outcome_value_flow_basis, outcome_argument_variable)) =
+                rust_realloc_outcome_operand_correlation_basis(
+                    predicate_block,
+                    function,
+                    &boundary.result_variable,
+                    &arguments[0].arg,
+                )
+            else {
+                continue;
+            };
+            let Some(predicate_result) = ProgramVarId::rust(function, return_place) else { continue; };
+            let Some(switch_node) = canonical_rust_block_target(predicate_node, return_target) else { continue; };
+            let Some(GlobalICFGNode::Mir(switch_block)) = nodes.get(switch_node.as_str()).copied() else { continue; };
+            let Some(MirTerminator::SwitchInt { discr, targets, otherwise, .. }) = switch_block.terminator.as_ref() else { continue; };
+            let Some(discr_variable) = ProgramVarId::rust(function, discr) else { continue; };
+            if discr_variable != predicate_result {
+                continue;
+            }
+            let Some(otherwise) = otherwise.as_deref() else { continue; };
+            let Some(otherwise_node) = canonical_rust_block_target(&switch_node, otherwise) else { continue; };
+            let mut false_successor = None;
+            let mut true_successor = None;
+            for target in targets {
+                let Some((value, block)) = parse_switch_target(target) else { continue; };
+                let Some(target_node) = canonical_rust_block_target(&switch_node, block) else { continue; };
+                match value {
+                    0 => false_successor = Some(target_node),
+                    1 => true_successor = Some(target_node),
+                    _ => {}
+                }
+            }
+            let (failure_successor, success_successor) = match (true_successor, false_successor) {
+                (Some(t), Some(f)) => (t, f),
+                (Some(t), None) => (t, otherwise_node),
+                (None, Some(f)) => (otherwise_node, f),
+                (None, None) => continue,
+            };
+            if failure_successor == success_successor
+                || !canonical_edges.contains(&(predicate_node.clone(), switch_node.clone()))
+                || !canonical_edges.contains(&(switch_node.clone(), failure_successor.clone()))
+                || !canonical_edges.contains(&(switch_node.clone(), success_successor.clone()))
+            {
+                continue;
+            }
+            outcome_candidates.push((
+                predicate_node.clone(),
+                outcome_argument_variable,
+                predicate_result.canonical_string(),
+                switch_node,
+                failure_successor,
+                success_successor,
+                outcome_callee_def_path.clone(),
+                outcome_value_flow_basis,
+            ));
+        }
+        if outcome_candidates.len() != 1 {
+            continue;
+        }
+        let (
+            outcome_predicate_call_node,
+            outcome_argument_variable,
+            outcome_predicate_result_variable,
+            outcome_switch_node,
+            failure_successor,
+            success_successor,
+            outcome_callee_def_path,
+            outcome_value_flow_basis,
+        ) = outcome_candidates.pop().expect("singleton checked");
+
+        let reachable_success = reachable_from(&success_successor, &successors);
+        let mut result_deallocations = BTreeSet::new();
+        for (node_id, candidate) in &icfg.ordered_nodes {
+            if !reachable_success.contains(node_id) {
+                continue;
+            }
+            let GlobalICFGNode::Mir(block) = candidate else { continue; };
+            let Some(MirTerminator::Call {
+                details,
+                function_called,
+                callee_def_path,
+                arguments,
+                ..
+            }) = block.terminator.as_ref() else { continue; };
+            if arguments.len() != 1
+                || !(is_c_free_function(function_called, ffi_functions)
+                    || is_c_free_call_text(details, ffi_functions))
+            {
+                continue;
+            }
+            let has_internal_rust_branch = icfg
+                .rust_calls
+                .iter()
+                .any(|call| call.call_node == node_id.as_str());
+            if has_internal_rust_branch || has_represented_external_body_at(icfg, node_id) {
+                continue;
+            }
+            let Some((argument_correlation_basis, argument_variable)) =
+                rust_call_operand_correlation_basis(
+                    block,
+                    function,
+                    &boundary.result_variable,
+                    &arguments[0].arg,
+                )
+            else {
+                continue;
+            };
+            let Some(callee_def_path) = callee_def_path.clone() else { continue; };
+            if !result_value_flow_is_stable_to_deallocation(
+                icfg,
+                &nodes,
+                &successors,
+                &predecessors,
+                &success_successor,
+                node_id,
+                function,
+                &boundary.result_variable,
+                ffi_functions,
+            ) {
+                continue;
+            }
+            result_deallocations.insert(ConditionalReallocationResultDeallocationRecord {
+                node: node_id.clone(),
+                variable: boundary.result_variable.clone(),
+                argument_variable,
+                callee_def_path,
+                family: "c_malloc",
+                operation: "free",
+                basis: "rust_foreign_decl_c_free_result_v1",
+                argument_correlation_basis,
+                value_flow_basis: "rust_mir_result_no_redefinition_all_paths_v1",
+            });
+        }
+
+        records.insert(ConditionalReallocationRecord {
+            source_allocation: boundary.source_allocation.clone(),
+            reallocation_node: boundary.node.clone(),
+            source_variable: boundary.source_variable.clone(),
+            result_variable: boundary.result_variable.clone(),
+            source_existence_predicate_call_node: source_guard.predicate_call_node.clone(),
+            outcome_predicate_call_node,
+            outcome_argument_variable,
+            outcome_predicate_result_variable,
+            outcome_switch_node,
+            failure_successor,
+            success_successor,
+            reallocation_callee_def_path: reallocation_callee_def_path.clone(),
+            outcome_callee_def_path,
+            family: "c_malloc",
+            operation: "realloc",
+            certainty: "may_abstract",
+            size_semantics: "positive_nonzero_constant",
+            status: "conditional_guarded",
+            basis: "rust_foreign_decl_c_realloc_is_null_switch_v1",
+            outcome_correlation_basis: "direct_cfg_edge_realloc_to_is_null_v1",
+            outcome_value_flow_basis,
+            result_deallocations: result_deallocations.into_iter().collect(),
+        });
+    }
+
+    records.into_iter().collect()
 }
 
 fn typed_edge_records(icfg: &GlobalICFGOrdered) -> Vec<TypedEdgeRecord> {
@@ -1159,14 +2348,24 @@ fn allocation_contract(allocation: &AbstractAllocId) -> AllocationContract {
     // v6N-r1 deliberately preserves the v1 allocator-origin boundary.  The
     // new v2 capability strengthens deallocator evidence only; this avoids
     // silently re-certifying legacy origin summaries that were not designed as
-    // producer-certified contracts.  Known C family naming follows LLVM LangRef's
-    // `"alloc-family"="malloc"` family for malloc/calloc/realloc/free:
-    // https://llvm.org/docs/LangRef.html#alloc-family
+    // producer-certified contracts.  Known C family naming uses `c_malloc` for
+    // malloc/calloc and for POSIX allocation APIs explicitly specified as fresh
+    // storage releasable with `free` (`strdup`, plus RN1 `realloc(NULL,n)`).  LLVM's
+    // `"alloc-family"="malloc"` motivates the malloc/calloc/realloc/free family
+    // relation, while the strdup extension is grounded separately in POSIX.
     match &allocation.site {
         AllocationSiteId::CCall { allocator, .. } if allocator == "malloc" =>
             AllocationContract::v1("c_malloc", "malloc", "c"),
         AllocationSiteId::CCall { allocator, .. } if allocator == "calloc" =>
             AllocationContract::v1("c_malloc", "calloc", "c"),
+        AllocationSiteId::CCall { allocator, .. } if allocator == "strdup" =>
+            AllocationContract::v1("c_malloc", "strdup", "c"),
+        // RN1: this site is emitted only when the identity producer has a
+        // MUST-null proof for realloc formal 0. POSIX/C semantics therefore
+        // classify the returned non-null object exactly like malloc-family
+        // storage, while the nullable result remains MAY in CQPL.
+        AllocationSiteId::CCall { allocator, .. } if allocator == "realloc" =>
+            AllocationContract::v1("c_malloc", "realloc", "c"),
         AllocationSiteId::RustCall { callee, .. } if memory_events::is_modeled_fresh_allocation(callee) => {
             let operation = if (callee.contains("std::boxed::Box::<") || callee.contains("alloc::boxed::Box::<"))
                 && (callee.ends_with("::new") || callee.contains("::new::<"))
@@ -1691,6 +2890,51 @@ fn external_deallocation_effect_records(
     out.into_iter().collect()
 }
 
+
+fn external_formal_memory_effect_records(
+    icfg: &GlobalICFGOrdered,
+    ffi_functions: &HashSet<String>,
+    represented_c_functions: &HashSet<String>,
+) -> Vec<ExternalFormalMemoryEffectRecord> {
+    let mut out = BTreeSet::new();
+    for (node_id, node) in &icfg.ordered_nodes {
+        let GlobalICFGNode::Mir(bb) = node else { continue; };
+        let Some(MirTerminator::Call {
+            function_called,
+            arguments,
+            ..
+        }) = bb.terminator.as_ref() else { continue; };
+        let Some(contract) = external_function_memory_contract(
+            function_called,
+            arguments.len(),
+            ffi_functions,
+            represented_c_functions,
+        ) else { continue; };
+        let Some(scope) = mir_function_scope_from_node_id(node_id) else { continue; };
+        let function = scope.strip_prefix("rust::").unwrap_or(&scope);
+
+        for rule in contract.rules {
+            if !external_formal_memory_effect_rule_active(&rule, arguments) { continue; }
+            let Some(argument) = arguments.get(rule.formal_index) else { continue; };
+            let Some(event_variable) = canonical_mir_local(&argument.arg) else { continue; };
+            let Some(actual_variable) = ProgramVarId::rust(function, &argument.arg) else { continue; };
+            out.insert(ExternalFormalMemoryEffectRecord {
+                node: node_id.clone(),
+                callee: contract.callee.to_string(),
+                semantic_class: contract.semantic_class,
+                formal_index: rule.formal_index,
+                access: rule.access,
+                event_variable,
+                actual_variable: actual_variable.canonical_string(),
+                size_argument_index: rule.size_argument_index,
+                basis: rule.basis,
+                semantic_sources: rule.semantic_sources.to_vec(),
+            });
+        }
+    }
+    out.into_iter().collect()
+}
+
 /// Compute the node set reachable from one explicit ICFG entry.
 ///
 /// v6K intentionally uses the serialized canonical edge relation here.  No
@@ -1985,6 +3229,23 @@ fn allocation_memory_annotation(
         }
     }
 
+    // RN1: legacy AbstractMemory has no dedicated C realloc(NULL, n) transfer.
+    // The identity producer nevertheless certifies a fresh nullable allocation
+    // for that special case.  Preserve sound lifecycle information by giving
+    // the fresh site TOP whenever no stronger legacy cell is available.
+    for allocations in identity.points_to.values().chain(identity.place_points_to.values()) {
+        for allocation in allocations {
+            if matches!(
+                &allocation.site,
+                AllocationSiteId::CCall { allocator, .. } if allocator == "realloc"
+            ) {
+                values
+                    .entry(stable_allocation_id(allocation))
+                    .or_insert(CellValue::TOP);
+            }
+        }
+    }
+
     AbstractAllocationMemoryAnnotation {
         cells: values
             .into_iter()
@@ -2227,6 +3488,178 @@ fn llvm_node_source_anchor(llvm: &crate::structs::LlvmJsonNode) -> Option<Source
     })
 }
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ExternalFormalMemoryEffectRule {
+    formal_index: usize,
+    access: &'static str,
+    size_argument_index: Option<usize>,
+    basis: &'static str,
+    semantic_sources: &'static [&'static str],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ExternalFunctionMemoryContract {
+    callee: &'static str,
+    semantic_class: &'static str,
+    rules: Vec<ExternalFormalMemoryEffectRule>,
+}
+
+fn external_formal_memory_effect_rule_active(
+    rule: &ExternalFormalMemoryEffectRule,
+    arguments: &[MirCallArgument],
+) -> bool {
+    let Some(size_index) = rule.size_argument_index else { return true; };
+    let Some(size_argument) = arguments.get(size_index) else { return false; };
+    // EFM1 is a MAY summary for unknown/positive extents, but a statically exact
+    // zero byte-count cannot dereference the byte range for the modeled APIs.
+    !definitely_zero_usize_constant(&size_argument.arg)
+}
+
+/// EFM1 closed semantic boundary for declaration-only external functions.
+///
+/// Scientific separation invariant:
+/// - SVF/LLVM knowledge classifies the *external API formal role* only.
+/// - Rust MIR/AllocationIdentityState supplies the actual operand and AbstractAllocId.
+/// - no SVF variable/function object is equated with a Rust MIR variable/function object.
+///
+/// Official provider semantics from which this CREMA-owned versioned contract is derived:
+/// - SVF ExtAPI exposes MEMCPY/MEMSET annotations and AbsExtAPI models strlen,
+///   memcpy and memset: https://svf-tools.github.io/SVF-doxygen/html/classSVF_1_1ExtAPI.html
+///   and https://svf-tools.github.io/SVF-doxygen/html/classSVF_1_1AbsExtAPI.html
+/// - LLVM TargetLibraryInfo validates known library functions by name+prototype;
+///   LLVM16 BuildLibCalls/MemoryLocation provide the read/write argument roles:
+///   https://llvm.org/doxygen/classllvm_1_1TargetLibraryInfo.html
+///   https://llvm.org/doxygen/BuildLibCalls_8h.html
+///   https://llvm.org/doxygen/classllvm_1_1MemoryLocation.html
+/// - POSIX write consumes bytes from buf: https://pubs.opengroup.org/onlinepubs/9690949599/functions/write.html
+///
+/// This function is deliberately closed and fail-closed at the current artifact boundary.
+/// It does not claim that SVF/TLI ran on this bodyless call: their documented semantics
+/// define the frozen CREMA contract. EFM1 v1 admits only an exact selected-crate
+/// foreign declaration name with exact arity; represented C bodies are excluded to avoid duplicating
+/// observed LLVM/SVF events. Prototype-level TLI validation is not reconstructed here.
+fn external_function_memory_contract(
+    function_called: &str,
+    argument_count: usize,
+    ffi_functions: &HashSet<String>,
+    represented_c_functions: &HashSet<String>,
+) -> Option<ExternalFunctionMemoryContract> {
+    fn admitted(
+        raw: &str,
+        name: &'static str,
+        ffi_functions: &HashSet<String>,
+        represented_c_functions: &HashSet<String>,
+    ) -> bool {
+        if represented_c_functions.contains(name) {
+            return false;
+        }
+        let t = raw.trim();
+        t == name && ffi_functions.contains(name)
+    }
+
+    let mk = |callee, semantic_class, rules| ExternalFunctionMemoryContract {
+        callee,
+        semantic_class,
+        rules,
+    };
+
+    if argument_count == 1 && admitted(function_called, "strlen", ffi_functions, represented_c_functions) {
+        return Some(mk(
+            "strlen",
+            "strlen_read_c_string_v1",
+            vec![ExternalFormalMemoryEffectRule {
+                formal_index: 0,
+                access: "read",
+                size_argument_index: None,
+                basis: "crema_efm1_closed_contract_v1",
+                semantic_sources: &["svf_absextapi_strlen_semantics_v1", "llvm16_tli_strlen_argmem_read_semantics_v1"],
+            }],
+        ));
+    }
+    if argument_count == 3 && admitted(function_called, "memset", ffi_functions, represented_c_functions) {
+        return Some(mk(
+            "memset",
+            "memset_v1",
+            vec![ExternalFormalMemoryEffectRule {
+                formal_index: 0,
+                access: "write",
+                size_argument_index: Some(2),
+                basis: "crema_efm1_closed_contract_v1",
+                semantic_sources: &["svf_extapi_memset_semantics_v1", "llvm16_tli_memset_arg0_writeonly_semantics_v1"],
+            }],
+        ));
+    }
+    if argument_count == 3 && admitted(function_called, "memcpy", ffi_functions, represented_c_functions) {
+        return Some(mk(
+            "memcpy",
+            "memcpy_v1",
+            vec![
+                ExternalFormalMemoryEffectRule {
+                    formal_index: 0,
+                    access: "write",
+                    size_argument_index: Some(2),
+                    basis: "crema_efm1_closed_contract_v1",
+                    semantic_sources: &["svf_extapi_memcpy_semantics_v1", "llvm16_tli_memcpy_arg0_writeonly_semantics_v1"],
+                },
+                ExternalFormalMemoryEffectRule {
+                    formal_index: 1,
+                    access: "read",
+                    size_argument_index: Some(2),
+                    basis: "crema_efm1_closed_contract_v1",
+                    semantic_sources: &["svf_extapi_memcpy_semantics_v1", "llvm16_tli_memcpy_arg1_readonly_semantics_v1"],
+                },
+            ],
+        ));
+    }
+    if argument_count == 3 && admitted(function_called, "memcmp", ffi_functions, represented_c_functions) {
+        return Some(mk(
+            "memcmp",
+            "memcmp_v1",
+            vec![
+                ExternalFormalMemoryEffectRule {
+                    formal_index: 0,
+                    access: "read",
+                    size_argument_index: Some(2),
+                    basis: "crema_efm1_closed_contract_v1",
+                    semantic_sources: &["llvm16_tli_memcmp_argmem_read_semantics_v1", "llvm16_memorylocation_memcmp_formal_semantics_v1"],
+                },
+                ExternalFormalMemoryEffectRule {
+                    formal_index: 1,
+                    access: "read",
+                    size_argument_index: Some(2),
+                    basis: "crema_efm1_closed_contract_v1",
+                    semantic_sources: &["llvm16_tli_memcmp_argmem_read_semantics_v1", "llvm16_memorylocation_memcmp_formal_semantics_v1"],
+                },
+            ],
+        ));
+    }
+    if argument_count == 3 && admitted(function_called, "write", ffi_functions, represented_c_functions) {
+        return Some(mk(
+            "write",
+            "posix_write_v1",
+            vec![ExternalFormalMemoryEffectRule {
+                formal_index: 1,
+                access: "read",
+                size_argument_index: Some(2),
+                basis: "crema_efm1_closed_contract_v1",
+                semantic_sources: &["posix_write_buffer_semantics_v1", "llvm16_tli_write_arg1_readonly_semantics_v1"],
+            }],
+        ));
+    }
+    None
+}
+
+fn represented_c_function_names(icfg: &GlobalICFGOrdered) -> HashSet<String> {
+    icfg.ordered_nodes
+        .iter()
+        .filter_map(|(_, node)| match node {
+            GlobalICFGNode::Llvm(llvm) => llvm.function_name.clone(),
+            _ => None,
+        })
+        .collect()
+}
+
 fn insert_event_source(
     events: &mut EventSourceMap,
     label: EventLabel,
@@ -2235,6 +3668,48 @@ fn insert_event_source(
     let anchors = events.entry(label).or_default();
     if let Some(anchor) = anchor {
         anchors.insert(anchor);
+    }
+}
+
+/// RN1 allocation events are identity-backed rather than name-backed.  A CCall
+/// site tagged `realloc` can only be created by the identity producer after a
+/// MUST-null source proof, so projecting that fresh site back to the MIR return
+/// local is the proof-carrying alloc event.  Ordinary realloc calls never create
+/// such an identity and therefore cannot acquire an alloc event here.
+fn add_realloc_null_allocation_event_source(
+    node_id: &str,
+    node: &GlobalICFGNode,
+    event_identity: &AllocationIdentityMemory,
+    events: &mut EventSourceMap,
+) {
+    let GlobalICFGNode::Mir(bb) = node else { return; };
+    let Some(term) = bb.terminator.as_ref() else { return; };
+    let anchor = mir_terminator_source_anchor(term);
+    let Some(scope) = mir_function_scope_from_node_id(node_id) else { return; };
+    let function = scope.strip_prefix("rust::").unwrap_or(&scope);
+
+    for (variable, allocations) in &event_identity.points_to {
+        let ProgramVarId::Rust { function: var_function, local } = variable else { continue; };
+        if var_function != function {
+            continue;
+        }
+        let is_fresh_realloc_null_site = allocations.iter().any(|allocation| {
+            matches!(
+                &allocation.site,
+                AllocationSiteId::CCall { node_id: site_node, allocator }
+                    if site_node == node_id && allocator == "realloc"
+            )
+        });
+        if is_fresh_realloc_null_site {
+            insert_event_source(
+                events,
+                EventLabel {
+                    predicate: "alloc",
+                    variable: format!("Local(_{local})"),
+                },
+                anchor.clone(),
+            );
+        }
     }
 }
 
@@ -2247,6 +3722,7 @@ fn event_sources_for_node(
     node: &GlobalICFGNode,
     llvm_names: &LlvmNameResolver,
     ffi_functions: &HashSet<String>,
+    represented_c_functions: &HashSet<String>,
 ) -> EventSourceMap {
     let mut events = EventSourceMap::new();
     match node {
@@ -2347,6 +3823,33 @@ fn event_sources_for_node(
                             }
                         }
 
+                        // EFM1: declaration-only external semantic memory effects.
+                        // The external API contract classifies formal positions; the
+                        // actual memory object remains the Rust MIR operand resolved by
+                        // CREMA's existing allocation-identity domain.
+                        if let Some(contract) = external_function_memory_contract(
+                            function_called,
+                            arguments.len(),
+                            ffi_functions,
+                            represented_c_functions,
+                        ) {
+                            for rule in contract.rules {
+                                if !external_formal_memory_effect_rule_active(&rule, arguments) { continue; }
+                                if let Some(argument) = arguments.get(rule.formal_index) {
+                                    if let Some(v) = canonical_mir_local(&argument.arg) {
+                                        insert_event_source(
+                                            &mut events,
+                                            EventLabel {
+                                                predicate: rule.access,
+                                                variable: v,
+                                            },
+                                            anchor.clone(),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+
                         if is_cstring_from_raw_read_summary(function_called)
                             || is_cstring_from_raw_read_summary(call_text)
                         {
@@ -2423,11 +3926,22 @@ fn event_sources_for_node(
                 match stmt.stmt_type.as_str() {
                     "LoadStmt" => {
                         if let Some(rhs) = stmt.rhs_var_id {
+                            let address = scoped_svf_var(rhs, node_id);
+                            // SVF models a source-level formal spill/reload as
+                            // Load/Store over an LLVM `alloca` stack slot.  The
+                            // identity analysis deliberately lets the pointed-to
+                            // allocation value flow through that carrier, but
+                            // the carrier access is not a read of the pointee.
+                            // Suppress only addresses structurally certified as
+                            // local stack slots; real pointee loads remain events.
+                            if llvm_names.is_stack_slot_address(&address) {
+                                continue;
+                            }
                             insert_event_source(
                                 &mut events,
                                 EventLabel {
                                     predicate: "read",
-                                    variable: llvm_names.resolve_svf(&scoped_svf_var(rhs, node_id)),
+                                    variable: llvm_names.resolve_svf(&address),
                                 },
                                 anchor.clone(),
                             );
@@ -2435,11 +3949,17 @@ fn event_sources_for_node(
                     }
                     "StoreStmt" => {
                         if let Some(lhs) = stmt.lhs_var_id {
+                            let address = scoped_svf_var(lhs, node_id);
+                            // As above, storing the pointer value into its local
+                            // `alloca` carrier is not a write through that pointer.
+                            if llvm_names.is_stack_slot_address(&address) {
+                                continue;
+                            }
                             insert_event_source(
                                 &mut events,
                                 EventLabel {
                                     predicate: "write",
-                                    variable: llvm_names.resolve_svf(&scoped_svf_var(lhs, node_id)),
+                                    variable: llvm_names.resolve_svf(&address),
                                 },
                                 anchor.clone(),
                             );
@@ -2461,9 +3981,15 @@ fn labels_for_node(
     llvm_names: &LlvmNameResolver,
     ffi_functions: &HashSet<String>,
 ) -> Vec<EventLabel> {
-    event_sources_for_node(node_id, node, llvm_names, ffi_functions)
-        .into_keys()
-        .collect()
+    event_sources_for_node(
+        node_id,
+        node,
+        llvm_names,
+        ffi_functions,
+        &HashSet::new(),
+    )
+    .into_keys()
+    .collect()
 }
 
 fn allocation_event_source_records_for_node(
@@ -2612,12 +4138,14 @@ fn is_raw_pointer_mem_drop(s: &str) -> bool {
 
 fn is_c_malloc_call(s: &str, ffi_functions: &HashSet<String>) -> bool {
     let t = s.trim();
-    if (t == "malloc" || t == "calloc") && ffi_functions.contains(t) {
+    if matches!(t, "malloc" | "calloc" | "strdup") && ffi_functions.contains(t) {
         return true;
     }
-    (t.contains("libc::") && (t.ends_with("::malloc") || t.ends_with("::calloc")))
+    (t.contains("libc::")
+        && (t.ends_with("::malloc") || t.ends_with("::calloc") || t.ends_with("::strdup")))
         || (ffi_functions.contains("malloc") && (t.starts_with("malloc(") || t.contains(" malloc(")))
         || (ffi_functions.contains("calloc") && (t.starts_with("calloc(") || t.contains(" calloc(")))
+        || (ffi_functions.contains("strdup") && (t.starts_with("strdup(") || t.contains(" strdup(")))
 }
 
 fn is_c_free_function(s: &str, ffi_functions: &HashSet<String>) -> bool {
@@ -2692,6 +4220,11 @@ struct LlvmNameResolver {
     svf_source: BTreeMap<Name, Name>,
     /// LLVM IR %N -> corresponding SVF result id.
     ir_to_svf: BTreeMap<Name, Name>,
+    /// Callsite-scoped SVF addresses that are structurally backed by a local
+    /// LLVM `alloca`.  These variables are pointer-value carrier cells, not
+    /// heap pointees.  Keeping this classification separate from `svf_source`
+    /// prevents spill/reload operations from becoming synthetic heap accesses.
+    stack_slot_addresses: BTreeSet<Name>,
 }
 
 impl LlvmNameResolver {
@@ -2699,6 +4232,23 @@ impl LlvmNameResolver {
         let mut out = Self::default();
         for (node_id, node) in &icfg.ordered_nodes {
             let GlobalICFGNode::Llvm(llvm) = node else { continue; };
+
+            // The pinned SVF exporter represents a local LLVM stack slot with
+            // an AddrStmt on the corresponding `alloca` instruction.  Record
+            // that address before following any StoreStmt provenance edge: a
+            // later store of a heap pointer into the slot must not reclassify
+            // the slot address itself as the heap object being accessed.
+            if llvm_info_is_stack_alloca(&llvm.info) {
+                for stmt in &llvm.svf_statements {
+                    if stmt.stmt_type == "AddrStmt" {
+                        if let Some(lhs_id) = stmt.lhs_var_id {
+                            out.stack_slot_addresses
+                                .insert(scoped_svf_var(lhs_id, node_id));
+                        }
+                    }
+                }
+            }
+
             for stmt in &llvm.svf_statements {
                 let Some(lhs_id) = stmt.result_var_id() else { continue; };
                 let lhs = scoped_svf_var(lhs_id, node_id);
@@ -2735,6 +4285,18 @@ impl LlvmNameResolver {
     fn resolve_ir(&self, ir: &str) -> Option<Name> {
         self.ir_to_svf.get(ir).map(|svf| self.resolve_svf(svf))
     }
+
+    fn is_stack_slot_address(&self, name: &str) -> bool {
+        self.stack_slot_addresses.contains(name)
+    }
+}
+
+fn llvm_info_is_stack_alloca(info: &str) -> bool {
+    let instruction = info
+        .split_once('=')
+        .map(|(_, rhs)| rhs.trim_start())
+        .unwrap_or_else(|| info.trim_start());
+    instruction == "alloca" || instruction.starts_with("alloca ")
 }
 
 #[cfg(test)]
@@ -2762,6 +4324,308 @@ mod tests {
     fn canonical_mir_variable_parser_is_stable() {
         assert_eq!(canonical_mir_local("copy _12"), Some("Local(_12)".into()));
         assert_eq!(canonical_mir_local("Local(_7) [mutable]"), Some("Local(_7)".into()));
+    }
+
+    fn efm1_call(function_called: &str, args: &[&str]) -> GlobalICFGNode {
+        GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 0,
+            statements: vec![],
+            terminator: Some(MirTerminator::Call {
+                details: format!("call {function_called}"),
+                source_info: "<efm1-test>".into(),
+                function_called: function_called.into(),
+                callee_def_path: Some(function_called.into()),
+                deallocator_evidence: None,
+                allocation_disposition_evidence: None,
+                higher_order_evidence: None,
+                callee_is_local: false,
+                callback_def_paths: Vec::new(),
+                resolved_instance_callees: Vec::new(),
+                instance_dispatch_observed: false,
+                instance_dispatch_external: false,
+                instance_dispatch_unresolved: false,
+                arguments: args
+                    .iter()
+                    .map(|arg| MirCallArgument {
+                        arg: (*arg).into(),
+                        is_mutable: Some(false),
+                    })
+                    .collect(),
+                return_place: "_0".into(),
+                return_target: Some("bb1".into()),
+                unwind_target: "continue".into(),
+            }),
+        })
+    }
+
+    #[test]
+    fn efm1_classifier_is_ffi_gated_arity_closed_and_body_aware() {
+        let ffi = ["strlen", "memset", "memcpy", "memcmp", "write"]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<HashSet<_>>();
+        let represented = HashSet::new();
+
+        let memcpy = external_function_memory_contract("memcpy", 3, &ffi, &represented)
+            .expect("declared memcpy contract");
+        assert_eq!(memcpy.semantic_class, "memcpy_v1");
+        assert_eq!(memcpy.rules.len(), 2);
+        assert!(memcpy.rules.iter().any(|r| r.formal_index == 0 && r.access == "write"));
+        assert!(memcpy.rules.iter().any(|r| r.formal_index == 1 && r.access == "read"));
+
+        let memcmp = external_function_memory_contract("memcmp", 3, &ffi, &represented)
+            .expect("declared memcmp contract");
+        assert_eq!(memcmp.rules.iter().map(|r| (r.formal_index, r.access)).collect::<Vec<_>>(), vec![(0, "read"), (1, "read")]);
+
+        assert!(external_function_memory_contract("memcpy", 2, &ffi, &represented).is_none());
+        assert!(external_function_memory_contract("memcpy", 3, &HashSet::new(), &represented).is_none());
+
+        let represented_memcpy = ["memcpy".to_string()].into_iter().collect::<HashSet<_>>();
+        assert!(external_function_memory_contract("memcpy", 3, &ffi, &represented_memcpy).is_none());
+
+        // Dependency-path libc calls are deliberately outside EFM1 v1: the
+        // current artifact does not carry provider prototype/linkage evidence.
+        assert!(external_function_memory_contract("libc::memcpy", 3, &HashSet::new(), &represented).is_none());
+    }
+
+    #[test]
+    fn efm1_bodyless_calls_emit_argument_specific_existing_use_labels() {
+        let ffi = ["strlen", "memset", "memcpy", "memcmp", "write"]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<HashSet<_>>();
+        let resolver = LlvmNameResolver::default();
+        let represented = HashSet::new();
+
+        let cases = [
+            ("strlen", vec!["Local(_1)"], vec![("read", "Local(_1)")]),
+            ("memset", vec!["Local(_1)", "const 0_i32", "const 8_usize"], vec![("write", "Local(_1)")]),
+            ("memcpy", vec!["Local(_1)", "Local(_2)", "const 8_usize"], vec![("write", "Local(_1)"), ("read", "Local(_2)")]),
+            ("memcmp", vec!["Local(_1)", "Local(_2)", "const 8_usize"], vec![("read", "Local(_1)"), ("read", "Local(_2)")]),
+            ("write", vec!["const 1_i32", "Local(_2)", "const 8_usize"], vec![("read", "Local(_2)")]),
+        ];
+
+        for (callee, args, expected) in cases {
+            let call = efm1_call(callee, &args);
+            let events = event_sources_for_node(
+                "rust::main::bb0",
+                &call,
+                &resolver,
+                &ffi,
+                &represented,
+            );
+            let actual = events
+                .keys()
+                .filter(|e| matches!(e.predicate, "read" | "write"))
+                .map(|e| (e.predicate, e.variable.as_str()))
+                .collect::<BTreeSet<_>>();
+            let expected = expected.into_iter().collect::<BTreeSet<_>>();
+            assert_eq!(actual, expected, "wrong EFM1 labels for {callee}");
+        }
+    }
+
+    #[test]
+    fn efm1_definite_zero_extent_suppresses_memory_event_and_record() {
+        let ffi = ["memcpy".to_string(), "memcmp".to_string(), "memset".to_string(), "write".to_string()]
+            .into_iter()
+            .collect::<HashSet<_>>();
+        let resolver = LlvmNameResolver::default();
+        let represented = HashSet::new();
+        let calls = [
+            efm1_call("memcpy", &["Local(_1)", "Local(_2)", "const 0_usize"]),
+            efm1_call("memcmp", &["Local(_1)", "Local(_2)", "const 0_usize"]),
+            efm1_call("memset", &["Local(_1)", "const 1_i32", "const 0_usize"]),
+            efm1_call("write", &["const 1_i32", "Local(_1)", "const 0_usize"]),
+        ];
+        for call in &calls {
+            let events = event_sources_for_node(
+                "rust::main::bb0", call, &resolver, &ffi, &represented,
+            );
+            assert!(events.keys().all(|e| !matches!(e.predicate, "read" | "write")));
+        }
+
+        let icfg = GlobalICFGOrdered {
+            ordered_nodes: vec![("rust::main::bb0".into(), calls[0].clone())],
+            icfg_edges: vec![],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            rust_functions: Default::default(),
+            rust_calls: vec![],
+        };
+        assert!(external_formal_memory_effect_records(&icfg, &ffi, &represented).is_empty());
+    }
+
+    #[test]
+    fn efm1_records_preserve_formal_actual_separation() {
+        let ffi = ["memcpy".to_string()].into_iter().collect::<HashSet<_>>();
+        let icfg = GlobalICFGOrdered {
+            ordered_nodes: vec![(
+                "rust::main::bb0".into(),
+                efm1_call("memcpy", &["Local(_1)", "Local(_2)", "const 8_usize"]),
+            )],
+            icfg_edges: vec![],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            rust_functions: Default::default(),
+            rust_calls: vec![],
+        };
+        let records = external_formal_memory_effect_records(&icfg, &ffi, &HashSet::new());
+        assert_eq!(records.len(), 2);
+        assert!(records.iter().any(|r| {
+            r.formal_index == 0
+                && r.access == "write"
+                && r.event_variable == "Local(_1)"
+                && r.actual_variable == "rust::main::Local(_1)"
+                && r.basis == "crema_efm1_closed_contract_v1"
+        }));
+        assert!(records.iter().any(|r| {
+            r.formal_index == 1
+                && r.access == "read"
+                && r.event_variable == "Local(_2)"
+                && r.actual_variable == "rust::main::Local(_2)"
+                && r.basis == "crema_efm1_closed_contract_v1"
+        }));
+    }
+
+    #[test]
+    fn represented_c_stack_slot_transport_is_not_exported_as_pointee_access() {
+        use crate::structs::{LlvmJsonNode, SvfStatement};
+
+        fn stmt(kind: &str, lhs: Option<usize>, rhs: Option<usize>, info: &str) -> SvfStatement {
+            SvfStatement {
+                stmt_id: 0,
+                stmt_type: kind.into(),
+                stmt_info: info.into(),
+                edge_id: None,
+                pta_edge: None,
+                lhs_var_id: lhs,
+                rhs_var_id: rhs,
+                res_var_id: None,
+                operand_var_ids: None,
+                operand_vars: None,
+                call_inst: None,
+                is_conditional: None,
+                condition_var_id: None,
+                successors: None,
+            }
+        }
+
+        fn llvm(info: &str, statements: Vec<SvfStatement>) -> GlobalICFGNode {
+            GlobalICFGNode::Llvm(LlvmJsonNode {
+                node_id: 0,
+                node_type: false,
+                info: info.into(),
+                node_kind_string: "IntraBlock".into(),
+                node_kind: 0,
+                node_source_loc: String::new(),
+                function_name: Some("body".into()),
+                basic_block: Some(0),
+                basic_block_name: None,
+                basic_block_info: None,
+                svf_statements: statements,
+                incoming_edges: vec![],
+                outgoing_edges: vec![],
+            })
+        }
+
+        let alloca_id = "llvm::body::node3::rust::main::bb5";
+        let spill_store_id = "llvm::body::node4::rust::main::bb5";
+        let spill_load_id = "llvm::body::node5::rust::main::bb5";
+        let gep_id = "llvm::body::node6::rust::main::bb5";
+        let pointee_read_id = "llvm::body::node7::rust::main::bb5";
+        let pointee_write_id = "llvm::body::node8::rust::main::bb5";
+
+        let alloca = llvm(
+            "%p.addr = alloca ptr, align 8",
+            vec![stmt("AddrStmt", Some(8), Some(9), "AddrStmt: [Var8 <-- Var9]")],
+        );
+        let spill_store = llvm(
+            "store ptr %p, ptr %p.addr, align 8",
+            vec![stmt("StoreStmt", Some(8), Some(7), "StoreStmt: [Var8 <-- Var7]")],
+        );
+        let spill_load = llvm(
+            "%0 = load ptr, ptr %p.addr, align 8",
+            vec![stmt("LoadStmt", Some(12), Some(8), "LoadStmt: [Var12 <-- Var8]")],
+        );
+        let gep = llvm(
+            "%arrayidx = getelementptr inbounds i8, ptr %0, i64 0",
+            vec![stmt("GepStmt", Some(13), Some(12), "GepStmt: [Var13 <-- Var12]")],
+        );
+        let pointee_read = llvm(
+            "%1 = load i8, ptr %arrayidx, align 1",
+            vec![stmt("LoadStmt", Some(15), Some(13), "LoadStmt: [Var15 <-- Var13]")],
+        );
+        let pointee_write = llvm(
+            "store i8 7, ptr %arrayidx, align 1",
+            vec![stmt("StoreStmt", Some(13), Some(16), "StoreStmt: [Var13 <-- Var16]")],
+        );
+
+        // Build the resolver over the complete carrier chain.  This checks the
+        // essential separation: value provenance must still flow
+        //   Var7 -> memory[Var8] -> Var12 -> Var13
+        // even though accesses *to Var8 itself* are suppressed as heap events.
+        let icfg = GlobalICFGOrdered {
+            ordered_nodes: vec![
+                (alloca_id.into(), alloca.clone()),
+                (spill_store_id.into(), spill_store.clone()),
+                (spill_load_id.into(), spill_load.clone()),
+                (gep_id.into(), gep),
+                (pointee_read_id.into(), pointee_read.clone()),
+                (pointee_write_id.into(), pointee_write.clone()),
+            ],
+            icfg_edges: vec![],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            rust_functions: Default::default(),
+            rust_calls: vec![],
+        };
+        let resolver = LlvmNameResolver::build(&icfg);
+        let formal = scoped_svf_var(7, spill_store_id);
+        let slot = scoped_svf_var(8, alloca_id);
+        let gep_address = scoped_svf_var(13, pointee_read_id);
+
+        assert!(resolver.is_stack_slot_address(&slot));
+        assert_eq!(resolver.resolve_svf(&gep_address), formal);
+
+        let spill_store_events = event_sources_for_node(
+            spill_store_id,
+            &spill_store,
+            &resolver,
+            &HashSet::new(),
+            &HashSet::new(),
+        );
+        assert!(spill_store_events.keys().all(|event| event.predicate != "write"));
+
+        let spill_load_events = event_sources_for_node(
+            spill_load_id,
+            &spill_load,
+            &resolver,
+            &HashSet::new(),
+            &HashSet::new(),
+        );
+        assert!(spill_load_events.keys().all(|event| event.predicate != "read"));
+
+        let read_events = event_sources_for_node(
+            pointee_read_id,
+            &pointee_read,
+            &resolver,
+            &HashSet::new(),
+            &HashSet::new(),
+        );
+        assert!(read_events.keys().any(|event| {
+            event.predicate == "read" && event.variable == formal
+        }));
+
+        let write_events = event_sources_for_node(
+            pointee_write_id,
+            &pointee_write,
+            &resolver,
+            &HashSet::new(),
+            &HashSet::new(),
+        );
+        assert!(write_events.keys().any(|event| {
+            event.predicate == "write" && event.variable == formal
+        }));
     }
 
     #[test]
@@ -2947,6 +4811,7 @@ mod tests {
             &node,
             &LlvmNameResolver::default(),
             &HashSet::new(),
+            &HashSet::new(),
         );
         let read = sources
             .get(&EventLabel { predicate: "read", variable: "Local(_2)".into() })
@@ -2993,6 +4858,7 @@ mod tests {
             node_id,
             &node,
             &LlvmNameResolver::default(),
+            &HashSet::new(),
             &HashSet::new(),
         );
         let records = allocation_event_source_records_for_node(
@@ -3621,6 +5487,32 @@ mod tests {
     }
 
     #[test]
+    fn age1_variable_catalog_is_closed_over_existence_guard_variables() {
+        let mut variable_ids = BTreeSet::from(["rust::main::Local(_1)".to_string()]);
+        let guards = vec![AllocationExistenceGuardRecord {
+            allocation: "a#test".into(),
+            producer_call_node: "rust::main::bb0".into(),
+            predicate_call_node: "rust::main::bb1".into(),
+            switch_node: "rust::main::bb2".into(),
+            tested_variable: "rust::main::Local(_1)".into(),
+            predicate_result_variable: "rust::main::Local(_2)".into(),
+            null_successor: "rust::main::bb4".into(),
+            non_null_successor: "rust::main::bb3".into(),
+            callee_def_path: "std::ptr::mut_ptr::<impl *mut T>::is_null".into(),
+            allocation_return_basis: "svf_single_source_c_allocator_return_v1",
+            basis: "rust_raw_pointer_is_null_switch_v1",
+        }];
+
+        close_variable_catalog_over_allocation_existence_guards(
+            &mut variable_ids,
+            Some(&guards),
+        );
+
+        assert!(variable_ids.contains("rust::main::Local(_1)"));
+        assert!(variable_ids.contains("rust::main::Local(_2)"));
+    }
+
+    #[test]
     fn schema_v2_variable_catalog_is_closed_over_identity_program_vars() {
         let node_id = "rust::main::bb0".to_string();
         let icfg = GlobalICFGOrdered {
@@ -3843,6 +5735,65 @@ mod tests {
         assert_eq!(contract.family, "c_malloc");
         assert_eq!(contract.operation, "malloc");
         assert_eq!(contract.language, "c");
+    }
+
+    #[test]
+    fn strdup_allocation_contract_is_structural_c_malloc_family() {
+        let allocation = AbstractAllocId::new(
+            AllocationSiteId::CCall {
+                node_id: "rust::main::bb0".into(),
+                allocator: "strdup".into(),
+            },
+            Vec::new(),
+        );
+        let contract = allocation_contract(&allocation);
+        assert_eq!(contract.family, "c_malloc");
+        assert_eq!(contract.operation, "strdup");
+        assert_eq!(contract.language, "c");
+    }
+
+    #[test]
+    fn rn1_realloc_null_allocation_contract_is_c_malloc_family() {
+        let allocation = AbstractAllocId::new(
+            AllocationSiteId::CCall {
+                node_id: "rust::main::bb1".into(),
+                allocator: "realloc".into(),
+            },
+            Vec::new(),
+        );
+        let contract = allocation_contract(&allocation);
+        assert_eq!(contract.family, "c_malloc");
+        assert_eq!(contract.operation, "realloc");
+        assert_eq!(contract.language, "c");
+    }
+
+    #[test]
+    fn rn1_realloc_null_age1_return_basis_reuses_bodyless_malloc_contract() {
+        let allocation = AbstractAllocId::new(
+            AllocationSiteId::CCall {
+                node_id: "rust::main::bb1".into(),
+                allocator: "realloc".into(),
+            },
+            Vec::new(),
+        );
+        let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ordered_nodes: Vec::new(),
+            icfg_edges: Vec::new(),
+            rust_functions: BTreeMap::new(),
+            rust_calls: Vec::new(),
+        };
+        let tested = ProgramVarId::Rust { function: "main".into(), local: 1 };
+        assert_eq!(
+            c_malloc_origin_return_basis(&icfg, &allocation, "rust::main::bb1", &tested),
+            Some("rust_foreign_decl_c_malloc_contract_v1")
+        );
+        assert_eq!(
+            c_malloc_origin_return_basis(&icfg, &allocation, "rust::main::bb9", &tested),
+            None,
+            "represented/non-matching realloc sites must not inherit RN1 AGE1 proof"
+        );
     }
 
     #[test]
@@ -4350,6 +6301,431 @@ mod tests {
             ),
             vec!["llvm16_tli_direct_callee_allockind_deallocation_v1"]
         );
+    }
+
+
+    #[test]
+    fn age1_raw_pointer_is_null_classifier_is_closed() {
+        assert!(is_raw_pointer_is_null_def_path(
+            "core::ptr::mut_ptr::<impl *mut u8>::is_null"
+        ));
+        assert!(is_raw_pointer_is_null_def_path(
+            "std::ptr::const_ptr::<impl *const i32>::is_null"
+        ));
+        assert!(!is_raw_pointer_is_null_def_path(
+            "core::option::Option::<*mut u8>::is_none"
+        ));
+    }
+
+    #[test]
+    fn age1_exact_single_source_svf_return_chain_is_fail_closed() {
+        let exact = BTreeMap::from([
+            (6usize, vec![("PhiStmt".to_string(), vec![13usize])]),
+        ]);
+        assert!(exact_single_source_svf_flow(
+            &exact, 6, 13, &mut BTreeSet::new()
+        ));
+
+        let joined = BTreeMap::from([
+            (6usize, vec![("PhiStmt".to_string(), vec![13usize, 14usize])]),
+        ]);
+        assert!(!exact_single_source_svf_flow(
+            &joined, 6, 13, &mut BTreeSet::new()
+        ));
+
+        let selected = BTreeMap::from([
+            (6usize, vec![("SelectStmt".to_string(), vec![13usize])]),
+        ]);
+        assert!(!exact_single_source_svf_flow(
+            &selected, 6, 13, &mut BTreeSet::new()
+        ));
+    }
+
+
+    #[test]
+    fn rbf1_bodyless_realloc_classifier_is_foreign_decl_gated_and_exact() {
+        let ffi = HashSet::from(["realloc".to_string()]);
+
+        // Real rustc shape for an `extern "C"` declaration: the DefPath is
+        // local to the crate even though no local MIR body exists.  Exact FFI
+        // declaration membership + no internal branch is the proof boundary.
+        assert!(is_bodyless_c_realloc_call(
+            "b10a_realloc_branch_clean::realloc",
+            "Call(_3 = realloc(copy _1, const 64_usize))",
+            Some("b10a_realloc_branch_clean::realloc"),
+            false,
+            &ffi,
+        ));
+
+        // A real local Rust function with the same terminal name is not an
+        // external bodyless realloc once the canonical ICFG has a Rust branch.
+        assert!(!is_bodyless_c_realloc_call(
+            "crate::realloc",
+            "Call(_3 = realloc(copy _1, const 64_usize))",
+            Some("crate::realloc"),
+            true,
+            &ffi,
+        ));
+
+        // Bare/locally-qualified names are never trusted without the extracted
+        // foreign-declaration certificate.
+        assert!(!is_bodyless_c_realloc_call(
+            "crate::realloc",
+            "Call(_3 = realloc(copy _1, const 64_usize))",
+            Some("crate::realloc"),
+            false,
+            &HashSet::new(),
+        ));
+
+        // Explicit libc paths remain a separately recognized external family.
+        assert!(is_bodyless_c_realloc_call(
+            "libc::realloc",
+            "Call(_3 = libc::realloc(copy _1, const 64_usize))",
+            Some("libc::realloc"),
+            false,
+            &HashSet::new(),
+        ));
+
+        assert!(!is_bodyless_c_realloc_call(
+            "reallocate",
+            "Call(_3 = reallocate(copy _1, const 64_usize))",
+            Some("reallocate"),
+            false,
+            &ffi,
+        ));
+    }
+
+    #[test]
+    fn rbf1_variable_catalog_is_closed_over_boundary_variables() {
+        let mut variable_ids = BTreeSet::from(["rust::main::Local(_1)".to_string()]);
+        let boundaries = vec![ReallocationBoundaryRecord {
+            node: "rust::main::bb3".into(),
+            source_allocation: "a#test".into(),
+            source_variable: "rust::main::Local(_1)".into(),
+            result_variable: "rust::main::Local(_3)".into(),
+            family: "c_malloc",
+            operation: "realloc",
+            certainty: "may_abstract",
+            status: "conditional_unmodeled",
+            basis: "rust_foreign_decl_c_realloc_boundary_v1",
+        }];
+
+        close_variable_catalog_over_reallocation_boundaries(
+            &mut variable_ids,
+            Some(&boundaries),
+        );
+
+        assert!(variable_ids.contains("rust::main::Local(_1)"));
+        assert!(variable_ids.contains("rust::main::Local(_3)"));
+    }
+
+
+    #[test]
+    fn cr1_positive_nonzero_usize_classifier_is_closed() {
+        assert!(positive_nonzero_usize_constant("const 64_usize"));
+        assert!(positive_nonzero_usize_constant("const 1_usize"));
+        assert!(!positive_nonzero_usize_constant("const 0_usize"));
+        assert!(!positive_nonzero_usize_constant("const 64_u64"));
+        assert!(!positive_nonzero_usize_constant("Local(_2)"));
+        assert!(!positive_nonzero_usize_constant("const -1_isize"));
+    }
+
+    #[test]
+    fn efm1_zero_usize_classifier_is_exact_and_closed() {
+        assert!(definitely_zero_usize_constant("const 0_usize"));
+        assert!(!definitely_zero_usize_constant("const 1_usize"));
+        assert!(!definitely_zero_usize_constant("const 0_u64"));
+        assert!(!definitely_zero_usize_constant("Local(_2)"));
+    }
+
+
+    #[test]
+    fn cr1_v2_path_slice_is_forward_reverse_intersection() {
+        let successors = BTreeMap::from([
+            ("s".to_string(), BTreeSet::from(["m".to_string()])),
+            ("m".to_string(), BTreeSet::from(["f".to_string()])),
+        ]);
+        let predecessors = BTreeMap::from([
+            ("m".to_string(), BTreeSet::from(["s".to_string()])),
+            ("f".to_string(), BTreeSet::from(["m".to_string()])),
+        ]);
+        let forward = reachable_from("s", &successors);
+        let backward = reachable_from("f", &predecessors);
+        assert_eq!(
+            forward.intersection(&backward).cloned().collect::<BTreeSet<_>>(),
+            BTreeSet::from(["s".to_string(), "m".to_string(), "f".to_string()]),
+        );
+    }
+
+    fn cr1_stmt(place: &str, rvalue: &str) -> MirStatement {
+        MirStatement {
+            source_info: SourceInfoData {
+                span: "test.rs:1:1: 1:1 (#0)".into(),
+                scope: "scope[0]".into(),
+            },
+            kind: "Assign".into(),
+            details: format!("Assign(({place}, {rvalue}))"),
+            place: Some(place.into()),
+            is_mutable: Some(true),
+            rvalue: Some(rvalue.into()),
+        }
+    }
+
+    fn cr1_block(statements: Vec<MirStatement>) -> MirBasicBlock {
+        MirBasicBlock {
+            block_id: 0,
+            statements,
+            terminator: None,
+        }
+    }
+
+    #[test]
+    fn cr1_v2_outcome_operand_accepts_direct_or_one_exact_copy_only() {
+        let direct = cr1_block(vec![]);
+        assert_eq!(
+            rust_realloc_outcome_operand_correlation_basis(
+                &direct,
+                "main",
+                "rust::main::Local(_3)",
+                "Local(_3) [mutable]",
+            ),
+            Some((
+                "rust_mir_direct_result_operand_v1",
+                "rust::main::Local(_3)".into(),
+            ))
+        );
+
+        let copied = cr1_block(vec![cr1_stmt("Local(_5) [mutable]", "copy _3")]);
+        assert_eq!(
+            rust_realloc_outcome_operand_correlation_basis(
+                &copied,
+                "main",
+                "rust::main::Local(_3)",
+                "Local(_5) [mutable]",
+            ),
+            Some((
+                "rust_mir_single_local_copy_result_operand_v1",
+                "rust::main::Local(_5)".into(),
+            ))
+        );
+
+        let projected = cr1_block(vec![cr1_stmt("Local(_5) [mutable]", "copy (*_3)")]);
+        assert!(rust_realloc_outcome_operand_correlation_basis(
+            &projected,
+            "main",
+            "rust::main::Local(_3)",
+            "Local(_5) [mutable]",
+        )
+        .is_none());
+
+        let transitive = cr1_block(vec![
+            cr1_stmt("Local(_6) [mutable]", "copy _3"),
+            cr1_stmt("Local(_5) [mutable]", "copy _6"),
+        ]);
+        assert!(rust_realloc_outcome_operand_correlation_basis(
+            &transitive,
+            "main",
+            "rust::main::Local(_3)",
+            "Local(_5) [mutable]",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn cr1_v2_outcome_operand_rejects_same_block_result_redefinition() {
+        let block = cr1_block(vec![
+            cr1_stmt("Local(_3) [mutable]", "copy _1"),
+            cr1_stmt("Local(_5) [mutable]", "copy _3"),
+        ]);
+        assert!(rust_realloc_outcome_operand_correlation_basis(
+            &block,
+            "main",
+            "rust::main::Local(_3)",
+            "Local(_5) [mutable]",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn cr1_v2_free_argument_correlation_is_separate_from_result_stability() {
+        let block = cr1_block(vec![
+            cr1_stmt("Local(_3) [mutable]", "copy _1"),
+            cr1_stmt("Local(_7) [mutable]", "copy _3"),
+        ]);
+        assert_eq!(
+            rust_call_operand_correlation_basis(
+                &block,
+                "main",
+                "rust::main::Local(_3)",
+                "Local(_7) [mutable]",
+            ),
+            Some((
+                "rust_mir_single_local_copy_result_operand_v1",
+                "rust::main::Local(_7)".into(),
+            ))
+        );
+    }
+
+    #[test]
+    fn cr1_v2_consumption_recognizes_only_exact_single_copy_argument() {
+        fn free_node(statements: Vec<MirStatement>) -> GlobalICFGNode {
+            GlobalICFGNode::Mir(MirBasicBlock {
+                block_id: 7,
+                statements,
+                terminator: Some(MirTerminator::Call {
+                    details: "_6 = free(move _7)".into(),
+                    source_info: "<cr1-v2-test>".into(),
+                    function_called: "free".into(),
+                    callee_def_path: Some("free".into()),
+                    deallocator_evidence: None,
+                    allocation_disposition_evidence: None,
+                    higher_order_evidence: None,
+                    callee_is_local: false,
+                    callback_def_paths: Vec::new(),
+                    resolved_instance_callees: Vec::new(),
+                    instance_dispatch_observed: false,
+                    instance_dispatch_external: true,
+                    instance_dispatch_unresolved: false,
+                    arguments: vec![MirCallArgument {
+                        arg: "Local(_7) [mutable]".into(),
+                        is_mutable: Some(true),
+                    }],
+                    return_place: "_6".into(),
+                    return_target: Some("bb8".into()),
+                    unwind_target: "unreachable".into(),
+                }),
+            })
+        }
+
+        let node_id = "rust::main::bb7".to_string();
+        let exact = free_node(vec![cr1_stmt("Local(_7) [mutable]", "copy _3")]);
+        let icfg = GlobalICFGOrdered {
+            ordered_nodes: vec![(node_id.clone(), exact.clone())],
+            icfg_edges: vec![],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            rust_functions: BTreeMap::new(),
+            rust_calls: vec![],
+        };
+        let ffi = HashSet::from(["free".to_string()]);
+        assert!(rust_node_consumes_result_obligation(
+            &icfg,
+            &node_id,
+            &exact,
+            "main",
+            "rust::main::Local(_3)",
+            &ffi,
+        ));
+
+        let transitive = free_node(vec![
+            cr1_stmt("Local(_8) [mutable]", "copy _3"),
+            cr1_stmt("Local(_7) [mutable]", "copy _8"),
+        ]);
+        let icfg = GlobalICFGOrdered {
+            ordered_nodes: vec![(node_id.clone(), transitive.clone())],
+            icfg_edges: vec![],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            rust_functions: BTreeMap::new(),
+            rust_calls: vec![],
+        };
+        assert!(!rust_node_consumes_result_obligation(
+            &icfg,
+            &node_id,
+            &transitive,
+            "main",
+            "rust::main::Local(_3)",
+            &ffi,
+        ));
+    }
+
+    #[test]
+    fn cr1_v2_no_redefinition_checks_target_block_statements() {
+        let start_id = "rust::main::bb6".to_string();
+        let target_id = "rust::main::bb7".to_string();
+        let start = GlobalICFGNode::Mir(cr1_block(vec![]));
+        let target = GlobalICFGNode::Mir(cr1_block(vec![cr1_stmt(
+            "Local(_3) [mutable]",
+            "copy _1",
+        )]));
+        let icfg = GlobalICFGOrdered {
+            ordered_nodes: vec![(start_id.clone(), start), (target_id.clone(), target)],
+            icfg_edges: vec![edge(&start_id, &target_id)],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            rust_functions: BTreeMap::new(),
+            rust_calls: vec![],
+        };
+        let nodes: BTreeMap<&str, &GlobalICFGNode> = icfg
+            .ordered_nodes
+            .iter()
+            .map(|(id, node)| (id.as_str(), node))
+            .collect();
+        let successors = BTreeMap::from([(
+            start_id.clone(),
+            BTreeSet::from([target_id.clone()]),
+        )]);
+        let predecessors = BTreeMap::from([(
+            target_id.clone(),
+            BTreeSet::from([start_id.clone()]),
+        )]);
+
+        assert!(!result_value_flow_is_stable_to_deallocation(
+            &icfg,
+            &nodes,
+            &successors,
+            &predecessors,
+            &start_id,
+            &target_id,
+            "main",
+            "rust::main::Local(_3)",
+            &HashSet::new(),
+        ));
+    }
+
+    #[test]
+    fn cr1_variable_catalog_is_closed_over_predicate_and_result_variables() {
+        let mut variables = BTreeSet::new();
+        let records = vec![ConditionalReallocationRecord {
+            source_allocation: "A".into(),
+            reallocation_node: "rust::main::bb3".into(),
+            source_variable: "rust::main::Local(_1)".into(),
+            result_variable: "rust::main::Local(_3)".into(),
+            source_existence_predicate_call_node: "rust::main::bb1".into(),
+            outcome_predicate_call_node: "rust::main::bb4".into(),
+            outcome_argument_variable: "rust::main::Local(_5)".into(),
+            outcome_predicate_result_variable: "rust::main::Local(_4)".into(),
+            outcome_switch_node: "rust::main::bb5".into(),
+            failure_successor: "rust::main::bb6".into(),
+            success_successor: "rust::main::bb7".into(),
+            reallocation_callee_def_path: "crate::realloc".into(),
+            outcome_callee_def_path: "std::ptr::mut_ptr::<impl *mut T>::is_null".into(),
+            family: "c_malloc",
+            operation: "realloc",
+            certainty: "may_abstract",
+            size_semantics: "positive_nonzero_constant",
+            status: "conditional_guarded",
+            basis: "rust_foreign_decl_c_realloc_is_null_switch_v1",
+            outcome_correlation_basis: "direct_cfg_edge_realloc_to_is_null_v1",
+            outcome_value_flow_basis: "rust_mir_single_local_copy_result_operand_v1",
+            result_deallocations: vec![ConditionalReallocationResultDeallocationRecord {
+                node: "rust::main::bb7".into(),
+                variable: "rust::main::Local(_3)".into(),
+                argument_variable: "rust::main::Local(_7)".into(),
+                callee_def_path: "crate::free".into(),
+                family: "c_malloc",
+                operation: "free",
+                basis: "rust_foreign_decl_c_free_result_v1",
+                argument_correlation_basis: "rust_mir_single_local_copy_result_operand_v1",
+                value_flow_basis: "rust_mir_result_no_redefinition_all_paths_v1",
+            }],
+        }];
+        close_variable_catalog_over_conditional_reallocations(&mut variables, Some(&records));
+        assert!(variables.contains("rust::main::Local(_1)"));
+        assert!(variables.contains("rust::main::Local(_3)"));
+        assert!(variables.contains("rust::main::Local(_4)"));
+        assert!(variables.contains("rust::main::Local(_5)"));
+        assert!(variables.contains("rust::main::Local(_7)"));
     }
 
 }

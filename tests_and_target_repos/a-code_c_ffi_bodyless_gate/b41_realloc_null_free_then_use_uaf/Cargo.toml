@@ -1,0 +1,4 @@
+[package]
+name = "b41_realloc_null_free_then_use_uaf"
+version = "0.1.0"
+edition = "2021"

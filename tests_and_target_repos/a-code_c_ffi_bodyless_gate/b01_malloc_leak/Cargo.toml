@@ -1,0 +1,4 @@
+[package]
+name = "b01_malloc_leak"
+version = "0.1.0"
+edition = "2021"

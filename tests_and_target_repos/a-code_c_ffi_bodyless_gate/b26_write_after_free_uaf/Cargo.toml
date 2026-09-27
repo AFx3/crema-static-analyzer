@@ -1,0 +1,4 @@
+[package]
+name = "b26_write_after_free_uaf"
+version = "0.1.0"
+edition = "2021"

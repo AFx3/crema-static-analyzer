@@ -1,0 +1,4 @@
+[package]
+name = "b30_strdup_unmodeled_allocator_scope"
+version = "0.1.0"
+edition = "2021"

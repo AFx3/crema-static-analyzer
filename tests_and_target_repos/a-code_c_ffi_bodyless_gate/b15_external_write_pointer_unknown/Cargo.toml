@@ -1,0 +1,4 @@
+[package]
+name = "b15_external_write_pointer_unknown"
+version = "0.1.0"
+edition = "2021"

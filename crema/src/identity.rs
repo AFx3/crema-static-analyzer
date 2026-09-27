@@ -1,7 +1,8 @@
 use crate::structs::{AbstractAllocId, PlaceId, PlaceProjection, ProgramVarId};
 use crate::memory_events::{self, RustAllocationSemantics};
+use crate::utils::load_ffi_functions;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 /// Additional implementation-level domain for canonical interprocedural
 /// allocation identity.
@@ -479,6 +480,205 @@ fn has_rust_call_at(icfg: &GlobalICFGOrdered, node: &str) -> bool {
     // whether at least one internal Rust branch exists; branch propagation
     // itself is keyed by the unique dummyCall/dummyRet metadata below.
     icfg.rust_calls.iter().any(|call| call.call_node == node)
+}
+
+fn has_represented_external_body_at(icfg: &GlobalICFGOrdered, node: &str) -> bool {
+    icfg.ordered_nodes.iter().any(|(_, candidate)| {
+        matches!(
+            candidate,
+            GlobalICFGNode::DummyCall(dummy)
+                if !dummy.is_internal.unwrap_or(false)
+                    && dummy.incoming_edge == node
+                    && dummy.outgoing_edge.starts_with("llvm::")
+        )
+    })
+}
+
+fn bodyless_c_allocator_name(
+    callee: &str,
+    call_text: &str,
+    ffi_functions: &HashSet<String>,
+) -> Option<&'static str> {
+    let callee = callee.trim();
+    let call_text = call_text.trim();
+
+    let declared_malloc = ffi_functions.contains("malloc")
+        && (callee == "malloc"
+            || call_text == "malloc"
+            || call_text.starts_with("malloc(")
+            || call_text.contains(" malloc("));
+    let declared_calloc = ffi_functions.contains("calloc")
+        && (callee == "calloc"
+            || call_text == "calloc"
+            || call_text.starts_with("calloc(")
+            || call_text.contains(" calloc("));
+    let declared_strdup = ffi_functions.contains("strdup")
+        && (callee == "strdup"
+            || call_text == "strdup"
+            || call_text.starts_with("strdup(")
+            || call_text.contains(" strdup("));
+
+    if declared_malloc
+        || (callee.contains("libc::") && callee.ends_with("::malloc"))
+        || (call_text.contains("libc::") && call_text.contains("::malloc("))
+    {
+        Some("malloc")
+    } else if declared_calloc
+        || (callee.contains("libc::") && callee.ends_with("::calloc"))
+        || (call_text.contains("libc::") && call_text.contains("::calloc("))
+    {
+        Some("calloc")
+    } else if declared_strdup
+        || (callee.contains("libc::") && callee.ends_with("::strdup"))
+        || (call_text.contains("libc::") && call_text.contains("::strdup("))
+    {
+        Some("strdup")
+    } else {
+        None
+    }
+}
+
+/// Closed bodyless C realloc classifier used only after a separate proof that
+/// formal 0 is definitely null.  Bare symbols remain foreign-declaration
+/// gated; libc paths are admitted by the same explicit namespace convention
+/// used by the existing bodyless allocation summaries.
+fn is_bodyless_c_realloc_call(
+    callee: &str,
+    call_text: &str,
+    ffi_functions: &HashSet<String>,
+) -> bool {
+    let callee = callee.trim();
+    let call_text = call_text.trim();
+    let declared = ffi_functions.contains("realloc")
+        && (callee == "realloc"
+            || call_text == "realloc"
+            || call_text.starts_with("realloc(")
+            || call_text.contains(" realloc("));
+    let libc = (callee.contains("libc::") && callee.ends_with("::realloc"))
+        || (call_text.contains("libc::") && call_text.contains("::realloc("));
+    declared || libc
+}
+
+/// Exact rustc DefPath classifier for canonical null-pointer constructors.
+/// This is a MUST-null proof source; pretty strings and arbitrary functions
+/// named `null_mut` are deliberately insufficient.
+fn is_null_pointer_constructor_def_path(path: Option<&str>) -> bool {
+    let Some(path) = path.map(str::trim) else { return false; };
+    matches!(path, "core::ptr::null_mut" | "std::ptr::null_mut")
+}
+
+/// Intraprocedural MUST-null dataflow used solely to prove the special C/POSIX
+/// rule `realloc(NULL, n) == malloc(n)`.  The domain is an intersection domain:
+/// a local is retained only when every represented incoming MIR path proves it
+/// null.  Unsupported calls/control-flow simply lose the fact (fail closed).
+fn definitely_null_at_mir_terminators(
+    icfg: &GlobalICFGOrdered,
+    entry: &str,
+) -> BTreeMap<String, BTreeSet<ProgramVarId>> {
+    let nodes = node_map(icfg);
+    let succs = successor_map(icfg);
+    let mut in_states: BTreeMap<String, BTreeSet<ProgramVarId>> = BTreeMap::new();
+    let mut before_terminator: BTreeMap<String, BTreeSet<ProgramVarId>> = BTreeMap::new();
+    let mut worklist = BTreeSet::from([entry.to_string()]);
+    in_states.insert(entry.to_string(), BTreeSet::new());
+
+    while let Some(node_id) = worklist.iter().next().cloned() {
+        worklist.remove(&node_id);
+        let Some(GlobalICFGNode::Mir(bb)) = nodes.get(&node_id) else { continue; };
+        let Some(function) = rust_function_from_node(&node_id) else { continue; };
+        let mut state = in_states.get(&node_id).cloned().unwrap_or_default();
+
+        for stmt in &bb.statements {
+            let Some(place) = stmt.place.as_deref() else { continue; };
+            let Some(dest) = assignment_destination(
+                function,
+                place,
+                IdentityTransferProfile::LegacyFrozen,
+            ) else { continue; };
+            if stmt.kind != "Assign" {
+                // Storage/deinit/retag and other direct-place mutations are not
+                // part of the closed RN1 propagation vocabulary.  Forget the
+                // fact rather than retaining stale MUST-null information.
+                state.remove(&dest);
+                continue;
+            }
+            let source_is_null = stmt.rvalue.as_deref().is_some_and(|rvalue| {
+                (rvalue.contains("copy ")
+                    || rvalue.contains("move ")
+                    || rvalue.contains(" as *")
+                    || rvalue.contains("PointerCoercion"))
+                    && first_local_operand(function, rvalue)
+                        .is_some_and(|source| state.contains(&source))
+            });
+            state.remove(&dest);
+            if source_is_null {
+                state.insert(dest);
+            }
+        }
+
+        before_terminator.insert(node_id.clone(), state.clone());
+
+        match &bb.terminator {
+            Some(MirTerminator::Call {
+                callee_def_path,
+                arguments,
+                return_place,
+                ..
+            }) => {
+                let is_null_constructor = arguments.is_empty()
+                    && is_null_pointer_constructor_def_path(callee_def_path.as_deref());
+                if !is_null_constructor {
+                    // A general call may mutate a pointer local through an alias.
+                    // Without a dedicated mod/ref proof, retaining any MUST-null
+                    // fact across that boundary would be unsound.
+                    state.clear();
+                }
+                if let Some(dest) = local(function, return_place) {
+                    state.remove(&dest);
+                    if is_null_constructor {
+                        state.insert(dest);
+                    }
+                }
+            }
+            Some(MirTerminator::Goto { .. })
+            | Some(MirTerminator::SwitchInt { .. })
+            | Some(MirTerminator::Assert { .. })
+            | Some(MirTerminator::FalseEdge { .. })
+            | Some(MirTerminator::FalseUnwind { .. })
+            | None => {}
+            _ => {
+                // Drop glue, inline asm, coroutine suspension, tail calls, and
+                // other unsupported terminators may have effects outside this
+                // tiny nullness vocabulary.  Forget rather than overclaim.
+                state.clear();
+            }
+        }
+
+        let Some(nexts) = succs.get(&node_id) else { continue; };
+        for succ in nexts {
+            let Some(GlobalICFGNode::Mir(_)) = nodes.get(succ) else { continue; };
+            if rust_function_from_node(succ) != Some(function) {
+                continue;
+            }
+            let changed = if let Some(existing) = in_states.get_mut(succ) {
+                let joined: BTreeSet<_> = existing.intersection(&state).cloned().collect();
+                if *existing != joined {
+                    *existing = joined;
+                    true
+                } else {
+                    false
+                }
+            } else {
+                in_states.insert(succ.clone(), state.clone());
+                true
+            };
+            if changed {
+                worklist.insert(succ.clone());
+            }
+        }
+    }
+
+    before_terminator
 }
 
 fn rust_call_for_dummy_call<'a>(
@@ -1162,7 +1362,78 @@ fn transfer_library_call(
     return_place: &str,
     memory: &mut AllocationIdentityMemory,
 ) {
+    transfer_library_call_with_external_context(
+        node_id,
+        function,
+        context,
+        callee,
+        "",
+        arguments,
+        return_place,
+        false,
+        false,
+        &HashSet::new(),
+        memory,
+    );
+}
+
+fn transfer_library_call_with_external_context(
+    node_id: &str,
+    function: &str,
+    context: &[String],
+    callee: &str,
+    call_text: &str,
+    arguments: &[crate::structs::MirCallArgument],
+    return_place: &str,
+    represented_external_body: bool,
+    source_definitely_null: bool,
+    ffi_functions: &HashSet<String>,
+    memory: &mut AllocationIdentityMemory,
+) {
     let Some(dest) = local(function, return_place) else { return; };
+
+    // Phase B-minimal: a bodyless foreign malloc/calloc/strdup call has no LLVM/SVF
+    // AddrStmt from which Phase 6E could derive a CCall identity.  Materialize
+    // the same finite allocation-site abstraction at the real MIR callsite.
+    // Bare names are accepted only when certified by the extracted foreign
+    // declaration set.  If a represented LLVM body exists, that body remains
+    // authoritative and this MIR-side fallback is suppressed.
+    if !represented_external_body {
+        if let Some(allocator) = bodyless_c_allocator_name(callee, call_text, ffi_functions) {
+            clear_destination(memory, &dest);
+            memory.assign_fresh(
+                dest,
+                AbstractAllocId::new(
+                    AllocationSiteId::CCall {
+                        node_id: node_id.to_string(),
+                        allocator: allocator.to_string(),
+                    },
+                    context.to_vec(),
+                ),
+            );
+            return;
+        }
+
+        // RN1: C/POSIX realloc with a MUST-null source is malloc-like.  This is
+        // deliberately distinct from ordinary realloc identity: there is no old
+        // allocation to invalidate or join with, so the returned non-null object
+        // is one fresh c_malloc-family site.  Nullable failure remains encoded by
+        // the MAY identity relation plus TOP lifecycle state in CQPL export.
+        if source_definitely_null && is_bodyless_c_realloc_call(callee, call_text, ffi_functions) {
+            clear_destination(memory, &dest);
+            memory.assign_fresh(
+                dest,
+                AbstractAllocId::new(
+                    AllocationSiteId::CCall {
+                        node_id: node_id.to_string(),
+                        allocator: "realloc".to_string(),
+                    },
+                    context.to_vec(),
+                ),
+            );
+            return;
+        }
+    }
 
     if is_manually_drop_new(callee) {
         if let Some(source) = arguments
@@ -1342,6 +1613,9 @@ fn transfer_mir_node(
     bb: &MirBasicBlock,
     context: &[String],
     internal_call: bool,
+    represented_external_body: bool,
+    definitely_null_at_terminator: &BTreeSet<ProgramVarId>,
+    ffi_functions: &HashSet<String>,
     input: &AllocationIdentityMemory,
     profile: IdentityTransferProfile,
 ) -> (AllocationIdentityMemory, AllocationIdentityMemory) {
@@ -1367,19 +1641,27 @@ fn transfer_mir_node(
     event_summary = event_summary.join(&out);
     if !internal_call {
         if let Some(MirTerminator::Call {
+            details,
             function_called,
             arguments,
             return_place,
             ..
         }) = &bb.terminator
         {
-            transfer_library_call(
+            transfer_library_call_with_external_context(
                 node_id,
                 function,
                 context,
                 function_called,
+                details,
                 arguments,
                 return_place,
+                represented_external_body,
+                arguments
+                    .first()
+                    .and_then(|arg| first_local_operand(function, &arg.arg))
+                    .is_some_and(|source| definitely_null_at_terminator.contains(&source)),
+                ffi_functions,
                 &mut out,
             );
             event_summary = event_summary.join(&out);
@@ -1743,6 +2025,8 @@ fn fixed_point_identity_analysis_with_profile(
     validate_canonical_rust_call_relation(icfg);
     let nodes = node_map(icfg);
     let succs = successor_map(icfg);
+    let ffi_functions = load_ffi_functions("./ffi_functions.json").unwrap_or_default();
+    let definitely_null = definitely_null_at_mir_terminators(icfg, entry);
 
     let entry_point = IdentityAnalysisPoint {
         node: entry.to_string(),
@@ -1769,13 +2053,20 @@ fn fixed_point_identity_analysis_with_profile(
         let Some(node) = nodes.get(&point.node) else { continue; };
         let input = in_states.get(&point).cloned().unwrap_or_default();
         let has_internal_rust_branch = has_rust_call_at(icfg, &point.node);
+        let has_represented_external_body =
+            has_represented_external_body_at(icfg, &point.node);
 
+        let empty_null_facts = BTreeSet::new();
+        let null_facts = definitely_null.get(&point.node).unwrap_or(&empty_null_facts);
         let (post, event_summary) = match node {
             GlobalICFGNode::Mir(bb) => transfer_mir_node(
                 &point.node,
                 bb,
                 &point.context,
                 has_internal_rust_branch,
+                has_represented_external_body,
+                null_facts,
+                &ffi_functions,
                 &input,
                 profile,
             ),
@@ -2550,6 +2841,9 @@ mod tests {
             &bb,
             &[],
             false,
+            false,
+            &BTreeSet::new(),
+            &HashSet::new(),
             &input,
             IdentityTransferProfile::LegacyFrozen,
         );
@@ -3779,6 +4073,431 @@ mod tests {
         );
 
         assert_eq!(mem.points_to(&rust("main", 11)), BTreeSet::from([a]));
+    }
+
+    #[test]
+    fn phase_b_bodyless_allocator_classifier_is_exact_and_foreign_decl_gated() {
+        let ffi = HashSet::from(["malloc".to_string(), "calloc".to_string(), "strdup".to_string()]);
+        assert_eq!(bodyless_c_allocator_name("malloc", "", &ffi), Some("malloc"));
+        assert_eq!(bodyless_c_allocator_name("calloc", "", &ffi), Some("calloc"));
+        assert_eq!(bodyless_c_allocator_name("strdup", "", &ffi), Some("strdup"));
+        assert_eq!(
+            bodyless_c_allocator_name("b01_malloc_leak::malloc", "Call(_1 = malloc(8))", &ffi),
+            Some("malloc")
+        );
+        assert_eq!(bodyless_c_allocator_name("libc::malloc", "", &HashSet::new()), Some("malloc"));
+        assert_eq!(bodyless_c_allocator_name("libc::calloc", "", &HashSet::new()), Some("calloc"));
+        assert_eq!(bodyless_c_allocator_name("libc::strdup", "", &HashSet::new()), Some("strdup"));
+        assert_eq!(bodyless_c_allocator_name("malloc_wrapper", "", &ffi), None);
+        assert_eq!(bodyless_c_allocator_name("my_malloc", "", &ffi), None);
+        assert_eq!(bodyless_c_allocator_name("malloc", "", &HashSet::new()), None);
+    }
+
+    #[test]
+    fn phase_b_bodyless_malloc_materializes_callsite_scoped_c_identity() {
+        let block = call_block("malloc", vec![], "_1", "bb1");
+        let ffi = HashSet::from(["malloc".to_string()]);
+        let (post, events) = transfer_mir_node(
+            "rust::main::bb0",
+            &block,
+            &[],
+            false,
+            false,
+            &BTreeSet::new(),
+            &ffi,
+            &AllocationIdentityMemory::default(),
+            IdentityTransferProfile::LegacyFrozen,
+        );
+        let expected = AbstractAllocId::new(
+            AllocationSiteId::CCall {
+                node_id: "rust::main::bb0".to_string(),
+                allocator: "malloc".to_string(),
+            },
+            Vec::new(),
+        );
+        assert_eq!(post.points_to(&rust("main", 1)), BTreeSet::from([expected.clone()]));
+        assert_eq!(events.points_to(&rust("main", 1)), BTreeSet::from([expected]));
+    }
+
+    #[test]
+    fn phase_b_bodyless_strdup_materializes_fresh_callsite_c_identity() {
+        let block = call_block(
+            "strdup",
+            vec![crate::structs::MirCallArgument {
+                arg: "Local(_9)".to_string(),
+                is_mutable: Some(false),
+            }],
+            "_1",
+            "bb1",
+        );
+        let ffi = HashSet::from(["strdup".to_string()]);
+        let mut input = AllocationIdentityMemory::default();
+        let source = AbstractAllocId::new(
+            AllocationSiteId::Synthetic { scope: "test".into(), label: "source".into() },
+            Vec::new(),
+        );
+        input.assign_points_to(rust("main", 9), BTreeSet::from([source.clone()]));
+        let (post, events) = transfer_mir_node(
+            "rust::main::bb0",
+            &block,
+            &[],
+            false,
+            false,
+            &BTreeSet::new(),
+            &ffi,
+            &input,
+            IdentityTransferProfile::LegacyFrozen,
+        );
+        let expected = AbstractAllocId::new(
+            AllocationSiteId::CCall {
+                node_id: "rust::main::bb0".to_string(),
+                allocator: "strdup".to_string(),
+            },
+            Vec::new(),
+        );
+        assert_eq!(post.points_to(&rust("main", 1)), BTreeSet::from([expected.clone()]));
+        assert_eq!(events.points_to(&rust("main", 1)), BTreeSet::from([expected]));
+        assert_eq!(post.points_to(&rust("main", 9)), BTreeSet::from([source]));
+        assert_ne!(post.points_to(&rust("main", 1)), post.points_to(&rust("main", 9)),
+            "strdup return must be fresh and must not alias the input string allocation");
+    }
+
+    #[test]
+    fn phase_b_bodyless_strdup_does_not_duplicate_represented_c_body_identity() {
+        let block = call_block(
+            "strdup",
+            vec![crate::structs::MirCallArgument {
+                arg: "Local(_9)".to_string(),
+                is_mutable: Some(false),
+            }],
+            "_1",
+            "bb1",
+        );
+        let ffi = HashSet::from(["strdup".to_string()]);
+        let (post, _) = transfer_mir_node(
+            "rust::main::bb0",
+            &block,
+            &[],
+            false,
+            true,
+            &BTreeSet::new(),
+            &ffi,
+            &AllocationIdentityMemory::default(),
+            IdentityTransferProfile::LegacyFrozen,
+        );
+        assert!(post.points_to(&rust("main", 1)).is_empty());
+    }
+
+    #[test]
+    fn phase_b_bodyless_malloc_does_not_duplicate_represented_c_body_identity() {
+        let block = call_block("malloc", vec![], "_1", "bb1");
+        let ffi = HashSet::from(["malloc".to_string()]);
+        let (post, _) = transfer_mir_node(
+            "rust::main::bb0",
+            &block,
+            &[],
+            false,
+            true,
+            &BTreeSet::new(),
+            &ffi,
+            &AllocationIdentityMemory::default(),
+            IdentityTransferProfile::LegacyFrozen,
+        );
+        assert!(post.points_to(&rust("main", 1)).is_empty());
+    }
+
+    #[test]
+    fn rn1_null_constructor_classifier_is_canonical_and_closed() {
+        assert!(is_null_pointer_constructor_def_path(Some("core::ptr::null_mut")));
+        assert!(is_null_pointer_constructor_def_path(Some("std::ptr::null_mut")));
+        assert!(!is_null_pointer_constructor_def_path(Some("crate::null_mut")));
+        assert!(!is_null_pointer_constructor_def_path(Some("core::ptr::null")));
+        assert!(!is_null_pointer_constructor_def_path(None));
+    }
+
+    #[test]
+    fn rn1_definite_null_dataflow_propagates_copy_to_realloc_terminator() {
+        use crate::structs::GlobalICFGOrdered;
+
+        let mut null_call = call_block("null_mut", vec![], "_1", "bb1");
+        if let Some(MirTerminator::Call { callee_def_path, .. }) = null_call.terminator.as_mut() {
+            *callee_def_path = Some("core::ptr::null_mut".to_string());
+        }
+        let copy = copy_statement(2, 1);
+        let realloc = call_block(
+            "realloc",
+            vec![
+                crate::structs::MirCallArgument { arg: "Local(_2)".into(), is_mutable: Some(false) },
+                crate::structs::MirCallArgument { arg: "const 64_usize".into(), is_mutable: None },
+            ],
+            "_3",
+            "bb3",
+        );
+        let middle = MirBasicBlock {
+            block_id: 1,
+            statements: vec![copy],
+            terminator: Some(MirTerminator::Goto {
+                details: String::new(),
+                source_info: String::new(),
+                target: "bb2".into(),
+            }),
+        };
+        let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ordered_nodes: vec![
+                ("rust::main::bb0".into(), GlobalICFGNode::Mir(null_call)),
+                ("rust::main::bb1".into(), GlobalICFGNode::Mir(middle)),
+                ("rust::main::bb2".into(), GlobalICFGNode::Mir(realloc)),
+            ],
+            icfg_edges: vec![
+                edge("rust::main::bb0", "rust::main::bb1"),
+                edge("rust::main::bb1", "rust::main::bb2"),
+            ],
+            rust_functions: BTreeMap::new(),
+            rust_calls: Vec::new(),
+        };
+        let states = definitely_null_at_mir_terminators(&icfg, "rust::main::bb0");
+        assert!(states["rust::main::bb2"].contains(&rust("main", 2)));
+    }
+
+    #[test]
+    fn rn1_definite_null_join_requires_all_incoming_paths() {
+        use crate::structs::GlobalICFGOrdered;
+
+        let mut null_call = call_block("null_mut", vec![], "_1", "bb2");
+        if let Some(MirTerminator::Call { callee_def_path, .. }) = null_call.terminator.as_mut() {
+            *callee_def_path = Some("core::ptr::null_mut".to_string());
+        }
+        let unknown = MirBasicBlock {
+            block_id: 1,
+            statements: vec![MirStatement {
+                source_info: source_info(),
+                kind: "Assign".into(),
+                details: "Assign((_1, move _9))".into(),
+                place: Some("Local(_1)".into()),
+                is_mutable: Some(true),
+                rvalue: Some("move _9".into()),
+            }],
+            terminator: Some(MirTerminator::Goto {
+                details: String::new(),
+                source_info: String::new(),
+                target: "bb2".into(),
+            }),
+        };
+        let join = return_block(2, Vec::new());
+        let entry = MirBasicBlock {
+            block_id: 9,
+            statements: Vec::new(),
+            terminator: Some(MirTerminator::SwitchInt {
+                details: String::new(),
+                source_info: String::new(),
+                targets: vec!["bb0".into()],
+                discr: "Local(_8)".into(),
+                otherwise: Some("bb1".into()),
+            }),
+        };
+        let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ordered_nodes: vec![
+                ("rust::main::bb9".into(), GlobalICFGNode::Mir(entry)),
+                ("rust::main::bb0".into(), GlobalICFGNode::Mir(null_call)),
+                ("rust::main::bb1".into(), GlobalICFGNode::Mir(unknown)),
+                ("rust::main::bb2".into(), GlobalICFGNode::Mir(join)),
+            ],
+            icfg_edges: vec![
+                edge("rust::main::bb9", "rust::main::bb0"),
+                edge("rust::main::bb9", "rust::main::bb1"),
+                edge("rust::main::bb0", "rust::main::bb2"),
+                edge("rust::main::bb1", "rust::main::bb2"),
+            ],
+            rust_functions: BTreeMap::new(),
+            rust_calls: Vec::new(),
+        };
+        let states = definitely_null_at_mir_terminators(&icfg, "rust::main::bb9");
+        assert!(!states["rust::main::bb2"].contains(&rust("main", 1)));
+    }
+
+    #[test]
+    fn rn1_definite_null_is_killed_by_intervening_unknown_call() {
+        use crate::structs::GlobalICFGOrdered;
+
+        let mut null_call = call_block("null_mut", vec![], "_1", "bb1");
+        if let Some(MirTerminator::Call { callee_def_path, .. }) = null_call.terminator.as_mut() {
+            *callee_def_path = Some("core::ptr::null_mut".to_string());
+        }
+        let unknown_call = call_block("unknown", vec![], "_9", "bb2");
+        let realloc = call_block(
+            "realloc",
+            vec![
+                crate::structs::MirCallArgument { arg: "Local(_1)".into(), is_mutable: Some(false) },
+                crate::structs::MirCallArgument { arg: "const 64_usize".into(), is_mutable: None },
+            ],
+            "_2",
+            "bb3",
+        );
+        let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ordered_nodes: vec![
+                ("rust::main::bb0".into(), GlobalICFGNode::Mir(null_call)),
+                ("rust::main::bb1".into(), GlobalICFGNode::Mir(unknown_call)),
+                ("rust::main::bb2".into(), GlobalICFGNode::Mir(realloc)),
+            ],
+            icfg_edges: vec![
+                edge("rust::main::bb0", "rust::main::bb1"),
+                edge("rust::main::bb1", "rust::main::bb2"),
+            ],
+            rust_functions: BTreeMap::new(),
+            rust_calls: Vec::new(),
+        };
+        let states = definitely_null_at_mir_terminators(&icfg, "rust::main::bb0");
+        assert!(!states["rust::main::bb2"].contains(&rust("main", 1)));
+    }
+
+    #[test]
+    fn rn1_represented_external_realloc_suppresses_mir_side_fresh_identity() {
+        let block = call_block(
+            "realloc",
+            vec![
+                crate::structs::MirCallArgument { arg: "Local(_1)".into(), is_mutable: Some(false) },
+                crate::structs::MirCallArgument { arg: "const 64_usize".into(), is_mutable: None },
+            ],
+            "_2",
+            "bb1",
+        );
+        let ffi = HashSet::from(["realloc".to_string()]);
+        let nulls = BTreeSet::from([rust("main", 1)]);
+        let (post, _) = transfer_mir_node(
+            "rust::main::bb0", &block, &[], false, true, &nulls, &ffi,
+            &AllocationIdentityMemory::default(), IdentityTransferProfile::LegacyFrozen,
+        );
+        assert!(post.points_to(&rust("main", 2)).is_empty());
+    }
+
+    #[test]
+    fn rn1_bodyless_realloc_definitely_null_materializes_fresh_c_identity() {
+        let block = call_block(
+            "realloc",
+            vec![
+                crate::structs::MirCallArgument { arg: "Local(_1)".into(), is_mutable: Some(false) },
+                crate::structs::MirCallArgument { arg: "const 64_usize".into(), is_mutable: None },
+            ],
+            "_2",
+            "bb1",
+        );
+        let ffi = HashSet::from(["realloc".to_string()]);
+        let nulls = BTreeSet::from([rust("main", 1)]);
+        let (post, events) = transfer_mir_node(
+            "rust::main::bb0",
+            &block,
+            &[],
+            false,
+            false,
+            &nulls,
+            &ffi,
+            &AllocationIdentityMemory::default(),
+            IdentityTransferProfile::LegacyFrozen,
+        );
+        let expected = AbstractAllocId::new(
+            AllocationSiteId::CCall {
+                node_id: "rust::main::bb0".into(),
+                allocator: "realloc".into(),
+            },
+            Vec::new(),
+        );
+        assert_eq!(post.points_to(&rust("main", 2)), BTreeSet::from([expected.clone()]));
+        assert_eq!(events.points_to(&rust("main", 2)), BTreeSet::from([expected]));
+        assert!(post.points_to(&rust("main", 1)).is_empty(), "NULL is not an old allocation identity");
+    }
+
+    #[test]
+    fn rn1_bodyless_realloc_zero_size_keeps_may_fresh_resource_identity() {
+        let block = call_block(
+            "realloc",
+            vec![
+                crate::structs::MirCallArgument { arg: "Local(_1)".into(), is_mutable: Some(false) },
+                crate::structs::MirCallArgument { arg: "const 0_usize".into(), is_mutable: None },
+            ],
+            "_2",
+            "bb1",
+        );
+        let ffi = HashSet::from(["realloc".to_string()]);
+        let nulls = BTreeSet::from([rust("main", 1)]);
+        let (post, _) = transfer_mir_node(
+            "rust::main::bb0", &block, &[], false, false, &nulls, &ffi,
+            &AllocationIdentityMemory::default(), IdentityTransferProfile::LegacyFrozen,
+        );
+        assert_eq!(post.points_to(&rust("main", 2)).len(), 1,
+            "malloc(0)-equivalent realloc(NULL,0) is a MAY resource, not proven absence");
+    }
+
+    #[test]
+    fn rn1_bodyless_realloc_dynamic_size_keeps_may_fresh_resource_identity() {
+        let block = call_block(
+            "realloc",
+            vec![
+                crate::structs::MirCallArgument { arg: "Local(_1)".into(), is_mutable: Some(false) },
+                crate::structs::MirCallArgument { arg: "copy _9".into(), is_mutable: None },
+            ],
+            "_2",
+            "bb1",
+        );
+        let ffi = HashSet::from(["realloc".to_string()]);
+        let nulls = BTreeSet::from([rust("main", 1)]);
+        let (post, _) = transfer_mir_node(
+            "rust::main::bb0", &block, &[], false, false, &nulls, &ffi,
+            &AllocationIdentityMemory::default(), IdentityTransferProfile::LegacyFrozen,
+        );
+        assert_eq!(post.points_to(&rust("main", 2)).len(), 1,
+            "unknown size includes positive/zero malloc-equivalent outcomes and remains MAY");
+    }
+
+    #[test]
+    fn rn1_bodyless_realloc_without_null_proof_does_not_invent_fresh_identity() {
+        let block = call_block(
+            "realloc",
+            vec![
+                crate::structs::MirCallArgument { arg: "Local(_1)".into(), is_mutable: Some(false) },
+                crate::structs::MirCallArgument { arg: "const 64_usize".into(), is_mutable: None },
+            ],
+            "_2",
+            "bb1",
+        );
+        let ffi = HashSet::from(["realloc".to_string()]);
+        let (post, _) = transfer_mir_node(
+            "rust::main::bb0",
+            &block,
+            &[],
+            false,
+            false,
+            &BTreeSet::new(),
+            &ffi,
+            &AllocationIdentityMemory::default(),
+            IdentityTransferProfile::LegacyFrozen,
+        );
+        assert!(post.points_to(&rust("main", 2)).is_empty());
+    }
+
+    #[test]
+    fn phase_b_bodyless_malloc_two_callsites_have_distinct_abstract_ids() {
+        let ffi = HashSet::from(["malloc".to_string()]);
+        let block1 = call_block("malloc", vec![], "_1", "bb1");
+        let block2 = call_block("malloc", vec![], "_2", "bb2");
+        let (post1, _) = transfer_mir_node(
+            "rust::main::bb0", &block1, &[], false, false, &BTreeSet::new(), &ffi,
+            &AllocationIdentityMemory::default(), IdentityTransferProfile::LegacyFrozen,
+        );
+        let (post2, _) = transfer_mir_node(
+            "rust::main::bb1", &block2, &[], false, false, &BTreeSet::new(), &ffi,
+            &post1, IdentityTransferProfile::LegacyFrozen,
+        );
+        let a = post2.points_to(&rust("main", 1));
+        let b = post2.points_to(&rust("main", 2));
+        assert_eq!(a.len(), 1);
+        assert_eq!(b.len(), 1);
+        assert_ne!(a, b);
     }
 
 }

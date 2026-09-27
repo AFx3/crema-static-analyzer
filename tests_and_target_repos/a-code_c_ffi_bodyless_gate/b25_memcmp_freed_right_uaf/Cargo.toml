@@ -1,0 +1,4 @@
+[package]
+name = "b25_memcmp_freed_right_uaf"
+version = "0.1.0"
+edition = "2021"

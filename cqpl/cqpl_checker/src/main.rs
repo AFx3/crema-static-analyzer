@@ -1,6 +1,7 @@
 use cqpl_checker::{
-    panic_lifecycle_overlay_from_json, source_provenance_overlay_from_json, typed_edge_overlay_from_json, parse_query_document, AnnotatedIcfg, Binding, Env, Kripke,
-    ModelChecker, QueryResultAssessment,
+    allocation_existence_guard_overlay_from_json, conditional_reallocation_overlay_from_json, reallocation_boundary_overlay_from_json,
+    panic_lifecycle_overlay_from_json, source_provenance_overlay_from_json, typed_edge_overlay_from_json,
+    parse_query_document, AnnotatedIcfg, Binding, Env, Kripke, ModelChecker, QueryResultAssessment,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -241,6 +242,105 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     let has_panic_lifecycle_state_v2 = capabilities.contains("panic_lifecycle_state_v2");
     let has_typed_edge_flow = capabilities.contains("typed_edge_flow_v1");
     let has_source_provenance = capabilities.contains("source_provenance_v1");
+    let has_allocation_existence_guards = capabilities.contains("allocation_existence_guards_v1");
+    let has_reallocation_boundaries = capabilities.contains("reallocation_boundaries_v1");
+    let has_reallocation_boundaries_v2 = capabilities.contains("reallocation_boundaries_v2");
+    let has_conditional_reallocations = capabilities.contains("conditional_reallocations_v1");
+    let has_conditional_reallocations_v2 = capabilities.contains("conditional_reallocations_v2");
+    let has_external_formal_memory_effects = capabilities.contains("external_formal_memory_effects_v1");
+
+    let guards_present = root.get("allocation_existence_guards").is_some();
+    if has_allocation_existence_guards != guards_present {
+        return Err("allocation_existence_guards_v1 capability and allocation_existence_guards payload must appear together".into());
+    }
+    if has_allocation_existence_guards && (!has_allocation_state || !has_mir_semantic_labels) {
+        return Err("allocation_existence_guards_v1 requires allocation_state_v1 and mir_semantic_labels_v1".into());
+    }
+    if let Some(records) = root.get("allocation_existence_guards") {
+        let records = records.as_array().ok_or_else(|| {
+            "schema-v2 allocation_existence_guards must be an array".to_string()
+        })?;
+        if records.is_empty() {
+            return Err("allocation_existence_guards_v1 payload must contain at least one record".into());
+        }
+    }
+
+    let reallocation_boundaries_present = root.get("reallocation_boundaries").is_some();
+    let reallocation_boundaries_has_v2_basis = root
+        .get("reallocation_boundaries")
+        .and_then(Value::as_array)
+        .is_some_and(|records| {
+            records.iter().any(|record| {
+                record.get("basis").and_then(Value::as_str)
+                    == Some("rust_foreign_decl_c_realloc_allocptr_family_v2")
+            })
+        });
+    if reallocation_boundaries_has_v2_basis && !has_reallocation_boundaries_v2 {
+        return Err("reallocation_boundaries payload contains a v2 allocator-family-consumer record without capability reallocation_boundaries_v2".into());
+    }
+    if has_reallocation_boundaries_v2 && !has_reallocation_boundaries {
+        return Err("reallocation_boundaries_v2 extends reallocation_boundaries_v1; both capabilities are required".into());
+    }
+    if has_reallocation_boundaries_v2
+        && (!has_allocation_contracts || !capabilities.contains("mir_semantics_v2"))
+    {
+        return Err("reallocation_boundaries_v2 requires allocation_contracts_v1 and mir_semantics_v2".into());
+    }
+    if has_reallocation_boundaries != reallocation_boundaries_present {
+        return Err("reallocation_boundaries_v1 capability and reallocation_boundaries payload must appear together".into());
+    }
+    if has_reallocation_boundaries && !has_allocation_state {
+        return Err("reallocation_boundaries_v1 requires allocation_state_v1".into());
+    }
+    if let Some(records) = root.get("reallocation_boundaries") {
+        let records = records.as_array().ok_or_else(|| {
+            "schema-v2 reallocation_boundaries must be an array".to_string()
+        })?;
+        if records.is_empty() {
+            return Err("reallocation_boundaries_v1 payload must contain at least one record".into());
+        }
+    }
+
+    let conditional_reallocations_present = root.get("conditional_reallocations").is_some();
+    if has_conditional_reallocations != conditional_reallocations_present {
+        return Err("conditional_reallocations_v1 capability and conditional_reallocations payload must appear together".into());
+    }
+    if has_conditional_reallocations_v2 && !has_conditional_reallocations {
+        return Err("conditional_reallocations_v2 strengthens conditional_reallocations_v1; both capabilities are required".into());
+    }
+    if has_conditional_reallocations
+        && (!has_allocation_state
+            || !has_reallocation_boundaries
+            || !has_allocation_existence_guards
+            || !has_mir_semantic_labels
+            || !has_typed_edge_flow)
+    {
+        return Err("conditional_reallocations_v1 requires allocation_state_v1, reallocation_boundaries_v1, allocation_existence_guards_v1, mir_semantic_labels_v1, and typed_edge_flow_v1".into());
+    }
+    if let Some(records) = root.get("conditional_reallocations") {
+        let records = records.as_array().ok_or_else(|| {
+            "schema-v2 conditional_reallocations must be an array".to_string()
+        })?;
+        if records.is_empty() {
+            return Err("conditional_reallocations_v1 payload must contain at least one record".into());
+        }
+    }
+
+    let external_formal_memory_effects_present = root.get("external_formal_memory_effects").is_some();
+    if has_external_formal_memory_effects != external_formal_memory_effects_present {
+        return Err("external_formal_memory_effects_v1 capability and external_formal_memory_effects payload must appear together".into());
+    }
+    if has_external_formal_memory_effects && !has_mir_semantics_v2 {
+        return Err("external_formal_memory_effects_v1 requires mir_semantics_v2".into());
+    }
+    if let Some(records) = root.get("external_formal_memory_effects") {
+        let records = records.as_array().ok_or_else(|| {
+            "schema-v2 external_formal_memory_effects must be an array".to_string()
+        })?;
+        if records.is_empty() {
+            return Err("external_formal_memory_effects_v1 payload must contain at least one record".into());
+        }
+    }
 
     let typed_edges_present = root.get("typed_edges").is_some();
     if has_typed_edge_flow != typed_edges_present {
@@ -564,13 +664,19 @@ fn run() -> Result<(), String> {
     let panic_lifecycle = panic_lifecycle_overlay_from_json(&raw_value)?;
     let typed_edges = typed_edge_overlay_from_json(&raw_value)?;
     let source_provenance = source_provenance_overlay_from_json(&raw_value)?;
+    let allocation_existence_guards = allocation_existence_guard_overlay_from_json(&raw_value)?;
+    let reallocation_boundaries = reallocation_boundary_overlay_from_json(&raw_value)?;
+    let conditional_reallocations = conditional_reallocation_overlay_from_json(&raw_value)?;
     let annotated: AnnotatedIcfg = serde_json::from_value(raw_value)
         .map_err(|e| format!("invalid annotated ICFG JSON: {e}"))?;
-    let base_k = Kripke::from_annotated_icfg_with_all_overlays(
+    let base_k = Kripke::from_annotated_icfg_with_all_diagnostic_overlays(
         annotated,
         panic_lifecycle,
         typed_edges,
         source_provenance,
+        allocation_existence_guards,
+        reallocation_boundaries,
+        conditional_reallocations,
     )?;
     let requested_entry = entry_override.as_deref().unwrap_or(&base_k.entry);
     let k = base_k.project_from_entry(requested_entry, intra)?;
@@ -678,6 +784,42 @@ mod tests {
                 "post": {"cells": []}
             }]
         })
+    }
+
+    #[test]
+    fn external_formal_memory_effect_cli_guard_requires_atomic_capability_and_payload() {
+        let mut missing = minimal_v2_node();
+        missing["capabilities"] = json!(["external_formal_memory_effects_v1"]);
+        let err = validate_boundary_requirements(&missing).unwrap_err();
+        assert!(err.contains("external_formal_memory_effects_v1"));
+
+        let mut naked = minimal_v2_node();
+        naked["external_formal_memory_effects"] = json!([{
+            "node":"rust::main::bb0", "callee":"strlen",
+            "semantic_class":"strlen_read_c_string_v1", "formal_index":0,
+            "access":"read", "event_variable":"Local(_1)",
+            "actual_variable":"rust::main::Local(_1)",
+            "basis":"crema_efm1_closed_contract_v1",
+            "semantic_sources":["svf_absextapi_strlen_semantics_v1","llvm16_tli_strlen_argmem_read_semantics_v1"]
+        }]);
+        let err = validate_boundary_requirements(&naked).unwrap_err();
+        assert!(err.contains("external_formal_memory_effects_v1"));
+    }
+
+    #[test]
+    fn external_formal_memory_effect_cli_guard_requires_mir_semantics_v2() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["external_formal_memory_effects_v1"]);
+        value["external_formal_memory_effects"] = json!([{
+            "node":"rust::main::bb0", "callee":"strlen",
+            "semantic_class":"strlen_read_c_string_v1", "formal_index":0,
+            "access":"read", "event_variable":"Local(_1)",
+            "actual_variable":"rust::main::Local(_1)",
+            "basis":"crema_efm1_closed_contract_v1",
+            "semantic_sources":["svf_absextapi_strlen_semantics_v1","llvm16_tli_strlen_argmem_read_semantics_v1"]
+        }]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("requires mir_semantics_v2"));
     }
 
     #[test]
@@ -988,6 +1130,122 @@ mod tests {
         value["capabilities"] = json!([]);
         let err = validate_boundary_requirements(&value).unwrap_err();
         assert!(err.contains("typed_edges payload"), "unexpected error: {err}");
+    }
+
+
+    #[test]
+    fn reallocation_boundary_cli_guard_requires_atomic_capability_and_payload() {
+        let mut value = minimal_v2_node();
+        // This test exercises RBF1 capability/payload atomicity, so the
+        // surrounding schema-v2 artifact must first satisfy the independent
+        // allocation_state_v1 boundary contract.
+        value["nodes"][0]["allocation_post"] = json!({"cells": []});
+        value["capabilities"] = json!(["allocation_state_v1", "reallocation_boundaries_v1"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("reallocation_boundaries_v1"), "unexpected error: {err}");
+
+        value["reallocation_boundaries"] = json!([{
+            "node": "b0",
+            "source_allocation": "A",
+            "source_variable": "rust::main::_1",
+            "result_variable": "rust::main::_2",
+            "family": "c_malloc",
+            "operation": "realloc",
+            "certainty": "may_abstract",
+            "status": "conditional_unmodeled",
+            "basis": "rust_foreign_decl_c_realloc_boundary_v1"
+        }]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["capabilities"] = json!(["allocation_state_v1"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("reallocation_boundaries_v1"), "unexpected error: {err}");
+    }
+
+
+    #[test]
+    fn reallocation_boundary_v2_cli_guard_requires_v1_contracts_and_mir_semantics() {
+        let mut value = minimal_v2_node();
+        value["nodes"][0]["allocation_post"] = json!({"cells": []});
+        value["reallocation_boundaries"] = json!([{
+            "basis": "rust_foreign_decl_c_realloc_allocptr_family_v2"
+        }]);
+        value["capabilities"] = json!([
+            "allocation_state_v1",
+            "reallocation_boundaries_v1"
+        ]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("without capability reallocation_boundaries_v2"));
+
+        value["reallocation_boundaries"] = json!([{"proof": "placeholder"}]);
+        value["capabilities"] = json!([
+            "allocation_state_v1",
+            "reallocation_boundaries_v1",
+            "reallocation_boundaries_v2"
+        ]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("allocation_contracts_v1") || err.contains("mir_semantics_v2"));
+
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        value["capabilities"] = json!([
+            "allocation_state_v1",
+            "allocation_contracts_v1",
+            "mir_semantic_labels_v1",
+            "mir_semantics_v2",
+            "reallocation_boundaries_v1",
+            "reallocation_boundaries_v2"
+        ]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+    }
+
+    #[test]
+    fn conditional_reallocation_cli_guard_requires_atomic_capability_and_dependencies() {
+        let mut value = minimal_v2_node();
+        value["nodes"][0]["allocation_post"] = json!({"cells": []});
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        value["capabilities"] = json!([
+            "allocation_state_v1",
+            "mir_semantic_labels_v1",
+            "typed_edge_flow_v1",
+            "allocation_existence_guards_v1",
+            "reallocation_boundaries_v1",
+            "conditional_reallocations_v1"
+        ]);
+        value["typed_edges"] = json!([]);
+        value["allocation_existence_guards"] = json!([{"proof": "placeholder"}]);
+        value["reallocation_boundaries"] = json!([{"proof": "placeholder"}]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("conditional_reallocations_v1"), "unexpected error: {err}");
+
+        value["conditional_reallocations"] = json!([{"proof": "placeholder"}]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["capabilities"] = json!([
+            "allocation_state_v1",
+            "mir_semantic_labels_v1",
+            "typed_edge_flow_v1",
+            "allocation_existence_guards_v1",
+            "reallocation_boundaries_v1"
+        ]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("conditional_reallocations_v1"), "unexpected error: {err}");
+        let mut v2_without_v1 = value.clone();
+        v2_without_v1["capabilities"] = json!([
+            "allocation_state_v1", "reallocation_boundaries_v1",
+            "allocation_existence_guards_v1", "mir_semantic_labels_v1",
+            "typed_edge_flow_v1", "conditional_reallocations_v2"
+        ]);
+        // This fixture specifically exercises the v2 -> v1 capability
+        // dependency. Remove the inherited v1 payload so the earlier
+        // v1 capability/payload atomicity guard is not the violated
+        // invariant under test.
+        v2_without_v1
+            .as_object_mut()
+            .expect("test fixture must be a JSON object")
+            .remove("conditional_reallocations");
+        let err = validate_boundary_requirements(&v2_without_v1).unwrap_err();
+        assert!(err.contains("conditional_reallocations_v2"), "unexpected error: {err}");
+
     }
 
 }

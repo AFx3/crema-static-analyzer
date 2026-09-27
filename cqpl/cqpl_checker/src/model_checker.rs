@@ -749,6 +749,7 @@ mod tests {
     fn quantifier_domain_includes_c_variables() {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -772,6 +773,7 @@ mod tests {
     fn explicit_binding_can_bind_a_logic_variable_to_c_program_variable() {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -796,6 +798,7 @@ mod tests {
     fn top_makes_all_supported_may_atoms_unknown_not_true() {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -822,6 +825,7 @@ mod tests {
     fn next_at_terminal_observes_quiescent_completion_state() {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -863,6 +867,7 @@ mod tests {
     fn next_duality_holds_at_totalized_terminal() {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -892,6 +897,7 @@ mod tests {
     fn partial_intra_constructor_preserves_legacy_deadlock_next_semantics() {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -918,6 +924,7 @@ mod tests {
     fn terminal_event_is_current_once_not_replayed_forever() {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -949,6 +956,7 @@ mod tests {
     fn terminal_drop_is_not_replayed_as_a_second_drop_or_use() {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -987,6 +995,7 @@ mod tests {
         // truth value is a semantic property, not a performance assumption.
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -1021,6 +1030,7 @@ mod tests {
     fn theoretical_uaf_query_is_unknown_on_cross_language_may_witness() {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -1065,6 +1075,7 @@ mod tests {
         // AF is refuted by the maximal path ending in b2.
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -1095,6 +1106,7 @@ mod tests {
         let use_x = || EventLabel { predicate: EventKind::Read, variable: "rust::x".into() };
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -1126,6 +1138,7 @@ mod tests {
         let use_x = || EventLabel { predicate: EventKind::Read, variable: "rust::x".into() };
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -1160,6 +1173,7 @@ mod tests {
         // without a drop. E[alloc_l U drop_l] has a witness; A[...] is refuted.
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -1187,6 +1201,7 @@ mod tests {
         // must remain unk rather than being promoted to tt or refuted to ff.
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -1211,6 +1226,7 @@ mod tests {
         // contains both Rust and C variables, so exists is tt and forall is ff.
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -1234,6 +1250,7 @@ mod tests {
     fn c_free_label_satisfies_rust_alias_drop_label_at_same_program_point() {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -1258,6 +1275,7 @@ mod tests {
     fn existential_candidate_pruning_preserves_refutation_when_required_alloc_is_absent() {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -1289,6 +1307,7 @@ mod tests {
     fn existential_candidate_pruning_is_not_applied_through_negation_or_disjunction() {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -1324,6 +1343,7 @@ mod tests {
 
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 2,
             capabilities: vec![],
             llvm_memory_effects: None,
@@ -1375,6 +1395,7 @@ mod tests {
         };
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 2,
             capabilities: vec!["allocation_state_v1".into()], entry: "b0".into(),
             llvm_memory_effects: None,
@@ -1415,6 +1436,7 @@ mod tests {
         use crate::kripke::{AbstractAllocation, AnnotatedIcfg, AnnotatedNode, ProgramLanguage, ProgramVariable};
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 2,
             capabilities: vec![], entry: "b0".into(),
             llvm_memory_effects: None,
@@ -1437,6 +1459,7 @@ mod tests {
         use crate::kripke::{AnnotatedIcfg, AnnotatedNode, ProgramLanguage, ProgramVariable};
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 1,
             capabilities: vec![], entry: "b0".into(),
             llvm_memory_effects: None,
@@ -1459,6 +1482,7 @@ mod tests {
     fn mismatch_fixture(allocator_family: &str, deallocator_family: &str) -> Kripke {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 2,
             capabilities: vec!["allocation_contracts_v1".into()],
             llvm_memory_effects: None,
@@ -1509,6 +1533,7 @@ mod tests {
     fn allocator_mismatch_query_requires_artifact_capability() {
         let mut input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 2, capabilities: vec![], entry: "b0".into(),
             llvm_memory_effects: None,
             svf_solved_points_to: None,
@@ -1565,6 +1590,7 @@ mod tests {
     fn allocator_mismatch_query_accepts_allocation_contracts_v2_requirement() {
         let mut input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 2,
             capabilities: vec!["allocation_contracts_v1".into(), "allocation_contracts_v2".into()],
             llvm_memory_effects: None,
@@ -1627,6 +1653,7 @@ mod tests {
     fn structural_mir_labels_are_capability_gated_and_queryable() {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 2,
             capabilities: vec!["mir_semantic_labels_v1".into(), "mir_semantics_v2".into()],
             llvm_memory_effects: None,
@@ -1675,6 +1702,7 @@ mod tests {
     fn lifecycle_query_input(coverage: crate::kripke::PanicLifecycleCoverage) -> (AnnotatedIcfg, crate::kripke::PanicLifecycleOverlay) {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 2,
             capabilities: vec![
                 "mir_semantic_labels_v1".into(),
@@ -1747,6 +1775,7 @@ mod tests {
     fn repeat_drop_requires_explicit_capability_declaration() {
         let input = AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 2, capabilities: vec![], entry: "b0".into(),
             llvm_memory_effects: None,
             svf_solved_points_to: None,

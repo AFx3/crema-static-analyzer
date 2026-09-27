@@ -1,0 +1,4 @@
+[package]
+name = "b35_memchr_return_not_alloc"
+version = "0.1.0"
+edition = "2021"

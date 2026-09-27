@@ -169,6 +169,23 @@ pub struct ExternalDeallocationEffectRecord {
     pub corroborating_bases: Vec<String>,
 }
 
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalFormalMemoryEffectRecord {
+    pub node: String,
+    pub callee: String,
+    pub semantic_class: String,
+    pub formal_index: usize,
+    pub access: String,
+    pub event_variable: String,
+    pub actual_variable: String,
+    #[serde(default)]
+    pub size_argument_index: Option<usize>,
+    pub basis: String,
+    #[serde(default)]
+    pub semantic_sources: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FfiArgumentIdentityRecord {
     pub node: String,
@@ -727,6 +744,627 @@ pub struct NodeIdentityAnnotation {
     pub stack_refs: Vec<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct AllocationExistenceGuardRecord {
+    pub allocation: String,
+    pub producer_call_node: String,
+    pub predicate_call_node: String,
+    pub switch_node: String,
+    pub tested_variable: String,
+    pub predicate_result_variable: String,
+    pub null_successor: String,
+    pub non_null_successor: String,
+    pub callee_def_path: String,
+    pub allocation_return_basis: String,
+    pub basis: String,
+}
+
+/// AGE1 read-only proof overlay.  This evidence is intentionally absent from
+/// `CqplTruthModel`; it may orient an already-UNKNOWN diagnostic but cannot
+/// change temporal truth.
+pub type AllocationExistenceGuardOverlay = Vec<AllocationExistenceGuardRecord>;
+
+pub fn allocation_existence_guard_overlay_from_json(
+    root: &serde_json::Value,
+) -> Result<Option<AllocationExistenceGuardOverlay>, String> {
+    let Some(raw) = root.get("allocation_existence_guards") else {
+        return Ok(None);
+    };
+    let records: AllocationExistenceGuardOverlay = serde_json::from_value(raw.clone())
+        .map_err(|err| format!("invalid allocation_existence_guards payload: {err}"))?;
+    Ok(Some(records))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct ReallocationBoundaryRecord {
+    pub node: String,
+    pub source_allocation: String,
+    pub source_variable: String,
+    pub result_variable: String,
+    pub family: String,
+    pub operation: String,
+    pub certainty: String,
+    pub status: String,
+    pub basis: String,
+}
+
+/// RBF1 diagnostic-only unresolved conditional reallocation boundary. This
+/// evidence is intentionally absent from `CqplTruthModel`.
+pub type ReallocationBoundaryOverlay = Vec<ReallocationBoundaryRecord>;
+
+pub fn reallocation_boundary_overlay_from_json(
+    root: &serde_json::Value,
+) -> Result<Option<ReallocationBoundaryOverlay>, String> {
+    let Some(raw) = root.get("reallocation_boundaries") else {
+        return Ok(None);
+    };
+    let records: ReallocationBoundaryOverlay = serde_json::from_value(raw.clone())
+        .map_err(|err| format!("invalid reallocation_boundaries payload: {err}"))?;
+    Ok(Some(records))
+}
+
+fn producer_certified_rn1_source_for_reallocation_boundary(
+    record: &ReallocationBoundaryRecord,
+    allocation: &AbstractAllocation,
+    guards: &[AllocationExistenceGuardRecord],
+) -> bool {
+    let Some(contract) = allocation.allocator_contract.as_ref() else {
+        return false;
+    };
+    if contract.family != "c_malloc"
+        || contract.operation != "realloc"
+        || contract.language != "c"
+    {
+        return false;
+    }
+    let Some(site) = allocation.site.as_ref() else {
+        return false;
+    };
+    if site.get("kind").and_then(serde_json::Value::as_str) != Some("c_call")
+        || site.get("allocator").and_then(serde_json::Value::as_str) != Some("realloc")
+    {
+        return false;
+    }
+    let Some(site_node) = site.get("node_id").and_then(serde_json::Value::as_str) else {
+        return false;
+    };
+
+    guards.iter().any(|guard| {
+        guard.allocation == record.source_allocation
+            && guard.producer_call_node == site_node
+            && guard.tested_variable == record.source_variable
+            && guard.non_null_successor == record.node
+            && guard.allocation_return_basis == "rust_foreign_decl_c_malloc_contract_v1"
+            && guard.basis == "rust_raw_pointer_is_null_switch_v1"
+    })
+}
+
+fn validate_reallocation_boundaries(
+    records: &[ReallocationBoundaryRecord],
+    variables: &BTreeMap<String, ProgramVariable>,
+    allocations: &BTreeMap<String, AbstractAllocation>,
+    nodes: &BTreeMap<String, AnnotatedNode>,
+    guards: &[AllocationExistenceGuardRecord],
+    allow_v2_family_consumers: bool,
+) -> Result<(), String> {
+    if records.is_empty() {
+        return Err("reallocation_boundaries_v1 payload must contain at least one record".into());
+    }
+    let mut seen = BTreeSet::new();
+    for record in records {
+        let legacy_v1 = record.basis == "rust_foreign_decl_c_realloc_boundary_v1";
+        let family_consumer_v2 = record.basis == "rust_foreign_decl_c_realloc_allocptr_family_v2";
+        if record.family != "c_malloc"
+            || record.operation != "realloc"
+            || record.certainty != "may_abstract"
+            || record.status != "conditional_unmodeled"
+            || (!legacy_v1 && !(allow_v2_family_consumers && family_consumer_v2))
+        {
+            return Err(format!(
+                "reallocation_boundaries invalid proof tuple at '{}' for '{}'",
+                record.node, record.source_allocation
+            ));
+        }
+        let allocation = allocations.get(&record.source_allocation).ok_or_else(|| {
+            format!(
+                "reallocation_boundaries_v1 references undeclared allocation '{}'",
+                record.source_allocation
+            )
+        })?;
+        if legacy_v1 {
+            let ordinary_c_malloc_source = allocation.allocator_contract.as_ref().is_some_and(|contract| {
+                contract.family == "c_malloc"
+                    && matches!(contract.operation.as_str(), "malloc" | "calloc")
+            });
+            let rn1_realloc_source = producer_certified_rn1_source_for_reallocation_boundary(
+                record, allocation, guards,
+            );
+            if !ordinary_c_malloc_source && !rn1_realloc_source {
+                return Err(format!(
+                    "reallocation_boundaries_v1 source '{}' is not a c_malloc malloc/calloc allocation or a producer-certified RN1 realloc allocation on its non-null successor",
+                    record.source_allocation
+                ));
+            }
+        }
+        if family_consumer_v2 && allocation.allocator_contract.is_none() {
+            return Err(format!(
+                "reallocation_boundaries_v2 source '{}' lacks allocation_contracts_v1 metadata",
+                record.source_allocation
+            ));
+        }
+        let node = nodes.get(&record.node).ok_or_else(|| {
+            format!("reallocation_boundaries_v1 references unknown node '{}'", record.node)
+        })?;
+        if family_consumer_v2
+            && !node.semantic_labels.iter().any(|label| label == "term:call")
+        {
+            return Err(format!(
+                "reallocation_boundaries_v2 record at '{}' is not anchored at a MIR call node",
+                record.node
+            ));
+        }
+        for variable in [&record.source_variable, &record.result_variable] {
+            if !variables.contains_key(variable) {
+                return Err(format!(
+                    "reallocation_boundaries_v1 references undeclared variable '{}'",
+                    variable
+                ));
+            }
+        }
+        let source_is_bound = node.identity.as_ref().is_some_and(|identity| {
+            identity.points_to.iter().any(|relation| {
+                relation.variable == record.source_variable
+                    && relation.allocations.iter().any(|a| a == &record.source_allocation)
+            })
+        });
+        if !source_is_bound {
+            return Err(format!(
+                "reallocation_boundaries_v1 source variable '{}' is not bound to allocation '{}' at '{}'",
+                record.source_variable, record.source_allocation, record.node
+            ));
+        }
+        if !seen.insert((record.node.clone(), record.source_allocation.clone())) {
+            return Err("reallocation_boundaries_v1 contains a duplicate boundary record".into());
+        }
+    }
+    Ok(())
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct ConditionalReallocationResultDeallocationRecord {
+    pub node: String,
+    pub variable: String,
+    #[serde(default)]
+    pub argument_variable: Option<String>,
+    pub callee_def_path: String,
+    pub family: String,
+    pub operation: String,
+    pub basis: String,
+    #[serde(default)]
+    pub argument_correlation_basis: Option<String>,
+    #[serde(default)]
+    pub value_flow_basis: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct ConditionalReallocationRecord {
+    pub source_allocation: String,
+    pub reallocation_node: String,
+    pub source_variable: String,
+    pub result_variable: String,
+    pub source_existence_predicate_call_node: String,
+    pub outcome_predicate_call_node: String,
+    #[serde(default)]
+    pub outcome_argument_variable: Option<String>,
+    pub outcome_predicate_result_variable: String,
+    pub outcome_switch_node: String,
+    pub failure_successor: String,
+    pub success_successor: String,
+    pub reallocation_callee_def_path: String,
+    pub outcome_callee_def_path: String,
+    pub family: String,
+    pub operation: String,
+    pub certainty: String,
+    pub size_semantics: String,
+    pub status: String,
+    pub basis: String,
+    #[serde(default)]
+    pub outcome_correlation_basis: Option<String>,
+    #[serde(default)]
+    pub outcome_value_flow_basis: Option<String>,
+    #[serde(default)]
+    pub result_deallocations: Vec<ConditionalReallocationResultDeallocationRecord>,
+}
+
+/// CR1 proof-carrying conditional realloc relation. Unlike AGE1/RBF1, this
+/// overlay is allowed to refine CQPL truth, but only through a checker-local
+/// semantic outcome state on the certified success edge. It never mutates the
+/// producer ICFG or CREMA fixed point.
+pub type ConditionalReallocationOverlay = Vec<ConditionalReallocationRecord>;
+
+pub fn conditional_reallocation_overlay_from_json(
+    root: &serde_json::Value,
+) -> Result<Option<ConditionalReallocationOverlay>, String> {
+    let Some(raw) = root.get("conditional_reallocations") else {
+        return Ok(None);
+    };
+    let records: ConditionalReallocationOverlay = serde_json::from_value(raw.clone())
+        .map_err(|err| format!("invalid conditional_reallocations payload: {err}"))?;
+    Ok(Some(records))
+}
+
+fn node_reaches(nodes: &BTreeMap<String, AnnotatedNode>, start: &str, target: &str) -> bool {
+    let mut seen = BTreeSet::new();
+    let mut pending = vec![start.to_string()];
+    while let Some(node_id) = pending.pop() {
+        if node_id == target {
+            return true;
+        }
+        if !seen.insert(node_id.clone()) {
+            continue;
+        }
+        if let Some(node) = nodes.get(&node_id) {
+            pending.extend(node.successors.iter().cloned());
+        }
+    }
+    false
+}
+
+fn event_label_matches_canonical_variable(label: &EventLabel, canonical: &str) -> bool {
+    label.variable == canonical
+        || canonical.rsplit("::").next().is_some_and(|leaf| label.variable == leaf)
+}
+
+fn validate_conditional_reallocations(
+    records: &[ConditionalReallocationRecord],
+    variables: &BTreeMap<String, ProgramVariable>,
+    allocations: &BTreeMap<String, AbstractAllocation>,
+    nodes: &BTreeMap<String, AnnotatedNode>,
+    boundaries: &[ReallocationBoundaryRecord],
+    guards: &[AllocationExistenceGuardRecord],
+    hardened_v2: bool,
+) -> Result<(), String> {
+    if records.is_empty() {
+        return Err("conditional_reallocations_v1 payload must contain at least one record".into());
+    }
+    let mut seen = BTreeSet::new();
+    for record in records {
+        if record.family != "c_malloc"
+            || record.operation != "realloc"
+            || record.certainty != "may_abstract"
+            || record.size_semantics != "positive_nonzero_constant"
+            || record.status != "conditional_guarded"
+            || record.basis != "rust_foreign_decl_c_realloc_is_null_switch_v1"
+        {
+            return Err(format!(
+                "conditional_reallocations_v1 invalid proof tuple at '{}' for '{}'",
+                record.reallocation_node, record.source_allocation
+            ));
+        }
+        if record.reallocation_callee_def_path.is_empty()
+            || !record.reallocation_callee_def_path.ends_with("::realloc")
+                && record.reallocation_callee_def_path != "realloc"
+        {
+            return Err("conditional_reallocations_v1 requires an exact realloc callee_def_path".into());
+        }
+        if !is_raw_pointer_is_null_def_path(&record.outcome_callee_def_path) {
+            return Err("conditional_reallocations_v1 requires an exact raw-pointer is_null outcome predicate".into());
+        }
+        if record.failure_successor == record.success_successor {
+            return Err("conditional_reallocations_v1 success/failure successors must be distinct".into());
+        }
+        if !allocations.contains_key(&record.source_allocation) {
+            return Err(format!("conditional_reallocations_v1 references undeclared allocation '{}'", record.source_allocation));
+        }
+        for variable in [
+            &record.source_variable,
+            &record.result_variable,
+            &record.outcome_predicate_result_variable,
+        ] {
+            if !variables.contains_key(variable) {
+                return Err(format!("conditional_reallocations_v1 references undeclared variable '{variable}'"));
+            }
+        }
+        for node_id in [
+            &record.reallocation_node,
+            &record.source_existence_predicate_call_node,
+            &record.outcome_predicate_call_node,
+            &record.outcome_switch_node,
+            &record.failure_successor,
+            &record.success_successor,
+        ] {
+            if !nodes.contains_key(node_id) {
+                return Err(format!("conditional_reallocations_v1 references unknown node '{node_id}'"));
+            }
+        }
+        let boundary_matches = boundaries.iter().any(|boundary| {
+            boundary.node == record.reallocation_node
+                && boundary.source_allocation == record.source_allocation
+                && boundary.source_variable == record.source_variable
+                && boundary.result_variable == record.result_variable
+        });
+        if !boundary_matches {
+            return Err("conditional_reallocations_v1 has no matching reallocation_boundaries_v1 record".into());
+        }
+        let guard_matches = guards.iter().any(|guard| {
+            guard.allocation == record.source_allocation
+                && guard.tested_variable == record.source_variable
+                && guard.predicate_call_node == record.source_existence_predicate_call_node
+                && guard.non_null_successor == record.reallocation_node
+        });
+        if !guard_matches {
+            return Err("conditional_reallocations_v1 has no matching source allocation_existence_guards_v1 proof".into());
+        }
+        if hardened_v2 {
+            if record.outcome_correlation_basis.as_deref() != Some("direct_cfg_edge_realloc_to_is_null_v1") {
+                return Err("conditional_reallocations_v2 requires direct realloc-result outcome correlation evidence".into());
+            }
+            let realloc_node = nodes.get(&record.reallocation_node).expect("closed above");
+            if !realloc_node.successors.iter().any(|s| s == &record.outcome_predicate_call_node) {
+                return Err("conditional_reallocations_v2 requires realloc -> is_null as one direct canonical CFG edge".into());
+            }
+            let outcome_argument = record.outcome_argument_variable.as_deref().ok_or_else(|| {
+                "conditional_reallocations_v2 requires the observed is_null argument variable".to_string()
+            })?;
+            if !variables.contains_key(outcome_argument) {
+                return Err(format!(
+                    "conditional_reallocations_v2 references undeclared outcome argument variable '{outcome_argument}'"
+                ));
+            }
+            match record.outcome_value_flow_basis.as_deref() {
+                Some("rust_mir_direct_result_operand_v1")
+                    if outcome_argument == record.result_variable.as_str() => {}
+                Some("rust_mir_single_local_copy_result_operand_v1")
+                    if outcome_argument != record.result_variable.as_str() => {}
+                _ => {
+                    return Err("conditional_reallocations_v2 requires a closed MIR result-to-is_null operand proof".into());
+                }
+            }
+        }
+        let outcome_call = nodes.get(&record.outcome_predicate_call_node).expect("closed above");
+        let outcome_switch = nodes.get(&record.outcome_switch_node).expect("closed above");
+        if !outcome_call.semantic_labels.iter().any(|l| l == "term:call")
+            || !outcome_switch.semantic_labels.iter().any(|l| l == "term:switch_int")
+        {
+            return Err("conditional_reallocations_v1 outcome proof requires structural call/switch labels".into());
+        }
+        if hardened_v2
+            && record.outcome_value_flow_basis.as_deref()
+                == Some("rust_mir_single_local_copy_result_operand_v1")
+            && !(outcome_call.semantic_labels.iter().any(|l| l == "stmt:assign")
+                && outcome_call.semantic_labels.iter().any(|l| l == "rvalue:use"))
+        {
+            return Err("conditional_reallocations_v2 single-copy outcome proof lacks matching MIR assignment labels".into());
+        }
+        if !outcome_call.successors.iter().any(|s| s == &record.outcome_switch_node) {
+            return Err("conditional_reallocations_v1 outcome predicate does not reach certified switch".into());
+        }
+        let switch_successors: BTreeSet<_> = outcome_switch.successors.iter().cloned().collect();
+        let certified = BTreeSet::from([record.failure_successor.clone(), record.success_successor.clone()]);
+        if switch_successors != certified {
+            return Err("conditional_reallocations_v1 outcome switch successor set disagrees with certified branches".into());
+        }
+        let mut dealloc_seen = BTreeSet::new();
+        for deallocation in &record.result_deallocations {
+            if deallocation.variable != record.result_variable
+                || deallocation.family != "c_malloc"
+                || deallocation.operation != "free"
+                || deallocation.basis != "rust_foreign_decl_c_free_result_v1"
+                || deallocation.callee_def_path.is_empty()
+                || !(deallocation.callee_def_path == "free" || deallocation.callee_def_path.ends_with("::free"))
+            {
+                return Err("conditional_reallocations_v1 contains an invalid result-deallocation proof tuple".into());
+            }
+            let deallocation_argument = if hardened_v2 {
+                if deallocation.value_flow_basis.as_deref()
+                    != Some("rust_mir_result_no_redefinition_all_paths_v1")
+                {
+                    return Err("conditional_reallocations_v2 result deallocation lacks no-redefinition value-flow proof".into());
+                }
+                let argument = deallocation.argument_variable.as_deref().ok_or_else(|| {
+                    "conditional_reallocations_v2 result deallocation lacks observed free argument variable".to_string()
+                })?;
+                if !variables.contains_key(argument) {
+                    return Err(format!(
+                        "conditional_reallocations_v2 references undeclared free argument variable '{argument}'"
+                    ));
+                }
+                match deallocation.argument_correlation_basis.as_deref() {
+                    Some("rust_mir_direct_result_operand_v1")
+                        if argument == record.result_variable.as_str() => {}
+                    Some("rust_mir_single_local_copy_result_operand_v1")
+                        if argument != record.result_variable.as_str() => {}
+                    _ => {
+                        return Err("conditional_reallocations_v2 result deallocation lacks a closed MIR result-to-free operand proof".into());
+                    }
+                }
+                argument
+            } else {
+                record.result_variable.as_str()
+            };
+            let node = nodes.get(&deallocation.node).ok_or_else(|| {
+                format!("conditional_reallocations_v1 result deallocation references unknown node '{}'", deallocation.node)
+            })?;
+            if !node.semantic_labels.iter().any(|l| l == "term:call")
+                || !node.labels.iter().any(|label| {
+                    label.predicate == EventKind::Drop
+                        && event_label_matches_canonical_variable(label, deallocation_argument)
+                })
+            {
+                return Err("conditional_reallocations_v1 result deallocation lacks matching raw drop/call evidence".into());
+            }
+            if hardened_v2
+                && deallocation.argument_correlation_basis.as_deref()
+                    == Some("rust_mir_single_local_copy_result_operand_v1")
+                && !(node.semantic_labels.iter().any(|l| l == "stmt:assign")
+                    && node.semantic_labels.iter().any(|l| l == "rvalue:use"))
+            {
+                return Err("conditional_reallocations_v2 single-copy free proof lacks matching MIR assignment labels".into());
+            }
+            if !node_reaches(nodes, &record.success_successor, &deallocation.node) {
+                return Err("conditional_reallocations_v1 result deallocation is not reachable from the success branch".into());
+            }
+            if !dealloc_seen.insert(deallocation.node.clone()) {
+                return Err("conditional_reallocations_v1 contains duplicate result-deallocation records".into());
+            }
+        }
+        if !seen.insert((record.reallocation_node.clone(), record.source_allocation.clone())) {
+            return Err("conditional_reallocations_v1 contains a duplicate conditional-reallocation record".into());
+        }
+    }
+    Ok(())
+}
+
+fn is_raw_pointer_is_null_def_path(path: &str) -> bool {
+    let raw_pointer_impl = path.contains("::ptr::mut_ptr::<impl *mut ")
+        || path.contains("::ptr::const_ptr::<impl *const ");
+    raw_pointer_impl && path.ends_with(">::is_null")
+}
+
+fn validate_allocation_existence_guards(
+    records: &[AllocationExistenceGuardRecord],
+    variables: &BTreeMap<String, ProgramVariable>,
+    allocations: &BTreeMap<String, AbstractAllocation>,
+    nodes: &BTreeMap<String, AnnotatedNode>,
+) -> Result<(), String> {
+    if records.is_empty() {
+        return Err("allocation_existence_guards_v1 payload must contain at least one record".into());
+    }
+    let mut seen = BTreeSet::new();
+    for record in records {
+        if record.basis != "rust_raw_pointer_is_null_switch_v1" {
+            return Err(format!(
+                "allocation_existence_guards_v1 has unsupported basis '{}'",
+                record.basis
+            ));
+        }
+        if !is_raw_pointer_is_null_def_path(&record.callee_def_path) {
+            return Err(format!(
+                "allocation_existence_guards_v1 has unsupported is_null callee_def_path '{}'",
+                record.callee_def_path
+            ));
+        }
+        if !matches!(
+            record.allocation_return_basis.as_str(),
+            "rust_foreign_decl_c_malloc_contract_v1"
+                | "svf_single_source_c_allocator_return_v1"
+        ) {
+            return Err(format!(
+                "allocation_existence_guards_v1 has unsupported allocation_return_basis '{}'",
+                record.allocation_return_basis
+            ));
+        }
+        let allocation_record = allocations.get(&record.allocation).ok_or_else(|| {
+            format!(
+                "allocation_existence_guards_v1 references undeclared allocation '{}'",
+                record.allocation
+            )
+        })?;
+        let site = allocation_record.site.as_ref().ok_or_else(|| {
+            "allocation_existence_guards_v1 requires a serialized allocation site".to_string()
+        })?;
+        let site_kind = site.get("kind").and_then(serde_json::Value::as_str);
+        let site_allocator = site.get("allocator").and_then(serde_json::Value::as_str);
+        let site_node = site.get("node_id").and_then(serde_json::Value::as_str);
+        let return_basis_matches_site = site_node.is_some_and(|node| match record.allocation_return_basis.as_str() {
+            "rust_foreign_decl_c_malloc_contract_v1" => node == record.producer_call_node,
+            "svf_single_source_c_allocator_return_v1" => {
+                node.starts_with("llvm::")
+                    && node.ends_with(&format!("::{}", record.producer_call_node))
+            }
+            _ => false,
+        });
+        if site_kind != Some("c_call")
+            || !matches!(site_allocator, Some("malloc") | Some("calloc") | Some("realloc"))
+            || !return_basis_matches_site
+        {
+            return Err(format!(
+                "allocation_existence_guards_v1 allocation '{}' is not a malloc/calloc/RN1-realloc site tied to producer call '{}' by basis '{}'",
+                record.allocation, record.producer_call_node, record.allocation_return_basis
+            ));
+        }
+        for variable in [&record.tested_variable, &record.predicate_result_variable] {
+            if !variables.contains_key(variable) {
+                return Err(format!(
+                    "allocation_existence_guards_v1 references undeclared variable '{variable}'"
+                ));
+            }
+        }
+        let producer = nodes.get(&record.producer_call_node).ok_or_else(|| {
+            format!(
+                "allocation_existence_guards_v1 references unknown producer_call_node '{}'",
+                record.producer_call_node
+            )
+        })?;
+        if !producer.semantic_labels.iter().any(|label| label == "term:call") {
+            return Err("allocation_existence_guards_v1 producer call lacks term:call evidence".into());
+        }
+        let call = nodes.get(&record.predicate_call_node).ok_or_else(|| {
+            format!(
+                "allocation_existence_guards_v1 references unknown predicate_call_node '{}'",
+                record.predicate_call_node
+            )
+        })?;
+        let switch = nodes.get(&record.switch_node).ok_or_else(|| {
+            format!(
+                "allocation_existence_guards_v1 references unknown switch_node '{}'",
+                record.switch_node
+            )
+        })?;
+        if !nodes.contains_key(&record.null_successor) || !nodes.contains_key(&record.non_null_successor) {
+            return Err("allocation_existence_guards_v1 references unknown branch successor".into());
+        }
+        if record.null_successor == record.non_null_successor {
+            return Err("allocation_existence_guards_v1 null/non-null successors must be distinct".into());
+        }
+        if !call.semantic_labels.iter().any(|label| label == "term:call")
+            || !switch.semantic_labels.iter().any(|label| label == "term:switch_int")
+        {
+            return Err("allocation_existence_guards_v1 requires producer structural call/switch labels".into());
+        }
+        if !call.successors.contains(&record.switch_node) {
+            return Err(format!(
+                "allocation_existence_guards_v1 predicate call '{}' does not reach certified switch '{}'",
+                record.predicate_call_node, record.switch_node
+            ));
+        }
+        let switch_successors: BTreeSet<_> = switch.successors.iter().cloned().collect();
+        let expected = BTreeSet::from([
+            record.null_successor.clone(),
+            record.non_null_successor.clone(),
+        ]);
+        if switch_successors != expected {
+            return Err(format!(
+                "allocation_existence_guards_v1 switch '{}' successor set does not match certified null/non-null branches",
+                record.switch_node
+            ));
+        }
+        let singleton_ok = call.identity.as_ref().is_some_and(|identity| {
+            identity.points_to.iter().any(|relation| {
+                relation.variable == record.tested_variable
+                    && relation.allocations == vec![record.allocation.clone()]
+            })
+        });
+        if !singleton_ok {
+            return Err(format!(
+                "allocation_existence_guards_v1 tested variable '{}' is not singleton-bound to allocation '{}' at '{}'",
+                record.tested_variable, record.allocation, record.predicate_call_node
+            ));
+        }
+        let key = (
+            record.allocation.clone(),
+            record.producer_call_node.clone(),
+            record.predicate_call_node.clone(),
+            record.switch_node.clone(),
+        );
+        if !seen.insert(key) {
+            return Err("allocation_existence_guards_v1 contains a duplicate guard record".into());
+        }
+    }
+    Ok(())
+}
+
 /// One implementation-level AbstractMemory component. All variables in
 /// `aliases` denote the same abstract allocation at this program point and
 /// therefore share one CellValue.
@@ -823,6 +1461,9 @@ pub struct AnnotatedIcfg {
     /// never interpreted as a negative certificate.
     #[serde(default)]
     pub external_deallocation_effects: Vec<ExternalDeallocationEffectRecord>,
+    /// EFM1 proof-carrying declaration-only external formal memory effects.
+    #[serde(default)]
+    pub external_formal_memory_effects: Vec<ExternalFormalMemoryEffectRecord>,
     #[serde(default)]
     pub llvm_memory_effects: Option<LlvmMemoryEffectsEvidenceV1>,
     #[serde(default)]
@@ -843,10 +1484,22 @@ pub struct Kripke {
     /// W1 read-only source provenance, capability-gated and never consulted by
     /// the temporal semantics or truth evaluation.
     pub source_provenance: SourceProvenanceOverlay,
+    /// AGE1 diagnostic-only existence guards. Never copied into CqplTruthModel.
+    pub allocation_existence_guards: AllocationExistenceGuardOverlay,
+    /// Reallocation-boundary overlay. Legacy RBF1 records remain diagnostic /
+    /// CR1 evidence; the RBF2 family-consumer subset is copied read-only into
+    /// CqplTruthModel solely for `allocator_mismatch_l` and is never interpreted
+    /// as a deallocation.
+    pub reallocation_boundaries: ReallocationBoundaryOverlay,
+    /// CR1 proof-carrying conditional realloc relation. This overlay remains
+    /// separate from the producer node domain; CqplTruthModel consumes it by
+    /// inserting a checker-local success-outcome state.
+    pub conditional_reallocations: ConditionalReallocationOverlay,
     /// A/R2 exact typed copy of the canonical CREMA edge relation. CQPL
     /// temporal semantics still traverse `AnnotatedNode::successors` in R2.
     pub typed_edges: Vec<TypedEdgeRecord>,
     pub external_deallocation_effects: BTreeMap<String, ExternalDeallocationEffectRecord>,
+    pub external_formal_memory_effects: Vec<ExternalFormalMemoryEffectRecord>,
     pub ffi_argument_identity: BTreeMap<(String, usize), FfiArgumentIdentityRecord>,
     pub llvm_memory_effects: Option<LlvmMemoryEffectsEvidenceV1>,
     pub svf_solved_points_to: Option<SvfSolvedPointsToEvidenceV1>,
@@ -865,6 +1518,10 @@ pub(crate) struct CqplTruthModel {
     pub(crate) capabilities: BTreeSet<String>,
     pub(crate) allocations: BTreeMap<String, AbstractAllocation>,
     pub(crate) nodes: BTreeMap<String, AnnotatedNode>,
+    /// RBF2 family-consumer records are truth-relevant only for the MAY
+    /// `allocator_mismatch_l` atom. They do not create CFG edges, drops, or
+    /// allocation-state transitions.
+    pub(crate) reallocation_boundaries: ReallocationBoundaryOverlay,
     pub(crate) panic_lifecycle: PanicLifecycleOverlay,
 }
 
@@ -1080,11 +1737,97 @@ fn validate_embedded_svf_pts(evidence: &SvfSolvedPointsToEvidenceV1) -> Result<(
 
 impl CqplTruthModel {
     fn from_projected(k: &Kripke) -> Self {
-        Self {
+        let mut model = Self {
             capabilities: k.capabilities.clone(),
             allocations: k.allocations.clone(),
             nodes: k.nodes.clone(),
+            reallocation_boundaries: k
+                .reallocation_boundaries
+                .iter()
+                .filter(|record| {
+                    record.basis == "rust_foreign_decl_c_realloc_allocptr_family_v2"
+                })
+                .cloned()
+                .collect(),
             panic_lifecycle: k.panic_lifecycle.clone(),
+        };
+        model.apply_conditional_reallocation_success_semantics(k);
+        model
+    }
+
+    fn apply_conditional_reallocation_success_semantics(&mut self, k: &Kripke) {
+        if !k.capabilities.contains("conditional_reallocations_v1") {
+            return;
+        }
+        let mut groups: BTreeMap<(String, String), Vec<&ConditionalReallocationRecord>> = BTreeMap::new();
+        for record in &k.conditional_reallocations {
+            groups
+                .entry((record.outcome_switch_node.clone(), record.success_successor.clone()))
+                .or_default()
+                .push(record);
+        }
+        let mut ordinal = 0usize;
+        for ((switch_id, success_id), mut records) in groups {
+            records.sort_by(|a, b| a.source_allocation.cmp(&b.source_allocation));
+            let Some(switch_snapshot) = self.nodes.get(&switch_id).cloned() else { continue; };
+            let synthetic_id = loop {
+                let candidate = format!("__cqpl_realloc_success__::{ordinal}");
+                ordinal += 1;
+                if !self.nodes.contains_key(&candidate) {
+                    break candidate;
+                }
+            };
+            let Some(switch) = self.nodes.get_mut(&switch_id) else { continue; };
+            let mut replaced = false;
+            for successor in &mut switch.successors {
+                if successor == &success_id {
+                    *successor = synthetic_id.clone();
+                    replaced = true;
+                }
+            }
+            if !replaced {
+                continue;
+            }
+            let mut allocation_labels = Vec::new();
+            for record in records {
+                allocation_labels.push(AllocationEventLabel {
+                    predicate: EventKind::Drop,
+                    allocation: record.source_allocation.clone(),
+                    certainty: AllocationEventCertainty::MayAbstract,
+                    deallocator_contract: Some(AllocationContract {
+                        family: "c_malloc".into(),
+                        operation: "realloc".into(),
+                        language: "c".into(),
+                        basis: Some("conditional_realloc_success_v1".into()),
+                        owner_def_path: None,
+                        allocator_def_path: None,
+                        callee_def_path: Some(record.reallocation_callee_def_path.clone()),
+                    }),
+                });
+            }
+            allocation_labels.sort_by(|a, b| a.allocation.cmp(&b.allocation));
+            self.nodes.insert(
+                synthetic_id.clone(),
+                AnnotatedNode {
+                    id: synthetic_id.clone(),
+                    successors: vec![success_id],
+                    labels: vec![],
+                    semantic_labels: vec![],
+                    allocation_labels,
+                    allocation_disposition: vec![],
+                    identity: switch_snapshot.identity.clone(),
+                    event_identity: None,
+                    allocation_post: switch_snapshot.allocation_post.clone(),
+                    pre: switch_snapshot.post.clone(),
+                    post: switch_snapshot.post.clone(),
+                },
+            );
+            if let Some(lifecycle) = k.panic_lifecycle.get(&switch_id) {
+                self.panic_lifecycle.insert(synthetic_id.clone(), lifecycle.clone());
+            }
+            if let Some(coverage) = k.panic_lifecycle.coverage_at(&switch_id) {
+                self.panic_lifecycle.set_coverage(synthetic_id, coverage);
+            }
         }
     }
 
@@ -1285,6 +2028,24 @@ impl CqplTruthModel {
             };
             acc = acc.join(value);
         }
+        if matches!(p, LabelPredicate::AllocatorMismatch) {
+            let allocator = self.allocations
+                .get(allocation)
+                .and_then(|a| a.allocator_contract.as_ref())
+                .map(|c| c.family.as_str())
+                .unwrap_or("unknown");
+            let realloc_consumer_mismatch = self.reallocation_boundaries.iter().any(|record| {
+                record.node == node_id
+                    && record.source_allocation == allocation
+                    && record.basis == "rust_foreign_decl_c_realloc_allocptr_family_v2"
+                    && record.operation == "realloc"
+                    && record.family == "c_malloc"
+                    && (allocator == "unknown" || allocator != record.family)
+            });
+            if realloc_consumer_mismatch {
+                acc = acc.join(Truth::Unknown);
+            }
+        }
         acc
     }
 }
@@ -1324,6 +2085,42 @@ impl Kripke {
         typed_edges: Option<Vec<TypedEdgeRecord>>,
         source_provenance: SourceProvenanceOverlay,
     ) -> Result<Self, String> {
+        Self::from_annotated_icfg_with_all_overlays_and_existence_guards(
+            input,
+            panic_lifecycle,
+            typed_edges,
+            source_provenance,
+            None,
+        )
+    }
+
+    pub fn from_annotated_icfg_with_all_overlays_and_existence_guards(
+        input: AnnotatedIcfg,
+        panic_lifecycle: PanicLifecycleOverlay,
+        typed_edges: Option<Vec<TypedEdgeRecord>>,
+        source_provenance: SourceProvenanceOverlay,
+        allocation_existence_guards: Option<AllocationExistenceGuardOverlay>,
+    ) -> Result<Self, String> {
+        Self::from_annotated_icfg_with_all_diagnostic_overlays(
+            input,
+            panic_lifecycle,
+            typed_edges,
+            source_provenance,
+            allocation_existence_guards,
+            None,
+            None,
+        )
+    }
+
+    pub fn from_annotated_icfg_with_all_diagnostic_overlays(
+        input: AnnotatedIcfg,
+        panic_lifecycle: PanicLifecycleOverlay,
+        typed_edges: Option<Vec<TypedEdgeRecord>>,
+        source_provenance: SourceProvenanceOverlay,
+        allocation_existence_guards: Option<AllocationExistenceGuardOverlay>,
+        reallocation_boundaries: Option<ReallocationBoundaryOverlay>,
+        conditional_reallocations: Option<ConditionalReallocationOverlay>,
+    ) -> Result<Self, String> {
         if !matches!(input.schema_version, 1 | 2) {
             return Err(format!(
                 "unsupported annotated ICFG schema_version {}; expected 1 or 2",
@@ -1341,11 +2138,58 @@ impl Kripke {
         let has_allocation_disposition = capabilities.contains("allocation_disposition_v1");
         let has_allocation_disposition_v2 = capabilities.contains("allocation_disposition_v2");
         let has_external_deallocation_effects = capabilities.contains("external_deallocation_effects_v1");
+        let has_external_formal_memory_effects = capabilities.contains("external_formal_memory_effects_v1");
         let has_llvm_memory_effects = capabilities.contains("llvm_memory_effects_v1");
         let has_svf_solved_points_to = capabilities.contains("svf_solved_points_to_v1");
         let has_ffi_argument_identity = capabilities.contains("ffi_argument_identity_v1");
         let has_typed_edge_flow = capabilities.contains("typed_edge_flow_v1");
         let has_source_provenance = capabilities.contains("source_provenance_v1");
+        let has_allocation_existence_guards = capabilities.contains("allocation_existence_guards_v1");
+        if has_allocation_existence_guards != allocation_existence_guards.is_some() {
+            return Err("allocation_existence_guards_v1 capability and allocation_existence_guards payload must appear together".into());
+        }
+        if has_allocation_existence_guards && schema_version != 2 {
+            return Err("allocation_existence_guards_v1 requires annotated ICFG schema v2".into());
+        }
+        if has_allocation_existence_guards
+            && (!has_allocation_state || !capabilities.contains("mir_semantic_labels_v1"))
+        {
+            return Err("allocation_existence_guards_v1 requires allocation_state_v1 and mir_semantic_labels_v1".into());
+        }
+        let has_reallocation_boundaries = capabilities.contains("reallocation_boundaries_v1");
+        let has_reallocation_boundaries_v2 = capabilities.contains("reallocation_boundaries_v2");
+        if has_reallocation_boundaries_v2 && !has_reallocation_boundaries {
+            return Err("reallocation_boundaries_v2 extends reallocation_boundaries_v1; both capabilities are required".into());
+        }
+        if has_reallocation_boundaries != reallocation_boundaries.is_some() {
+            return Err("reallocation_boundaries_v1 capability and reallocation_boundaries payload must appear together".into());
+        }
+        if has_reallocation_boundaries && (schema_version != 2 || !has_allocation_state) {
+            return Err("reallocation_boundaries_v1 requires schema v2 and allocation_state_v1".into());
+        }
+        if has_reallocation_boundaries_v2
+            && (!has_allocation_contracts || !capabilities.contains("mir_semantics_v2"))
+        {
+            return Err("reallocation_boundaries_v2 requires allocation_contracts_v1 and mir_semantics_v2".into());
+        }
+        let has_conditional_reallocations = capabilities.contains("conditional_reallocations_v1");
+        let has_conditional_reallocations_v2 = capabilities.contains("conditional_reallocations_v2");
+        if has_conditional_reallocations != conditional_reallocations.is_some() {
+            return Err("conditional_reallocations_v1 capability and conditional_reallocations payload must appear together".into());
+        }
+        if has_conditional_reallocations_v2 && !has_conditional_reallocations {
+            return Err("conditional_reallocations_v2 strengthens conditional_reallocations_v1; both capabilities are required".into());
+        }
+        if has_conditional_reallocations
+            && (schema_version != 2
+                || !has_allocation_state
+                || !has_reallocation_boundaries
+                || !has_allocation_existence_guards
+                || !capabilities.contains("mir_semantic_labels_v1")
+                || !capabilities.contains("typed_edge_flow_v1"))
+        {
+            return Err("conditional_reallocations_v1 requires schema v2, allocation_state_v1, reallocation_boundaries_v1, allocation_existence_guards_v1, mir_semantic_labels_v1, and typed_edge_flow_v1".into());
+        }
         if has_typed_edge_flow != typed_edges.is_some() {
             return Err("typed_edge_flow_v1 capability and typed_edges payload must appear together".into());
         }
@@ -1405,6 +2249,14 @@ impl Kripke {
         }
         if has_external_deallocation_effects && schema_version != 2 {
             return Err("external_deallocation_effects_v1 requires annotated ICFG schema v2".into());
+        }
+        if has_external_formal_memory_effects != !input.external_formal_memory_effects.is_empty() {
+            return Err("external_formal_memory_effects_v1 capability and evidence records must appear together".into());
+        }
+        if has_external_formal_memory_effects
+            && (schema_version != 2 || !capabilities.contains("mir_semantics_v2"))
+        {
+            return Err("external_formal_memory_effects_v1 requires annotated ICFG schema v2 and mir_semantics_v2".into());
         }
         if has_llvm_memory_effects && schema_version != 2 {
             return Err("llvm_memory_effects_v1 requires annotated ICFG schema v2".into());
@@ -1593,6 +2445,18 @@ impl Kripke {
             return Err("source provenance records require capability source_provenance_v1".into());
         }
 
+        let allocation_existence_guards = allocation_existence_guards.unwrap_or_default();
+        if has_allocation_existence_guards {
+            validate_allocation_existence_guards(
+                &allocation_existence_guards,
+                &variables,
+                &allocations,
+                &nodes,
+            )?;
+        } else if !allocation_existence_guards.is_empty() {
+            return Err("allocation existence-guard records require capability allocation_existence_guards_v1".into());
+        }
+
         if !has_external_deallocation_effects && !input.external_deallocation_effects.is_empty() {
             return Err("external deallocation-effect records require capability external_deallocation_effects_v1".into());
         }
@@ -1616,6 +2480,22 @@ impl Kripke {
             if external_deallocation_effects.insert(record.node.clone(), record).is_some() {
                 return Err("duplicate external deallocation-effect record for node".into());
             }
+        }
+
+        let mut external_formal_memory_effects = Vec::new();
+        let mut seen_external_formal_memory_effects = BTreeSet::new();
+        for record in input.external_formal_memory_effects {
+            validate_external_formal_memory_effect(&record, &variables, &nodes)?;
+            let key = (
+                record.node.clone(),
+                record.callee.clone(),
+                record.formal_index,
+                record.access.clone(),
+            );
+            if !seen_external_formal_memory_effects.insert(key) {
+                return Err("duplicate external formal memory-effect record".into());
+            }
+            external_formal_memory_effects.push(record);
         }
 
         let mut ffi_argument_identity = BTreeMap::new();
@@ -1722,9 +2602,33 @@ impl Kripke {
             }
         }
 
+        if let Some(records) = reallocation_boundaries.as_deref() {
+            validate_reallocation_boundaries(
+                records,
+                &variables,
+                &allocations,
+                &nodes,
+                &allocation_existence_guards,
+                has_reallocation_boundaries_v2,
+            )?;
+        }
+        let reallocation_boundaries = reallocation_boundaries.unwrap_or_default();
+        if let Some(records) = conditional_reallocations.as_deref() {
+            validate_conditional_reallocations(
+                records,
+                &variables,
+                &allocations,
+                &nodes,
+                &reallocation_boundaries,
+                &allocation_existence_guards,
+                has_conditional_reallocations_v2,
+            )?;
+        }
+        let conditional_reallocations = conditional_reallocations.unwrap_or_default();
+
         Ok(Self {
             schema_version, entry: input.entry, capabilities, variables, allocations, nodes,
-            source_provenance, typed_edges, external_deallocation_effects, ffi_argument_identity,
+            source_provenance, allocation_existence_guards, reallocation_boundaries, conditional_reallocations, typed_edges, external_deallocation_effects, external_formal_memory_effects, ffi_argument_identity,
             llvm_memory_effects, svf_solved_points_to, panic_lifecycle,
         })
     }
@@ -1847,6 +2751,44 @@ impl Kripke {
             }
         }
 
+        // Diagnostic overlays participate in projection catalog closure even
+        // though they never enter CQPL truth semantics.  A retained proof
+        // record must not become internally dangling after entry projection.
+        for record in &self.allocation_existence_guards {
+            if retained.contains(&record.producer_call_node)
+                && retained.contains(&record.predicate_call_node)
+                && retained.contains(&record.switch_node)
+                && retained.contains(&record.null_successor)
+                && retained.contains(&record.non_null_successor)
+            {
+                used_allocations.insert(record.allocation.clone());
+                used_variables.insert(record.tested_variable.clone());
+                used_variables.insert(record.predicate_result_variable.clone());
+            }
+        }
+        for record in &self.reallocation_boundaries {
+            if retained.contains(&record.node) {
+                used_allocations.insert(record.source_allocation.clone());
+                used_variables.insert(record.source_variable.clone());
+                used_variables.insert(record.result_variable.clone());
+            }
+        }
+        for record in &self.conditional_reallocations {
+            let complete = retained.contains(&record.reallocation_node)
+                && retained.contains(&record.source_existence_predicate_call_node)
+                && retained.contains(&record.outcome_predicate_call_node)
+                && retained.contains(&record.outcome_switch_node)
+                && retained.contains(&record.failure_successor)
+                && retained.contains(&record.success_successor)
+                && record.result_deallocations.iter().all(|d| retained.contains(&d.node));
+            if complete {
+                used_allocations.insert(record.source_allocation.clone());
+                used_variables.insert(record.source_variable.clone());
+                used_variables.insert(record.result_variable.clone());
+                used_variables.insert(record.outcome_predicate_result_variable.clone());
+            }
+        }
+
         let mut panic_lifecycle = PanicLifecycleOverlay::new();
         for id in &retained {
             if let Some(records) = self.panic_lifecycle.get(id) {
@@ -1878,11 +2820,53 @@ impl Kripke {
             .map(|(node, record)| (node.clone(), record.clone()))
             .collect();
 
+        let allocation_existence_guards = self
+            .allocation_existence_guards
+            .iter()
+            .filter(|record| {
+                retained.contains(&record.producer_call_node)
+                    && retained.contains(&record.predicate_call_node)
+                    && retained.contains(&record.switch_node)
+                    && retained.contains(&record.null_successor)
+                    && retained.contains(&record.non_null_successor)
+            })
+            .cloned()
+            .collect();
+
+        let reallocation_boundaries = self
+            .reallocation_boundaries
+            .iter()
+            .filter(|record| retained.contains(&record.node))
+            .cloned()
+            .collect();
+
+        let conditional_reallocations = self
+            .conditional_reallocations
+            .iter()
+            .filter(|record| {
+                retained.contains(&record.reallocation_node)
+                    && retained.contains(&record.source_existence_predicate_call_node)
+                    && retained.contains(&record.outcome_predicate_call_node)
+                    && retained.contains(&record.outcome_switch_node)
+                    && retained.contains(&record.failure_successor)
+                    && retained.contains(&record.success_successor)
+                    && record.result_deallocations.iter().all(|d| retained.contains(&d.node))
+            })
+            .cloned()
+            .collect();
+
         let external_deallocation_effects = self
             .external_deallocation_effects
             .iter()
             .filter(|(node, _)| retained.contains(*node))
             .map(|(node, record)| (node.clone(), record.clone()))
+            .collect();
+
+        let external_formal_memory_effects = self
+            .external_formal_memory_effects
+            .iter()
+            .filter(|record| retained.contains(&record.node))
+            .cloned()
             .collect();
 
         Ok(Self {
@@ -1893,6 +2877,9 @@ impl Kripke {
             allocations,
             nodes,
             source_provenance,
+            allocation_existence_guards,
+            reallocation_boundaries,
+            conditional_reallocations,
             typed_edges: self
                 .typed_edges
                 .iter()
@@ -1900,6 +2887,7 @@ impl Kripke {
                 .cloned()
                 .collect(),
             external_deallocation_effects,
+            external_formal_memory_effects,
             ffi_argument_identity: self
                 .ffi_argument_identity
                 .iter()
@@ -1958,6 +2946,32 @@ impl Kripke {
             .as_ref()?
             .get("kind")?
             .as_str()
+    }
+
+    pub fn allocation_existence_guards_for<'a>(
+        &'a self,
+        allocation: &'a str,
+    ) -> impl Iterator<Item = &'a AllocationExistenceGuardRecord> + 'a {
+        self.allocation_existence_guards
+            .iter()
+            .filter(move |record| record.allocation == allocation)
+    }
+
+    pub fn has_unmodeled_reallocation_boundary(&self, node_id: &str, allocation: &str) -> bool {
+        self.reallocation_boundaries.iter().any(|record| {
+            record.node == node_id
+                && record.source_allocation == allocation
+                && record.status == "conditional_unmodeled"
+        })
+    }
+
+    pub fn conditional_reallocations_for<'a>(
+        &'a self,
+        allocation: &'a str,
+    ) -> impl Iterator<Item = &'a ConditionalReallocationRecord> + 'a {
+        self.conditional_reallocations
+            .iter()
+            .filter(move |record| record.source_allocation == allocation)
     }
 
     pub fn external_deallocation_effect_at(
@@ -2110,6 +3124,24 @@ impl Kripke {
             };
             acc = acc.join(value);
         }
+        if matches!(p, LabelPredicate::AllocatorMismatch) {
+            let allocator = self.allocations
+                .get(allocation)
+                .and_then(|a| a.allocator_contract.as_ref())
+                .map(|c| c.family.as_str())
+                .unwrap_or("unknown");
+            let realloc_consumer_mismatch = self.reallocation_boundaries.iter().any(|record| {
+                record.node == node_id
+                    && record.source_allocation == allocation
+                    && record.basis == "rust_foreign_decl_c_realloc_allocptr_family_v2"
+                    && record.operation == "realloc"
+                    && record.family == "c_malloc"
+                    && (allocator == "unknown" || allocator != record.family)
+            });
+            if realloc_consumer_mismatch {
+                acc = acc.join(Truth::Unknown);
+            }
+        }
         acc
     }
 }
@@ -2225,6 +3257,125 @@ fn validate_external_deallocation_effect(
                 corroborating, record.status
             ));
         }
+    }
+    Ok(())
+}
+
+
+fn validate_external_formal_memory_effect(
+    record: &ExternalFormalMemoryEffectRecord,
+    variables: &BTreeMap<String, ProgramVariable>,
+    nodes: &BTreeMap<String, AnnotatedNode>,
+) -> Result<(), String> {
+    let Some(node) = nodes.get(&record.node) else {
+        return Err(format!(
+            "external_formal_memory_effects_v1 references unknown node '{}'",
+            record.node
+        ));
+    };
+    if !record.node.starts_with("rust::") {
+        return Err("external_formal_memory_effects_v1 must reference the real Rust MIR call node".into());
+    }
+    if !node.semantic_labels.iter().any(|label| label == "term:call") {
+        return Err("external_formal_memory_effects_v1 must reference a MIR term:call node".into());
+    }
+    let Some(actual) = variables.get(&record.actual_variable) else {
+        return Err(format!(
+            "external_formal_memory_effects_v1 references undeclared actual variable '{}'",
+            record.actual_variable
+        ));
+    };
+    let Some(scope) = rust_function_scope(&record.node) else {
+        return Err("external_formal_memory_effects_v1 cannot recover Rust function scope".into());
+    };
+    let expected_prefix = format!("{}::", scope);
+    if actual.language != ProgramLanguage::Rust
+        || !record.actual_variable.starts_with(&expected_prefix)
+    {
+        return Err(format!(
+            "external_formal_memory_effects_v1 actual variable '{}' is outside node scope '{}'",
+            record.actual_variable, scope
+        ));
+    }
+    if !matches!(record.access.as_str(), "read" | "write") {
+        return Err("external_formal_memory_effects_v1 access must be read or write".into());
+    }
+    let event_suffix = format!("::{}", record.event_variable);
+    if !record.actual_variable.ends_with(&event_suffix) {
+        return Err(format!(
+            "external_formal_memory_effects_v1 actual/event variable mismatch: '{}' vs '{}'",
+            record.actual_variable, record.event_variable
+        ));
+    }
+    let expected_event_kind = match record.access.as_str() {
+        "read" => EventKind::Read,
+        "write" => EventKind::Write,
+        _ => unreachable!("validated closed access vocabulary"),
+    };
+    if !node.labels.iter().any(|label| {
+        label.predicate == expected_event_kind && label.variable == record.event_variable
+    }) {
+        return Err(format!(
+            "external_formal_memory_effects_v1 record at '{}' lacks matching node event {}({})",
+            record.node, record.access, record.event_variable
+        ));
+    }
+
+    let expected: (&str, usize, &str, Option<usize>, &str, &[&str]) =
+        match (record.callee.as_str(), record.formal_index, record.access.as_str()) {
+            ("strlen", 0, "read") => (
+                "strlen_read_c_string_v1", 0, "read", None,
+                "crema_efm1_closed_contract_v1", &["svf_absextapi_strlen_semantics_v1", "llvm16_tli_strlen_argmem_read_semantics_v1"],
+            ),
+            ("memset", 0, "write") => (
+                "memset_v1", 0, "write", Some(2),
+                "crema_efm1_closed_contract_v1", &["svf_extapi_memset_semantics_v1", "llvm16_tli_memset_arg0_writeonly_semantics_v1"],
+            ),
+            ("memcpy", 0, "write") => (
+                "memcpy_v1", 0, "write", Some(2),
+                "crema_efm1_closed_contract_v1", &["svf_extapi_memcpy_semantics_v1", "llvm16_tli_memcpy_arg0_writeonly_semantics_v1"],
+            ),
+            ("memcpy", 1, "read") => (
+                "memcpy_v1", 1, "read", Some(2),
+                "crema_efm1_closed_contract_v1", &["svf_extapi_memcpy_semantics_v1", "llvm16_tli_memcpy_arg1_readonly_semantics_v1"],
+            ),
+            ("memcmp", 0, "read") => (
+                "memcmp_v1", 0, "read", Some(2),
+                "crema_efm1_closed_contract_v1", &["llvm16_tli_memcmp_argmem_read_semantics_v1", "llvm16_memorylocation_memcmp_formal_semantics_v1"],
+            ),
+            ("memcmp", 1, "read") => (
+                "memcmp_v1", 1, "read", Some(2),
+                "crema_efm1_closed_contract_v1", &["llvm16_tli_memcmp_argmem_read_semantics_v1", "llvm16_memorylocation_memcmp_formal_semantics_v1"],
+            ),
+            ("write", 1, "read") => (
+                "posix_write_v1", 1, "read", Some(2),
+                "crema_efm1_closed_contract_v1", &["posix_write_buffer_semantics_v1", "llvm16_tli_write_arg1_readonly_semantics_v1"],
+            ),
+            _ => {
+                return Err(format!(
+                    "external_formal_memory_effects_v1 unsupported closed tuple: callee={} formal={} access={}",
+                    record.callee, record.formal_index, record.access
+                ))
+            }
+        };
+
+    if record.semantic_class != expected.0
+        || record.formal_index != expected.1
+        || record.access != expected.2
+        || record.size_argument_index != expected.3
+        || record.basis != expected.4
+    {
+        return Err(format!(
+            "external_formal_memory_effects_v1 invalid proof tuple at '{}' for '{}'/arg{}",
+            record.node, record.callee, record.formal_index
+        ));
+    }
+    let expected_sources = expected.5.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    if record.semantic_sources != expected_sources {
+        return Err(format!(
+            "external_formal_memory_effects_v1 invalid semantic source set at '{}' for '{}'/arg{}",
+            record.node, record.callee, record.formal_index
+        ));
     }
     Ok(())
 }
@@ -2484,6 +3635,7 @@ mod tests {
             ],
             allocations: vec![],
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             nodes: vec![AnnotatedNode {
                 id: "b0".into(), successors: vec![],
                 labels: vec![EventLabel { predicate: EventKind::Drop, variable: "c::p".into() }],
@@ -2497,6 +3649,257 @@ mod tests {
                 post: mem(&["rust::x", "c::p"], CellValue::Top),
             }],
         }
+    }
+
+    fn efm1_valid_strlen_input() -> AnnotatedIcfg {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec![
+            "mir_semantic_labels_v1".into(),
+            "mir_semantics_v2".into(),
+            "external_formal_memory_effects_v1".into(),
+        ];
+        input.entry = "rust::main::bb0".into();
+        input.variables.push(ProgramVariable {
+            id: "Local(_1)".into(),
+            language: ProgramLanguage::Rust,
+            display: None,
+            function: None,
+        });
+        input.variables.push(ProgramVariable {
+            id: "rust::main::Local(_1)".into(),
+            language: ProgramLanguage::Rust,
+            display: None,
+            function: None,
+        });
+        input.nodes[0].id = "rust::main::bb0".into();
+        input.nodes[0].semantic_labels = vec!["term:call".into()];
+        input.nodes[0].labels = vec![EventLabel {
+            predicate: EventKind::Read,
+            variable: "Local(_1)".into(),
+        }];
+        input.external_formal_memory_effects = vec![ExternalFormalMemoryEffectRecord {
+            node: "rust::main::bb0".into(),
+            callee: "strlen".into(),
+            semantic_class: "strlen_read_c_string_v1".into(),
+            formal_index: 0,
+            access: "read".into(),
+            event_variable: "Local(_1)".into(),
+            actual_variable: "rust::main::Local(_1)".into(),
+            size_argument_index: None,
+            basis: "crema_efm1_closed_contract_v1".into(),
+            semantic_sources: vec!["svf_absextapi_strlen_semantics_v1".into(), "llvm16_tli_strlen_argmem_read_semantics_v1".into()],
+        }];
+        input
+    }
+
+    #[test]
+    fn efm1_accepts_closed_formal_effect_with_matching_existing_event() {
+        let input = efm1_valid_strlen_input();
+        let k = Kripke::from_annotated_icfg(input).expect("valid EFM1 record");
+        assert_eq!(k.external_formal_memory_effects.len(), 1);
+        assert_eq!(k.external_formal_memory_effects[0].formal_index, 0);
+    }
+
+    #[test]
+    fn efm1_requires_mir_semantics_v2() {
+        let mut input = efm1_valid_strlen_input();
+        input.capabilities.retain(|cap| cap != "mir_semantics_v2");
+        let err = Kripke::from_annotated_icfg(input).unwrap_err();
+        assert!(err.contains("requires annotated ICFG schema v2 and mir_semantics_v2"));
+    }
+
+    #[test]
+    fn efm1_capability_payload_are_atomic() {
+        let mut missing = efm1_valid_strlen_input();
+        missing.external_formal_memory_effects.clear();
+        let err = Kripke::from_annotated_icfg(missing).unwrap_err();
+        assert!(err.contains("capability and evidence records must appear together"));
+
+        let mut naked = efm1_valid_strlen_input();
+        naked.capabilities.clear();
+        let err = Kripke::from_annotated_icfg(naked).unwrap_err();
+        assert!(err.contains("capability and evidence records must appear together"));
+    }
+
+    #[test]
+    fn efm1_rejects_wrong_formal_or_missing_matching_node_event() {
+        let mut wrong = efm1_valid_strlen_input();
+        wrong.external_formal_memory_effects[0].formal_index = 1;
+        let err = Kripke::from_annotated_icfg(wrong).unwrap_err();
+        assert!(err.contains("unsupported closed tuple") || err.contains("invalid proof tuple"));
+
+        let mut missing_event = efm1_valid_strlen_input();
+        missing_event.nodes[0].labels.clear();
+        let err = Kripke::from_annotated_icfg(missing_event).unwrap_err();
+        assert!(err.contains("lacks matching node event"));
+    }
+
+    #[test]
+    fn efm1_rejects_non_call_node_and_cross_function_actual() {
+        let mut non_call = efm1_valid_strlen_input();
+        non_call.nodes[0].semantic_labels.clear();
+        let err = Kripke::from_annotated_icfg(non_call).unwrap_err();
+        assert!(err.contains("term:call"));
+
+        let mut cross_scope = efm1_valid_strlen_input();
+        cross_scope.variables.push(ProgramVariable {
+            id: "rust::other::Local(_1)".into(),
+            language: ProgramLanguage::Rust,
+            display: None,
+            function: None,
+        });
+        cross_scope.external_formal_memory_effects[0].actual_variable =
+            "rust::other::Local(_1)".into();
+        let err = Kripke::from_annotated_icfg(cross_scope).unwrap_err();
+        assert!(err.contains("outside node scope"));
+    }
+
+    fn rbf2_family_consumer_fixture(source_family: &str) -> (AnnotatedIcfg, ReallocationBoundaryOverlay) {
+        let mut input = base();
+        input.schema_version = 2;
+        input.capabilities = vec![
+            "allocation_state_v1".into(),
+            "allocation_contracts_v1".into(),
+            "mir_semantic_labels_v1".into(),
+            "mir_semantics_v2".into(),
+            "reallocation_boundaries_v1".into(),
+            "reallocation_boundaries_v2".into(),
+        ];
+        input.entry = "rust::main::bb0".into();
+        input.variables = vec![
+            ProgramVariable {
+                id: "rust::main::Local(_1)".into(),
+                language: ProgramLanguage::Rust,
+                display: None,
+                function: None,
+            },
+            ProgramVariable {
+                id: "rust::main::Local(_2)".into(),
+                language: ProgramLanguage::Rust,
+                display: None,
+                function: None,
+            },
+        ];
+        input.allocations = vec![AbstractAllocation {
+            id: "A".into(),
+            display: None,
+            site: Some(serde_json::json!({
+                "kind": "rust_call",
+                "node_id": "rust::main::bb0",
+                "callee": "alloc::boxed::Box::<[u8;16]>::new"
+            })),
+            context: vec![],
+            allocator_contract: Some(AllocationContract {
+                family: source_family.into(),
+                operation: if source_family == "c_malloc" { "strdup".into() } else { "box_new".into() },
+                language: if source_family == "c_malloc" { "c".into() } else { "rust".into() },
+                basis: None,
+                owner_def_path: None,
+                allocator_def_path: None,
+                callee_def_path: None,
+            }),
+        }];
+        input.nodes = vec![AnnotatedNode {
+            id: "rust::main::bb0".into(),
+            successors: vec![],
+            labels: vec![],
+            semantic_labels: vec!["term:call".into()],
+            allocation_labels: vec![],
+            allocation_disposition: vec![],
+            identity: Some(NodeIdentityAnnotation {
+                points_to: vec![IdentityPointsToRecord {
+                    variable: "rust::main::Local(_1)".into(),
+                    allocations: vec!["A".into()],
+                }],
+                stack_refs: vec![],
+            }),
+            event_identity: None,
+            allocation_post: Some(AbstractAllocationMemoryAnnotation {
+                cells: vec![AbstractAllocationCell {
+                    allocation: "A".into(),
+                    value: CellValue::Top,
+                }],
+            }),
+            pre: AbstractMemoryAnnotation::default(),
+            post: AbstractMemoryAnnotation::default(),
+        }];
+        let boundaries = vec![ReallocationBoundaryRecord {
+            node: "rust::main::bb0".into(),
+            source_allocation: "A".into(),
+            source_variable: "rust::main::Local(_1)".into(),
+            result_variable: "rust::main::Local(_2)".into(),
+            family: "c_malloc".into(),
+            operation: "realloc".into(),
+            certainty: "may_abstract".into(),
+            status: "conditional_unmodeled".into(),
+            basis: "rust_foreign_decl_c_realloc_allocptr_family_v2".into(),
+        }];
+        (input, boundaries)
+    }
+
+    #[test]
+    fn rbf2_allocator_consumer_mismatch_is_may_truth_without_synthetic_drop() {
+        let (input, boundaries) = rbf2_family_consumer_fixture("rust_global");
+        let k = Kripke::from_annotated_icfg_with_all_diagnostic_overlays(
+            input,
+            PanicLifecycleOverlay::new(),
+            None,
+            SourceProvenanceOverlay::new(),
+            None,
+            Some(boundaries),
+            None,
+        )
+        .expect("valid RBF2 family-consumer record");
+        assert_eq!(
+            k.totalized_for_cqpl_truth().allocation_label_hold(
+                "rust::main::bb0",
+                "A",
+                LabelPredicate::AllocatorMismatch,
+            ),
+            Truth::Unknown,
+        );
+        assert!(k.nodes["rust::main::bb0"].allocation_labels.is_empty());
+    }
+
+    #[test]
+    fn rbf2_same_family_consumer_does_not_invent_allocator_mismatch() {
+        let (input, boundaries) = rbf2_family_consumer_fixture("c_malloc");
+        let k = Kripke::from_annotated_icfg_with_all_diagnostic_overlays(
+            input,
+            PanicLifecycleOverlay::new(),
+            None,
+            SourceProvenanceOverlay::new(),
+            None,
+            Some(boundaries),
+            None,
+        )
+        .expect("valid same-family RBF2 record");
+        assert_eq!(
+            k.totalized_for_cqpl_truth().allocation_label_hold(
+                "rust::main::bb0",
+                "A",
+                LabelPredicate::AllocatorMismatch,
+            ),
+            Truth::False,
+        );
+    }
+
+    #[test]
+    fn rbf2_requires_a_mir_call_anchor() {
+        let (mut input, boundaries) = rbf2_family_consumer_fixture("rust_global");
+        input.nodes[0].semantic_labels.clear();
+        let err = Kripke::from_annotated_icfg_with_all_diagnostic_overlays(
+            input,
+            PanicLifecycleOverlay::new(),
+            None,
+            SourceProvenanceOverlay::new(),
+            None,
+            Some(boundaries),
+            None,
+        )
+        .unwrap_err();
+        assert!(err.contains("MIR call node"), "unexpected error: {err}");
     }
 
     #[test]
@@ -2992,6 +4395,7 @@ mod tests {
                 AbstractAllocation { id: "DEAD".into(), display: None, site: None, context: vec![], allocator_contract: None },
             ],
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             nodes: vec![
                 AnnotatedNode {
                     id: "rust::main::bb0".into(), successors: vec!["rust::main::bb1".into()],
@@ -3040,6 +4444,7 @@ mod tests {
             variables: vec![ProgramVariable { id: "rust::x".into(), language: ProgramLanguage::Rust, display: None, function: Some("main".into()) }],
             allocations: vec![],
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             nodes: vec![
                 AnnotatedNode { id: "rust::main::bb0".into(), successors: vec!["rust::main::terminate".into()], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
                 AnnotatedNode { id: "rust::main::terminate".into(), successors: vec![], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
@@ -3065,6 +4470,7 @@ mod tests {
             variables: vec![ProgramVariable { id: "v".into(), language: ProgramLanguage::Rust, display: None, function: None }],
             allocations: vec![],
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             nodes: vec![
                 AnnotatedNode { id: "rust::main::bb0".into(), successors: vec!["dummyCall::x".into()], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },
                 AnnotatedNode { id: "dummyCall::x".into(), successors: vec!["rust::callee::bb0".into()], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![], identity: None, event_identity: None, allocation_post: None, pre: Default::default(), post: Default::default() },

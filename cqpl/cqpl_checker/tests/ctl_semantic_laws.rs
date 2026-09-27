@@ -187,6 +187,7 @@ fn synthetic_model(
         variables: vec![var("rust::x"), var("rust::y")],
         allocations: vec![],
         external_deallocation_effects: vec![],
+        external_formal_memory_effects: vec![],
         llvm_memory_effects: None,
         svf_solved_points_to: None,
         ffi_argument_identity: vec![],

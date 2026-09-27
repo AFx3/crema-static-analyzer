@@ -1,0 +1,4 @@
+[package]
+name = "b18_getenv_pointer_return_not_alloc"
+version = "0.1.0"
+edition = "2021"

@@ -1,0 +1,5 @@
+[package]
+name = "b20c_realloc_zero_size_fail_closed"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"

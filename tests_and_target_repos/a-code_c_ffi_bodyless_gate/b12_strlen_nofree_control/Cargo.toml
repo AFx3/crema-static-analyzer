@@ -1,0 +1,4 @@
+[package]
+name = "b12_strlen_nofree_control"
+version = "0.1.0"
+edition = "2021"

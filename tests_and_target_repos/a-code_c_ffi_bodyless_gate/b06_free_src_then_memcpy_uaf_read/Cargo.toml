@@ -1,0 +1,4 @@
+[package]
+name = "b06_free_src_then_memcpy_uaf_read"
+version = "0.1.0"
+edition = "2021"

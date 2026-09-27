@@ -1,0 +1,4 @@
+[package]
+name = "b42_realloc_null_then_realloc_clean"
+version = "0.1.0"
+edition = "2021"

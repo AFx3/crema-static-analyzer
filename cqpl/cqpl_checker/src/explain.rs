@@ -85,11 +85,16 @@ impl QueryResultStrength {
 #[serde(rename_all = "snake_case")]
 pub enum AllocationObligationFindingKind {
     NormalReturnOpenManualObligation,
+    NormalReturnUnreleasedExternalAllocation,
     AllCandidateSuffixesCrossModeledDrop,
     AllCandidateDropSuffixesExcludeRepeatedDrop,
+    ConditionalReallocationObligationsClosed,
+    SuccessfulReallocationThenOldUse,
+    SuccessfulReallocationThenOldDrop,
     DropThenUseWithoutReallocation,
     RepeatedDropWithoutReallocation,
     AllocatorFamilyMismatch,
+    AllocatorFamilyConsumerMismatch,
     UnresolvedAllocatorContractCandidate,
 }
 
@@ -109,6 +114,7 @@ pub enum AllocationObligationEvidence {
     NormalReturnReachable,
     NoModeledDischargeOnWitnessPath,
     NoInterveningCallAfterHandoff,
+    NoInterveningCallAfterAllocation,
     NonReturningDischargeObservedOffWitness,
     MayAllocationEventObserved,
     AllocationStateIncludesAllocated,
@@ -119,15 +125,25 @@ pub enum AllocationObligationEvidence {
     NoReallocationBetweenEvents,
     KnownAllocatorFamily,
     KnownDeallocatorFamily,
+    KnownRequiredAllocatorFamily,
     AllocatorFamiliesDiffer,
     AllocatorFamilyUnresolved,
     DeallocatorFamilyUnresolved,
     ProducerCertifiedDeallocatorContract,
+    ProducerCertifiedAllocatorConsumerContract,
     AllAllocationCandidatesCovered,
     AllAllocationOriginsCovered,
     NoDropFreeTerminalSuffix,
     NoDropFreeCyclicSuffix,
     ModeledFreedStateBarrier,
+    ProducerCertifiedExistenceGuard,
+    CompatibleDeallocationBarrier,
+    ProducerCertifiedConditionalReallocation,
+    ReallocationFailurePreservesSource,
+    ReallocationSuccessInvalidatesSource,
+    PositiveNonzeroReallocationSize,
+    ReallocationResultObligationTransferred,
+    CompatibleResultDeallocationBarrier,
     AllFirstDeallocationCandidatesCovered,
     NoRepeatedDropBeforeReallocation,
     NoUnresolvedDeallocationEffectOnNormalProjection,
@@ -137,11 +153,16 @@ impl AllocationObligationFindingKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::NormalReturnOpenManualObligation => "normal_return_open_manual_obligation",
+            Self::NormalReturnUnreleasedExternalAllocation => "normal_return_unreleased_external_allocation",
             Self::AllCandidateSuffixesCrossModeledDrop => "all_candidate_suffixes_cross_modeled_drop",
             Self::AllCandidateDropSuffixesExcludeRepeatedDrop => "all_candidate_drop_suffixes_exclude_repeated_drop",
+            Self::ConditionalReallocationObligationsClosed => "conditional_reallocation_obligations_closed",
+            Self::SuccessfulReallocationThenOldUse => "successful_reallocation_then_old_use",
+            Self::SuccessfulReallocationThenOldDrop => "successful_reallocation_then_old_drop",
             Self::DropThenUseWithoutReallocation => "drop_then_use_without_reallocation",
             Self::RepeatedDropWithoutReallocation => "repeated_drop_without_reallocation",
             Self::AllocatorFamilyMismatch => "allocator_family_mismatch",
+            Self::AllocatorFamilyConsumerMismatch => "allocator_family_consumer_mismatch",
             Self::UnresolvedAllocatorContractCandidate => "unresolved_allocator_contract_candidate",
         }
     }
@@ -154,7 +175,8 @@ impl AllocationObligationFindingKind {
     fn query_direction(self) -> QueryEvidenceDirection {
         match self {
             Self::AllCandidateSuffixesCrossModeledDrop
-            | Self::AllCandidateDropSuffixesExcludeRepeatedDrop => QueryEvidenceDirection::False,
+            | Self::AllCandidateDropSuffixesExcludeRepeatedDrop
+            | Self::ConditionalReallocationObligationsClosed => QueryEvidenceDirection::False,
             Self::UnresolvedAllocatorContractCandidate => QueryEvidenceDirection::None,
             _ => QueryEvidenceDirection::True,
         }
@@ -282,6 +304,7 @@ impl AllocationObligationEvidence {
             Self::NormalReturnReachable => "normal_return_reachable",
             Self::NoModeledDischargeOnWitnessPath => "no_modeled_discharge_on_witness_path",
             Self::NoInterveningCallAfterHandoff => "no_intervening_call_after_handoff",
+            Self::NoInterveningCallAfterAllocation => "no_intervening_call_after_allocation",
             Self::NonReturningDischargeObservedOffWitness => "non_returning_discharge_observed_off_witness",
             Self::MayAllocationEventObserved => "may_allocation_event_observed",
             Self::AllocationStateIncludesAllocated => "allocation_state_includes_allocated",
@@ -292,15 +315,25 @@ impl AllocationObligationEvidence {
             Self::NoReallocationBetweenEvents => "no_reallocation_between_events",
             Self::KnownAllocatorFamily => "known_allocator_family",
             Self::KnownDeallocatorFamily => "known_deallocator_family",
+            Self::KnownRequiredAllocatorFamily => "known_required_allocator_family",
             Self::AllocatorFamiliesDiffer => "allocator_families_differ",
             Self::AllocatorFamilyUnresolved => "allocator_family_unresolved",
             Self::DeallocatorFamilyUnresolved => "deallocator_family_unresolved",
             Self::ProducerCertifiedDeallocatorContract => "producer_certified_deallocator_contract",
+            Self::ProducerCertifiedAllocatorConsumerContract => "producer_certified_allocator_consumer_contract",
             Self::AllAllocationCandidatesCovered => "all_allocation_candidates_covered",
             Self::AllAllocationOriginsCovered => "all_allocation_origins_covered",
             Self::NoDropFreeTerminalSuffix => "no_drop_free_terminal_suffix",
             Self::NoDropFreeCyclicSuffix => "no_drop_free_cyclic_suffix",
             Self::ModeledFreedStateBarrier => "modeled_freed_state_barrier",
+            Self::ProducerCertifiedExistenceGuard => "producer_certified_existence_guard",
+            Self::CompatibleDeallocationBarrier => "compatible_deallocation_barrier",
+            Self::ProducerCertifiedConditionalReallocation => "producer_certified_conditional_reallocation",
+            Self::ReallocationFailurePreservesSource => "reallocation_failure_preserves_source",
+            Self::ReallocationSuccessInvalidatesSource => "reallocation_success_invalidates_source",
+            Self::PositiveNonzeroReallocationSize => "positive_nonzero_reallocation_size",
+            Self::ReallocationResultObligationTransferred => "reallocation_result_obligation_transferred",
+            Self::CompatibleResultDeallocationBarrier => "compatible_result_deallocation_barrier",
             Self::AllFirstDeallocationCandidatesCovered => "all_first_deallocation_candidates_covered",
             Self::NoRepeatedDropBeforeReallocation => "no_repeated_drop_before_reallocation",
             Self::NoUnresolvedDeallocationEffectOnNormalProjection => "no_unresolved_deallocation_effect_on_normal_projection",
@@ -514,6 +547,7 @@ pub enum DiagnosticEventRole {
     SecondDeallocation,
     UseAfterDeallocation,
     MismatchDeallocation,
+    AllocatorFamilyConsumer,
     ModeledFreedStateBarrier,
     NonReturningDischarge,
 }
@@ -1143,7 +1177,9 @@ impl<'a> ModelChecker<'a> {
         }
 
         if formula_is_allocation_state_leak_shape(&document.formula) {
-            return self.leak_state_refuting_findings(result, document.assessment_scope);
+            let mut findings = self.leak_state_refuting_findings(result, document.assessment_scope);
+            findings.extend(self.conditional_reallocation_leak_refuting_findings(result, document.assessment_scope));
+            return findings;
         }
 
         if document.assessment_scope == AssessmentScope::NormalExecution
@@ -1164,11 +1200,16 @@ impl<'a> ModelChecker<'a> {
         if formula_contains_negated_drop(&document.formula) {
             findings.extend(self.allocation_obligation_findings(result, document.assessment_scope));
         }
+        if formula_is_allocation_state_leak_shape(&document.formula) {
+            findings.extend(self.external_allocation_leak_findings(result, document.assessment_scope));
+        }
         if formula_is_use_after_free_shape(&document.formula) {
             findings.extend(self.use_after_free_findings(result));
+            findings.extend(self.conditional_reallocation_uaf_findings(result, document.assessment_scope));
         }
         if formula_is_double_free_shape(&document.formula) {
             findings.extend(self.double_free_findings(result, document.assessment_scope));
+            findings.extend(self.conditional_reallocation_double_free_findings(result, document.assessment_scope));
         }
         if formula_uses_allocator_mismatch(&document.formula) {
             findings.extend(self.allocator_mismatch_findings(result));
@@ -1440,13 +1481,23 @@ impl<'a> ModelChecker<'a> {
             ));
         }
         if let Some(node) = finding.mismatch_node.as_deref() {
-            events.push(self.source_grounded_event(
-                &finding.allocation,
-                DiagnosticEventRole::MismatchDeallocation,
-                node,
-                &[EventKind::Drop],
-                true,
-            ));
+            if finding.kind == AllocationObligationFindingKind::AllocatorFamilyConsumerMismatch {
+                events.push(self.source_grounded_event(
+                    &finding.allocation,
+                    DiagnosticEventRole::AllocatorFamilyConsumer,
+                    node,
+                    &[],
+                    true,
+                ));
+            } else {
+                events.push(self.source_grounded_event(
+                    &finding.allocation,
+                    DiagnosticEventRole::MismatchDeallocation,
+                    node,
+                    &[EventKind::Drop],
+                    true,
+                ));
+            }
         }
         if finding.kind == AllocationObligationFindingKind::AllCandidateSuffixesCrossModeledDrop {
             if let Some(node) = finding.witness_path.last() {
@@ -1682,7 +1733,7 @@ impl<'a> ModelChecker<'a> {
                         }) {
                             vec![
                                 "refuting diagnostic evidence does not promote UNKNOWN to false",
-                                "modeled Freed-state barriers remain MAY evidence rather than MUST deallocation facts",
+                                "producer-certified compatible deallocation barriers remain MAY evidence rather than MUST deallocation facts",
                             ]
                         } else {
                             vec![
@@ -2484,20 +2535,200 @@ impl<'a> ModelChecker<'a> {
         findings
     }
 
-    /// Gate L1-R1: read-only negative orientation for the canonical
+    /// Positive diagnostic orientation for nullable bodyless C allocator origins.
+    ///
+    /// This is deliberately narrower than the generic allocation-state query:
+    /// only an explicit `c_call` allocation whose producer contract is exactly
+    /// `c_malloc` / `malloc|calloc|strdup|realloc` / `c` is eligible.  Until
+    /// `external_contract_allocations_v1` provides a first-class proof-carrying
+    /// discriminator, W1 Rust source provenance at the allocation event is used
+    /// as a fail-closed proxy for the contract-materialized bodyless case.  A
+    /// represented C/LLVM allocation therefore cannot enter this finding.
+    ///
+    /// The legacy TOP state is not itself treated as positive evidence; the
+    /// explicit allocation event and allocator contract are required.  Because
+    /// TOP also includes allocator failure/null, this diagnostic additionally
+    /// fails closed whenever any modeled discharge/escape for the same abstract
+    /// allocation is reachable in scope.  Without branch-sensitive correlation
+    /// between allocation existence and the null/non-null guard, a path that
+    /// merely avoids that discharge is not sufficient positive leak evidence.
+    /// The routine never changes CQPL truth and also fails closed on static-site
+    /// recurrence.
+    fn external_allocation_leak_findings(
+        &self,
+        result: Truth,
+        scope: AssessmentScope,
+    ) -> Vec<AllocationObligationFinding> {
+        if result != Truth::Unknown
+            || !self.k.capabilities.contains("allocation_state_v1")
+            || !self.k.capabilities.contains("allocation_contracts_v1")
+            || !self.k.capabilities.contains("source_provenance_v1")
+        {
+            return Vec::new();
+        }
+
+        let reachable = self.reachable_nodes_in_scope(scope);
+        let mut findings = Vec::new();
+
+        for allocation in self.k.allocation_ids() {
+            if self.k.allocation_site_kind(allocation) != Some("c_call") {
+                continue;
+            }
+            let Some(record) = self.k.allocations.get(allocation) else { continue; };
+            let Some(contract) = record.allocator_contract.as_ref() else { continue; };
+            let site_allocator = record
+                .site
+                .as_ref()
+                .and_then(|site| site.get("allocator"))
+                .and_then(serde_json::Value::as_str);
+            if contract.family != "c_malloc"
+                || contract.language != "c"
+                || !matches!(contract.operation.as_str(), "malloc" | "calloc" | "strdup" | "realloc")
+                || site_allocator != Some(contract.operation.as_str())
+            {
+                continue;
+            }
+
+            let Some(origin) = self.k.allocation_site_node(allocation) else { continue; };
+            if !reachable.contains(origin)
+                || !self.node_has_allocation_event(origin, allocation, EventKind::Alloc)
+            {
+                continue;
+            }
+
+            // Temporary fail-closed bodyless discriminator.  A Phase-B-minimal
+            // materialized allocation is anchored at the Rust MIR external-call
+            // site; represented C/LLVM allocator bodies are anchored in C.  Do
+            // not infer bodylessness from `site.kind == c_call` alone.
+            let Some(origin_provenance) = self.k.source_provenance_at(origin) else { continue; };
+            if origin_provenance.language != "rust" {
+                continue;
+            }
+
+            // One static site can summarize multiple dynamic objects.  Until a
+            // recurrence-sensitive positive leak certificate is defined, do not
+            // orient such cases from the site abstraction alone.
+            if self.node_can_recur_in_scope(scope, origin) {
+                continue;
+            }
+
+            // Nullable TOP does not correlate the abstract allocation identity
+            // with the non-null branch.  If any modeled discharge or escape of
+            // this same abstract allocation is reachable, an alternative path
+            // avoiding it may simply be the allocator-failure/null branch.  In
+            // that case positive orientation would be unsound; fail closed.
+            if self
+                .bfs_to_in_scope(
+                    scope,
+                    origin,
+                    |candidate| {
+                        candidate != origin
+                            && self.blocks_open_manual_obligation(candidate, allocation)
+                    },
+                    |_| true,
+                )
+                .is_some()
+            {
+                continue;
+            }
+
+            let path = self.bfs_to_in_scope(
+                scope,
+                origin,
+                |candidate| self.is_normal_return_node(candidate),
+                |candidate| !self.blocks_open_manual_obligation(candidate, allocation),
+            );
+            let Some(witness_path) = path else { continue; };
+            let Some(return_node) = witness_path.last().cloned() else { continue; };
+
+            let has_intervening_call = witness_path
+                .iter()
+                .skip(1)
+                .take(witness_path.len().saturating_sub(2))
+                .any(|node_id| {
+                    self.k.nodes.get(node_id).is_some_and(|node| {
+                        node.semantic_labels.iter().any(|label| label == "term:call")
+                    })
+                });
+
+            let strength = if has_intervening_call {
+                AllocationObligationFindingStrength::ObservationalCandidate
+            } else {
+                AllocationObligationFindingStrength::StrongAbstractEvidence
+            };
+
+            let mut evidence = vec![
+                AllocationObligationEvidence::MayAllocationEventObserved,
+                AllocationObligationEvidence::KnownAllocatorFamily,
+                AllocationObligationEvidence::NormalReturnReachable,
+                AllocationObligationEvidence::NoModeledDischargeOnWitnessPath,
+            ];
+            if !has_intervening_call {
+                evidence.push(AllocationObligationEvidence::NoInterveningCallAfterAllocation);
+            }
+
+            let summary = match strength {
+                AllocationObligationFindingStrength::StrongAbstractEvidence => format!(
+                    "The abstract model contains a normal-return path from an explicit bodyless C {} allocation origin on which allocation {} has no modeled deallocation, obligation discharge, or escape. This is strong abstract evidence of a leak on normal completion; the nullable TOP allocation state remains MAY evidence and CQPL truth stays {}.",
+                    contract.operation,
+                    allocation,
+                    result.as_str(),
+                ),
+                AllocationObligationFindingStrength::ObservationalCandidate => format!(
+                    "The abstract model contains a normal-return path from an explicit bodyless C {} allocation origin on which allocation {} has no modeled deallocation, but the path contains an intervening call whose effects may be outside the current disposition vocabulary. This is positive observational evidence only; CQPL truth remains {}.",
+                    contract.operation,
+                    allocation,
+                    result.as_str(),
+                ),
+            };
+
+            findings.push(AllocationObligationFinding {
+                taxonomy: MEMORY_ERROR_DIAGNOSTICS_VERSION,
+                kind: AllocationObligationFindingKind::NormalReturnUnreleasedExternalAllocation,
+                strength,
+                allocation: allocation.clone(),
+                query_result: result.as_str(),
+                witness_path,
+                evidence,
+                origin_node: Some(origin.to_string()),
+                handoff_node: None,
+                return_node: Some(return_node),
+                first_drop_node: None,
+                second_drop_node: None,
+                use_node: None,
+                mismatch_node: None,
+                allocator_family: Some(contract.family.clone()),
+                deallocator_family: None,
+                contracts: self.allocator_contract_witness(allocation).into_iter().collect(),
+                dispositions: Vec::new(),
+                ffi_argument_identity: Vec::new(),
+                external_effects: Vec::new(),
+                non_returning_discharge_nodes: Vec::new(),
+                summary,
+            });
+        }
+
+        findings.sort_by(|a, b| {
+            (&a.allocation, &a.origin_node, &a.return_node)
+                .cmp(&(&b.allocation, &b.origin_node, &b.return_node))
+        });
+        findings
+    }
+
     /// allocation-state leak query.
     ///
     /// Scientific contract:
     /// - this routine is invoked only for an already-UNKNOWN query;
     /// - it never changes CQPL truth;
-    /// - a barrier is accepted only when the allocation-state value is exactly
-    ///   `Freed` (not `Top`), so generic abstract uncertainty is not mistaken
-    ///   for deallocation evidence;
-    /// - every represented allocation candidate and every explicit allocation
-    ///   origin must be covered, otherwise the routine fails closed;
-    /// - any drop-free terminal/cycle, site reuse, unresolved external effect,
-    ///   or explicit ownership-preserving/escaping disposition blocks negative
-    ///   orientation.
+    /// - exact allocation origins are refuted only when every in-scope suffix
+    ///   crosses a producer-certified compatible deallocation barrier;
+    /// - nullable/TOP allocation origins additionally require an AGE1
+    ///   `allocation_existence_guards_v1` certificate. The null successor is
+    ///   excluded because the represented allocation does not concretely exist
+    ///   there; the non-null successor must be closed by a compatible discharge;
+    /// - allocation-site recurrence, unresolved external effects, mismatched
+    ///   deallocators, true escape, and unreclaimed-obligation dispositions all
+    ///   fail closed.
     fn leak_state_refuting_findings(&self, result: Truth, scope: AssessmentScope) -> Vec<AllocationObligationFinding> {
         if result != Truth::Unknown || !self.k.capabilities.contains("allocation_state_v1") {
             return Vec::new();
@@ -2513,8 +2744,7 @@ impl<'a> ModelChecker<'a> {
                         node_id.as_str(),
                         allocation.as_str(),
                         MayPredicate::Alloc,
-                    )
-                        != Truth::False
+                    ) != Truth::False
                 })
             })
             .cloned()
@@ -2537,23 +2767,16 @@ impl<'a> ModelChecker<'a> {
                         allocation.as_str(),
                         EventKind::Alloc,
                     )
-                        && self.k.nodes.get(*node_id).is_some_and(|node| {
-                            node.allocation_post.as_ref().is_some_and(|post| {
-                                post.value_of(allocation.as_str()) == CellValue::Alloc
-                            })
-                        })
                 })
                 .cloned()
                 .collect::<Vec<_>>();
 
-            // State-only MAY allocation evidence without an exact allocation
-            // origin is not sufficient for a negative certificate.
             if origins.is_empty() {
                 return Vec::new();
             }
 
-            // Re-execution of the same abstract allocation site means one
-            // AbstractAllocId may summarize multiple concrete instances.
+            // One static allocation site may summarize several dynamic objects.
+            // Negative leak orientation is not iteration-sensitive yet.
             if origins
                 .iter()
                 .any(|origin| self.node_can_recur_in_scope(scope, origin.as_str()))
@@ -2562,27 +2785,80 @@ impl<'a> ModelChecker<'a> {
             }
 
             let mut representative_path = Vec::new();
+            let mut used_existence_guard = false;
             for origin in &origins {
-                if self.drop_free_suffix_can_escape(scope, origin.as_str(), allocation.as_str()) {
+                let origin_value = self
+                    .k
+                    .nodes
+                    .get(origin)
+                    .and_then(|node| node.allocation_post.as_ref())
+                    .map(|post| post.value_of(allocation.as_str()))
+                    .unwrap_or(CellValue::Bottom);
+
+                let covered = match origin_value {
+                    CellValue::Alloc => {
+                        !self.negative_leak_suffix_can_escape(
+                            scope,
+                            origin,
+                            allocation,
+                            None,
+                        )
+                    }
+                    CellValue::Top => {
+                        let guard = self
+                            .k
+                            .allocation_existence_guards_for(allocation)
+                            .filter(|guard| reachable.contains(&guard.predicate_call_node))
+                            .find(|guard| {
+                                self.nullable_origin_is_closed_by_guard(
+                                    scope,
+                                    origin,
+                                    allocation,
+                                    guard,
+                                )
+                            });
+                        if guard.is_some() {
+                            used_existence_guard = true;
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    _ => false,
+                };
+                if !covered {
                     return Vec::new();
                 }
 
                 if representative_path.is_empty() {
                     representative_path = self
-                        .bfs_to_in_scope(scope,
-                            origin.as_str(),
-                            |candidate| self.is_exact_freed_state(candidate, allocation.as_str()),
+                        .bfs_to_in_scope(
+                            scope,
+                            origin,
                             |candidate| {
-                                candidate == origin.as_str()
-                                    || !self.node_blocks_negative_leak_orientation(
-                                        candidate,
-                                        allocation.as_str(),
-                                    )
-                                    || self.is_exact_freed_state(candidate, allocation.as_str())
+                                self.is_compatible_deallocation_barrier(candidate, allocation)
+                                    || self.legacy_exact_freed_barrier(candidate, allocation)
+                            },
+                            |candidate| {
+                                candidate == origin
+                                    || !self.node_blocks_negative_leak_orientation(candidate, allocation)
+                                    || self.is_compatible_deallocation_barrier(candidate, allocation)
+                                    || self.legacy_exact_freed_barrier(candidate, allocation)
                             },
                         )
                         .unwrap_or_else(|| vec![origin.clone()]);
                 }
+            }
+
+            let mut evidence = vec![
+                AllocationObligationEvidence::AllAllocationCandidatesCovered,
+                AllocationObligationEvidence::AllAllocationOriginsCovered,
+                AllocationObligationEvidence::NoDropFreeTerminalSuffix,
+                AllocationObligationEvidence::NoDropFreeCyclicSuffix,
+                AllocationObligationEvidence::CompatibleDeallocationBarrier,
+            ];
+            if used_existence_guard {
+                evidence.push(AllocationObligationEvidence::ProducerCertifiedExistenceGuard);
             }
 
             findings.push(AllocationObligationFinding {
@@ -2592,13 +2868,7 @@ impl<'a> ModelChecker<'a> {
                 allocation: allocation.clone(),
                 query_result: result.as_str(),
                 witness_path: representative_path,
-                evidence: vec![
-                    AllocationObligationEvidence::AllAllocationCandidatesCovered,
-                    AllocationObligationEvidence::AllAllocationOriginsCovered,
-                    AllocationObligationEvidence::NoDropFreeTerminalSuffix,
-                    AllocationObligationEvidence::NoDropFreeCyclicSuffix,
-                    AllocationObligationEvidence::ModeledFreedStateBarrier,
-                ],
+                evidence,
                 origin_node: origins.first().cloned(),
                 handoff_node: None,
                 return_node: None,
@@ -2606,21 +2876,31 @@ impl<'a> ModelChecker<'a> {
                 second_drop_node: None,
                 use_node: None,
                 mismatch_node: None,
-                allocator_family: None,
+                allocator_family: self
+                    .k
+                    .allocations
+                    .get(allocation)
+                    .and_then(|record| record.allocator_contract.as_ref())
+                    .map(|contract| contract.family.clone()),
                 deallocator_family: None,
-                contracts: Vec::new(),
+                contracts: self.allocator_contract_witness(allocation).into_iter().collect(),
                 dispositions: Vec::new(),
                 ffi_argument_identity: Vec::new(),
                 external_effects: Vec::new(),
                 non_returning_discharge_nodes: Vec::new(),
                 summary: format!(
-                    "For allocation {allocation}, every explicit allocation origin in the projected abstract graph is structurally cut by an exact Freed-state barrier before any drop-free maximal terminal or cyclic suffix is reachable. This is negative observational evidence only: Freed membership is still interpreted as MAY by CQPL, so the query remains {}.",
+                    "For allocation {allocation}, every concretely existing allocation candidate in the normal-execution projection is closed by a producer-certified compatible deallocation. Nullable allocation-failure branches are excluded only when allocation_existence_guards_v1 certifies the exact raw-pointer is_null split. This is negative observational evidence only; CQPL truth remains {}.",
                     result.as_str(),
                 ),
             });
         }
 
         findings
+    }
+
+    fn legacy_exact_freed_barrier(&self, node_id: &str, allocation: &str) -> bool {
+        !self.k.capabilities.contains("allocation_contracts_v1")
+            && self.is_exact_freed_state(node_id, allocation)
     }
 
     fn is_exact_freed_state(&self, node_id: &str, allocation: &str) -> bool {
@@ -2631,14 +2911,52 @@ impl<'a> ModelChecker<'a> {
         })
     }
 
+    fn is_compatible_deallocation_barrier(&self, node_id: &str, allocation: &str) -> bool {
+        let Some(allocator_family) = self
+            .k
+            .allocations
+            .get(allocation)
+            .and_then(|record| record.allocator_contract.as_ref())
+            .map(|contract| contract.family.as_str())
+        else {
+            return false;
+        };
+        self.k.nodes.get(node_id).is_some_and(|node| {
+            node.allocation_labels.iter().any(|label| {
+                label.allocation == allocation
+                    && label.predicate == EventKind::Drop
+                    && label.deallocator_contract.as_ref().is_some_and(|contract| {
+                        contract.family == allocator_family
+                            && contract.basis.as_deref().is_some_and(|basis| basis != "unresolved")
+                    })
+            })
+        })
+    }
+
     fn node_blocks_negative_leak_orientation(&self, node_id: &str, allocation: &str) -> bool {
+        if self.k.has_unmodeled_reallocation_boundary(node_id, allocation) {
+            // RBF1 is a proof firewall only. Until the conditional realloc
+            // success/failure semantics are modeled allocation-centrically,
+            // a later free of the old pointer cannot certify that the original
+            // obligation was validly discharged on every branch.
+            return true;
+        }
+        if self.k.external_deallocation_effect_at(node_id).is_some_and(|record| {
+            record.status == crate::kripke::ExternalDeallocationEffectStatus::Unresolved
+        }) {
+            return true;
+        }
+
         let Some(node) = self.k.nodes.get(node_id) else {
             return true;
         };
 
-        if self.k.external_deallocation_effect_at(node_id).is_some_and(|record| {
-            record.status == crate::kripke::ExternalDeallocationEffectStatus::Unresolved
-        }) {
+        let has_drop = node.allocation_labels.iter().any(|label| {
+            label.allocation == allocation && label.predicate == EventKind::Drop
+        });
+        if has_drop && !self.is_compatible_deallocation_barrier(node_id, allocation) {
+            // A mismatched or unresolved deallocator is UB evidence, not a
+            // certificate that the allocator obligation was correctly closed.
             return true;
         }
 
@@ -2646,65 +2964,134 @@ impl<'a> ModelChecker<'a> {
             if record.allocation != allocation {
                 return false;
             }
-            matches!(
-                record.obligation_effect,
+            match record.obligation_effect {
                 AllocationObligationEffect::PreserveManualObligation
-                    | AllocationObligationEffect::PreservePersistentObligation
-                    | AllocationObligationEffect::PreserveUnreclaimedObligation
-                    | AllocationObligationEffect::MayEscapeToCaller
-            ) || (record.obligation_effect == AllocationObligationEffect::MayDischarge
-                && !self.is_exact_freed_state(node_id, allocation))
+                | AllocationObligationEffect::RestoreRaiiObligation
+                | AllocationObligationEffect::NoPointeeLifecycleEffect => false,
+                AllocationObligationEffect::PreservePersistentObligation
+                | AllocationObligationEffect::PreserveUnreclaimedObligation
+                | AllocationObligationEffect::MayEscapeToCaller => true,
+                AllocationObligationEffect::MayDischarge => {
+                    !self.is_compatible_deallocation_barrier(node_id, allocation)
+                }
+            }
         })
     }
 
-    /// Return true when an explicit allocation origin has at least one
-    /// successor suffix that can remain drop-free to a terminal/cycle, or when
-    /// the suffix crosses evidence that makes a negative orientation unsafe.
-    fn drop_free_suffix_can_escape(&self, scope: AssessmentScope, origin: &str, allocation: &str) -> bool {
-        let successors = self.successors_in_scope(scope, origin);
-        if successors.is_empty() {
-            // `EX` is false at a terminal origin, so this origin cannot witness
-            // the leak suffix.  It is therefore covered for this diagnostic.
+    fn nullable_origin_is_closed_by_guard(
+        &self,
+        scope: AssessmentScope,
+        origin: &str,
+        allocation: &str,
+        guard: &crate::kripke::AllocationExistenceGuardRecord,
+    ) -> bool {
+        // First prove that all in-scope paths from the allocation origin either
+        // reach this exact certified is_null predicate or already cross a
+        // compatible discharge. A terminal/cycle/escape before the predicate
+        // would make the existence-conditioned argument incomplete.
+        if self.negative_leak_suffix_can_escape(
+            scope,
+            origin,
+            allocation,
+            Some(&guard.predicate_call_node),
+        ) {
             return false;
         }
 
-        let mut color: BTreeMap<String, u8> = BTreeMap::new();
-        successors.into_iter().any(|successor| {
-            self.drop_free_dfs_can_escape(scope, &successor, allocation, &mut color)
-        })
+        // On the null successor this allocation does not concretely exist by
+        // the producer certificate. Only the non-null continuation carries the
+        // allocation obligation and therefore must be closed before completion.
+        self.k.nodes.contains_key(&guard.non_null_successor)
+            && !self.negative_leak_suffix_can_escape(
+                scope,
+                &guard.non_null_successor,
+                allocation,
+                None,
+            )
     }
 
-    fn drop_free_dfs_can_escape(
+    /// Return true when the suffix can reach a maximal terminal/cycle or unsafe
+    /// ownership boundary without crossing a compatible deallocation barrier.
+    /// `stop_at` is a proof barrier used only to establish that a certified
+    /// existence predicate dominates the relevant nullable origin paths.
+    fn negative_leak_suffix_can_escape(
+        &self,
+        scope: AssessmentScope,
+        start: &str,
+        allocation: &str,
+        stop_at: Option<&str>,
+    ) -> bool {
+        if stop_at == Some(start) {
+            return false;
+        }
+        // A producer-certified compatible deallocation, or the legacy exact
+        // FREED-state barrier when allocation contracts are unavailable, closes
+        // the suffix before generic blocking rules are considered.  This order
+        // preserves the pre-AGE1 exact-state negative proof while modern
+        // contract-carrying graphs still reject mismatched/unresolved drops
+        // because `legacy_exact_freed_barrier` is disabled there.
+        if self.is_compatible_deallocation_barrier(start, allocation)
+            || self.legacy_exact_freed_barrier(start, allocation)
+        {
+            return false;
+        }
+        if self.node_blocks_negative_leak_orientation(start, allocation) {
+            return true;
+        }
+
+        let mut color: BTreeMap<String, u8> = BTreeMap::new();
+        self.negative_leak_dfs_can_escape(
+            scope,
+            start,
+            allocation,
+            stop_at,
+            &mut color,
+        )
+    }
+
+    fn negative_leak_dfs_can_escape(
         &self,
         scope: AssessmentScope,
         node_id: &str,
         allocation: &str,
+        stop_at: Option<&str>,
         color: &mut BTreeMap<String, u8>,
     ) -> bool {
+        if stop_at == Some(node_id) {
+            return false;
+        }
+        if self.is_compatible_deallocation_barrier(node_id, allocation)
+            || self.legacy_exact_freed_barrier(node_id, allocation)
+        {
+            return false;
+        }
         if self.node_blocks_negative_leak_orientation(node_id, allocation) {
             return true;
         }
-        if self.is_exact_freed_state(node_id, allocation) {
-            return false;
-        }
 
         match color.get(node_id).copied() {
-            Some(1) => return true,  // reachable drop-free cycle
-            Some(2) => return false, // already proved closed by barriers
+            Some(1) => return true,
+            Some(2) => return false,
             _ => {}
         }
 
-        let Some(_node) = self.k.nodes.get(node_id) else {
+        if !self.k.nodes.contains_key(node_id) {
             return true;
-        };
+        }
         let successors = self.successors_in_scope(scope, node_id);
         if successors.is_empty() {
-            return true; // drop-free maximal finite suffix in the assessment projection
+            return true;
         }
 
         color.insert(node_id.to_string(), 1);
         for successor in &successors {
-            if self.drop_free_dfs_can_escape(scope, successor, allocation, color) {
+            if self.negative_leak_dfs_can_escape(
+                scope,
+                successor,
+                allocation,
+                stop_at,
+                color,
+            ) {
                 return true;
             }
         }
@@ -2719,6 +3106,337 @@ impl<'a> ModelChecker<'a> {
         })
     }
 
+
+    fn conditional_reallocation_uaf_findings(
+        &self,
+        result: Truth,
+        scope: AssessmentScope,
+    ) -> Vec<AllocationObligationFinding> {
+        if result != Truth::Unknown || !self.k.capabilities.contains("conditional_reallocations_v1") {
+            return Vec::new();
+        }
+        let mut findings = Vec::new();
+        for record in &self.k.conditional_reallocations {
+            let Some(path) = self.bfs_to_in_scope(
+                scope,
+                &record.success_successor,
+                |node| self.node_has_use_event(node, &record.source_allocation),
+                |_| true,
+            ) else { continue; };
+            let Some(use_node) = path.last().cloned() else { continue; };
+            let mut witness_path = vec![record.reallocation_node.clone(), record.outcome_predicate_call_node.clone(), record.outcome_switch_node.clone()];
+            witness_path.extend(path);
+            findings.push(AllocationObligationFinding {
+                taxonomy: MEMORY_ERROR_DIAGNOSTICS_VERSION,
+                kind: AllocationObligationFindingKind::SuccessfulReallocationThenOldUse,
+                strength: AllocationObligationFindingStrength::StrongAbstractEvidence,
+                allocation: record.source_allocation.clone(),
+                query_result: result.as_str(),
+                witness_path,
+                evidence: vec![
+                    AllocationObligationEvidence::ProducerCertifiedConditionalReallocation,
+                    AllocationObligationEvidence::PositiveNonzeroReallocationSize,
+                    AllocationObligationEvidence::ReallocationSuccessInvalidatesSource,
+                    AllocationObligationEvidence::MayUseObserved,
+                    AllocationObligationEvidence::OrderedDropBeforeUse,
+                ],
+                origin_node: Some(record.source_existence_predicate_call_node.clone()),
+                handoff_node: None,
+                return_node: None,
+                first_drop_node: None,
+                second_drop_node: None,
+                use_node: Some(use_node),
+                mismatch_node: None,
+                allocator_family: Some("c_malloc".into()),
+                deallocator_family: Some("c_malloc".into()),
+                contracts: Vec::new(),
+                dispositions: Vec::new(),
+                ffi_argument_identity: Vec::new(),
+                external_effects: Vec::new(),
+                non_returning_discharge_nodes: Vec::new(),
+                summary: format!(
+                    "The producer-certified conditional realloc relation proves that successful realloc invalidates old allocation {} before a later MAY use/read/write through the old identity. CQPL truth remains {} because the allocation identity is MAY.",
+                    record.source_allocation,
+                    result.as_str(),
+                ),
+            });
+        }
+        findings
+    }
+
+    fn conditional_reallocation_double_free_findings(
+        &self,
+        result: Truth,
+        scope: AssessmentScope,
+    ) -> Vec<AllocationObligationFinding> {
+        if result != Truth::Unknown || !self.k.capabilities.contains("conditional_reallocations_v1") {
+            return Vec::new();
+        }
+        let mut findings = Vec::new();
+        for record in &self.k.conditional_reallocations {
+            let Some(path) = self.bfs_to_in_scope(
+                scope,
+                &record.success_successor,
+                |node| self.node_has_allocation_event(node, &record.source_allocation, EventKind::Drop),
+                |_| true,
+            ) else { continue; };
+            let Some(second_drop) = path.last().cloned() else { continue; };
+            let mut witness_path = vec![record.reallocation_node.clone(), record.outcome_predicate_call_node.clone(), record.outcome_switch_node.clone()];
+            witness_path.extend(path);
+            findings.push(AllocationObligationFinding {
+                taxonomy: MEMORY_ERROR_DIAGNOSTICS_VERSION,
+                kind: AllocationObligationFindingKind::SuccessfulReallocationThenOldDrop,
+                strength: AllocationObligationFindingStrength::StrongAbstractEvidence,
+                allocation: record.source_allocation.clone(),
+                query_result: result.as_str(),
+                witness_path,
+                evidence: vec![
+                    AllocationObligationEvidence::ProducerCertifiedConditionalReallocation,
+                    AllocationObligationEvidence::PositiveNonzeroReallocationSize,
+                    AllocationObligationEvidence::ReallocationSuccessInvalidatesSource,
+                    AllocationObligationEvidence::MayDeallocationObserved,
+                    AllocationObligationEvidence::TwoOrderedDropsObserved,
+                ],
+                origin_node: Some(record.source_existence_predicate_call_node.clone()),
+                handoff_node: None,
+                return_node: None,
+                first_drop_node: None,
+                second_drop_node: Some(second_drop),
+                use_node: None,
+                mismatch_node: None,
+                allocator_family: Some("c_malloc".into()),
+                deallocator_family: Some("c_malloc".into()),
+                contracts: Vec::new(),
+                dispositions: Vec::new(),
+                ffi_argument_identity: Vec::new(),
+                external_effects: Vec::new(),
+                non_returning_discharge_nodes: Vec::new(),
+                summary: format!(
+                    "The producer-certified successful realloc already invalidates old allocation {}; a later explicit MAY drop of that old identity is strong abstract evidence of a repeated deallocation. CQPL truth remains {} because the allocation identity is MAY.",
+                    record.source_allocation,
+                    result.as_str(),
+                ),
+            });
+        }
+        findings
+    }
+
+    fn result_reallocation_obligation_can_escape(
+        &self,
+        scope: AssessmentScope,
+        start: &str,
+        closing_nodes: &BTreeSet<String>,
+    ) -> bool {
+        fn dfs(
+            checker: &ModelChecker<'_>,
+            scope: AssessmentScope,
+            node: &str,
+            closing_nodes: &BTreeSet<String>,
+            active: &mut BTreeSet<String>,
+            memo: &mut BTreeMap<String, bool>,
+        ) -> bool {
+            if closing_nodes.contains(node) {
+                return false;
+            }
+            if let Some(value) = memo.get(node) {
+                return *value;
+            }
+            if !active.insert(node.to_string()) {
+                return true;
+            }
+            let successors = checker.successors_in_scope(scope, node);
+            let escapes = successors.is_empty()
+                || successors.iter().any(|successor| {
+                    dfs(checker, scope, successor, closing_nodes, active, memo)
+                });
+            active.remove(node);
+            memo.insert(node.to_string(), escapes);
+            escapes
+        }
+        dfs(self, scope, start, closing_nodes, &mut BTreeSet::new(), &mut BTreeMap::new())
+    }
+
+    fn conditional_reallocation_representative_closure_path(
+        &self,
+        scope: AssessmentScope,
+        record: &crate::kripke::ConditionalReallocationRecord,
+        closing_nodes: &BTreeSet<String>,
+    ) -> Option<Vec<String>> {
+        fn append_segment(path: &mut Vec<String>, segment: Vec<String>) -> Option<()> {
+            if segment.is_empty() {
+                return None;
+            }
+            if path.is_empty() {
+                path.extend(segment);
+                return Some(());
+            }
+            if path.last() != segment.first() {
+                return None;
+            }
+            path.extend(segment.into_iter().skip(1));
+            Some(())
+        }
+
+        // A diagnostic witness must be one concrete CFG path.  The universal
+        // CR1 proof covers both realloc outcomes, but serializing the failure
+        // and success successors consecutively would fabricate a non-edge.
+        // Use the certified success outcome as a deterministic representative
+        // path; branch-universal coverage remains carried by the evidence set.
+        let to_realloc = self.bfs_to_in_scope(
+            scope,
+            &record.source_existence_predicate_call_node,
+            |node| node == record.reallocation_node.as_str(),
+            |_| true,
+        )?;
+        let to_outcome_predicate = self.bfs_to_in_scope(
+            scope,
+            &record.reallocation_node,
+            |node| node == record.outcome_predicate_call_node.as_str(),
+            |_| true,
+        )?;
+        let to_outcome_switch = self.bfs_to_in_scope(
+            scope,
+            &record.outcome_predicate_call_node,
+            |node| node == record.outcome_switch_node.as_str(),
+            |_| true,
+        )?;
+        if !self
+            .successors_in_scope(scope, &record.outcome_switch_node)
+            .iter()
+            .any(|successor| successor == &record.success_successor)
+        {
+            return None;
+        }
+        let success_to_close = self.bfs_to_in_scope(
+            scope,
+            &record.success_successor,
+            |node| closing_nodes.contains(node),
+            |_| true,
+        )?;
+
+        let mut path = Vec::new();
+        append_segment(&mut path, to_realloc)?;
+        append_segment(&mut path, to_outcome_predicate)?;
+        append_segment(&mut path, to_outcome_switch)?;
+        append_segment(
+            &mut path,
+            vec![record.outcome_switch_node.clone(), record.success_successor.clone()],
+        )?;
+        append_segment(&mut path, success_to_close)?;
+        Some(path)
+    }
+
+    fn conditional_reallocation_leak_refuting_findings(
+        &self,
+        result: Truth,
+        scope: AssessmentScope,
+    ) -> Vec<AllocationObligationFinding> {
+        if result != Truth::Unknown || !self.k.capabilities.contains("conditional_reallocations_v1") {
+            return Vec::new();
+        }
+        let reachable = self.reachable_nodes_in_scope(scope);
+        let candidates = self
+            .k
+            .allocation_ids()
+            .filter(|allocation| {
+                self.k.nodes.keys().filter(|node| reachable.contains(*node)).any(|node| {
+                    self.k.allocation_may_hold(node, allocation, MayPredicate::Alloc) != Truth::False
+                })
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if candidates.is_empty() {
+            return Vec::new();
+        }
+
+        // The leak query is existential over allocations, so negative
+        // orientation is sound only when *every* candidate allocation is
+        // covered. CR1-v1 deliberately fails closed rather than combining a
+        // conditional proof for one allocation with unrelated generic facts.
+        let mut findings = Vec::new();
+        for allocation in &candidates {
+            let matching = self
+                .k
+                .conditional_reallocations_for(allocation)
+                .collect::<Vec<_>>();
+            if matching.len() != 1 {
+                return Vec::new();
+            }
+            let record = matching[0];
+            if self.node_can_recur_in_scope(scope, &record.reallocation_node) {
+                return Vec::new();
+            }
+            if self.negative_leak_suffix_can_escape(
+                scope,
+                &record.failure_successor,
+                &record.source_allocation,
+                None,
+            ) {
+                return Vec::new();
+            }
+            let closing_nodes = record
+                .result_deallocations
+                .iter()
+                .map(|d| d.node.clone())
+                .collect::<BTreeSet<_>>();
+            if closing_nodes.is_empty()
+                || self.result_reallocation_obligation_can_escape(
+                    scope,
+                    &record.success_successor,
+                    &closing_nodes,
+                )
+            {
+                return Vec::new();
+            }
+            let Some(witness_path) = self.conditional_reallocation_representative_closure_path(
+                scope,
+                record,
+                &closing_nodes,
+            ) else {
+                return Vec::new();
+            };
+            findings.push(AllocationObligationFinding {
+                taxonomy: MEMORY_ERROR_DIAGNOSTICS_VERSION,
+                kind: AllocationObligationFindingKind::ConditionalReallocationObligationsClosed,
+                strength: AllocationObligationFindingStrength::StrongAbstractEvidence,
+                allocation: record.source_allocation.clone(),
+                query_result: result.as_str(),
+                witness_path,
+                evidence: vec![
+                    AllocationObligationEvidence::AllAllocationCandidatesCovered,
+                    AllocationObligationEvidence::AllAllocationOriginsCovered,
+                    AllocationObligationEvidence::ProducerCertifiedExistenceGuard,
+                    AllocationObligationEvidence::ProducerCertifiedConditionalReallocation,
+                    AllocationObligationEvidence::PositiveNonzeroReallocationSize,
+                    AllocationObligationEvidence::ReallocationFailurePreservesSource,
+                    AllocationObligationEvidence::ReallocationSuccessInvalidatesSource,
+                    AllocationObligationEvidence::ReallocationResultObligationTransferred,
+                    AllocationObligationEvidence::CompatibleDeallocationBarrier,
+                    AllocationObligationEvidence::CompatibleResultDeallocationBarrier,
+                ],
+                origin_node: Some(record.source_existence_predicate_call_node.clone()),
+                handoff_node: None,
+                return_node: None,
+                first_drop_node: None,
+                second_drop_node: None,
+                use_node: None,
+                mismatch_node: None,
+                allocator_family: Some("c_malloc".into()),
+                deallocator_family: Some("c_malloc".into()),
+                contracts: Vec::new(),
+                dispositions: Vec::new(),
+                ffi_argument_identity: Vec::new(),
+                external_effects: Vec::new(),
+                non_returning_discharge_nodes: Vec::new(),
+                summary: format!(
+                    "All producer-certified realloc outcomes close their corresponding obligation for {}: failure preserves and subsequently frees the old object, while success invalidates the old object and every certified result path reaches compatible free(q).",
+                    record.source_allocation,
+                ),
+            });
+        }
+        findings
+    }
+
     fn use_after_free_findings(&self, result: Truth) -> Vec<AllocationObligationFinding> {
         let mut findings = Vec::new();
         for allocation in self.k.allocations.keys() {
@@ -2728,6 +3446,9 @@ impl<'a> ModelChecker<'a> {
                 let Some((origin_path, origin_evidence)) = self.origin_path_to(allocation, first_drop) else {
                     continue;
                 };
+                let witness_entry = origin_path.first().map(String::as_str).unwrap_or(first_drop);
+                let explicit_origin_reaches_entry = self
+                    .explicit_allocation_origin_reaches(allocation, witness_entry);
 
                 for successor in self.successors(first_drop) {
                     let Some(suffix) = self.bfs_to(
@@ -2744,18 +3465,27 @@ impl<'a> ModelChecker<'a> {
 
                     let mut witness_path = origin_path.clone();
                     witness_path.extend(suffix);
-                    let strength = if origin_evidence == AllocationObligationEvidence::MayAllocationEventObserved {
+                    let strength = if explicit_origin_reaches_entry {
                         AllocationObligationFindingStrength::StrongAbstractEvidence
                     } else {
                         AllocationObligationFindingStrength::ObservationalCandidate
                     };
-                    let mut evidence = vec![
-                        origin_evidence,
+                    let mut evidence = vec![origin_evidence];
+                    if explicit_origin_reaches_entry
+                        && origin_evidence != AllocationObligationEvidence::MayAllocationEventObserved
+                    {
+                        // Keep the shortest diagnostic witness entry while also
+                        // recording the stronger, independently established
+                        // canonical allocation-origin evidence.  W1 certificates
+                        // already expose these as distinct concepts.
+                        evidence.push(AllocationObligationEvidence::MayAllocationEventObserved);
+                    }
+                    evidence.extend([
                         AllocationObligationEvidence::MayDeallocationObserved,
                         AllocationObligationEvidence::MayUseObserved,
                         AllocationObligationEvidence::OrderedDropBeforeUse,
                         AllocationObligationEvidence::NoReallocationBetweenEvents,
-                    ];
+                    ]);
                     let summary = match strength {
                         AllocationObligationFindingStrength::StrongAbstractEvidence => format!(
                             "The abstract model contains an ordered witness for allocation {allocation}: a MAY deallocation is followed by a MAY use/read/write of the same AbstractAllocId, with no intervening re-allocation event. This is strong abstract evidence of a use-after-free pattern; CQPL truth remains {} because allocation/event identity is MAY rather than MUST.",
@@ -2998,6 +3728,13 @@ impl<'a> ModelChecker<'a> {
 
         let mut findings = Vec::new();
         for allocation in &candidates {
+            // CR1 inserts a checker-local successful-realloc deallocation into
+            // CQPL truth. The producer Kripke intentionally does not contain
+            // that synthetic event, so the legacy negative refuter cannot use
+            // producer-only drops to certify absence of a repeated drop.
+            if self.k.conditional_reallocations_for(allocation).next().is_some() {
+                return Vec::new();
+            }
             let origins = self
                 .k
                 .nodes
@@ -3280,6 +4017,95 @@ impl<'a> ModelChecker<'a> {
                 }
             }
         }
+        // RBF2: realloc's allocptr is a family-constrained consumer.  This is
+        // not a deallocation event and therefore must not be represented as a
+        // synthetic drop.  A v2 record says only that the call requires the
+        // c_malloc family for this source allocation; the source's own
+        // allocator contract remains authoritative.
+        for boundary in &self.k.reallocation_boundaries {
+            if boundary.basis != "rust_foreign_decl_c_realloc_allocptr_family_v2" {
+                continue;
+            }
+            let Some(source) = self.k.allocations.get(&boundary.source_allocation) else {
+                continue;
+            };
+            let allocator_family = source
+                .allocator_contract
+                .as_ref()
+                .map(|contract| contract.family.clone())
+                .unwrap_or_else(|| "unknown".into());
+            let allocator_known = allocator_family != "unknown";
+            if allocator_known && allocator_family == boundary.family {
+                continue;
+            }
+            let Some((witness_path, origin_evidence)) =
+                self.origin_path_to(&boundary.source_allocation, &boundary.node)
+            else {
+                continue;
+            };
+            let (kind, strength) = if allocator_known {
+                (
+                    AllocationObligationFindingKind::AllocatorFamilyConsumerMismatch,
+                    AllocationObligationFindingStrength::StrongAbstractEvidence,
+                )
+            } else {
+                (
+                    AllocationObligationFindingKind::UnresolvedAllocatorContractCandidate,
+                    AllocationObligationFindingStrength::ObservationalCandidate,
+                )
+            };
+            let mut evidence = vec![
+                origin_evidence,
+                AllocationObligationEvidence::KnownRequiredAllocatorFamily,
+                AllocationObligationEvidence::ProducerCertifiedAllocatorConsumerContract,
+            ];
+            if allocator_known {
+                evidence.push(AllocationObligationEvidence::KnownAllocatorFamily);
+                evidence.push(AllocationObligationEvidence::AllocatorFamiliesDiffer);
+            } else {
+                evidence.push(AllocationObligationEvidence::AllocatorFamilyUnresolved);
+            }
+            let mut contracts = Vec::new();
+            if let Some(contract) = self.allocator_contract_witness(&boundary.source_allocation) {
+                contracts.push(contract);
+            }
+            let summary = if allocator_known {
+                format!(
+                    "The abstract model associates allocation {} with allocator family '{}' and reaches producer-certified realloc consumer {} whose allocptr contract requires family '{}'. The families differ, which is strong abstract evidence of allocator-family mismatch at the realloc boundary; no deallocation is invented and CQPL truth remains {} because allocation identity is MAY.",
+                    boundary.source_allocation, allocator_family, boundary.node, boundary.family, result.as_str(),
+                )
+            } else {
+                format!(
+                    "Producer-certified realloc consumer {} requires allocator family '{}' for allocation {}, but the source allocator family is unresolved. This is an observational candidate only; CQPL truth remains {}.",
+                    boundary.node, boundary.family, boundary.source_allocation, result.as_str(),
+                )
+            };
+            findings.push(AllocationObligationFinding {
+                taxonomy: MEMORY_ERROR_DIAGNOSTICS_VERSION,
+                kind,
+                strength,
+                allocation: boundary.source_allocation.clone(),
+                query_result: result.as_str(),
+                witness_path,
+                evidence,
+                origin_node: self.k.allocation_site_node(&boundary.source_allocation).map(str::to_string),
+                handoff_node: None,
+                return_node: None,
+                first_drop_node: None,
+                second_drop_node: None,
+                use_node: None,
+                mismatch_node: Some(boundary.node.clone()),
+                allocator_family: Some(allocator_family),
+                deallocator_family: None,
+                contracts,
+                dispositions: Vec::new(),
+                ffi_argument_identity: Vec::new(),
+                external_effects: Vec::new(),
+                non_returning_discharge_nodes: Vec::new(),
+                summary,
+            });
+        }
+
         findings
     }
 
@@ -3573,6 +4399,24 @@ impl<'a> ModelChecker<'a> {
                 ),
                 _ => false,
             }
+        })
+    }
+
+    fn explicit_allocation_origin_reaches(&self, allocation: &str, target: &str) -> bool {
+        self.k.nodes.keys().any(|origin| {
+            if !self.node_has_allocation_event(origin, allocation, EventKind::Alloc) {
+                return false;
+            }
+            self.bfs_to(
+                origin,
+                |candidate| candidate == target,
+                |candidate| {
+                    candidate == origin.as_str()
+                        || candidate == target
+                        || !self.node_has_allocation_event(candidate, allocation, EventKind::Alloc)
+                },
+            )
+            .is_some()
         })
     }
 
@@ -4156,6 +5000,7 @@ mod tests {
     fn one_allocation_graph() -> Kripke {
         Kripke::from_annotated_icfg(AnnotatedIcfg {
             external_deallocation_effects: vec![],
+            external_formal_memory_effects: vec![],
             schema_version: 2,
             entry: "b0".into(),
             capabilities: vec![],
@@ -4553,6 +5398,706 @@ mod tests {
             },
         );
         k
+    }
+
+    fn bodyless_c_malloc_leak_graph(intervening_call: bool) -> Kripke {
+        let mut k = one_allocation_graph();
+        k.capabilities.insert("allocation_state_v1".into());
+        k.capabilities.insert("allocation_contracts_v1".into());
+        k.capabilities.insert("typed_edge_flow_v1".into());
+        k.capabilities.insert("source_provenance_v1".into());
+        k.source_provenance.insert(
+            "b0".into(),
+            NodeSourceProvenance {
+                language: "rust".into(),
+                anchors: vec![],
+                allocation_events: vec![],
+            },
+        );
+
+        {
+            let allocation = k.allocations.get_mut("A").unwrap();
+            allocation.site = Some(serde_json::json!({
+                "kind": "c_call",
+                "node_id": "b0",
+                "allocator": "malloc"
+            }));
+            allocation.allocator_contract = Some(AllocationContract {
+                family: "c_malloc".into(),
+                operation: "malloc".into(),
+                language: "c".into(),
+                basis: None,
+                owner_def_path: None,
+                allocator_def_path: None,
+                callee_def_path: None,
+            });
+        }
+        {
+            let b0 = k.nodes.get_mut("b0").unwrap();
+            b0.semantic_labels = vec!["term:call".into()];
+            b0.successors = vec![if intervening_call { "call".into() } else { "ret".into() }];
+            b0.allocation_post = Some(AbstractAllocationMemoryAnnotation {
+                cells: vec![AbstractAllocationCell {
+                    allocation: "A".into(),
+                    value: CellValue::Top,
+                }],
+            });
+        }
+
+        if intervening_call {
+            k.nodes.insert(
+                "call".into(),
+                AnnotatedNode {
+                    id: "call".into(),
+                    successors: vec!["ret".into()],
+                    labels: vec![],
+                    semantic_labels: vec!["term:call".into()],
+                    allocation_labels: vec![],
+                    allocation_disposition: vec![],
+                    identity: Some(NodeIdentityAnnotation::default()),
+                    event_identity: Some(NodeIdentityAnnotation::default()),
+                    allocation_post: Some(AbstractAllocationMemoryAnnotation {
+                        cells: vec![AbstractAllocationCell {
+                            allocation: "A".into(),
+                            value: CellValue::Top,
+                        }],
+                    }),
+                    pre: AbstractMemoryAnnotation::default(),
+                    post: AbstractMemoryAnnotation::default(),
+                },
+            );
+        }
+
+        k.nodes.insert(
+            "ret".into(),
+            AnnotatedNode {
+                id: "ret".into(),
+                successors: vec![],
+                labels: vec![],
+                semantic_labels: vec!["term:return".into()],
+                allocation_labels: vec![],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: Some(AbstractAllocationMemoryAnnotation {
+                    cells: vec![AbstractAllocationCell {
+                        allocation: "A".into(),
+                        value: CellValue::Top,
+                    }],
+                }),
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+
+        let mut edges = vec![TypedEdgeRecord {
+            source: "b0".into(),
+            destination: if intervening_call { "call".into() } else { "ret".into() },
+            flow: TypedEdgeFlow::Normal,
+            label: Some("Call return".into()),
+            source_label: None,
+            destination_label: None,
+        }];
+        if intervening_call {
+            edges.push(TypedEdgeRecord {
+                source: "call".into(),
+                destination: "ret".into(),
+                flow: TypedEdgeFlow::Normal,
+                label: Some("Call return".into()),
+                source_label: None,
+                destination_label: None,
+            });
+        }
+        k.typed_edges = edges;
+        k
+    }
+
+    #[test]
+    fn bodyless_c_malloc_top_leak_orients_unknown_true_without_changing_truth() {
+        let k = bodyless_c_malloc_leak_graph(true);
+        let checker = ModelChecker::new(&k);
+        let doc = normal_scoped_leak_state_document();
+        let truth = checker.evaluate_document(&doc, &Env::new()).unwrap();
+        assert_eq!(truth, Truth::Unknown);
+
+        let assessment = checker.assess_document(&doc, truth);
+        assert_eq!(assessment.subresult, QuerySubresult::UnkTrue);
+        assert_eq!(assessment.direction, QueryEvidenceDirection::True);
+        assert_eq!(assessment.strength, QueryResultStrength::ObservationalCandidate);
+        assert!(assessment.basis.iter().any(|basis| {
+            basis == "finding:normal_return_unreleased_external_allocation"
+        }));
+
+        let report = checker.explain_document(&doc, &Env::new(), 4).unwrap();
+        assert_eq!(report.result, "unk");
+        let finding = report
+            .supporting_findings
+            .iter()
+            .find(|finding| {
+                finding.kind
+                    == AllocationObligationFindingKind::NormalReturnUnreleasedExternalAllocation
+            })
+            .expect("bodyless C allocation leak finding");
+        assert_eq!(finding.strength, AllocationObligationFindingStrength::ObservationalCandidate);
+        assert_eq!(finding.origin_node.as_deref(), Some("b0"));
+        assert_eq!(finding.return_node.as_deref(), Some("ret"));
+        assert!(finding
+            .evidence
+            .contains(&AllocationObligationEvidence::MayAllocationEventObserved));
+        assert!(!finding
+            .evidence
+            .contains(&AllocationObligationEvidence::NoInterveningCallAfterAllocation));
+    }
+
+    #[test]
+    fn bodyless_c_strdup_top_leak_uses_same_malloc_family_obligation_without_alias_claim() {
+        let mut k = bodyless_c_malloc_leak_graph(true);
+        let allocation = k.allocations.get_mut("A").unwrap();
+        allocation.site = Some(serde_json::json!({
+            "kind": "c_call",
+            "node_id": "b0",
+            "allocator": "strdup"
+        }));
+        allocation.allocator_contract = Some(AllocationContract {
+            family: "c_malloc".into(),
+            operation: "strdup".into(),
+            language: "c".into(),
+            basis: None,
+            owner_def_path: None,
+            allocator_def_path: None,
+            callee_def_path: None,
+        });
+
+        let checker = ModelChecker::new(&k);
+        let doc = normal_scoped_leak_state_document();
+        let report = checker.explain_document(&doc, &Env::new(), 4).unwrap();
+        assert_eq!(report.result, "unk");
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkTrue);
+        assert_eq!(report.assessment.direction, QueryEvidenceDirection::True);
+        assert_eq!(report.assessment.strength, QueryResultStrength::ObservationalCandidate);
+        let finding = report
+            .supporting_findings
+            .iter()
+            .find(|finding| {
+                finding.kind
+                    == AllocationObligationFindingKind::NormalReturnUnreleasedExternalAllocation
+            })
+            .expect("bodyless strdup leak finding");
+        assert_eq!(finding.origin_node.as_deref(), Some("b0"));
+        assert_eq!(finding.allocator_family.as_deref(), Some("c_malloc"));
+        assert!(finding.contracts.iter().any(|w| {
+            w.contract.family == "c_malloc" && w.contract.operation == "strdup"
+        }));
+    }
+
+    #[test]
+    fn bodyless_c_realloc_null_top_leak_uses_fresh_malloc_family_obligation_without_old_source() {
+        let mut k = bodyless_c_malloc_leak_graph(false);
+        let allocation = k.allocations.get_mut("A").unwrap();
+        allocation.site = Some(serde_json::json!({
+            "kind": "c_call",
+            "node_id": "b0",
+            "allocator": "realloc"
+        }));
+        allocation.allocator_contract = Some(AllocationContract {
+            family: "c_malloc".into(),
+            operation: "realloc".into(),
+            language: "c".into(),
+            basis: None,
+            owner_def_path: None,
+            allocator_def_path: None,
+            callee_def_path: None,
+        });
+        k.reallocation_boundaries.clear();
+
+        let checker = ModelChecker::new(&k);
+        let doc = normal_scoped_leak_state_document();
+        let report = checker.explain_document(&doc, &Env::new(), 4).unwrap();
+        assert_eq!(report.result, "unk");
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkTrue);
+        assert_eq!(report.assessment.direction, QueryEvidenceDirection::True);
+        assert_eq!(report.assessment.strength, QueryResultStrength::StrongAbstractEvidence);
+        let finding = report
+            .supporting_findings
+            .iter()
+            .find(|finding| {
+                finding.kind
+                    == AllocationObligationFindingKind::NormalReturnUnreleasedExternalAllocation
+            })
+            .expect("bodyless realloc(NULL, n) leak finding");
+        assert_eq!(finding.origin_node.as_deref(), Some("b0"));
+        assert_eq!(finding.allocator_family.as_deref(), Some("c_malloc"));
+        assert!(finding.contracts.iter().any(|w| {
+            w.contract.family == "c_malloc" && w.contract.operation == "realloc"
+        }));
+        assert!(k.reallocation_boundaries.is_empty(),
+            "realloc(NULL,n) fresh allocation must not manufacture an old-source boundary");
+    }
+
+    #[test]
+    fn bodyless_c_malloc_direct_normal_return_is_strong_assessment_evidence_only() {
+        let k = bodyless_c_malloc_leak_graph(false);
+        let checker = ModelChecker::new(&k);
+        let doc = normal_scoped_leak_state_document();
+        let truth = checker.evaluate_document(&doc, &Env::new()).unwrap();
+        assert_eq!(truth, Truth::Unknown);
+
+        let assessment = checker.assess_document(&doc, truth);
+        assert_eq!(assessment.subresult, QuerySubresult::UnkTrue);
+        assert_eq!(assessment.strength, QueryResultStrength::StrongAbstractEvidence);
+
+        let report = checker.explain_document(&doc, &Env::new(), 4).unwrap();
+        let finding = report
+            .supporting_findings
+            .iter()
+            .find(|finding| {
+                finding.kind
+                    == AllocationObligationFindingKind::NormalReturnUnreleasedExternalAllocation
+            })
+            .expect("direct-return C allocation leak finding");
+        assert!(finding
+            .evidence
+            .contains(&AllocationObligationEvidence::NoInterveningCallAfterAllocation));
+    }
+
+    fn bodyless_nullable_malloc_with_guarded_discharge_graph() -> Kripke {
+        let mut k = bodyless_c_malloc_leak_graph(false);
+
+        k.nodes.get_mut("b0").unwrap().successors = vec!["guard".into()];
+        k.nodes.insert(
+            "guard".into(),
+            AnnotatedNode {
+                id: "guard".into(),
+                successors: vec!["ret_null".into(), "drop".into()],
+                labels: vec![],
+                semantic_labels: vec!["term:switch_int".into()],
+                allocation_labels: vec![],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: Some(AbstractAllocationMemoryAnnotation {
+                    cells: vec![AbstractAllocationCell {
+                        allocation: "A".into(),
+                        value: CellValue::Top,
+                    }],
+                }),
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        k.nodes.insert(
+            "drop".into(),
+            AnnotatedNode {
+                id: "drop".into(),
+                successors: vec!["ret_freed".into()],
+                labels: vec![],
+                semantic_labels: vec!["term:call".into()],
+                allocation_labels: vec![AllocationEventLabel {
+                    predicate: EventKind::Drop,
+                    allocation: "A".into(),
+                    certainty: AllocationEventCertainty::MayAbstract,
+                    deallocator_contract: None,
+                }],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: Some(AbstractAllocationMemoryAnnotation {
+                    cells: vec![AbstractAllocationCell {
+                        allocation: "A".into(),
+                        value: CellValue::Freed,
+                    }],
+                }),
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        for ret in ["ret_null", "ret_freed"] {
+            k.nodes.insert(
+                ret.into(),
+                AnnotatedNode {
+                    id: ret.into(),
+                    successors: vec![],
+                    labels: vec![],
+                    semantic_labels: vec!["term:return".into()],
+                    allocation_labels: vec![],
+                    allocation_disposition: vec![],
+                    identity: Some(NodeIdentityAnnotation::default()),
+                    event_identity: Some(NodeIdentityAnnotation::default()),
+                    allocation_post: Some(AbstractAllocationMemoryAnnotation {
+                        cells: vec![AbstractAllocationCell {
+                            allocation: "A".into(),
+                            value: if ret == "ret_freed" {
+                                CellValue::Freed
+                            } else {
+                                CellValue::Top
+                            },
+                        }],
+                    }),
+                    pre: AbstractMemoryAnnotation::default(),
+                    post: AbstractMemoryAnnotation::default(),
+                },
+            );
+        }
+        k.nodes.remove("ret");
+        k.typed_edges = vec![
+            TypedEdgeRecord {
+                source: "b0".into(),
+                destination: "guard".into(),
+                flow: TypedEdgeFlow::Normal,
+                label: Some("Call return".into()),
+                source_label: None,
+                destination_label: None,
+            },
+            TypedEdgeRecord {
+                source: "guard".into(),
+                destination: "ret_null".into(),
+                flow: TypedEdgeFlow::Normal,
+                label: Some("Switch null".into()),
+                source_label: None,
+                destination_label: None,
+            },
+            TypedEdgeRecord {
+                source: "guard".into(),
+                destination: "drop".into(),
+                flow: TypedEdgeFlow::Normal,
+                label: Some("Switch non-null".into()),
+                source_label: None,
+                destination_label: None,
+            },
+            TypedEdgeRecord {
+                source: "drop".into(),
+                destination: "ret_freed".into(),
+                flow: TypedEdgeFlow::Normal,
+                label: Some("Call return".into()),
+                source_label: None,
+                destination_label: None,
+            },
+        ];
+        k
+    }
+
+    #[test]
+    fn represented_c_malloc_origin_does_not_trigger_bodyless_leak_finding() {
+        let mut k = bodyless_c_malloc_leak_graph(false);
+        k.source_provenance.get_mut("b0").unwrap().language = "c".into();
+
+        let checker = ModelChecker::new(&k);
+        let doc = normal_scoped_leak_state_document();
+        let truth = checker.evaluate_document(&doc, &Env::new()).unwrap();
+        assert_eq!(truth, Truth::Unknown);
+
+        let report = checker.explain_document(&doc, &Env::new(), 4).unwrap();
+        assert!(!report.supporting_findings.iter().any(|finding| {
+            finding.kind
+                == AllocationObligationFindingKind::NormalReturnUnreleasedExternalAllocation
+        }));
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkUnoriented);
+    }
+
+    #[test]
+    fn bodyless_nullable_malloc_with_reachable_discharge_does_not_orient_leak_true() {
+        let k = bodyless_nullable_malloc_with_guarded_discharge_graph();
+        let checker = ModelChecker::new(&k);
+        let doc = normal_scoped_leak_state_document();
+        let truth = checker.evaluate_document(&doc, &Env::new()).unwrap();
+        assert_eq!(truth, Truth::Unknown);
+
+        let report = checker.explain_document(&doc, &Env::new(), 4).unwrap();
+        assert!(!report.supporting_findings.iter().any(|finding| {
+            finding.kind
+                == AllocationObligationFindingKind::NormalReturnUnreleasedExternalAllocation
+        }));
+        assert_ne!(report.assessment.subresult, QuerySubresult::UnkTrue);
+    }
+
+    #[test]
+    fn nullable_malloc_existence_guard_plus_compatible_drop_orients_unknown_false() {
+        let mut k = bodyless_nullable_malloc_with_guarded_discharge_graph();
+        k.nodes.get_mut("drop").unwrap().allocation_labels[0].deallocator_contract =
+            Some(AllocationContract {
+                family: "c_malloc".into(),
+                operation: "free".into(),
+                language: "c".into(),
+                basis: Some("structural_c_free_v1".into()),
+                owner_def_path: None,
+                allocator_def_path: None,
+                callee_def_path: None,
+            });
+        k.allocation_existence_guards.push(crate::kripke::AllocationExistenceGuardRecord {
+            allocation: "A".into(),
+            producer_call_node: "b0".into(),
+            predicate_call_node: "b0".into(),
+            switch_node: "guard".into(),
+            tested_variable: "rust::main::Local(_1)".into(),
+            predicate_result_variable: "rust::main::Local(_2)".into(),
+            null_successor: "ret_null".into(),
+            non_null_successor: "drop".into(),
+            callee_def_path: "core::ptr::mut_ptr::<impl *mut u8>::is_null".into(),
+            allocation_return_basis: "rust_foreign_decl_c_malloc_contract_v1".into(),
+            basis: "rust_raw_pointer_is_null_switch_v1".into(),
+        });
+
+        let checker = ModelChecker::new(&k);
+        let doc = normal_scoped_leak_state_document();
+        let truth = checker.evaluate_document(&doc, &Env::new()).unwrap();
+        assert_eq!(truth, Truth::Unknown);
+        let report = checker.explain_document(&doc, &Env::new(), 4).unwrap();
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkFalse);
+        assert!(report.refuting_findings.iter().any(|finding| {
+            finding.kind == AllocationObligationFindingKind::AllCandidateSuffixesCrossModeledDrop
+                && finding.evidence.contains(&AllocationObligationEvidence::ProducerCertifiedExistenceGuard)
+                && finding.evidence.contains(&AllocationObligationEvidence::CompatibleDeallocationBarrier)
+        }));
+    }
+
+    #[test]
+    fn conditional_reallocation_leak_witness_is_one_real_cfg_path() {
+        let mut k = one_allocation_graph();
+        k.capabilities.insert("typed_edge_flow_v1".into());
+        k.nodes.get_mut("b0").unwrap().successors = vec!["src_switch".into()];
+
+        for (id, successors) in [
+            ("src_switch", vec!["realloc"]),
+            ("realloc", vec!["outcome_pred"]),
+            ("outcome_pred", vec!["outcome_switch"]),
+            ("outcome_switch", vec!["failure", "success"]),
+            ("failure", vec![]),
+            ("success", vec!["free_q"]),
+            ("free_q", vec![]),
+        ] {
+            k.nodes.insert(
+                id.into(),
+                AnnotatedNode {
+                    id: id.into(),
+                    successors: successors.into_iter().map(str::to_string).collect(),
+                    labels: vec![],
+                    semantic_labels: vec![],
+                    allocation_labels: vec![],
+                    allocation_disposition: vec![],
+                    identity: Some(NodeIdentityAnnotation::default()),
+                    event_identity: Some(NodeIdentityAnnotation::default()),
+                    allocation_post: None,
+                    pre: AbstractMemoryAnnotation::default(),
+                    post: AbstractMemoryAnnotation::default(),
+                },
+            );
+        }
+
+        k.typed_edges = [
+            ("b0", "src_switch"),
+            ("src_switch", "realloc"),
+            ("realloc", "outcome_pred"),
+            ("outcome_pred", "outcome_switch"),
+            ("outcome_switch", "failure"),
+            ("outcome_switch", "success"),
+            ("success", "free_q"),
+        ]
+        .into_iter()
+        .map(|(source, destination)| TypedEdgeRecord {
+            source: source.into(),
+            destination: destination.into(),
+            flow: TypedEdgeFlow::Normal,
+            label: Some("test".into()),
+            source_label: None,
+            destination_label: None,
+        })
+        .collect();
+
+        let record = crate::kripke::ConditionalReallocationRecord {
+            source_allocation: "A".into(),
+            reallocation_node: "realloc".into(),
+            source_variable: "rust::main::_1".into(),
+            result_variable: "rust::main::_3".into(),
+            source_existence_predicate_call_node: "b0".into(),
+            outcome_predicate_call_node: "outcome_pred".into(),
+            outcome_argument_variable: Some("rust::main::_3".into()),
+            outcome_predicate_result_variable: "rust::main::_4".into(),
+            outcome_switch_node: "outcome_switch".into(),
+            failure_successor: "failure".into(),
+            success_successor: "success".into(),
+            reallocation_callee_def_path: "crate::realloc".into(),
+            outcome_callee_def_path: "core::ptr::mut_ptr::<impl *mut u8>::is_null".into(),
+            family: "c_malloc".into(),
+            operation: "realloc".into(),
+            certainty: "may_abstract".into(),
+            size_semantics: "positive_nonzero_constant".into(),
+            status: "conditional_guarded".into(),
+            basis: "rust_foreign_decl_c_realloc_is_null_switch_v1".into(),
+            outcome_correlation_basis: Some("direct_cfg_edge_realloc_to_is_null_v1".into()),
+            outcome_value_flow_basis: Some("rust_mir_direct_result_operand_v1".into()),
+            result_deallocations: vec![],
+        };
+        let checker = ModelChecker::new(&k);
+        let closing = BTreeSet::from(["free_q".to_string()]);
+        let path = checker
+            .conditional_reallocation_representative_closure_path(
+                AssessmentScope::NormalExecution,
+                &record,
+                &closing,
+            )
+            .expect("representative CR1 path");
+
+        assert_eq!(
+            path,
+            vec![
+                "b0",
+                "src_switch",
+                "realloc",
+                "outcome_pred",
+                "outcome_switch",
+                "success",
+                "free_q",
+            ]
+        );
+        checker
+            .diagnostic_abstract_witness(&path, AssessmentScope::NormalExecution)
+            .expect("W1 must accept every adjacent pair as a real CFG edge");
+        assert!(!path.contains(&"failure".to_string()));
+    }
+
+    #[test]
+    fn unresolved_reallocation_boundary_blocks_negative_leak_orientation() {
+        let mut k = bodyless_nullable_malloc_with_guarded_discharge_graph();
+        k.nodes.get_mut("drop").unwrap().allocation_labels[0].deallocator_contract =
+            Some(AllocationContract {
+                family: "c_malloc".into(),
+                operation: "free".into(),
+                language: "c".into(),
+                basis: Some("structural_c_free_v1".into()),
+                owner_def_path: None,
+                allocator_def_path: None,
+                callee_def_path: None,
+            });
+        k.allocation_existence_guards.push(crate::kripke::AllocationExistenceGuardRecord {
+            allocation: "A".into(),
+            producer_call_node: "b0".into(),
+            predicate_call_node: "b0".into(),
+            switch_node: "guard".into(),
+            tested_variable: "rust::main::Local(_1)".into(),
+            predicate_result_variable: "rust::main::Local(_2)".into(),
+            null_successor: "ret_null".into(),
+            non_null_successor: "realloc".into(),
+            callee_def_path: "core::ptr::mut_ptr::<impl *mut u8>::is_null".into(),
+            allocation_return_basis: "rust_foreign_decl_c_malloc_contract_v1".into(),
+            basis: "rust_raw_pointer_is_null_switch_v1".into(),
+        });
+        k.nodes.get_mut("guard").unwrap().successors = vec!["ret_null".into(), "realloc".into()];
+        k.nodes.insert(
+            "realloc".into(),
+            AnnotatedNode {
+                id: "realloc".into(),
+                successors: vec!["drop".into()],
+                labels: vec![], semantic_labels: vec![], allocation_labels: vec![],
+                allocation_disposition: vec![], identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: Some(AbstractAllocationMemoryAnnotation { cells: vec![AbstractAllocationCell { allocation: "A".into(), value: CellValue::Top }] }),
+                pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        k.typed_edges.retain(|edge| !(edge.source == "guard" && edge.destination == "drop"));
+        k.typed_edges.push(TypedEdgeRecord {
+            source: "guard".into(), destination: "realloc".into(), flow: TypedEdgeFlow::Normal,
+            label: Some("Switch non-null".into()), source_label: None, destination_label: None,
+        });
+        k.typed_edges.push(TypedEdgeRecord {
+            source: "realloc".into(), destination: "drop".into(), flow: TypedEdgeFlow::Normal,
+            label: Some("Call return".into()), source_label: None, destination_label: None,
+        });
+        k.reallocation_boundaries.push(crate::kripke::ReallocationBoundaryRecord {
+            node: "realloc".into(), source_allocation: "A".into(),
+            source_variable: "rust::main::Local(_1)".into(), result_variable: "rust::main::Local(_3)".into(),
+            family: "c_malloc".into(), operation: "realloc".into(), certainty: "may_abstract".into(),
+            status: "conditional_unmodeled".into(), basis: "rust_foreign_decl_c_realloc_boundary_v1".into(),
+        });
+
+        let checker = ModelChecker::new(&k);
+        let doc = normal_scoped_leak_state_document();
+        let truth = checker.evaluate_document(&doc, &Env::new()).unwrap();
+        assert_eq!(truth, Truth::Unknown);
+        let report = checker.explain_document(&doc, &Env::new(), 4).unwrap();
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkUnoriented);
+        assert!(report.refuting_findings.is_empty());
+    }
+
+    #[test]
+    fn modern_mismatched_drop_with_exact_freed_state_does_not_use_legacy_barrier() {
+        let mut k = bodyless_nullable_malloc_with_guarded_discharge_graph();
+        // Modern contract-carrying graph: a mismatched deallocator may leave
+        // allocation_post=FREED as an abstract effect, but that must not count
+        // as a valid negative leak certificate.
+        k.nodes.get_mut("drop").unwrap().allocation_labels[0].deallocator_contract =
+            Some(AllocationContract {
+                family: "rust_global".into(),
+                operation: "dealloc".into(),
+                language: "rust".into(),
+                basis: Some("rust_global_dealloc_v2".into()),
+                owner_def_path: None,
+                allocator_def_path: None,
+                callee_def_path: None,
+            });
+        k.allocation_existence_guards.push(crate::kripke::AllocationExistenceGuardRecord {
+            allocation: "A".into(),
+            producer_call_node: "b0".into(),
+            predicate_call_node: "b0".into(),
+            switch_node: "guard".into(),
+            tested_variable: "rust::main::Local(_1)".into(),
+            predicate_result_variable: "rust::main::Local(_2)".into(),
+            null_successor: "ret_null".into(),
+            non_null_successor: "drop".into(),
+            callee_def_path: "core::ptr::mut_ptr::<impl *mut u8>::is_null".into(),
+            allocation_return_basis: "rust_foreign_decl_c_malloc_contract_v1".into(),
+            basis: "rust_raw_pointer_is_null_switch_v1".into(),
+        });
+
+        let checker = ModelChecker::new(&k);
+        let doc = normal_scoped_leak_state_document();
+        let truth = checker.evaluate_document(&doc, &Env::new()).unwrap();
+        assert_eq!(truth, Truth::Unknown);
+        let report = checker.explain_document(&doc, &Env::new(), 4).unwrap();
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkUnoriented);
+        assert!(report.refuting_findings.is_empty());
+    }
+
+    #[test]
+    fn external_c_call_without_malloc_family_alloc_return_contract_does_not_orient_leak() {
+        let mut k = bodyless_c_malloc_leak_graph(false);
+        k.allocations.get_mut("A").unwrap().allocator_contract.as_mut().unwrap().operation =
+            "realloc".into();
+
+        let checker = ModelChecker::new(&k);
+        let doc = normal_scoped_leak_state_document();
+        let truth = checker.evaluate_document(&doc, &Env::new()).unwrap();
+        assert_eq!(truth, Truth::Unknown);
+        let report = checker.explain_document(&doc, &Env::new(), 4).unwrap();
+        assert!(!report.supporting_findings.iter().any(|finding| {
+            finding.kind
+                == AllocationObligationFindingKind::NormalReturnUnreleasedExternalAllocation
+        }));
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkUnoriented);
+    }
+
+    #[test]
+    fn external_allocation_leak_orientation_fails_closed_on_site_reuse() {
+        let mut k = bodyless_c_malloc_leak_graph(false);
+        k.nodes.get_mut("b0").unwrap().successors = vec!["b0".into(), "ret".into()];
+        k.typed_edges.push(TypedEdgeRecord {
+            source: "b0".into(),
+            destination: "b0".into(),
+            flow: TypedEdgeFlow::Normal,
+            label: Some("Loop".into()),
+            source_label: None,
+            destination_label: None,
+        });
+
+        let checker = ModelChecker::new(&k);
+        let doc = normal_scoped_leak_state_document();
+        let truth = checker.evaluate_document(&doc, &Env::new()).unwrap();
+        assert_eq!(truth, Truth::Unknown);
+        let report = checker.explain_document(&doc, &Env::new(), 4).unwrap();
+        assert!(!report.supporting_findings.iter().any(|finding| {
+            finding.kind
+                == AllocationObligationFindingKind::NormalReturnUnreleasedExternalAllocation
+        }));
     }
 
     #[test]
@@ -5383,6 +6928,52 @@ mod tests {
     }
 
     #[test]
+    fn uaf_strength_uses_explicit_origin_even_with_shorter_state_witness_entry() {
+        let mut k = one_allocation_graph();
+        k.nodes.get_mut("b0").unwrap().successors = vec!["state".into()];
+        k.nodes.insert("state".into(), AnnotatedNode {
+            id: "state".into(), successors: vec!["drop1".into()], labels: vec![], semantic_labels: vec![],
+            allocation_labels: vec![], allocation_disposition: vec![],
+            identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()),
+            allocation_post: Some(AbstractAllocationMemoryAnnotation {
+                cells: vec![AbstractAllocationCell { allocation: "A".into(), value: CellValue::Alloc }],
+            }),
+            pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        k.nodes.insert("drop1".into(), AnnotatedNode {
+            id: "drop1".into(), successors: vec!["use1".into()], labels: vec![], semantic_labels: vec![],
+            allocation_labels: vec![AllocationEventLabel {
+                predicate: EventKind::Drop, allocation: "A".into(),
+                certainty: AllocationEventCertainty::MayAbstract, deallocator_contract: None,
+            }],
+            allocation_disposition: vec![], identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()), allocation_post: None,
+            pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        k.nodes.insert("use1".into(), AnnotatedNode {
+            id: "use1".into(), successors: vec![], labels: vec![], semantic_labels: vec![],
+            allocation_labels: vec![AllocationEventLabel {
+                predicate: EventKind::Read, allocation: "A".into(),
+                certainty: AllocationEventCertainty::MayAbstract, deallocator_contract: None,
+            }],
+            allocation_disposition: vec![], identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()), allocation_post: None,
+            pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+
+        let findings = ModelChecker::new(&k).use_after_free_findings(Truth::Unknown);
+        let finding = findings.iter()
+            .find(|f| f.kind == AllocationObligationFindingKind::DropThenUseWithoutReallocation)
+            .expect("UAF finding");
+        assert_eq!(finding.origin_node.as_deref(), Some("state"));
+        assert_eq!(finding.witness_path, vec!["state", "drop1", "use1"]);
+        assert_eq!(finding.strength, AllocationObligationFindingStrength::StrongAbstractEvidence);
+        assert!(finding.evidence.contains(&AllocationObligationEvidence::AllocationStateIncludesAllocated));
+        assert!(finding.evidence.contains(&AllocationObligationEvidence::MayAllocationEventObserved));
+    }
+
+    #[test]
     fn w1_certificate_separates_canonical_allocation_site_from_shorter_witness_entry() {
         fn anchor(kind: &str, line: u32, statement_index: Option<usize>) -> SourceAnchor {
             SourceAnchor {
@@ -5615,6 +7206,132 @@ mod tests {
         assert!(rendered.contains("basis     : rust_cstring_global_drop"));
         assert!(finding.summary.contains("producer contract basis 'rust_cstring_global_drop'"));
         assert_eq!(finding.contracts.len(), 2);
+    }
+
+    #[test]
+    fn realloc_family_consumer_mismatch_is_strong_without_inventing_drop() {
+        let mut k = one_allocation_graph();
+        k.capabilities.insert("allocation_contracts_v1".into());
+        k.capabilities.insert("reallocation_boundaries_v1".into());
+        k.capabilities.insert("reallocation_boundaries_v2".into());
+        k.capabilities.insert("source_provenance_v1".into());
+        k.allocations.get_mut("A").unwrap().allocator_contract = Some(AllocationContract {
+            family: "rust_global".into(),
+            operation: "box_new".into(),
+            language: "rust".into(),
+            basis: None,
+            owner_def_path: None,
+            allocator_def_path: None,
+            callee_def_path: None,
+        });
+        k.nodes.get_mut("b0").unwrap().successors = vec!["realloc".into()];
+        k.nodes.insert("realloc".into(), AnnotatedNode {
+            id: "realloc".into(),
+            successors: vec![],
+            labels: vec![],
+            semantic_labels: vec!["term:call".into()],
+            allocation_labels: vec![],
+            allocation_disposition: vec![],
+            identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()),
+            allocation_post: None,
+            pre: AbstractMemoryAnnotation::default(),
+            post: AbstractMemoryAnnotation::default(),
+        });
+        k.reallocation_boundaries.push(crate::kripke::ReallocationBoundaryRecord {
+            node: "realloc".into(),
+            source_allocation: "A".into(),
+            source_variable: "rust::main::Local(_1)".into(),
+            result_variable: "rust::main::Local(_2)".into(),
+            family: "c_malloc".into(),
+            operation: "realloc".into(),
+            certainty: "may_abstract".into(),
+            status: "conditional_unmodeled".into(),
+            basis: "rust_foreign_decl_c_realloc_allocptr_family_v2".into(),
+        });
+
+        let doc = parse_query_document(
+            "requires allocation_contracts_v1; exists_alloc a. EF (alloc_l(a) && EX EF allocator_mismatch_l(a))"
+        ).unwrap();
+        let report = ModelChecker::new(&k).explain_document(&doc, &Env::new(), 8).unwrap();
+        assert_eq!(report.result, "unk");
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkTrue);
+        assert_eq!(report.assessment.direction, QueryEvidenceDirection::True);
+        assert_eq!(report.assessment.strength, QueryResultStrength::StrongAbstractEvidence);
+        let finding = report.supporting_findings.iter()
+            .find(|f| f.kind == AllocationObligationFindingKind::AllocatorFamilyConsumerMismatch)
+            .expect("realloc allocator-family consumer finding");
+        assert_eq!(finding.mismatch_node.as_deref(), Some("realloc"));
+        assert_eq!(finding.allocator_family.as_deref(), Some("rust_global"));
+        assert!(finding.deallocator_family.is_none());
+        assert!(finding.evidence.contains(&AllocationObligationEvidence::KnownRequiredAllocatorFamily));
+        assert!(finding.evidence.contains(&AllocationObligationEvidence::ProducerCertifiedAllocatorConsumerContract));
+        assert!(finding.evidence.contains(&AllocationObligationEvidence::AllocatorFamiliesDiffer));
+        assert!(k.nodes["realloc"].allocation_labels.is_empty(), "consumer mismatch must not synthesize a drop");
+        let certificate = report.diagnostic_certificates.iter()
+            .find(|c| c.finding_kind == AllocationObligationFindingKind::AllocatorFamilyConsumerMismatch)
+            .expect("consumer mismatch certificate");
+        assert!(certificate.events.iter().any(|event| {
+            event.role == DiagnosticEventRole::AllocatorFamilyConsumer && event.node == "realloc"
+        }));
+    }
+
+    #[test]
+    fn realloc_family_consumer_with_unknown_source_family_is_unoriented() {
+        let mut k = one_allocation_graph();
+        k.capabilities.insert("allocation_contracts_v1".into());
+        k.capabilities.insert("reallocation_boundaries_v1".into());
+        k.capabilities.insert("reallocation_boundaries_v2".into());
+        k.allocations.get_mut("A").unwrap().allocator_contract = Some(AllocationContract {
+            family: "unknown".into(),
+            operation: "unknown".into(),
+            language: "unknown".into(),
+            basis: None,
+            owner_def_path: None,
+            allocator_def_path: None,
+            callee_def_path: None,
+        });
+        k.nodes.get_mut("b0").unwrap().successors = vec!["realloc".into()];
+        k.nodes.insert("realloc".into(), AnnotatedNode {
+            id: "realloc".into(),
+            successors: vec![],
+            labels: vec![],
+            semantic_labels: vec!["term:call".into()],
+            allocation_labels: vec![],
+            allocation_disposition: vec![],
+            identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()),
+            allocation_post: None,
+            pre: AbstractMemoryAnnotation::default(),
+            post: AbstractMemoryAnnotation::default(),
+        });
+        k.reallocation_boundaries.push(crate::kripke::ReallocationBoundaryRecord {
+            node: "realloc".into(),
+            source_allocation: "A".into(),
+            source_variable: "rust::main::Local(_1)".into(),
+            result_variable: "rust::main::Local(_2)".into(),
+            family: "c_malloc".into(),
+            operation: "realloc".into(),
+            certainty: "may_abstract".into(),
+            status: "conditional_unmodeled".into(),
+            basis: "rust_foreign_decl_c_realloc_allocptr_family_v2".into(),
+        });
+
+        let doc = parse_query_document(
+            "requires allocation_contracts_v1; exists_alloc a. EF (alloc_l(a) && EX EF allocator_mismatch_l(a))"
+        ).unwrap();
+        let report = ModelChecker::new(&k).explain_document(&doc, &Env::new(), 8).unwrap();
+        assert_eq!(report.result, "unk");
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkUnoriented);
+        assert_eq!(report.assessment.direction, QueryEvidenceDirection::None);
+        assert_eq!(report.assessment.strength, QueryResultStrength::Unresolved);
+        let finding = report.supporting_findings.iter()
+            .find(|f| f.kind == AllocationObligationFindingKind::UnresolvedAllocatorContractCandidate)
+            .expect("unresolved realloc family-consumer candidate");
+        assert!(finding.evidence.contains(&AllocationObligationEvidence::KnownRequiredAllocatorFamily));
+        assert!(finding.evidence.contains(&AllocationObligationEvidence::AllocatorFamilyUnresolved));
+        assert!(!finding.evidence.contains(&AllocationObligationEvidence::AllocatorFamiliesDiffer));
+        assert!(finding.deallocator_family.is_none());
     }
 
     #[test]

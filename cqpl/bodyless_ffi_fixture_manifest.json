@@ -1,0 +1,158 @@
+{
+  "schema": "cqpl_bodyless_ffi_fixture_manifest_v1",
+  "directory": "tests_and_target_repos/a-code_c_ffi_bodyless_gate",
+  "fixtures": [
+    {
+      "id": "B01",
+      "target": "b01_malloc_leak",
+      "class": "characterization",
+      "obligation": "AllocReturn; leak",
+      "phase_a_expected_producer_status": "fail_closed_alloc_identity_missing",
+      "phase_a_interpretation": "known baseline gap: bodyless malloc is labeled alloc but lacks allocation event identity; schema-v2 must fail closed"
+    },
+    {
+      "id": "B02",
+      "target": "b02_malloc_free_clean",
+      "class": "strict-control",
+      "obligation": "AllocReturn + FreeArg; matching family",
+      "phase_a_expected_producer_status": "pass",
+      "phase_a_interpretation": "fixture isolates a later external effect without depending on bodyless malloc allocation identity"
+    },
+    {
+      "id": "B03",
+      "target": "b03_malloc_double_free",
+      "class": "strict-control-characterization",
+      "obligation": "two FreeArg events",
+      "phase_a_expected_producer_status": "pass",
+      "phase_a_interpretation": "fixture isolates a later external effect without depending on bodyless malloc allocation identity"
+    },
+    {
+      "id": "B04",
+      "target": "b04_free_then_strlen_uaf_read",
+      "class": "characterization",
+      "obligation": "ReadArg(0) after free",
+      "phase_a_expected_producer_status": "pass",
+      "phase_a_interpretation": "fixture isolates a later external effect without depending on bodyless malloc allocation identity"
+    },
+    {
+      "id": "B05",
+      "target": "b05_free_then_memset_uaf_write",
+      "class": "characterization",
+      "obligation": "WriteArg(0) after free",
+      "phase_a_expected_producer_status": "pass",
+      "phase_a_interpretation": "fixture isolates a later external effect without depending on bodyless malloc allocation identity"
+    },
+    {
+      "id": "B06",
+      "target": "b06_free_src_then_memcpy_uaf_read",
+      "class": "characterization",
+      "obligation": "ReadArg(src) after free",
+      "phase_a_expected_producer_status": "pass",
+      "phase_a_interpretation": "fixture isolates a later external effect without depending on bodyless malloc allocation identity"
+    },
+    {
+      "id": "B07",
+      "target": "b07_free_dst_then_memcpy_uaf_write",
+      "class": "characterization",
+      "obligation": "WriteArg(dst) after free",
+      "phase_a_expected_producer_status": "pass",
+      "phase_a_interpretation": "fixture isolates a later external effect without depending on bodyless malloc allocation identity"
+    },
+    {
+      "id": "B08a",
+      "target": "b08a_rust_box_then_c_free_mismatch",
+      "class": "strict-control",
+      "obligation": "allocator mismatch Rust->C",
+      "phase_a_expected_producer_status": "pass",
+      "phase_a_interpretation": "fixture isolates a later external effect without depending on bodyless malloc allocation identity"
+    },
+    {
+      "id": "B08b",
+      "target": "b08b_c_malloc_then_rust_dealloc_mismatch",
+      "class": "characterization",
+      "obligation": "allocator mismatch C->Rust",
+      "phase_a_expected_producer_status": "fail_closed_alloc_identity_missing",
+      "phase_a_interpretation": "known baseline gap: bodyless malloc is labeled alloc but lacks allocation event identity; schema-v2 must fail closed"
+    },
+    {
+      "id": "B09",
+      "target": "b09_malloc_free_family_match",
+      "class": "strict-control",
+      "obligation": "same allocator family",
+      "phase_a_expected_producer_status": "pass",
+      "phase_a_interpretation": "fixture isolates a later external effect without depending on bodyless malloc allocation identity"
+    },
+    {
+      "id": "B10a",
+      "target": "b10a_realloc_branch_clean",
+      "class": "characterization",
+      "obligation": "conditional realloc",
+      "phase_a_expected_producer_status": "pass",
+      "phase_a_interpretation": "fixture isolates a later external effect without depending on bodyless malloc allocation identity"
+    },
+    {
+      "id": "B10b",
+      "target": "b10b_realloc_then_old_use",
+      "class": "characterization",
+      "obligation": "old-pointer UAF on realloc success",
+      "phase_a_expected_producer_status": "pass",
+      "phase_a_interpretation": "fixture isolates a later external effect without depending on bodyless malloc allocation identity"
+    },
+    {
+      "id": "B10c",
+      "target": "b10c_realloc_then_old_free",
+      "class": "characterization",
+      "obligation": "old-pointer repeated free on realloc success",
+      "phase_a_expected_producer_status": "pass",
+      "phase_a_interpretation": "fixture isolates a later external effect without depending on bodyless malloc allocation identity"
+    },
+    {
+      "id": "B11",
+      "target": "b11_memcpy_returned_alias",
+      "class": "characterization",
+      "obligation": "ReturnedAlias(0)",
+      "phase_a_expected_producer_status": "pass",
+      "phase_a_interpretation": "fixture isolates a later external effect without depending on bodyless malloc allocation identity"
+    },
+    {
+      "id": "B12",
+      "target": "b12_strlen_nofree_control",
+      "class": "negative-control",
+      "obligation": "nofree is not drop",
+      "phase_a_expected_producer_status": "pass",
+      "phase_a_interpretation": "fixture isolates a later external effect without depending on bodyless malloc allocation identity"
+    },
+    {
+      "id": "B13",
+      "target": "b13_memcmp_two_pointer_argmem",
+      "class": "negative-control",
+      "obligation": "no blanket per-formal read",
+      "phase_a_expected_producer_status": "pass",
+      "phase_a_interpretation": "fixture isolates a later external effect without depending on bodyless malloc allocation identity"
+    },
+    {
+      "id": "B14a",
+      "target": "b14a_bodyless_strlen",
+      "class": "characterization",
+      "obligation": "bodyless read",
+      "phase_a_expected_producer_status": "pass",
+      "phase_a_interpretation": "fixture isolates a later external effect without depending on bodyless malloc allocation identity"
+    },
+    {
+      "id": "B14b",
+      "target": "b14b_body_present_reader",
+      "class": "represented-body-control",
+      "obligation": "represented C read",
+      "phase_a_expected_producer_status": "pass",
+      "phase_a_interpretation": "fixture isolates a later external effect without depending on bodyless malloc allocation identity"
+    },
+    {
+      "id": "B15",
+      "target": "b15_external_write_pointer_unknown",
+      "class": "characterization",
+      "obligation": "unknown/TLI external pointer use",
+      "phase_a_expected_producer_status": "pass",
+      "phase_a_interpretation": "fixture isolates a later external effect without depending on bodyless malloc allocation identity"
+    }
+  ]
+}

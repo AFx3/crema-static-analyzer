@@ -1,0 +1,5 @@
+[package]
+name = "b10b_realloc_then_old_use"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"

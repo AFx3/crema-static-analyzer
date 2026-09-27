@@ -1,0 +1,4 @@
+[package]
+name = "b07_free_dst_then_memcpy_uaf_write"
+version = "0.1.0"
+edition = "2021"
