@@ -1,0 +1,13 @@
+{
+  "schema": "crema_dep1_p0_fixture_manifest_v1",
+  "selected_target": "app (binary)",
+  "fixtures": [
+    {"case":"non_generic_non_inline","package":"dep 0.1.0","item":"ordinary","unique_operation":"u32 wrapping_add(17)"},
+    {"case":"inline","package":"dep 0.1.0","item":"inline_body","unique_operation":"u32 rotate_left(5)"},
+    {"case":"generic","package":"dep 0.1.0","item":"generic_body::<u64>","unique_operation":"u64 wrapping_mul(31)"},
+    {"case":"trait_method","package":"dep 0.1.0","item":"<Worker as Compute>::compute","unique_operation":"u32 bitxor(0x5a5a)"},
+    {"case":"transitive","package":"dep 0.1.0 -> dep2 0.1.0","item":"dep::transitive -> dep2::leaf","unique_operation":"u32 rotate_right(3)"}
+  ],
+  "host_only_controls": ["build.rs", "proc-macro dependencies if introduced"],
+  "identity_rule": "Cargo PackageId plus compiler DefId/def-path and concrete Instance where available; no display-string matching"
+}
