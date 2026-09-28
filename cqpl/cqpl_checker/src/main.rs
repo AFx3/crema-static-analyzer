@@ -5,7 +5,155 @@ use cqpl_checker::{
 };
 use serde::Serialize;
 use serde_json::Value;
-use std::{env, fs, path::Path, process};
+use std::{collections::{BTreeMap, BTreeSet}, env, fs, path::Path, process};
+
+const ELE1_FAMILIES: [&str; 6] = ["allocation_return", "reallocation", "deallocation", "formal_memory", "return_relation", "negative_evidence"];
+
+/// Validate ELE1 against the already-present proof records. The annotated
+/// artifact cannot prove its own MIR origin; the producer and gate test that
+/// separately. This routine never creates a semantic event.
+fn validate_ele1(root: &Value) -> Result<Option<Vec<Value>>, String> {
+    let caps: BTreeSet<_> = root.get("capabilities").and_then(Value::as_array)
+        .into_iter().flatten().filter_map(Value::as_str).collect();
+    let enabled = caps.contains("external_library_effects_v1");
+    let bindings = root.get("external_call_bindings");
+    let envelopes = root.get("external_library_effects");
+    if !enabled {
+        if bindings.is_some() || envelopes.is_some() { return Err("ELE1 payload without capability".into()); }
+        return Ok(None);
+    }
+    let bindings = bindings.and_then(Value::as_array).filter(|a| !a.is_empty()).ok_or("ELE1 requires nonempty bindings")?;
+    let envelopes = envelopes.and_then(Value::as_array).filter(|a| !a.is_empty()).ok_or("ELE1 requires nonempty envelopes")?;
+    if root.get("external_return_call_bindings").is_some() { return Err("ELE1 rejects second ERR1 binding authority".into()); }
+    let nodes: BTreeMap<_, _> = root["nodes"].as_array().ok_or("ELE1 nodes missing")?.iter()
+        .filter_map(|n| n["id"].as_str().map(|id| (id, n))).collect();
+    let variables: BTreeSet<_> = root["variables"].as_array().ok_or("ELE1 variables missing")?.iter()
+        .filter_map(|v| (v["language"].as_str() == Some("rust")).then(|| v["id"].as_str()).flatten()).collect();
+    let mut calls = BTreeMap::new();
+    let mut ids = BTreeSet::new();
+    for b in bindings {
+        let node = b["node"].as_str().ok_or("ELE1 binding node")?;
+        let id = b["binding_id"].as_str().ok_or("ELE1 binding id")?;
+        let scope = b["rust_function_scope"].as_str().ok_or("ELE1 scope")?;
+        let expected_scope = node.rsplit_once("::bb").map(|(s, _)| s).ok_or("ELE1 non-Rust node")?;
+        if !node.starts_with("rust::") || scope != expected_scope || id != format!("ele1:{node}")
+            || b["basis"] != "rustc_mir_external_call_binding_v1" || b["body_status"] != "bodyless"
+            || !b["callee"].as_str().is_some_and(|c| !c.is_empty()) {
+            return Err("ELE1 invalid binding identity or basis".into());
+        }
+        let call_node = nodes.get(node).ok_or("ELE1 unknown binding node")?;
+        if !call_node["semantic_labels"].as_array().is_some_and(|a| a.iter().any(|v| v == "term:call")) {
+            return Err("ELE1 binding requires Rust term:call".into());
+        }
+        let callee = b["callee"].as_str().unwrap();
+        if nodes.keys().any(|n| n.starts_with(&format!("llvm::{callee}::"))) {
+            return Err("ELE1 represented body binding".into());
+        }
+        let args = b["arguments"].as_array().ok_or("ELE1 arguments")?;
+        if b["arity"].as_u64() != Some(args.len() as u64) { return Err("ELE1 arity mismatch".into()); }
+        for value in args.iter().chain(b.get("result_variable")) {
+            if value.is_null() { continue; }
+            let actual = value.as_str().ok_or("ELE1 non-string variable")?;
+            if !variables.contains(actual) || !actual.starts_with(&format!("{scope}::Local(_"))
+                || !actual.ends_with(')') {
+                return Err("ELE1 undeclared or cross-scope variable".into());
+            }
+        }
+        if !ids.insert(id) || calls.insert(node, b).is_some() { return Err("ELE1 duplicate binding".into()); }
+    }
+    let mut source: BTreeMap<String, BTreeMap<String, usize>> = BTreeMap::new();
+    let mut seen_records = BTreeSet::new();
+    let mut count = |family: &str, record: &Value, node: &str| -> Result<(), String> {
+        if !seen_records.insert((family.to_owned(), record.to_string())) { return Err("ELE1 duplicate underlying effect".into()); }
+        if !calls.contains_key(node) { return Err("ELE1 orphan underlying effect".into()); }
+        *source.entry(node.to_owned()).or_default().entry(family.to_owned()).or_default() += 1;
+        Ok(())
+    };
+    let records = |field: &str| -> Vec<&Value> { root.get(field).and_then(Value::as_array).map(|a| a.iter().collect()).unwrap_or_default() };
+    for a in records("allocations") {
+        let site = &a["site"];
+        let contract = &a["allocator_contract"];
+        if site["kind"] == "c_call" && site["node_id"].as_str().is_some_and(|n| n.starts_with("rust::"))
+            && contract["family"] == "c_malloc"
+            && matches!(contract["operation"].as_str(), Some("malloc" | "calloc" | "strdup" | "realloc")) {
+            let node = site["node_id"].as_str().unwrap();
+            let b = calls.get(node).ok_or("ELE1 allocation return without binding")?;
+            if b["callee"] != contract["operation"] { return Err("ELE1 allocation callee mismatch".into()); }
+            count("allocation_return", a, node)?;
+        }
+    }
+    for r in records("reallocation_boundaries") {
+        let node = r["node"].as_str().ok_or("ELE1 RBF node")?;
+        let b = calls.get(node).ok_or("ELE1 RBF binding")?;
+        if b["callee"] != "realloc" || b["arguments"][0] != r["source_variable"]
+            || b["result_variable"] != r["result_variable"] { return Err("ELE1 RBF identity mismatch".into()); }
+        count("reallocation", r, node)?;
+    }
+    for r in records("external_deallocation_call_provenance") {
+        let node = r["node"].as_str().ok_or("ELE1 DCP1 node")?;
+        let b = calls.get(node).ok_or("ELE1 DCP1 binding")?;
+        if b["callee"] != r["callee"] || b["arity"] != r["arity"]
+            || b["arguments"][0] != r["actual_variable"] { return Err("ELE1 DCP1 identity mismatch".into()); }
+        count("deallocation", r, node)?;
+    }
+    for r in records("external_formal_memory_effects") {
+        let node = r["node"].as_str().ok_or("ELE1 EFM2 node")?;
+        let b = calls.get(node).ok_or("ELE1 EFM2 binding")?;
+        let i = r["formal_index"].as_u64().ok_or("ELE1 EFM2 formal")? as usize;
+        if b["callee"] != r["callee"] || b["arguments"].as_array().and_then(|a| a.get(i)) != Some(&r["actual_variable"]) {
+            return Err("ELE1 EFM2 identity mismatch".into());
+        }
+        count("formal_memory", r, node)?;
+    }
+    for r in records("external_return_relations") {
+        let node = r["node"].as_str().ok_or("ELE1 ERR1 node")?;
+        let b = calls.get(node).ok_or("ELE1 ERR1 binding")?;
+        if b["callee"] != r["callee"] || b["arity"] != r["arity"] || b["result_variable"] != r["result_variable"]
+            || r.get("source_formal_index").is_some_and(|i| b["arguments"][i.as_u64().unwrap_or(u64::MAX) as usize] != r["source_actual_variable"]) {
+            return Err("ELE1 ERR1 identity mismatch".into());
+        }
+        count("return_relation", r, node)?;
+    }
+    for r in records("external_negative_evidence") {
+        let node = r["node"].as_str().ok_or("ELE1 ENE1 node")?;
+        let b = calls.get(node).ok_or("ELE1 ENE1 binding")?;
+        if b["callee"] != r["callee"] || b["arguments"] != r["call_arguments"] {
+            return Err("ELE1 ENE1 identity mismatch".into());
+        }
+        if let Some(i) = r["formal_index"].as_u64() {
+            if b["arguments"].as_array().and_then(|a| a.get(i as usize)) != Some(&r["actual_variable"]) {
+                return Err("ELE1 ENE1 formal mismatch".into());
+            }
+        }
+        count("negative_evidence", r, node)?;
+    }
+    let mut envelope_ids = BTreeSet::new();
+    for e in envelopes {
+        let id = e["binding_id"].as_str().ok_or("ELE1 envelope id")?;
+        let node = id.strip_prefix("ele1:").ok_or("ELE1 envelope binding id")?;
+        if !envelope_ids.insert(id) || !calls.contains_key(node) || e["basis"] != "crema_external_library_effects_v1" {
+            return Err("ELE1 duplicate or orphan envelope".into());
+        }
+        let counts = e["effect_counts"].as_object().ok_or("ELE1 counts")?;
+        let families = e["effect_families"].as_array().ok_or("ELE1 families")?;
+        if counts.len() != 6 || counts.keys().any(|k| !ELE1_FAMILIES.contains(&k.as_str())) { return Err("ELE1 unknown family".into()); }
+        let positive: BTreeSet<_> = ELE1_FAMILIES.iter().filter(|f| counts[**f].as_u64().unwrap_or(u64::MAX) > 0).copied().collect();
+        let listed: BTreeSet<_> = families.iter().filter_map(Value::as_str).collect();
+        if positive.is_empty() || listed.len() != families.len() || listed != positive
+            || ELE1_FAMILIES.iter().any(|f| counts[*f].as_u64() != Some(source.get(node).and_then(|m| m.get(*f)).copied().unwrap_or_default() as u64)) {
+            return Err("ELE1 envelope count mismatch".into());
+        }
+    }
+    if envelope_ids.len() != calls.len() || source.len() != calls.len() { return Err("ELE1 effectful-call closure mismatch".into()); }
+    // Only the in-memory ERR1 validator needs this compatibility adapter. The
+    // serialized ELE1 artifact has one authoritative binding protocol.
+    let legacy: Vec<Value> = records("external_return_relations").iter().map(|r| {
+        let b = calls[r["node"].as_str().unwrap()];
+        serde_json::json!({"node": b["node"], "callee": b["callee"], "arguments": b["arguments"],
+            "result_variable": b["result_variable"], "body_status": "bodyless", "basis": "rustc_mir_call_binding_v1"})
+    }).collect();
+    Ok(Some(legacy))
+}
 
 #[derive(Serialize)]
 struct JsonOutput<'a> {
@@ -358,6 +506,10 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     }
     let has_err1 = capabilities.contains("external_return_relations_v1");
     for field in ["external_return_relations", "external_return_call_bindings"] {
+        if field == "external_return_call_bindings" && capabilities.contains("external_library_effects_v1") {
+            if root.get(field).is_some() { return Err("ELE1 forbids legacy ERR1 binding payload".into()); }
+            continue;
+        }
         if has_err1 != root.get(field).is_some() {
             return Err(format!("ERR1 capability and {field} must appear together"));
         }
@@ -712,6 +864,7 @@ fn run() -> Result<(), String> {
     let raw_value: Value = serde_json::from_str(&raw_icfg)
         .map_err(|e| format!("invalid annotated ICFG JSON: {e}"))?;
     validate_boundary_requirements(&raw_value)?;
+    let ele1_legacy_adapter = validate_ele1(&raw_value)?;
     let panic_lifecycle = panic_lifecycle_overlay_from_json(&raw_value)?;
     let typed_edges = typed_edge_overlay_from_json(&raw_value)?;
     let source_provenance = source_provenance_overlay_from_json(&raw_value)?;
@@ -719,7 +872,13 @@ fn run() -> Result<(), String> {
     let reallocation_boundaries = reallocation_boundary_overlay_from_json(&raw_value)?;
     let conditional_reallocations = conditional_reallocation_overlay_from_json(&raw_value)?;
     let dcp1_payload = raw_value.get("external_deallocation_call_provenance").cloned();
-    let annotated: AnnotatedIcfg = serde_json::from_value(raw_value)
+    let mut parse_value = raw_value;
+    if let Some(bindings) = ele1_legacy_adapter {
+        if !bindings.is_empty() {
+            parse_value["external_return_call_bindings"] = Value::Array(bindings);
+        }
+    }
+    let annotated: AnnotatedIcfg = serde_json::from_value(parse_value)
         .map_err(|e| format!("invalid annotated ICFG JSON: {e}"))?;
     let base_k = Kripke::from_annotated_icfg_with_all_diagnostic_overlays(
         annotated,
@@ -819,6 +978,39 @@ fn run() -> Result<(), String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn ele1_binding_and_envelope_fail_closed() {
+        let valid = json!({
+            "capabilities": ["external_library_effects_v1"],
+            "nodes": [{"id": "rust::main::bb0", "semantic_labels": ["term:call"]}],
+            "variables": [{"id": "rust::main::Local(_1)", "language": "rust"}],
+            "external_call_bindings": [{
+                "binding_id": "ele1:rust::main::bb0", "node": "rust::main::bb0",
+                "rust_function_scope": "rust::main", "callee": "free", "arity": 1,
+                "arguments": ["rust::main::Local(_1)"], "result_variable": null,
+                "body_status": "bodyless", "basis": "rustc_mir_external_call_binding_v1"
+            }],
+            "external_library_effects": [{
+                "binding_id": "ele1:rust::main::bb0", "effect_families": ["deallocation"],
+                "effect_counts": {"allocation_return": 0, "reallocation": 0, "deallocation": 1,
+                    "formal_memory": 0, "return_relation": 0, "negative_evidence": 0},
+                "basis": "crema_external_library_effects_v1"
+            }],
+            "external_deallocation_call_provenance": [{"node": "rust::main::bb0", "callee": "free",
+                "arity": 1, "actual_variable": "rust::main::Local(_1)"}]
+        });
+        assert_eq!(validate_ele1(&valid).unwrap(), Some(vec![]));
+        let mut wrong = valid.clone();
+        wrong["external_call_bindings"][0]["arguments"][0] = json!("rust::main::Local(_999)");
+        assert!(validate_ele1(&wrong).is_err());
+        let mut wrong = valid.clone();
+        wrong["external_library_effects"][0]["effect_counts"]["deallocation"] = json!(2);
+        assert!(validate_ele1(&wrong).is_err());
+        let mut wrong = valid.clone();
+        wrong["external_return_call_bindings"] = json!([{}]);
+        assert!(validate_ele1(&wrong).is_err());
+    }
 
     fn minimal_v2_node() -> Value {
         json!({

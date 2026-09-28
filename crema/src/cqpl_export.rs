@@ -29,6 +29,10 @@ use once_cell::sync::Lazy;
 #[derive(Debug, Clone, Serialize)]
 struct AnnotatedIcfg {
     #[serde(skip_serializing_if = "Option::is_none")]
+    external_call_bindings: Option<Vec<ExternalCallBindingV1>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    external_library_effects: Option<Vec<ExternalLibraryEffectsV1>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     external_deallocation_call_provenance: Option<Vec<ExternalDeallocationCallProvenanceV1>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     external_negative_evidence: Option<Vec<ExternalNegativeEvidenceRecord>>,
@@ -109,6 +113,29 @@ struct AbstractAllocationRecord {
 struct ProgramVariable {
     id: String,
     language: &'static str,
+}
+
+/// ELE1 is metadata over existing proofs. Neither record is consumed by an
+/// event or abstract-state producer.
+#[derive(Debug, Clone, Serialize)]
+struct ExternalCallBindingV1 {
+    binding_id: String,
+    node: String,
+    rust_function_scope: String,
+    callee: String,
+    arity: usize,
+    arguments: Vec<Option<String>>,
+    result_variable: Option<String>,
+    body_status: &'static str,
+    basis: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ExternalLibraryEffectsV1 {
+    binding_id: String,
+    effect_families: Vec<&'static str>,
+    effect_counts: BTreeMap<&'static str, usize>,
+    basis: &'static str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -947,7 +974,10 @@ fn export_cqpl_annotated_icfg_versioned(
         if let Some(source) = &record.source_actual_variable { variable_ids.insert(source.clone()); }
     }
     let external_return_relations = if return_records.is_empty() { None } else { Some(return_records) };
-    let external_return_call_bindings = if return_bindings.is_empty() { None } else { Some(return_bindings) };
+    // ERR1's historical binding is replaced on the wire by ELE1 below. The
+    // return records retain exactly their accepted semantic fields.
+    let _return_bindings = return_bindings;
+    let external_return_call_bindings = None;
 
     let negative_records = if schema_version == 2 {
         external_negative_evidence_records(icfg, &ffi_functions, &represented_c_functions)
@@ -968,7 +998,7 @@ fn export_cqpl_annotated_icfg_versioned(
         return Err("CQPL annotated ICFG contains no program variables".into());
     }
 
-    let variables = variable_ids
+    let variables: Vec<ProgramVariable> = variable_ids
         .into_iter()
         .map(|id| ProgramVariable {
             language: language_of(&id),
@@ -986,6 +1016,16 @@ fn export_cqpl_annotated_icfg_versioned(
     } else {
         None
     };
+    let (external_call_bindings, external_library_effects) = if schema_version == 2 {
+        external_library_effect_envelopes(
+            icfg, &variables, allocations.as_deref().unwrap_or_default(),
+            reallocation_boundaries.as_deref().unwrap_or_default(),
+            external_deallocation_call_provenance.as_deref().unwrap_or_default(),
+            external_formal_memory_effects.as_deref().unwrap_or_default(),
+            external_return_relations.as_deref().unwrap_or_default(),
+            external_negative_evidence.as_deref().unwrap_or_default(),
+        )
+    } else { (None, None) };
     let ffi_argument_identity = if schema_version == 2 {
         let records = ffi_argument_identity_records(
             icfg,
@@ -999,7 +1039,10 @@ fn export_cqpl_annotated_icfg_versioned(
     let has_external_return_relations = external_return_relations.is_some();
     let has_ene1 = external_negative_evidence.is_some();
     let has_dcp1 = external_deallocation_call_provenance.is_some();
+    let has_ele1 = external_call_bindings.is_some();
     let output = AnnotatedIcfg {
+        external_call_bindings,
+        external_library_effects,
         external_deallocation_call_provenance,
         external_negative_evidence,
         external_return_relations,
@@ -1036,6 +1079,7 @@ fn export_cqpl_annotated_icfg_versioned(
             }
             if has_ene1 { caps.push("external_negative_evidence_v1"); }
             if has_dcp1 { caps.push("external_deallocation_call_provenance_v1"); }
+            if has_ele1 { caps.push("external_library_effects_v1"); }
             if has_external_return_relations {
                 caps.push("external_return_relations_v1");
             }
@@ -4006,6 +4050,84 @@ fn external_deallocation_call_provenance_records(
     records
 }
 
+const ELE1_FAMILIES: [&str; 6] = [
+    "allocation_return", "reallocation", "deallocation", "formal_memory",
+    "return_relation", "negative_evidence",
+];
+
+/// Count the accepted records and bind their call nodes directly to structured
+/// MIR. In particular, neither a drop label nor a call's printed text can seed
+/// the deallocation family.
+fn external_library_effect_envelopes(
+    icfg: &GlobalICFGOrdered,
+    variables: &[ProgramVariable],
+    allocations: &[AbstractAllocationRecord],
+    boundaries: &[ReallocationBoundaryRecord],
+    deallocations: &[ExternalDeallocationCallProvenanceV1],
+    memory: &[ExternalFormalMemoryEffectRecord],
+    relations: &[ExternalReturnRelationRecord],
+    negative: &[ExternalNegativeEvidenceRecord],
+) -> (Option<Vec<ExternalCallBindingV1>>, Option<Vec<ExternalLibraryEffectsV1>>) {
+    let catalog: BTreeSet<_> = variables.iter().map(|v| v.id.as_str()).collect();
+    let mut counts: BTreeMap<String, BTreeMap<&'static str, usize>> = BTreeMap::new();
+    let mut add = |node: &str, family: &'static str| {
+        *counts.entry(node.to_owned()).or_default().entry(family).or_default() += 1;
+    };
+    for allocation in allocations {
+        if let AllocationSiteId::CCall { node_id, .. } = &allocation.site {
+            if node_id.starts_with("rust::")
+                && allocation.allocator_contract.as_ref().is_some_and(|c|
+                    c.family == "c_malloc"
+                        && matches!(c.operation, "malloc" | "calloc" | "strdup" | "realloc"))
+                && !has_represented_external_body_at(icfg, node_id)
+            {
+                add(node_id, "allocation_return");
+            }
+        }
+    }
+    for record in boundaries { add(&record.node, "reallocation"); }
+    for record in deallocations { add(&record.node, "deallocation"); }
+    for record in memory { add(&record.node, "formal_memory"); }
+    for record in relations { add(&record.node, "return_relation"); }
+    for record in negative { add(&record.node, "negative_evidence"); }
+
+    let mut bindings = Vec::new();
+    let mut envelopes = Vec::new();
+    for (node_id, family_counts) in counts {
+        let Some((_, GlobalICFGNode::Mir(block))) = icfg.ordered_nodes.iter()
+            .find(|(id, _)| id == &node_id) else { continue; };
+        let Some(MirTerminator::Call { function_called, arguments, return_place, .. }) =
+            block.terminator.as_ref() else { continue; };
+        if has_represented_external_body_at(icfg, &node_id) { continue; }
+        let Some(scope) = mir_function_scope_from_node_id(&node_id) else { continue; };
+        let function = scope.strip_prefix("rust::").unwrap_or(&scope);
+        let canonical = |raw: &str| ProgramVarId::rust(function, raw)
+            .map(|v| v.canonical_string())
+            .filter(|id| catalog.contains(id.as_str()));
+        let binding_id = format!("ele1:{node_id}");
+        bindings.push(ExternalCallBindingV1 {
+            binding_id: binding_id.clone(), node: node_id,
+            rust_function_scope: scope.clone(),
+            callee: function_called.trim().to_owned(),
+            arity: arguments.len(),
+            arguments: arguments.iter().map(|arg| canonical(&arg.arg)).collect(),
+            result_variable: canonical(return_place),
+            body_status: "bodyless", basis: "rustc_mir_external_call_binding_v1",
+        });
+        let effect_families = ELE1_FAMILIES.iter().copied()
+            .filter(|family| family_counts.get(family).copied().unwrap_or_default() > 0)
+            .collect();
+        let effect_counts = ELE1_FAMILIES.iter().copied()
+            .map(|family| (family, family_counts.get(family).copied().unwrap_or_default()))
+            .collect();
+        envelopes.push(ExternalLibraryEffectsV1 {
+            binding_id, effect_families, effect_counts,
+            basis: "crema_external_library_effects_v1",
+        });
+    }
+    if bindings.is_empty() { (None, None) } else { (Some(bindings), Some(envelopes)) }
+}
+
 fn insert_event_source(
     events: &mut EventSourceMap,
     label: EventLabel,
@@ -4871,6 +4993,43 @@ mod tests {
             }
             assert!(external_return_relation_records(&icfg, &ffi, &HashSet::new()).0.is_empty());
         }
+    }
+
+    #[test]
+    fn ele1_binding_is_extracted_from_structured_mir_call() {
+        let mut call = efm2_call("memcpy", &["Local(_1)", "Local(_2)", "const 0_usize"]);
+        if let GlobalICFGNode::Mir(bb) = &mut call {
+            if let Some(MirTerminator::Call { return_place, .. }) = &mut bb.terminator {
+                *return_place = "Local(_9)".into();
+            }
+        }
+        let mut icfg = GlobalICFGOrdered {
+            ordered_nodes: vec![("rust::main::bb0".into(), call)], icfg_edges: vec![],
+            llvm_memory_effects: None, svf_solved_points_to: None,
+            rust_functions: Default::default(), rust_calls: vec![],
+        };
+        let ffi = HashSet::from(["memcpy".into()]);
+        let (relations, _) = external_return_relation_records(&icfg, &ffi, &HashSet::new());
+        let vars = [1, 2, 9].map(|n| ProgramVariable {
+            id: format!("rust::main::Local(_{n})"), language: "rust",
+        });
+        let build = |icfg: &GlobalICFGOrdered| external_library_effect_envelopes(
+            icfg, &vars, &[], &[], &[], &[], &relations, &[],
+        );
+        let (bindings, envelopes) = build(&icfg);
+        let bindings = bindings.unwrap();
+        assert_eq!(bindings.len(), 1);
+        assert_eq!(bindings[0].binding_id, "ele1:rust::main::bb0");
+        assert_eq!(bindings[0].arity, 3);
+        assert_eq!(bindings[0].arguments, vec![Some(vars[0].id.clone()), Some(vars[1].id.clone()), None]);
+        assert_eq!(bindings[0].result_variable, Some(vars[2].id.clone()));
+        assert_eq!(envelopes.unwrap()[0].effect_counts["return_relation"], 1);
+        if let GlobalICFGNode::Mir(bb) = &mut icfg.ordered_nodes[0].1 {
+            if let Some(MirTerminator::Call { return_place, .. }) = &mut bb.terminator {
+                *return_place = "Local(_8)".into();
+            }
+        }
+        assert_eq!(build(&icfg).0.unwrap()[0].result_variable, None);
     }
 
     #[test]

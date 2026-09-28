@@ -12,6 +12,14 @@
   ],
   "additionalProperties": false,
   "properties": {
+    "external_call_bindings": {
+      "type": "array", "minItems": 1,
+      "items": {"$ref": "#/$defs/external_call_binding_v1"}
+    },
+    "external_library_effects": {
+      "type": "array", "minItems": 1,
+      "items": {"$ref": "#/$defs/external_library_effects_v1"}
+    },
     "external_deallocation_call_provenance": {
       "type": "array",
       "minItems": 1,
@@ -137,6 +145,43 @@
     }
   },
   "$defs": {
+    "external_call_binding_v1": {
+      "type": "object", "additionalProperties": false,
+      "required": ["binding_id", "node", "rust_function_scope", "callee", "arity", "arguments", "body_status", "basis"],
+      "properties": {
+        "binding_id": {"type": "string", "pattern": "^ele1:rust::"},
+        "node": {"type": "string", "pattern": "^rust::"},
+        "rust_function_scope": {"type": "string", "pattern": "^rust::"},
+        "callee": {"type": "string", "minLength": 1},
+        "arity": {"type": "integer", "minimum": 0},
+        "arguments": {"type": "array", "items": {"type": ["string", "null"]}},
+        "result_variable": {"type": ["string", "null"]},
+        "abi": {"type": "string"},
+        "body_status": {"const": "bodyless"},
+        "basis": {"const": "rustc_mir_external_call_binding_v1"}
+      }
+    },
+    "external_library_effects_v1": {
+      "type": "object", "additionalProperties": false,
+      "required": ["binding_id", "effect_families", "effect_counts", "basis"],
+      "properties": {
+        "binding_id": {"type": "string", "pattern": "^ele1:rust::"},
+        "effect_families": {"type": "array", "uniqueItems": true, "items": {"enum": ["allocation_return", "reallocation", "deallocation", "formal_memory", "return_relation", "negative_evidence"]}},
+        "effect_counts": {
+          "type": "object", "additionalProperties": false,
+          "required": ["allocation_return", "reallocation", "deallocation", "formal_memory", "return_relation", "negative_evidence"],
+          "properties": {
+            "allocation_return": {"type": "integer", "minimum": 0},
+            "reallocation": {"type": "integer", "minimum": 0},
+            "deallocation": {"type": "integer", "minimum": 0},
+            "formal_memory": {"type": "integer", "minimum": 0},
+            "return_relation": {"type": "integer", "minimum": 0},
+            "negative_evidence": {"type": "integer", "minimum": 0}
+          }
+        },
+        "basis": {"const": "crema_external_library_effects_v1"}
+      }
+    },
     "externalDeallocationCallProvenanceV1": {
       "type": "object",
       "additionalProperties": false,
@@ -3031,6 +3076,25 @@
   },
   "allOf": [
     {
+      "if": {"required": ["capabilities"], "properties": {"capabilities": {"allOf": [
+        {"contains": {"const": "external_return_relations_v1"}},
+        {"not": {"contains": {"const": "external_library_effects_v1"}}}
+      ]}}},
+      "then": {"required": ["external_return_call_bindings"]}
+    },
+    {
+      "if": {"required": ["capabilities"], "properties": {"capabilities": {"contains": {"const": "external_library_effects_v1"}}}},
+      "then": {"required": ["external_call_bindings", "external_library_effects"], "not": {"required": ["external_return_call_bindings"]}}
+    },
+    {
+      "if": {"required": ["external_call_bindings"]},
+      "then": {"required": ["external_library_effects", "capabilities"], "properties": {"capabilities": {"contains": {"const": "external_library_effects_v1"}}}}
+    },
+    {
+      "if": {"required": ["external_library_effects"]},
+      "then": {"required": ["external_call_bindings", "capabilities"], "properties": {"capabilities": {"contains": {"const": "external_library_effects_v1"}}}}
+    },
+    {
       "if": {
         "required": ["capabilities"],
         "properties": {"capabilities": {"contains": {"const": "external_deallocation_call_provenance_v1"}}}
@@ -3059,8 +3123,7 @@
       },
       "then": {
         "required": [
-          "external_return_relations",
-          "external_return_call_bindings"
+          "external_return_relations"
         ],
         "properties": {
           "capabilities": {
