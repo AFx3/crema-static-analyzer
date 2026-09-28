@@ -1,0 +1,4 @@
+[package]
+name = "b65_aliased_formal_nocapture"
+version = "0.1.0"
+edition = "2021"

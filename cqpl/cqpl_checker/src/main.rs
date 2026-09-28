@@ -328,6 +328,24 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     }
 
     let external_formal_memory_effects_present = root.get("external_formal_memory_effects").is_some();
+    let has_ene1 = capabilities.contains("external_negative_evidence_v1");
+    if has_ene1 != root.get("external_negative_evidence").is_some() {
+        return Err("ENE1 capability/payload must appear together".into());
+    }
+    if has_ene1 && (!has_mir_semantics_v2 || !capabilities.contains("llvm_memory_effects_v1")) {
+        return Err("ENE1 requires MIR and LLVM proof capabilities".into());
+    }
+    if let Some(payload) = root.get("external_negative_evidence") {
+        let records = payload.as_array().filter(|a| !a.is_empty()).ok_or("ENE1 requires nonempty array")?;
+        for r in records {
+            let function = r.get("evidence_kind").and_then(Value::as_str) == Some("no_free_function");
+            for field in ["formal_index", "actual_variable"] {
+                if function == r.get(field).is_some() || r.get(field).is_some_and(Value::is_null) {
+                    return Err("ENE1 formal fields must be absent for function facts, present/non-null for formal facts".into());
+                }
+            }
+        }
+    }
     let has_err1 = capabilities.contains("external_return_relations_v1");
     for field in ["external_return_relations", "external_return_call_bindings"] {
         if has_err1 != root.get(field).is_some() {
@@ -843,6 +861,28 @@ mod tests {
         }]);
         let err = validate_boundary_requirements(&value).unwrap_err();
         assert!(err.contains("requires mir_semantics_v2"));
+    }
+
+    #[test]
+    fn ene1_raw_boundary_atomicity_and_null_attacks() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["mir_semantic_labels_v1", "mir_semantics_v2", "llvm_memory_effects_v1", "external_negative_evidence_v1"]);
+        value["llvm_memory_effects"] = json!({});
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        value["external_negative_evidence"] = json!([{"evidence_kind":"no_free_function"}]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+        for payload in [json!([]),json!(null),json!({})] {
+            let mut bad = value.clone(); bad["external_negative_evidence"] = payload;
+            assert!(validate_boundary_requirements(&bad).is_err());
+        }
+        let mut bad = value.clone(); bad.as_object_mut().unwrap().remove("external_negative_evidence");
+        assert!(validate_boundary_requirements(&bad).is_err());
+        let mut bad = value.clone(); bad["capabilities"] = json!([]);
+        assert!(validate_boundary_requirements(&bad).is_err());
+        for field in ["formal_index","actual_variable"] {
+            let mut bad = value.clone(); bad["external_negative_evidence"][0][field] = json!(null);
+            assert!(validate_boundary_requirements(&bad).is_err());
+        }
     }
 
     #[test]

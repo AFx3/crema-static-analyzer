@@ -1462,6 +1462,8 @@ pub struct AnnotatedNode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnnotatedIcfg {
     #[serde(default)]
+    pub external_negative_evidence: Vec<ExternalNegativeEvidenceRecord>,
+    #[serde(default)]
     pub external_return_relations: Vec<ExternalReturnRelationRecord>,
     #[serde(default)]
     pub external_return_call_bindings: Vec<ExternalReturnCallBinding>,
@@ -2157,6 +2159,11 @@ impl Kripke {
         let has_external_deallocation_effects = capabilities.contains("external_deallocation_effects_v1");
         let has_external_formal_memory_effects_v1 = capabilities.contains("external_formal_memory_effects_v1");
         let has_external_formal_memory_effects_v2 = capabilities.contains("external_formal_memory_effects_v2");
+        let has_ene1 = capabilities.contains("external_negative_evidence_v1");
+        if has_ene1 != !input.external_negative_evidence.is_empty()
+            || (has_ene1 && (schema_version != 2 || !capabilities.contains("mir_semantics_v2") || !capabilities.contains("llvm_memory_effects_v1"))) {
+            return Err("ENE1 requires atomic nonempty payload, schema v2, MIR and LLVM evidence".into());
+        }
         let has_err1 = capabilities.contains("external_return_relations_v1");
         if has_err1 != !input.external_return_relations.is_empty()
             || has_err1 != !input.external_return_call_bindings.is_empty() {
@@ -2475,6 +2482,7 @@ impl Kripke {
         } else if !source_provenance.is_empty() {
             return Err("source provenance records require capability source_provenance_v1".into());
         }
+        validate_external_negative_evidence(&input.external_negative_evidence, input.llvm_memory_effects.as_ref(), &variables, &nodes)?;
         validate_external_return_relations(
             &input.external_return_relations, &input.external_return_call_bindings,
             &variables, &nodes, &allocations,
@@ -3490,6 +3498,109 @@ pub struct ExternalReturnCallBinding {
     pub basis: String,
 }
 
+/// Proof-carrying negative facts; never translated to ordinary semantic events.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExternalNegativeEvidenceRecord {
+    pub node: String,
+    pub callee: String,
+    pub evidence_kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formal_index: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual_variable: Option<String>,
+    pub evidence_source: String,
+    pub basis: String,
+    pub evidence_module: usize,
+    pub evidence_function: usize,
+    pub attribute_origin: String,
+    pub call_arguments: Vec<Option<String>>,
+    pub body_status: String,
+    pub binding_basis: String,
+}
+
+fn validate_external_negative_evidence(
+    records: &[ExternalNegativeEvidenceRecord], effects: Option<&LlvmMemoryEffectsEvidenceV1>,
+    variables: &BTreeMap<String, ProgramVariable>, nodes: &BTreeMap<String, AnnotatedNode>,
+) -> Result<(), String> {
+    if records.is_empty() { return Ok(()); }
+    let effects = effects.ok_or("ENE1 missing LLVM evidence")?;
+    validate_embedded_llvm_effects(effects)?;
+    let mut seen = BTreeSet::new();
+    let mut bindings = BTreeMap::new();
+    for record in records {
+        let node = nodes.get(&record.node).ok_or("ENE1 unknown call node")?;
+        let scope = rust_function_scope(&record.node).ok_or("ENE1 non-Rust node")?;
+        if !record.node.starts_with("rust::") || !node.semantic_labels.iter().any(|l| l == "term:call")
+            || record.body_status != "bodyless" || record.binding_basis != "rustc_mir_call_binding_v1"
+            || record.attribute_origin != "callee_declaration"
+            || nodes.keys().any(|id| id.starts_with(&format!("llvm::{}::",record.callee))) {
+            return Err("ENE1 requires genuine bodyless Rust call".into());
+        }
+        let module = effects.modules.get(record.evidence_module).ok_or("ENE1 wrong evidence module")?;
+        let function = module.functions.get(record.evidence_function).ok_or("ENE1 wrong evidence function")?;
+        if function.name != record.callee || !function.is_declaration
+            || effects.modules.iter().flat_map(|m| &m.functions).filter(|f| f.name == record.callee).count() != 1
+            || record.call_arguments.len() != function.explicit.formals.len() {
+            return Err("ENE1 callee/arity/declaration evidence mismatch".into());
+        }
+        let binding = (&record.callee, &record.call_arguments);
+        if bindings.insert(&record.node, binding).is_some_and(|before| before != binding) {
+            return Err("ENE1 inconsistent MIR bindings".into());
+        }
+        let valid_actual = |id: &str| variables.get(id).is_some_and(|v| v.language == ProgramLanguage::Rust)
+            && id.strip_prefix(&format!("{scope}::Local(_")).and_then(|s| s.strip_suffix(')'))
+                .is_some_and(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()));
+        if record.call_arguments.iter().flatten().any(|id| !valid_actual(id)) {
+            return Err("ENE1 wrong actual scope".into());
+        }
+        let formal = record.formal_index.and_then(|i| function.explicit.formals.get(i));
+        let proved = match (record.evidence_kind.as_str(),record.evidence_source.as_str(),record.basis.as_str()) {
+            ("no_free_function","llvm16_explicit_ir","llvm16_explicit_function_nofree_v1") => function.explicit.nofree,
+            ("no_free_function","llvm16_verified_tli","llvm16_tli_verified_function_nofree_v1") =>
+                !function.explicit.nofree && function.tli_changed && function.tli_recognized && function.tli_inferred.nofree,
+            ("no_free_formal","llvm16_explicit_ir","llvm16_explicit_formal_nofree_v1") => formal.is_some_and(|f| f.pointer_typed && f.nofree),
+            ("no_capture_formal","llvm16_explicit_ir","llvm16_explicit_formal_nocapture_v1") => formal.is_some_and(|f| f.pointer_typed && f.nocapture),
+            _ => false,
+        };
+        if !proved { return Err("ENE1 unsupported/unproved source/basis/kind tuple".into()); }
+        let function_level = record.evidence_kind == "no_free_function";
+        if function_level {
+            if record.formal_index.is_some() || record.actual_variable.is_some() { return Err("ENE1 function fact must omit formal/actual".into()); }
+        } else {
+            let i = record.formal_index.ok_or("ENE1 missing formal index")?;
+            let actual = record.actual_variable.as_ref().ok_or("ENE1 missing actual")?;
+            if record.call_arguments.get(i).and_then(|a| a.as_ref()) != Some(actual) || !valid_actual(actual) {
+                return Err("ENE1 formal/actual binding mismatch".into());
+            }
+        }
+        if !seen.insert((&record.node,&record.callee,&record.evidence_kind,record.formal_index)) {
+            return Err("ENE1 duplicate logical record".into());
+        }
+        // Allockind + allocptr is the existing precise FreeArg/ReallocArg proof
+        // surface. Never resolve a contradiction by erasing the positive fact.
+        if record.evidence_kind != "no_capture_formal" {
+            for snapshot in [&function.explicit, &function.tli_inferred] {
+                if snapshot.alloc_kind.iter().any(|k| k == "free" || k == "realloc")
+                    && snapshot.formals.iter().any(|f| f.allocptr && f.pointer_typed
+                        && (function_level || Some(f.index) == record.formal_index)
+                        && record.call_arguments.get(f.index).is_some_and(Option::is_some)) {
+                    return Err("ENE1 contradictory positive FreeArg/ReallocArg proof".into());
+                }
+            }
+            if function_level && node.allocation_labels.iter().any(|l| l.predicate == EventKind::Drop) {
+                return Err("ENE1 contradictory positive pre-existing deallocation event".into());
+            }
+            if !function_level && node.labels.iter().any(|l| l.predicate == EventKind::Drop
+                && record.actual_variable.as_ref().is_some_and(|id| l.variable == *id
+                    || id.strip_prefix(&format!("{scope}::")) == Some(l.variable.as_str()))) {
+                return Err("ENE1 contradictory formal deallocation event".into());
+            }
+        }
+    }
+    Ok(())
+}
+
 fn validate_external_return_relations(
     records: &[ExternalReturnRelationRecord], bindings: &[ExternalReturnCallBinding],
     variables: &BTreeMap<String, ProgramVariable>, nodes: &BTreeMap<String, AnnotatedNode>,
@@ -3924,6 +4035,7 @@ mod tests {
 
     fn base() -> AnnotatedIcfg {
         AnnotatedIcfg {
+            external_negative_evidence: vec![],
             external_return_relations: vec![],
             external_return_call_bindings: vec![],
             schema_version: 1,
@@ -3952,6 +4064,65 @@ mod tests {
                 post: mem(&["rust::x", "c::p"], CellValue::Top),
             }],
         }
+    }
+
+    #[test]
+    fn ene1_closed_provenance_identity_and_contradictions() {
+        let mut input = base();
+        input.entry = "rust::main::bb0".into();
+        input.nodes[0].id = input.entry.clone(); input.nodes[0].labels.clear();
+        input.nodes[0].semantic_labels = vec!["term:call".into()];
+        input.variables = vec![ProgramVariable { id: "rust::main::Local(_1)".into(), language: ProgramLanguage::Rust, display: None, function: None }];
+        let mut effects = valid_efx1_evidence();
+        let f = &mut effects.modules[0].functions[0];
+        f.name = "observe".into(); f.explicit.formals[0].pointer_typed = true;
+        f.explicit.formals[0].nofree = true; f.explicit.nofree = true;
+        f.explicit.formals[0].nocapture = true; f.explicit.alloc_kind.clear();
+        f.tli_inferred = f.explicit.clone(); f.tli_changed = false;
+        let records: Vec<ExternalNegativeEvidenceRecord> = serde_json::from_value(serde_json::json!([
+            {"node":"rust::main::bb0", "callee":"observe", "evidence_kind":"no_free_formal", "formal_index":0,
+             "actual_variable":"rust::main::Local(_1)", "evidence_source":"llvm16_explicit_ir", "basis":"llvm16_explicit_formal_nofree_v1",
+             "evidence_module":0,"evidence_function":0,"attribute_origin":"callee_declaration",
+             "call_arguments":["rust::main::Local(_1)"],"body_status":"bodyless","binding_basis":"rustc_mir_call_binding_v1"}
+        ])).unwrap();
+        let vars = input.variables.iter().cloned().map(|v| (v.id.clone(),v)).collect();
+        let nodes = input.nodes.iter().cloned().map(|n| (n.id.clone(),n)).collect();
+        let validate = |rs: &[ExternalNegativeEvidenceRecord], ef: &LlvmMemoryEffectsEvidenceV1| validate_external_negative_evidence(rs, Some(ef), &vars, &nodes);
+        validate(&records, &effects).unwrap();
+        // A1-A10/A13: closed kinds, provenance, indices and exact actuals.
+        for (field, value) in [
+            ("evidence_kind", serde_json::json!("capture")), ("basis",serde_json::json!("wrong")),
+            ("evidence_source",serde_json::json!("llvm16_verified_tli")), ("formal_index",serde_json::json!(1)),
+            ("actual_variable",serde_json::json!("rust::other::Local(_1)")),
+            ("body_status",serde_json::json!("represented")), ("evidence_function",serde_json::json!(99)),
+        ] {
+            let mut raw = serde_json::to_value(&records).unwrap(); raw[0][field] = value;
+            let attacked: Vec<ExternalNegativeEvidenceRecord> = serde_json::from_value(raw).unwrap(); assert!(validate(&attacked,&effects).is_err(), "{field}");
+        }
+        for field in ["formal_index", "actual_variable"] {
+            let mut raw = serde_json::to_value(&records).unwrap(); raw[0].as_object_mut().unwrap().remove(field);
+            let attacked: Vec<ExternalNegativeEvidenceRecord> = serde_json::from_value(raw).unwrap(); assert!(validate(&attacked,&effects).is_err());
+        }
+        assert!(validate(&[records[0].clone(), records[0].clone()],&effects).is_err());
+        let mut function = records[0].clone(); function.evidence_kind = "no_free_function".into();
+        function.basis = "llvm16_explicit_function_nofree_v1".into();
+        assert!(validate(&[function.clone()],&effects).is_err());
+        function.formal_index = None; function.actual_variable = None;
+        validate(&[function.clone()],&effects).unwrap();
+        // A14-A16: positive FreeArg/ReallocArg proof must not be erased.
+        for operation in ["free", "realloc"] {
+            let mut conflicting = effects.clone(); let f = &mut conflicting.modules[0].functions[0];
+            f.explicit.alloc_kind = vec![operation.into()]; f.explicit.formals[0].allocptr = true;
+            f.tli_inferred = f.explicit.clone();
+            assert!(validate(&records,&conflicting).unwrap_err().contains("contradictory"));
+            assert!(validate(&[function.clone()],&conflicting).unwrap_err().contains("contradictory"));
+        }
+        // Conjunction is stored, with zero ordinary event or state mutation.
+        let mut capture = records[0].clone(); capture.evidence_kind = "no_capture_formal".into();
+        capture.basis = "llvm16_explicit_formal_nocapture_v1".into();
+        let before = serde_json::to_value(&input).unwrap();
+        validate(&[function, capture],&effects).unwrap();
+        assert_eq!(serde_json::to_value(&input).unwrap(), before);
     }
 
     fn efm1_valid_strlen_input() -> AnnotatedIcfg {
@@ -4953,6 +5124,7 @@ mod tests {
     #[test]
     fn entry_projection_prunes_unreachable_nodes_and_quantifier_domains() {
         let input = AnnotatedIcfg {
+            external_negative_evidence: vec![],
             external_return_relations: vec![],
             external_return_call_bindings: vec![],
             schema_version: 2,
@@ -5010,6 +5182,7 @@ mod tests {
     #[test]
     fn intra_projection_preserves_same_function_unwind_terminal() {
         let input = AnnotatedIcfg {
+            external_negative_evidence: vec![],
             external_return_relations: vec![],
             external_return_call_bindings: vec![],
             schema_version: 1,
@@ -5038,6 +5211,7 @@ mod tests {
     #[test]
     fn intra_projection_is_same_function_induced_subgraph_and_stops_at_call_boundary() {
         let input = AnnotatedIcfg {
+            external_negative_evidence: vec![],
             external_return_relations: vec![],
             external_return_call_bindings: vec![],
             schema_version: 1,

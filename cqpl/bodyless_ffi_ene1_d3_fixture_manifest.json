@@ -1,0 +1,104 @@
+{
+  "schema": "cqpl_ene1_d3_fixture_manifest_v1",
+  "baseline_commit": "da9555a6fa6a99f3607112be6b3d36c7acc01e84",
+  "end_to_end_formal_nofree_available": false,
+  "end_to_end_conjunction_available": false,
+  "fixtures": [
+    {
+      "target": "b62_function_nofree",
+      "fixture": "b62",
+      "callee": "malloc",
+      "evidence_kind": "no_free_function",
+      "evidence_source": "llvm16_verified_tli",
+      "formal_index": null,
+      "synthetic": false,
+      "reason": "existing LLVM16 TLI verifier on compiler-produced declaration",
+      "end_to_end_conjunction_available": null,
+      "synthetic_conformance_fixture": true
+    },
+    {
+      "target": "b63_formal_nocapture",
+      "fixture": "b63",
+      "callee": "d3_observe",
+      "evidence_kind": "no_capture_formal",
+      "evidence_source": "llvm16_explicit_ir",
+      "formal_index": 0,
+      "synthetic": true,
+      "reason": "Clang-14 noescape declaration emits explicit nocapture",
+      "end_to_end_conjunction_available": null,
+      "synthetic_conformance_fixture": true
+    },
+    {
+      "target": "b64_formal_nofree_fallback",
+      "fixture": "b64",
+      "callee": "calloc",
+      "evidence_kind": "no_free_function",
+      "evidence_source": "llvm16_verified_tli",
+      "formal_index": null,
+      "synthetic": false,
+      "reason": "existing LLVM16 TLI verifier on compiler-produced declaration",
+      "end_to_end_conjunction_available": null,
+      "synthetic_conformance_fixture": true
+    },
+    {
+      "target": "b65_aliased_formal_nocapture",
+      "fixture": "b65",
+      "callee": "d3_observe",
+      "evidence_kind": "no_capture_formal",
+      "evidence_source": "llvm16_explicit_ir",
+      "formal_index": 0,
+      "synthetic": true,
+      "reason": "Clang-14 noescape declaration emits explicit nocapture",
+      "end_to_end_conjunction_available": null,
+      "synthetic_conformance_fixture": true
+    },
+    {
+      "target": "b66_nofree_no_liveness",
+      "fixture": "b66",
+      "callee": "strlen",
+      "evidence_kind": "no_free_function",
+      "evidence_source": "llvm16_verified_tli",
+      "formal_index": null,
+      "synthetic": false,
+      "reason": "existing LLVM16 TLI verifier on compiler-produced declaration",
+      "end_to_end_conjunction_available": null,
+      "synthetic_conformance_fixture": true
+    },
+    {
+      "target": "b67_represented_body_suppression",
+      "fixture": "b67",
+      "callee": "d3_observe",
+      "evidence_kind": null,
+      "evidence_source": null,
+      "formal_index": null,
+      "synthetic": true,
+      "reason": "Clang-14 noescape declaration emits explicit nocapture",
+      "end_to_end_conjunction_available": null,
+      "synthetic_conformance_fixture": true
+    },
+    {
+      "target": "b68_unresolved_no_attributes",
+      "fixture": "b68",
+      "callee": "d3_unknown",
+      "evidence_kind": null,
+      "evidence_source": null,
+      "formal_index": null,
+      "synthetic": true,
+      "reason": "unknown bodyless declaration has no explicit negative attributes and is not TLI recognized",
+      "end_to_end_conjunction_available": null,
+      "synthetic_conformance_fixture": true
+    },
+    {
+      "target": "b69_conjunction_unavailable_control",
+      "fixture": "b69",
+      "callee": "d3_observe",
+      "evidence_kind": "no_capture_formal",
+      "evidence_source": "llvm16_explicit_ir",
+      "formal_index": 0,
+      "synthetic": true,
+      "reason": "Clang-14 noescape declaration emits explicit nocapture",
+      "end_to_end_conjunction_available": false,
+      "synthetic_conformance_fixture": true
+    }
+  ]
+}

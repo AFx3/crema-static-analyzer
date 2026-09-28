@@ -29,6 +29,8 @@ use once_cell::sync::Lazy;
 #[derive(Debug, Clone, Serialize)]
 struct AnnotatedIcfg {
     #[serde(skip_serializing_if = "Option::is_none")]
+    external_negative_evidence: Option<Vec<ExternalNegativeEvidenceRecord>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     external_return_relations: Option<Vec<ExternalReturnRelationRecord>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     external_return_call_bindings: Option<Vec<ExternalReturnCallBinding>>,
@@ -945,6 +947,14 @@ fn export_cqpl_annotated_icfg_versioned(
     let external_return_relations = if return_records.is_empty() { None } else { Some(return_records) };
     let external_return_call_bindings = if return_bindings.is_empty() { None } else { Some(return_bindings) };
 
+    let negative_records = if schema_version == 2 {
+        external_negative_evidence_records(icfg, &ffi_functions, &represented_c_functions)
+    } else { vec![] };
+    for record in &negative_records {
+        variable_ids.extend(record.call_arguments.iter().flatten().cloned());
+    }
+    let external_negative_evidence = (!negative_records.is_empty()).then_some(negative_records);
+
     if variable_ids.is_empty() {
         return Err("CQPL annotated ICFG contains no program variables".into());
     }
@@ -978,7 +988,9 @@ fn export_cqpl_annotated_icfg_versioned(
     };
 
     let has_external_return_relations = external_return_relations.is_some();
+    let has_ene1 = external_negative_evidence.is_some();
     let output = AnnotatedIcfg {
+        external_negative_evidence,
         external_return_relations,
         external_return_call_bindings,
         schema_version,
@@ -1011,6 +1023,7 @@ fn export_cqpl_annotated_icfg_versioned(
             if external_formal_memory_effects.is_some() {
                 caps.push("external_formal_memory_effects_v2");
             }
+            if has_ene1 { caps.push("external_negative_evidence_v1"); }
             if has_external_return_relations {
                 caps.push("external_return_relations_v1");
             }
@@ -2996,6 +3009,78 @@ struct ExternalReturnCallBinding {
     basis: &'static str,
 }
 
+/// ENE1 is an evidence-only sidecar. No abstract-state or event APIs are called.
+#[derive(Debug, Clone, Serialize)]
+struct ExternalNegativeEvidenceRecord {
+    node: String,
+    callee: String,
+    evidence_kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    formal_index: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    actual_variable: Option<String>,
+    evidence_source: &'static str,
+    basis: &'static str,
+    evidence_module: usize,
+    evidence_function: usize,
+    attribute_origin: &'static str,
+    // Exact positional MIR binding, independent of allocation identity.
+    call_arguments: Vec<Option<String>>,
+    body_status: &'static str,
+    binding_basis: &'static str,
+}
+
+fn external_negative_evidence_records(
+    icfg: &GlobalICFGOrdered, ffi: &HashSet<String>, represented: &HashSet<String>,
+) -> Vec<ExternalNegativeEvidenceRecord> {
+    let mut records = vec![];
+    let Some(effects) = &icfg.llvm_memory_effects else { return records; };
+    // The existing EFX1 loader verifies snapshots, TLI admissibility and clone
+    // callsite cardinality/identity before constructing this ICFG.
+    if effects.schema != "llvm_memory_effects_v1" || effects.llvm_version != "16.0.4"
+        || effects.explicit_basis != "llvm16_explicit_input_ir_v1"
+        || effects.tli_basis != "llvm16_tli_libfunc_attrs_v1" { return records; }
+    for (node_id, node) in &icfg.ordered_nodes {
+        let GlobalICFGNode::Mir(bb) = node else { continue; };
+        let Some(MirTerminator::Call { function_called, arguments, .. }) = &bb.terminator else { continue; };
+        let callee = function_called.trim();
+        if !ffi.contains(callee) || represented.contains(callee) { continue; }
+        let mut matches = effects.modules.iter().enumerate().flat_map(|(mi, m)|
+            m.functions.iter().enumerate().filter(move |(_, f)| f.name == callee).map(move |(fi, f)| (mi, fi, f)));
+        let Some((mi, fi, function)) = matches.next() else { continue; };
+        if matches.next().is_some() || !function.is_declaration
+            || !effects.modules[mi].input_ir_verified || !effects.modules[mi].tli_clone_verified
+            || function.origin_explicit != "explicit_input_ir" || function.origin_inferred != "llvm_tli_inferred"
+            || function.explicit.formals.len() != arguments.len() { continue; }
+        let Some(scope) = mir_function_scope_from_node_id(node_id) else { continue; };
+        let scope = scope.strip_prefix("rust::").unwrap_or(&scope);
+        let actuals: Vec<_> = arguments.iter().map(|arg|
+            if arg.arg.contains(" -> ") { None } else { ProgramVarId::rust(scope, &arg.arg).map(|var| var.canonical_string()) }).collect();
+        let mut emit = |kind, index: Option<usize>, source, basis| {
+            let actual = index.and_then(|i| actuals.get(i).cloned().flatten());
+            if index.is_some() && actual.is_none() { return; }
+            records.push(ExternalNegativeEvidenceRecord {
+                node: node_id.clone(), callee: callee.into(), evidence_kind: kind,
+                formal_index: index, actual_variable: actual, evidence_source: source, basis,
+                evidence_module: mi, evidence_function: fi, attribute_origin: "callee_declaration",
+                call_arguments: actuals.clone(), body_status: "bodyless", binding_basis: "rustc_mir_call_binding_v1",
+            });
+        };
+        if function.explicit.nofree {
+            emit("no_free_function", None, "llvm16_explicit_ir", "llvm16_explicit_function_nofree_v1");
+        } else if function.tli_changed && function.tli_recognized && !function.explicit.nobuiltin
+            && !function.explicit.optnone && function.tli_inferred.nofree {
+            emit("no_free_function", None, "llvm16_verified_tli", "llvm16_tli_verified_function_nofree_v1");
+        }
+        for formal in &function.explicit.formals {
+            if !formal.pointer_typed || formal.index >= actuals.len() { continue; }
+            if formal.nofree { emit("no_free_formal", Some(formal.index), "llvm16_explicit_ir", "llvm16_explicit_formal_nofree_v1"); }
+            if formal.nocapture { emit("no_capture_formal", Some(formal.index), "llvm16_explicit_ir", "llvm16_explicit_formal_nocapture_v1"); }
+        }
+    }
+    records
+}
+
 fn external_return_relation_records(
     icfg: &GlobalICFGOrdered,
     ffi: &HashSet<String>,
@@ -4590,6 +4675,55 @@ mod tests {
             let represented = [callee.to_string()].into_iter().collect::<HashSet<_>>();
             assert!(external_function_memory_contract_v2(callee, arity, &ffi, &represented).is_none());
         }
+    }
+
+    #[test]
+    fn ene1_producer_evidence_identity_and_no_semantic_transfer() {
+        let ffi = HashSet::from(["observe".to_string()]);
+        let mut snapshot = LlvmFunctionEffectsSnapshotV1::default();
+        snapshot.formals = vec![
+            crate::structs::LlvmFormalEffectsSnapshotV1 { index: 0, pointer_typed: true, ..Default::default() },
+            crate::structs::LlvmFormalEffectsSnapshotV1 { index: 1, pointer_typed: true, ..Default::default() },
+        ];
+        let mut icfg = GlobalICFGOrdered {
+            ordered_nodes: vec![("rust::main::bb0".into(), efm2_call("observe", &["Local(_1)", "Local(_1)"]))],
+            icfg_edges: vec![], llvm_memory_effects: None, svf_solved_points_to: None,
+            rust_functions: Default::default(), rust_calls: vec![],
+        };
+        // U7/U9/U10: absence never creates either opposite behavior.
+        icfg.llvm_memory_effects = Some(efx1_test_artifact("observe", snapshot.clone(), snapshot.clone(), false, false));
+        assert!(external_negative_evidence_records(&icfg, &ffi, &HashSet::new()).is_empty());
+        // U1/U3/U4/U8: independent copies, even when actuals alias.
+        snapshot.nofree = true; snapshot.formals[0].nofree = true; snapshot.formals[0].nocapture = true;
+        icfg.llvm_memory_effects = Some(efx1_test_artifact("observe", snapshot.clone(), snapshot.clone(), false, false));
+        let before = serde_json::to_value(&icfg).unwrap();
+        let records = external_negative_evidence_records(&icfg, &ffi, &HashSet::new());
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0].evidence_kind, "no_free_function");
+        assert_eq!(records[0].basis, "llvm16_explicit_function_nofree_v1");
+        for record in &records[1..] {
+            assert_eq!(record.formal_index, Some(0));
+            assert_eq!(record.actual_variable.as_deref(), Some("rust::main::Local(_1)"));
+        }
+        // U11/U12: no mutation to ICFG, ordinary events or identity/state.
+        assert_eq!(serde_json::to_value(&icfg).unwrap(), before);
+        // U6: body present or declaration mismatch cannot be summarized.
+        assert!(external_negative_evidence_records(&icfg, &ffi, &ffi).is_empty());
+        icfg.llvm_memory_effects.as_mut().unwrap().modules[0].functions[0].is_declaration = false;
+        assert!(external_negative_evidence_records(&icfg, &ffi, &HashSet::new()).is_empty());
+        // U5: do not guess a projected actual.
+        icfg.ordered_nodes[0].1 = efm2_call("observe", &["Local(_1) -> Deref", "Local(_1)"]);
+        icfg.llvm_memory_effects = Some(efx1_test_artifact("observe", snapshot.clone(), snapshot.clone(), false, false));
+        assert_eq!(external_negative_evidence_records(&icfg, &ffi, &HashSet::new()).len(), 1);
+        // U2: verified TLI nofree is distinct; inferred formal attributes are inadmissible.
+        let mut explicit = snapshot.clone(); explicit.nofree = false;
+        explicit.formals[0].nofree = false; explicit.formals[0].nocapture = false;
+        icfg.llvm_memory_effects = Some(efx1_test_artifact("observe", explicit, snapshot, true, true));
+        let records = external_negative_evidence_records(&icfg, &ffi, &HashSet::new());
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].basis, "llvm16_tli_verified_function_nofree_v1");
+        icfg.llvm_memory_effects.as_mut().unwrap().modules[0].functions[0].tli_recognized = false;
+        assert!(external_negative_evidence_records(&icfg, &ffi, &HashSet::new()).is_empty());
     }
 
     #[test]

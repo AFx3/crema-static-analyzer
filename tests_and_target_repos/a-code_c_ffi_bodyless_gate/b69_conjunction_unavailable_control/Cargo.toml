@@ -1,0 +1,4 @@
+[package]
+name = "b69_conjunction_unavailable_control"
+version = "0.1.0"
+edition = "2021"

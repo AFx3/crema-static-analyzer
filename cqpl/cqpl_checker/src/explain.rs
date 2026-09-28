@@ -4999,6 +4999,7 @@ mod tests {
 
     fn one_allocation_graph() -> Kripke {
         Kripke::from_annotated_icfg(AnnotatedIcfg {
+            external_negative_evidence: vec![],
             external_return_relations: vec![],
             external_return_call_bindings: vec![],
             external_deallocation_effects: vec![],

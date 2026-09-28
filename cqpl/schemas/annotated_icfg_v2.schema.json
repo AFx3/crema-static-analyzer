@@ -120,6 +120,13 @@
       "items": {
         "$ref": "#/$defs/conditionalReallocationRecord"
       }
+    },
+    "external_negative_evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/externalNegativeEvidenceRecordV1"
+      }
     }
   },
   "$defs": {
@@ -849,7 +856,9 @@
       ],
       "additionalProperties": false,
       "properties": {
-        "access_bases": {"$ref": "#/$defs/identity/properties/points_to"},
+        "access_bases": {
+          "$ref": "#/$defs/identity/properties/points_to"
+        },
         "points_to": {
           "type": "array",
           "items": {
@@ -2827,6 +2836,172 @@
           }
         }
       ]
+    },
+    "externalNegativeEvidenceRecordV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "callee": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_kind": {
+          "enum": [
+            "no_free_function",
+            "no_free_formal",
+            "no_capture_formal"
+          ]
+        },
+        "actual_variable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "basis": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attribute_origin": {
+          "const": "callee_declaration"
+        },
+        "body_status": {
+          "const": "bodyless"
+        },
+        "binding_basis": {
+          "const": "rustc_mir_call_binding_v1"
+        },
+        "formal_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "evidence_module": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "evidence_function": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "call_arguments": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "required": [
+        "node",
+        "callee",
+        "evidence_kind",
+        "evidence_source",
+        "basis",
+        "attribute_origin",
+        "body_status",
+        "binding_basis",
+        "evidence_module",
+        "evidence_function",
+        "call_arguments"
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "evidence_kind": {
+              "const": "no_free_function"
+            },
+            "evidence_source": {
+              "const": "llvm16_explicit_ir"
+            },
+            "basis": {
+              "const": "llvm16_explicit_function_nofree_v1"
+            }
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "formal_index"
+                ]
+              },
+              {
+                "required": [
+                  "actual_variable"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "properties": {
+            "evidence_kind": {
+              "const": "no_free_function"
+            },
+            "evidence_source": {
+              "const": "llvm16_verified_tli"
+            },
+            "basis": {
+              "const": "llvm16_tli_verified_function_nofree_v1"
+            }
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "formal_index"
+                ]
+              },
+              {
+                "required": [
+                  "actual_variable"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "properties": {
+            "evidence_kind": {
+              "const": "no_free_formal"
+            },
+            "evidence_source": {
+              "const": "llvm16_explicit_ir"
+            },
+            "basis": {
+              "const": "llvm16_explicit_formal_nofree_v1"
+            }
+          },
+          "required": [
+            "formal_index",
+            "actual_variable"
+          ]
+        },
+        {
+          "properties": {
+            "evidence_kind": {
+              "const": "no_capture_formal"
+            },
+            "evidence_source": {
+              "const": "llvm16_explicit_ir"
+            },
+            "basis": {
+              "const": "llvm16_explicit_formal_nocapture_v1"
+            }
+          },
+          "required": [
+            "formal_index",
+            "actual_variable"
+          ]
+        }
+      ]
     }
   },
   "allOf": [
@@ -3866,6 +4041,49 @@
         "required": [
           "capabilities"
         ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "external_negative_evidence_v1"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "required": [
+          "external_negative_evidence",
+          "llvm_memory_effects"
+        ],
+        "properties": {
+          "capabilities": {
+            "allOf": [
+              {
+                "contains": {
+                  "const": "llvm_memory_effects_v1"
+                }
+              },
+              {
+                "contains": {
+                  "const": "mir_semantics_v2"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "external_negative_evidence"
+          ]
+        }
       }
     }
   ]

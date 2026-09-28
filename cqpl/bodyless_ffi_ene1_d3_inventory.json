@@ -1,0 +1,235 @@
+{
+  "schema": "cqpl_ene1_d3_preflight_inventory_v1",
+  "baseline_commit": "da9555a6fa6a99f3607112be6b3d36c7acc01e84",
+  "branch": "cqpl6-bodyless-ffi-effect-gate",
+  "baseline_source_postimage_match": {
+    "cqpl/cqpl_checker/src/kripke.rs": "d499f922b3cf0f28b7d26cf16ad63d9205646d3be17527d552f99e3edf5192d9",
+    "cqpl/cqpl_checker/src/main.rs": "de72f0cd328539183dcb4d1047561add838b73f606ba2bdc9bce5937235cff3e",
+    "cqpl/schemas/annotated_icfg_v2.schema.json": "f96502b2fa03dd6c629519d898f9e875cbcfa3818c21e7bba456053e077bd582",
+    "crema/src/cqpl_export.rs": "1c29d86b1166c1e76d3dbe2e20f79e344f98a75b1efa5f9f71147379cec347ee",
+    "crema/src/identity.rs": "bcc57d27980391cbf21c4a75ff0a4b8adbf8a7b022efdc06779c02af16cd1e9a"
+  },
+  "artifact_run": "repro-results/bodyless-ffi-err1-d2-20260927T163641Z",
+  "artifact_gate_sha256": "497c3c14670fa84e293b4fd89465b65e6a3a801913d7a587fe22b9fad9ec1390",
+  "baseline_targets": 75,
+  "llvm_modules": 20,
+  "inventory": {
+    "explicit_function_nofree_calls": 0,
+    "tli_verified_function_nofree_calls": 0,
+    "explicit_formal_nofree_calls": 0,
+    "explicit_formal_nocapture_calls": 0,
+    "unresolved_formal_identity": 0,
+    "represented_body_candidates": 0
+  },
+  "inventory_scope": "Eligible bodyless Rust calls: zero candidate declarations in selected Rust FFI inventories. Existing accepted D2 artifacts match exact baseline semantic sources. Fresh baseline replay has not run.",
+  "observed_tli_declarations": [
+    {
+      "target": "b02_malloc_free_clean",
+      "module": 0,
+      "function": 1,
+      "callee": "malloc",
+      "evidence": [
+        "verified_tli_function_nofree"
+      ],
+      "selected_rust_foreign_declaration": false,
+      "represented_body": false
+    },
+    {
+      "target": "b03_malloc_double_free",
+      "module": 0,
+      "function": 1,
+      "callee": "malloc",
+      "evidence": [
+        "verified_tli_function_nofree"
+      ],
+      "selected_rust_foreign_declaration": false,
+      "represented_body": false
+    },
+    {
+      "target": "b09_malloc_free_family_match",
+      "module": 0,
+      "function": 1,
+      "callee": "malloc",
+      "evidence": [
+        "verified_tli_function_nofree"
+      ],
+      "selected_rust_foreign_declaration": false,
+      "represented_body": false
+    },
+    {
+      "target": "b10a_realloc_branch_clean",
+      "module": 0,
+      "function": 1,
+      "callee": "malloc",
+      "evidence": [
+        "verified_tli_function_nofree"
+      ],
+      "selected_rust_foreign_declaration": false,
+      "represented_body": false
+    },
+    {
+      "target": "b10b_realloc_then_old_use",
+      "module": 0,
+      "function": 1,
+      "callee": "malloc",
+      "evidence": [
+        "verified_tli_function_nofree"
+      ],
+      "selected_rust_foreign_declaration": false,
+      "represented_body": false
+    },
+    {
+      "target": "b10c_realloc_then_old_free",
+      "module": 0,
+      "function": 1,
+      "callee": "malloc",
+      "evidence": [
+        "verified_tli_function_nofree"
+      ],
+      "selected_rust_foreign_declaration": false,
+      "represented_body": false
+    },
+    {
+      "target": "b20a_realloc_delayed_outcome_no_cr1",
+      "module": 0,
+      "function": 1,
+      "callee": "malloc",
+      "evidence": [
+        "verified_tli_function_nofree"
+      ],
+      "selected_rust_foreign_declaration": false,
+      "represented_body": false
+    },
+    {
+      "target": "b20b_realloc_result_redefined_before_free",
+      "module": 0,
+      "function": 1,
+      "callee": "malloc",
+      "evidence": [
+        "verified_tli_function_nofree"
+      ],
+      "selected_rust_foreign_declaration": false,
+      "represented_body": false
+    },
+    {
+      "target": "b20c_realloc_zero_size_fail_closed",
+      "module": 0,
+      "function": 1,
+      "callee": "malloc",
+      "evidence": [
+        "verified_tli_function_nofree"
+      ],
+      "selected_rust_foreign_declaration": false,
+      "represented_body": false
+    },
+    {
+      "target": "b20d_realloc_dynamic_size_fail_closed",
+      "module": 0,
+      "function": 1,
+      "callee": "malloc",
+      "evidence": [
+        "verified_tli_function_nofree"
+      ],
+      "selected_rust_foreign_declaration": false,
+      "represented_body": false
+    },
+    {
+      "target": "b20f_realloc_failure_old_use_clean",
+      "module": 0,
+      "function": 1,
+      "callee": "malloc",
+      "evidence": [
+        "verified_tli_function_nofree"
+      ],
+      "selected_rust_foreign_declaration": false,
+      "represented_body": false
+    },
+    {
+      "target": "b20g_realloc_success_result_use_clean",
+      "module": 0,
+      "function": 1,
+      "callee": "malloc",
+      "evidence": [
+        "verified_tli_function_nofree"
+      ],
+      "selected_rust_foreign_declaration": false,
+      "represented_body": false
+    },
+    {
+      "target": "b20h_realloc_repeated_result_check",
+      "module": 0,
+      "function": 1,
+      "callee": "malloc",
+      "evidence": [
+        "verified_tli_function_nofree"
+      ],
+      "selected_rust_foreign_declaration": false,
+      "represented_body": false
+    },
+    {
+      "target": "b20j_second_realloc_chain_partial",
+      "module": 0,
+      "function": 1,
+      "callee": "malloc",
+      "evidence": [
+        "verified_tli_function_nofree"
+      ],
+      "selected_rust_foreign_declaration": false,
+      "represented_body": false
+    },
+    {
+      "target": "b33_calloc_wrapper_free_clean",
+      "module": 0,
+      "function": 1,
+      "callee": "calloc",
+      "evidence": [
+        "verified_tli_function_nofree"
+      ],
+      "selected_rust_foreign_declaration": false,
+      "represented_body": false
+    }
+  ],
+  "existing_explicit_ir_probe": {
+    "input": "cqpl/fixtures/efx1/explicit_effects.ll",
+    "input_sha256": "8b87e53deb27b676b6f4074d19424c746d794ed619bd10cd62bc3b6559cdf53d",
+    "artifact_path": "/tmp/cqpl-d3-preflight.QiG3V4",
+    "producer_exit_code": 0,
+    "validator_exit_code": 0,
+    "callee": "read_arg",
+    "arity": 1,
+    "explicit_function_nofree": true,
+    "explicit_formal_nofree": [
+      0
+    ],
+    "explicit_formal_nocapture": [
+      0
+    ],
+    "caller_language": "llvm",
+    "canonical_rust_actual_available": false
+  },
+  "blocker": "Required explicit-positive Rust end-to-end fixtures are not available through the current authored-C-only input path. Aliased two-formal explicit nocapture fixture cannot be selected from observed inventory. Do not invent attributes or weaken fixture criteria.",
+  "synthetic_compiler_verified_probe": {
+    "compiler": "/usr/bin/clang-14",
+    "normal_pipeline": "Rust extern -> authored evidence.c -> EFX1 -> ENE1 -> checker 12-query matrix",
+    "successful_fixture_probes": [
+      62,
+      63,
+      64,
+      65,
+      66,
+      67,
+      68,
+      69
+    ],
+    "formal_nofree_end_to_end_available": false,
+    "end_to_end_conjunction_available": false,
+    "record_counts": {
+      "function_nofree": 3,
+      "formal_nofree": 0,
+      "formal_nocapture": 3
+    },
+    "conjunction_unit_coverage": true,
+    "fixture_matrix_note": "b68 original getenv probe exposed verified TLI nofree; replaced with separately compiled unknown synthetic declaration, not an oracle rewrite."
+  },
+  "blocker_resolution": "User authorized separately compiled synthetic conformance library; noescape on its declaration yields genuine explicit nocapture. Library implementation remains outside analyzed translation unit."
+}

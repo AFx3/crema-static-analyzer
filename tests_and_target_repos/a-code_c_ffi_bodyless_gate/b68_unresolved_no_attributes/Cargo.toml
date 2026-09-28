@@ -1,0 +1,4 @@
+[package]
+name = "b68_unresolved_no_attributes"
+version = "0.1.0"
+edition = "2021"

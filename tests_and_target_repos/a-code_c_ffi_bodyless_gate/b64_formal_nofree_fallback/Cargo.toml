@@ -1,0 +1,4 @@
+[package]
+name = "b64_formal_nofree_fallback"
+version = "0.1.0"
+edition = "2021"
