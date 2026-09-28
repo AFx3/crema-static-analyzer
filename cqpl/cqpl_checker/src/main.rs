@@ -329,6 +329,16 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
 
     let external_formal_memory_effects_present = root.get("external_formal_memory_effects").is_some();
     let has_ene1 = capabilities.contains("external_negative_evidence_v1");
+    let has_dcp1 = capabilities.contains("external_deallocation_call_provenance_v1");
+    let dcp1_payload = root.get("external_deallocation_call_provenance");
+    if has_dcp1 != dcp1_payload.is_some() {
+        return Err("DCP1 capability/payload must appear together".into());
+    }
+    if let Some(payload) = dcp1_payload {
+        if !payload.as_array().is_some_and(|records| !records.is_empty()) {
+            return Err("DCP1 requires nonempty record array".into());
+        }
+    }
     if has_ene1 != root.get("external_negative_evidence").is_some() {
         return Err("ENE1 capability/payload must appear together".into());
     }
@@ -708,6 +718,7 @@ fn run() -> Result<(), String> {
     let allocation_existence_guards = allocation_existence_guard_overlay_from_json(&raw_value)?;
     let reallocation_boundaries = reallocation_boundary_overlay_from_json(&raw_value)?;
     let conditional_reallocations = conditional_reallocation_overlay_from_json(&raw_value)?;
+    let dcp1_payload = raw_value.get("external_deallocation_call_provenance").cloned();
     let annotated: AnnotatedIcfg = serde_json::from_value(raw_value)
         .map_err(|e| format!("invalid annotated ICFG JSON: {e}"))?;
     let base_k = Kripke::from_annotated_icfg_with_all_diagnostic_overlays(
@@ -719,6 +730,7 @@ fn run() -> Result<(), String> {
         reallocation_boundaries,
         conditional_reallocations,
     )?;
+    base_k.validate_external_deallocation_call_provenance_json(dcp1_payload.as_ref())?;
     let requested_entry = entry_override.as_deref().unwrap_or(&base_k.entry);
     let k = base_k.project_from_entry(requested_entry, intra)?;
 
@@ -883,6 +895,30 @@ mod tests {
             let mut bad = value.clone(); bad["external_negative_evidence"][0][field] = json!(null);
             assert!(validate_boundary_requirements(&bad).is_err());
         }
+    }
+
+    #[test]
+    fn dcp1_raw_boundary_atomicity() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["external_deallocation_call_provenance_v1"]);
+        value["external_deallocation_call_provenance"] = json!([{
+            "node":"rust::main::bb0", "callee":"free", "arity":1,
+            "formal_index":0, "actual_variable":null, "family":"c_malloc",
+            "operation":"free", "language":"c", "body_status":"bodyless",
+            "certainty":"may_effect", "basis":"rust_mir_exact_external_free_call_v1"
+        }]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+        for payload in [json!([]), json!(null), json!({})] {
+            let mut bad = value.clone();
+            bad["external_deallocation_call_provenance"] = payload;
+            assert!(validate_boundary_requirements(&bad).is_err());
+        }
+        let mut missing_payload = value.clone();
+        missing_payload.as_object_mut().unwrap().remove("external_deallocation_call_provenance");
+        assert!(validate_boundary_requirements(&missing_payload).is_err());
+        let mut missing_capability = value;
+        missing_capability["capabilities"] = json!([]);
+        assert!(validate_boundary_requirements(&missing_capability).is_err());
     }
 
     #[test]

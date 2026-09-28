@@ -12,6 +12,13 @@
   ],
   "additionalProperties": false,
   "properties": {
+    "external_deallocation_call_provenance": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/externalDeallocationCallProvenanceV1"
+      }
+    },
     "external_return_relations": {
       "type": "array",
       "minItems": 1,
@@ -130,6 +137,24 @@
     }
   },
   "$defs": {
+    "externalDeallocationCallProvenanceV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node", "callee", "arity", "formal_index", "actual_variable", "family", "operation", "language", "body_status", "certainty", "basis"],
+      "properties": {
+        "node": {"type": "string", "pattern": "^rust::.+::bb[0-9]+$"},
+        "callee": {"const": "free"},
+        "arity": {"const": 1},
+        "formal_index": {"const": 0},
+        "actual_variable": {"type": ["string", "null"]},
+        "family": {"const": "c_malloc"},
+        "operation": {"const": "free"},
+        "language": {"const": "c"},
+        "body_status": {"const": "bodyless"},
+        "certainty": {"const": "may_effect"},
+        "basis": {"const": "rust_mir_exact_external_free_call_v1"}
+      }
+    },
     "external_return_relation_record_v1": {
       "type": "object",
       "additionalProperties": false,
@@ -3005,6 +3030,20 @@
     }
   },
   "allOf": [
+    {
+      "if": {
+        "required": ["capabilities"],
+        "properties": {"capabilities": {"contains": {"const": "external_deallocation_call_provenance_v1"}}}
+      },
+      "then": {"required": ["external_deallocation_call_provenance"]}
+    },
+    {
+      "if": {"required": ["external_deallocation_call_provenance"]},
+      "then": {
+        "required": ["capabilities"],
+        "properties": {"capabilities": {"contains": {"const": "external_deallocation_call_provenance_v1"}}}
+      }
+    },
     {
       "if": {
         "properties": {

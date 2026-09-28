@@ -1,0 +1,10 @@
+{
+  "schema": "cqpl_dcp1_d4p0_preimage_sha256_v1",
+  "baseline_commit": "8ebf4a9d7b5718d5632e946813710e45d4d9fe85",
+  "semantic_source_preimages": {
+    "crema/src/cqpl_export.rs": "4b0cda67fd547b8bd9fbd4e99469766ee4e793841fbe8b5489db6f5bfba93368",
+    "cqpl/cqpl_checker/src/kripke.rs": "141680bcf4559791ecdd64671697f00ca5760d2d367bde33d57128ee1faf8ff3",
+    "cqpl/cqpl_checker/src/main.rs": "14b0397e38f89e8dd9ed82f099c381b858b8293ae7895ecc23f0f39ed70cbd8e",
+    "cqpl/schemas/annotated_icfg_v2.schema.json": "13110e887f86d2ebafef728943064f376b5c651d19dbe0a3f5fd911ab78b10e3"
+  }
+}

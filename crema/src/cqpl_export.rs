@@ -29,6 +29,8 @@ use once_cell::sync::Lazy;
 #[derive(Debug, Clone, Serialize)]
 struct AnnotatedIcfg {
     #[serde(skip_serializing_if = "Option::is_none")]
+    external_deallocation_call_provenance: Option<Vec<ExternalDeallocationCallProvenanceV1>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     external_negative_evidence: Option<Vec<ExternalNegativeEvidenceRecord>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     external_return_relations: Option<Vec<ExternalReturnRelationRecord>>,
@@ -955,6 +957,13 @@ fn export_cqpl_annotated_icfg_versioned(
     }
     let external_negative_evidence = (!negative_records.is_empty()).then_some(negative_records);
 
+    let dcp1_records = if schema_version == 2 {
+        external_deallocation_call_provenance_records(
+            icfg, &ffi_functions, &represented_c_functions, &variable_ids,
+        )
+    } else { vec![] };
+    let external_deallocation_call_provenance = (!dcp1_records.is_empty()).then_some(dcp1_records);
+
     if variable_ids.is_empty() {
         return Err("CQPL annotated ICFG contains no program variables".into());
     }
@@ -989,7 +998,9 @@ fn export_cqpl_annotated_icfg_versioned(
 
     let has_external_return_relations = external_return_relations.is_some();
     let has_ene1 = external_negative_evidence.is_some();
+    let has_dcp1 = external_deallocation_call_provenance.is_some();
     let output = AnnotatedIcfg {
+        external_deallocation_call_provenance,
         external_negative_evidence,
         external_return_relations,
         external_return_call_bindings,
@@ -1024,6 +1035,7 @@ fn export_cqpl_annotated_icfg_versioned(
                 caps.push("external_formal_memory_effects_v2");
             }
             if has_ene1 { caps.push("external_negative_evidence_v1"); }
+            if has_dcp1 { caps.push("external_deallocation_call_provenance_v1"); }
             if has_external_return_relations {
                 caps.push("external_return_relations_v1");
             }
@@ -3925,6 +3937,75 @@ fn represented_c_function_names(icfg: &GlobalICFGOrdered) -> HashSet<String> {
         .collect()
 }
 
+/// Exact structured admission for DCP1. This intentionally does not inspect
+/// `details`, labels, allocation identity, or historical free-call text helpers.
+fn bodyless_direct_c_free_call_contract<'a>(
+    node: &'a GlobalICFGNode,
+    ffi_functions: &HashSet<String>,
+    represented_c_functions: &HashSet<String>,
+) -> Option<&'a MirCallArgument> {
+    let GlobalICFGNode::Mir(bb) = node else { return None; };
+    let Some(MirTerminator::Call {
+        function_called, callee_def_path, arguments, ..
+    }) = &bb.terminator else { return None; };
+    if function_called != "free" || callee_def_path.as_deref() != Some("free")
+        || arguments.len() != 1 || !ffi_functions.contains("free")
+        || represented_c_functions.contains("free") {
+        return None;
+    }
+    arguments.first()
+}
+
+/// DCP1 proves only the exact call contract; this record has no event producer.
+#[derive(Debug, Clone, Serialize)]
+struct ExternalDeallocationCallProvenanceV1 {
+    node: String,
+    callee: &'static str,
+    arity: usize,
+    formal_index: usize,
+    actual_variable: Option<String>,
+    family: &'static str,
+    operation: &'static str,
+    language: &'static str,
+    body_status: &'static str,
+    certainty: &'static str,
+    basis: &'static str,
+}
+
+fn dcp1_existing_canonical_actual(
+    node_id: &str, argument: &MirCallArgument, catalog: &BTreeSet<Name>,
+) -> Option<String> {
+    let scope = mir_function_scope_from_node_id(node_id)?;
+    let function = scope.strip_prefix("rust::")?;
+    let canonical = ProgramVarId::rust(function, &argument.arg)?.canonical_string();
+    catalog.contains(&canonical).then_some(canonical)
+}
+
+fn external_deallocation_call_provenance_records(
+    icfg: &GlobalICFGOrdered,
+    ffi_functions: &HashSet<String>,
+    represented_c_functions: &HashSet<String>,
+    catalog: &BTreeSet<Name>,
+) -> Vec<ExternalDeallocationCallProvenanceV1> {
+    let mut records = Vec::new();
+    for (node_id, node) in &icfg.ordered_nodes {
+        let Some(argument) = bodyless_direct_c_free_call_contract(
+            node, ffi_functions, represented_c_functions,
+        ) else { continue; };
+        if !node_id.starts_with("rust::") || mir_function_scope_from_node_id(node_id).is_none() {
+            continue;
+        }
+        records.push(ExternalDeallocationCallProvenanceV1 {
+            node: node_id.clone(), callee: "free", arity: 1, formal_index: 0,
+            actual_variable: dcp1_existing_canonical_actual(node_id, argument, catalog),
+            family: "c_malloc", operation: "free", language: "c",
+            body_status: "bodyless", certainty: "may_effect",
+            basis: "rust_mir_exact_external_free_call_v1",
+        });
+    }
+    records
+}
+
 fn insert_event_source(
     events: &mut EventSourceMap,
     label: EventLabel,
@@ -4621,6 +4702,43 @@ mod tests {
                 unwind_target: "continue".into(),
             }),
         })
+    }
+
+    #[test]
+    fn dcp1_exact_structured_free_admission() {
+        let ffi = HashSet::from(["free".to_string()]);
+        let empty = HashSet::new();
+        let call = efm2_call("free", &["Local(_1)"]);
+        assert!(bodyless_direct_c_free_call_contract(&call, &ffi, &empty).is_some());
+        assert!(bodyless_direct_c_free_call_contract(&call, &empty, &empty).is_none());
+        assert!(bodyless_direct_c_free_call_contract(&call, &ffi, &ffi).is_none());
+        assert!(bodyless_direct_c_free_call_contract(&efm2_call("free", &[]), &ffi, &empty).is_none());
+        assert!(bodyless_direct_c_free_call_contract(&efm2_call("free", &["_1", "_2"]), &ffi, &empty).is_none());
+        for callee in ["my_free", "free_wrapper", "realloc", "std::alloc::dealloc", "mem::drop"] {
+            assert!(bodyless_direct_c_free_call_contract(&efm2_call(callee, &["_1"]), &ffi, &empty).is_none());
+        }
+        let mut poisoned = efm2_call("my_free", &["_1"]);
+        if let GlobalICFGNode::Mir(bb) = &mut poisoned {
+            if let Some(MirTerminator::Call { details, .. }) = &mut bb.terminator {
+                *details = "call free(copy _1)".into();
+            }
+        }
+        assert!(bodyless_direct_c_free_call_contract(&poisoned, &ffi, &empty).is_none());
+        let mut wrong_decl = call.clone();
+        if let GlobalICFGNode::Mir(bb) = &mut wrong_decl {
+            if let Some(MirTerminator::Call { callee_def_path, .. }) = &mut bb.terminator {
+                *callee_def_path = Some("other::free".into());
+            }
+        }
+        assert!(bodyless_direct_c_free_call_contract(&wrong_decl, &ffi, &empty).is_none());
+        let argument = bodyless_direct_c_free_call_contract(&call, &ffi, &empty).unwrap();
+        let catalog = BTreeSet::from(["rust::main::Local(_1)".to_string()]);
+        assert_eq!(dcp1_existing_canonical_actual("rust::main::bb0", argument, &catalog),
+                   Some("rust::main::Local(_1)".into()));
+        assert_eq!(dcp1_existing_canonical_actual("rust::main::bb0", argument, &BTreeSet::new()), None);
+        // An unscoped legacy local does not authorize a new scoped variable.
+        assert_eq!(dcp1_existing_canonical_actual("rust::main::bb0", argument,
+                   &BTreeSet::from(["Local(_1)".to_string()])), None);
     }
 
     #[test]

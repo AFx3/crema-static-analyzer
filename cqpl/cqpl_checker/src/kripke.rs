@@ -3601,6 +3601,82 @@ fn validate_external_negative_evidence(
     Ok(())
 }
 
+/// Call-contract proof only. Validation must not create a drop or allocation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExternalDeallocationCallProvenanceV1 {
+    pub node: String,
+    pub callee: String,
+    pub arity: usize,
+    pub formal_index: usize,
+    pub actual_variable: Option<String>,
+    pub family: String,
+    pub operation: String,
+    pub language: String,
+    pub body_status: String,
+    pub certainty: String,
+    pub basis: String,
+}
+
+fn validate_external_deallocation_call_provenance(
+    records: &[ExternalDeallocationCallProvenanceV1],
+    variables: &BTreeMap<String, ProgramVariable>,
+    nodes: &BTreeMap<String, AnnotatedNode>,
+) -> Result<(), String> {
+    let mut seen = BTreeSet::new();
+    for record in records {
+        if record.callee != "free" || record.arity != 1 || record.formal_index != 0
+            || record.family != "c_malloc" || record.operation != "free"
+            || record.language != "c" || record.body_status != "bodyless"
+            || record.certainty != "may_effect"
+            || record.basis != "rust_mir_exact_external_free_call_v1" {
+            return Err("DCP1 invalid closed free-call tuple".into());
+        }
+        let node = nodes.get(&record.node).ok_or("DCP1 unknown call node")?;
+        let scope = rust_function_scope(&record.node).ok_or("DCP1 non-Rust call node")?;
+        if !node.semantic_labels.iter().any(|label| label == "term:call") {
+            return Err("DCP1 requires Rust term:call node".into());
+        }
+        if nodes.keys().any(|id| id.starts_with("llvm::free::")) {
+            return Err("DCP1 cannot summarize represented free body".into());
+        }
+        if let Some(actual) = &record.actual_variable {
+            let valid_scope = actual.strip_prefix(&format!("{scope}::"))
+                .and_then(|local| local.strip_prefix("Local(_"))
+                .and_then(|digits| digits.strip_suffix(')'))
+                .is_some_and(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()));
+            if !valid_scope || !variables.get(actual).is_some_and(|var| var.language == ProgramLanguage::Rust) {
+                return Err("DCP1 actual must be declared same-scope Rust local".into());
+            }
+        }
+        if !seen.insert((&record.node, &record.callee, record.formal_index)) {
+            return Err("DCP1 duplicate call provenance".into());
+        }
+    }
+    Ok(())
+}
+
+impl Kripke {
+    pub fn validate_external_deallocation_call_provenance_json(
+        &self, payload: Option<&serde_json::Value>,
+    ) -> Result<(), String> {
+        let has_cap = self.capabilities.contains("external_deallocation_call_provenance_v1");
+        if has_cap != payload.is_some() {
+            return Err("DCP1 capability/payload must appear together".into());
+        }
+        let Some(payload) = payload else { return Ok(()); };
+        if self.schema_version != 2 {
+            return Err("DCP1 requires schema v2".into());
+        }
+        let records: Vec<ExternalDeallocationCallProvenanceV1> =
+            serde_json::from_value(payload.clone()).map_err(|e| format!("DCP1 invalid payload: {e}"))?;
+        if records.is_empty() {
+            return Err("DCP1 requires nonempty payload".into());
+        }
+        validate_external_deallocation_call_provenance(&records, &self.variables, &self.nodes)
+    }
+}
+
 fn validate_external_return_relations(
     records: &[ExternalReturnRelationRecord], bindings: &[ExternalReturnCallBinding],
     variables: &BTreeMap<String, ProgramVariable>, nodes: &BTreeMap<String, AnnotatedNode>,
@@ -3955,6 +4031,68 @@ fn validate_memory(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dcp1_closed_call_contract_adversarial() {
+        let mut input = base();
+        input.schema_version = 2;
+        input.entry = "rust::main::bb0".into();
+        input.capabilities.push("external_deallocation_call_provenance_v1".into());
+        input.capabilities.push("mir_semantic_labels_v1".into());
+        input.capabilities.push("mir_semantics_v2".into());
+        input.nodes[0].id = input.entry.clone();
+        input.nodes[0].semantic_labels.push("term:call".into());
+        input.variables.push(ProgramVariable {
+            id: "rust::main::Local(_1)".into(), language: ProgramLanguage::Rust,
+            display: None, function: None,
+        });
+        let k = Kripke::from_annotated_icfg(input).unwrap();
+        let valid = serde_json::json!({"external_deallocation_call_provenance": [{
+            "node":"rust::main::bb0", "callee":"free", "arity":1,
+            "formal_index":0, "actual_variable":"rust::main::Local(_1)",
+            "family":"c_malloc", "operation":"free", "language":"c",
+            "body_status":"bodyless", "certainty":"may_effect",
+            "basis":"rust_mir_exact_external_free_call_v1"
+        }]});
+        assert!(k.validate_external_deallocation_call_provenance_json(valid.get("external_deallocation_call_provenance")).is_ok());
+        let mut nullable = valid.clone();
+        nullable["external_deallocation_call_provenance"][0]["actual_variable"] = serde_json::Value::Null;
+        assert!(k.validate_external_deallocation_call_provenance_json(nullable.get("external_deallocation_call_provenance")).is_ok());
+        for (field, value) in [
+            ("callee", serde_json::json!("my_free")), ("arity", serde_json::json!(2)),
+            ("formal_index", serde_json::json!(1)), ("family", serde_json::json!("rust_global")),
+            ("operation", serde_json::json!("drop")), ("language", serde_json::json!("rust")),
+            ("body_status", serde_json::json!("represented")),
+            ("certainty", serde_json::json!("must_effect")),
+            ("basis", serde_json::json!("text_free_match")),
+            ("node", serde_json::json!("rust::main::bb99")),
+            ("actual_variable", serde_json::json!("rust::other::Local(_1)")),
+            ("actual_variable", serde_json::json!("rust::main::Local(_99)")),
+        ] {
+            let mut attacked = valid.clone();
+            attacked["external_deallocation_call_provenance"][0][field] = value;
+            assert!(k.validate_external_deallocation_call_provenance_json(attacked.get("external_deallocation_call_provenance")).is_err(), "{field}");
+        }
+        let mut duplicate = valid.clone();
+        let record = duplicate["external_deallocation_call_provenance"][0].clone();
+        duplicate["external_deallocation_call_provenance"].as_array_mut().unwrap().push(record);
+        assert!(k.validate_external_deallocation_call_provenance_json(duplicate.get("external_deallocation_call_provenance")).is_err());
+        let mut extra = valid.clone();
+        extra["external_deallocation_call_provenance"][0]["extra"] = serde_json::json!(1);
+        assert!(k.validate_external_deallocation_call_provenance_json(extra.get("external_deallocation_call_provenance")).is_err());
+        let mut no_cap = k.clone();
+        no_cap.capabilities.remove("external_deallocation_call_provenance_v1");
+        assert!(no_cap.validate_external_deallocation_call_provenance_json(valid.get("external_deallocation_call_provenance")).is_err());
+        assert!(k.validate_external_deallocation_call_provenance_json(None).is_err());
+        let mut noncall = k.clone();
+        noncall.nodes.get_mut("rust::main::bb0").unwrap().semantic_labels.clear();
+        assert!(noncall.validate_external_deallocation_call_provenance_json(valid.get("external_deallocation_call_provenance")).is_err());
+        let mut represented = k.clone();
+        let mut body = represented.nodes["rust::main::bb0"].clone();
+        body.id = "llvm::free::node1".into();
+        represented.nodes.insert(body.id.clone(), body);
+        assert!(represented.validate_external_deallocation_call_provenance_json(valid.get("external_deallocation_call_provenance")).is_err());
+    }
 
     fn mem(aliases: &[&str], value: CellValue) -> AbstractMemoryAnnotation {
         AbstractMemoryAnnotation { cells: vec![AbstractCell {
