@@ -43,6 +43,24 @@ use std::path::PathBuf;
 use crate::abstract_domain::set_entrypoint;
 use crate::cqpl_export::{export_cqpl_annotated_icfg, export_cqpl_annotated_icfg_with_identity_and_disposition};
 use crate::identity::{fixed_point_disposition_identity_analysis, fixed_point_identity_analysis};
+
+fn crema_manifest_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml")
+}
+
+fn ffi_extraction_args(project_path: &Path, tool_dir: &Path) -> Vec<std::ffi::OsString> {
+    let mut args = vec![
+        "run".into(),
+        "--manifest-path".into(),
+        crema_manifest_path().into_os_string(),
+        "--package".into(),
+        "ffi_extraction".into(),
+        "--".into(),
+    ];
+    args.push(project_path.as_os_str().to_owned());
+    args.push(tool_dir.as_os_str().to_owned());
+    args
+}
 use crate::cargo_project::{
     AnalysisMode, CargoBuildInvocation, CargoCliConfig, CargoTargetKind,
     discover_analysis_plan, isolated_cargo_target_dir, normalize_local_def_path_request, run_selected_target_with_cargo,
@@ -325,14 +343,7 @@ fn main() {
         });
     }
     let extraction_status = Command::new("cargo")
-    .args(&[
-        "run", 
-        "--package", 
-        "ffi_extraction", 
-        "--", 
-        project_path.to_str().unwrap(),
-        tool_dir.to_str().unwrap() // pass tool's dir as output location
-    ])
+    .args(ffi_extraction_args(&project_path, &tool_dir))
     .status()
     .expect("Failed to run FFI extraction");
     if !extraction_status.success() {
@@ -1287,7 +1298,7 @@ Perform a clean rebuild of target 'svf-example' before running CREMA.",
 
 #[cfg(test)]
 mod c_source_discovery_tests {
-    use super::{find_c_files, validate_live_svf_producer_contract};
+    use super::{crema_manifest_path, ffi_extraction_args, find_c_files, validate_live_svf_producer_contract};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1389,5 +1400,49 @@ mod c_source_discovery_tests {
 
         validate_live_svf_producer_contract(&root).unwrap();
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ffi_extraction_manifest_is_independent_of_caller_cwd() {
+        let project = fresh_test_dir("crema-external-cargo-project");
+        fs::write(project.join("Cargo.toml"), "[package]\nname='subject'\nversion='0.1.0'\n").unwrap();
+        let args = ffi_extraction_args(&project, &project);
+        let manifest_index = args.iter().position(|arg| arg == "--manifest-path").unwrap();
+        assert_eq!(PathBuf::from(&args[manifest_index + 1]), crema_manifest_path());
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn ffi_extraction_manifest_resolves_to_crema_cargo_toml() {
+        let expected = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        assert_eq!(crema_manifest_path().canonicalize().unwrap(), expected.canonicalize().unwrap());
+    }
+
+    #[test]
+    fn external_subject_manifest_is_not_selected_as_ffi_workspace() {
+        let subject = fresh_test_dir("crema-arbitrary-subject-workspace");
+        let subject_manifest = subject.join("Cargo.toml");
+        fs::write(&subject_manifest, "[workspace]\nmembers=[]\n").unwrap();
+        let args = ffi_extraction_args(&subject, &subject);
+        let selected_manifest = args.iter().position(|arg| arg == "--manifest-path").unwrap() + 1;
+        assert_ne!(PathBuf::from(&args[selected_manifest]), subject_manifest);
+        assert_eq!(args[selected_manifest + 1], "--package");
+        assert_eq!(args[selected_manifest + 2], "ffi_extraction");
+        fs::remove_dir_all(subject).unwrap();
+    }
+
+    #[test]
+    fn ffi_extraction_normal_invocation_keeps_subject_arguments() {
+        let project = PathBuf::from("/external/subject");
+        let tool_output = PathBuf::from("/external/tool-output");
+        let args = ffi_extraction_args(&project, &tool_output);
+        assert_eq!(args[0], "run");
+        assert_eq!(args[1], "--manifest-path");
+        assert_eq!(args[2], crema_manifest_path().as_os_str());
+        assert_eq!(args[3], "--package");
+        assert_eq!(args[4], "ffi_extraction");
+        assert_eq!(args[5], "--");
+        assert_eq!(args[6], project.as_os_str());
+        assert_eq!(args[7], tool_output.as_os_str());
     }
 }
