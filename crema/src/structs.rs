@@ -928,5 +928,98 @@ pub struct GlobalICFGOrdered {
     pub rust_functions: BTreeMap<String, RustFunctionMetadata>,
     #[serde(default)]
     pub rust_calls: Vec<RustCallMetadata>,
+    /// Producer evidence for opt-in dependency-body ingestion.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependency_body_ingestion_v1: Option<DependencyBodyIngestionExport>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DependencyBodyIngestionExport {
+    pub capability: String,
+    pub target_triple: String,
+    pub crate_correlations: Vec<serde_json::Value>,
+    pub package_scope: Vec<serde_json::Value>,
+    pub body_statuses: Vec<serde_json::Value>,
+    pub exact_call_bindings: Vec<serde_json::Value>,
+    /// Exact compiler-derived semantic call identities joined to the existing
+    /// ICFG MIR call nodes by the producer while both views share one rustc
+    /// session. Call coverage consumers must use this relation, never display
+    /// names, as the bridge key.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub icfg_callsite_links: Vec<serde_json::Value>,
+    /// DEP1-P2 control-flow provenance. This references the existing call/body
+    /// producers and the ordinary global ICFG nodes/edges; it carries no
+    /// resource identity semantics.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icfg_stitching_v1: Option<serde_json::Value>,
+    /// Context-explicit execution-state provenance.  This is present only on
+    /// DEP1-enabled output after the producer has replaced the flat Rust
+    /// call/return adjacency with its finite execution graph.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_execution_graph_v1: Option<serde_json::Value>,
+}
+
+/// Canonical compiler body/code provenance.  `concrete_instance_id` is the
+/// persisted rustc-derived Instance identity; basic blocks are shared across
+/// execution contexts and are never reacquired for each caller.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct CanonicalCodeNodeIdentity {
+    pub concrete_instance_id: String,
+    pub basic_block: u32,
+}
+
+/// One ordered activation context over canonical code.  Static COV1 call keys
+/// are the context elements; order is semantically significant.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct ExecutionStateIdentity {
+    pub code: CanonicalCodeNodeIdentity,
+    pub context: Vec<String>,
+}
+
+/// Centralized deterministic serialization for context-qualified Rust MIR
+/// nodes.  Length-prefixing plus hexadecimal encoding is injective and does
+/// not depend on display names, paths, or session-local compiler indices.
+pub fn execution_state_node_id(identity: &ExecutionStateIdentity) -> String {
+    fn append_field(out: &mut Vec<u8>, value: &[u8]) {
+        out.extend_from_slice(&(value.len() as u64).to_be_bytes());
+        out.extend_from_slice(value);
+    }
+    let mut bytes = b"crema-execution-state-v1".to_vec();
+    append_field(&mut bytes, identity.code.concrete_instance_id.as_bytes());
+    bytes.extend_from_slice(&(identity.context.len() as u64).to_be_bytes());
+    for call_key in &identity.context {
+        append_field(&mut bytes, call_key.as_bytes());
+    }
+    let mut hex = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write;
+        let _ = write!(&mut hex, "{byte:02x}");
+    }
+    format!("rust::exec-v1::{hex}::bb{}", identity.code.basic_block)
+}
+
+#[cfg(test)]
+mod execution_state_identity_tests {
+    use super::*;
+
+    fn state(context: &[&str]) -> ExecutionStateIdentity {
+        ExecutionStateIdentity {
+            code: CanonicalCodeNodeIdentity {
+                concrete_instance_id: "instance-hash-v1:0123456789abcdef".into(),
+                basic_block: 7,
+            },
+            context: context.iter().map(|part| (*part).to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn contexts_are_ordered_and_do_not_duplicate_canonical_code() {
+        let a = state(&["call-A"]);
+        let b = state(&["call-B"]);
+        assert_eq!(a.code, b.code);
+        assert_ne!(execution_state_node_id(&a), execution_state_node_id(&b));
+        assert_ne!(execution_state_node_id(&state(&["outer", "inner"])),
+                   execution_state_node_id(&state(&["inner", "outer"])));
+        assert!(execution_state_node_id(&a).ends_with("::bb7"));
+    }
+}

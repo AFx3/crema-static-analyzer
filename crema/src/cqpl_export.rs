@@ -28,6 +28,17 @@ use once_cell::sync::Lazy;
 /// inspecting the existing ICFG nodes.
 #[derive(Debug, Clone, Serialize)]
 struct AnnotatedIcfg {
+    /// DEP1-P2 execution-state provenance. Program successors remain the exact
+    /// producer graph; this sidecar lets consumers map opaque node IDs back to
+    /// one canonical MIR node and its ordered call context without parsing IDs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    context_execution_graph_v1: Option<serde_json::Value>,
+    /// DEP1-COV1 diagnostic provenance only. The checker does not consume this
+    /// ledger; each record references an existing semantic producer artifact.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    call_semantic_coverage: Option<Vec<serde_json::Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    call_semantic_coverage_complete: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     external_call_bindings: Option<Vec<ExternalCallBindingV1>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -247,6 +258,8 @@ struct FfiArgumentIdentityRecord {
 struct AllocationExistenceGuardRecord {
     allocation: String,
     producer_call_node: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    producer_call_canonical_node: Option<String>,
     predicate_call_node: String,
     switch_node: String,
     tested_variable: String,
@@ -1026,6 +1039,16 @@ fn export_cqpl_annotated_icfg_versioned(
             external_negative_evidence.as_deref().unwrap_or_default(),
         )
     } else { (None, None) };
+    let (call_semantic_coverage, call_semantic_coverage_complete) =
+        if icfg.dependency_body_ingestion_v1.is_some() {
+            let (records, complete) = dep1_call_semantic_coverage(
+                icfg,
+                external_call_bindings.as_deref().unwrap_or_default(),
+                external_library_effects.as_deref().unwrap_or_default(),
+                &reachable,
+            ).expect("DEP1 export presence checked");
+            (Some(records), Some(complete))
+        } else { (None, None) };
     let ffi_argument_identity = if schema_version == 2 {
         let records = ffi_argument_identity_records(
             icfg,
@@ -1041,6 +1064,10 @@ fn export_cqpl_annotated_icfg_versioned(
     let has_dcp1 = external_deallocation_call_provenance.is_some();
     let has_ele1 = external_call_bindings.is_some();
     let output = AnnotatedIcfg {
+        context_execution_graph_v1: icfg.dependency_body_ingestion_v1.as_ref()
+            .and_then(|dep| dep.context_execution_graph_v1.clone()),
+        call_semantic_coverage,
+        call_semantic_coverage_complete,
         external_call_bindings,
         external_library_effects,
         external_deallocation_call_provenance,
@@ -1080,6 +1107,11 @@ fn export_cqpl_annotated_icfg_versioned(
             if has_ene1 { caps.push("external_negative_evidence_v1"); }
             if has_dcp1 { caps.push("external_deallocation_call_provenance_v1"); }
             if has_ele1 { caps.push("external_library_effects_v1"); }
+            if icfg.dependency_body_ingestion_v1.as_ref()
+                .and_then(|dep| dep.context_execution_graph_v1.as_ref()).is_some()
+            {
+                caps.push("context_explicit_icfg_v1");
+            }
             if has_external_return_relations {
                 caps.push("external_return_relations_v1");
             }
@@ -1337,7 +1369,16 @@ fn represented_c_allocator_exact_return(
             continue;
         }
         let Some(mir_var) = dummy.mir_var.as_deref() else { continue; };
-        if ProgramVarId::rust(rust_function, mir_var).as_ref() != Some(tested_variable) {
+        // The C/LLVM return relation is keyed by the pre-expansion MIR
+        // callsite, while `tested_variable` is scoped by the exact execution
+        // activation.  Once context states are introduced those function
+        // namespaces intentionally differ; require the same MIR local index
+        // here, with the exact activation checked by the caller.
+        let same_local = match (ProgramVarId::rust(rust_function, mir_var), tested_variable) {
+            (Some(ProgramVarId::Rust { local: a, .. }), ProgramVarId::Rust { local: b, .. }) => a == *b,
+            _ => false,
+        };
+        if !same_local {
             continue;
         }
         if llvm_function_from_global_node_id(&dummy.incoming_edge) != Some(function)
@@ -1408,17 +1449,32 @@ fn c_malloc_origin_return_basis(
         // proof does not carry the independent MUST-null source certificate.
         return None;
     }
-    if node_id.ends_with(&format!("::{producer_call_node}"))
+    let producer_canonical_node = canonical_mir_node_id(icfg, producer_call_node)
+        .unwrap_or(producer_call_node);
+    if node_id.ends_with(&format!("::{producer_canonical_node}"))
         && represented_c_allocator_exact_return(
             icfg,
             node_id,
-            producer_call_node,
+            producer_canonical_node,
             tested_variable,
         )
     {
         return Some("svf_single_source_c_allocator_return_v1");
     }
     None
+}
+
+/// Map a context-qualified execution MIR node to its canonical pre-expansion
+/// MIR node for producer provenance checks.  The value is diagnostic/source
+/// provenance, not a semantic identity or call-resolution key.
+fn canonical_mir_node_id<'a>(icfg: &'a GlobalICFGOrdered, node_id: &'a str) -> Option<&'a str> {
+    let dep = icfg.dependency_body_ingestion_v1.as_ref()?;
+    let states = dep.context_execution_graph_v1.as_ref()?.get("states")?.as_array()?;
+    states.iter().find_map(|state| {
+        (state.get("execution_node")?.as_str()? == node_id)
+            .then(|| state.get("canonical_node_id")?.as_str())
+            .flatten()
+    })
 }
 
 fn allocation_existence_guard_records(
@@ -1520,6 +1576,8 @@ fn allocation_existence_guard_records(
         records.insert(AllocationExistenceGuardRecord {
             allocation: stable_allocation_id(allocation),
             producer_call_node: producer_call_node.to_string(),
+            producer_call_canonical_node: canonical_mir_node_id(icfg, producer_call_node)
+                .map(str::to_owned),
             predicate_call_node: call_node_id.clone(),
             switch_node: switch_node_id,
             tested_variable: tested_variable.canonical_string(),
@@ -4128,6 +4186,184 @@ fn external_library_effect_envelopes(
     if bindings.is_empty() { (None, None) } else { (Some(bindings), Some(envelopes)) }
 }
 
+fn crema_ffi_body_coverage_reference(
+    icfg: &GlobalICFGOrdered,
+    node_id: &str,
+) -> Option<String> {
+    let (_, GlobalICFGNode::Mir(call_block)) = icfg.ordered_nodes.iter()
+        .find(|(id, _)| id == node_id)? else { return None; };
+    let Some(MirTerminator::Call { return_target, .. }) = call_block.terminator.as_ref() else { return None; };
+    let call_edges: Vec<_> = icfg.icfg_edges.iter().filter(|edge|
+        edge.source == node_id && edge.label.as_deref() == Some("FFI Call")
+    ).collect();
+    let [call_edge] = call_edges.as_slice() else { return None; };
+    let dummy_call = &call_edge.destination;
+    let entry_edges: Vec<_> = icfg.icfg_edges.iter().filter(|edge|
+        edge.source == *dummy_call && edge.label.as_deref() == Some("dummyCall->LLVM Entry")
+    ).collect();
+    let [llvm_entry] = entry_edges.as_slice() else { return None; };
+    let (_, GlobalICFGNode::Llvm(_)) = icfg.ordered_nodes.iter()
+        .find(|(id, _)| id == &llvm_entry.destination)? else { return None; };
+    let exits: Vec<_> = icfg.icfg_edges.iter().filter(|edge|
+        edge.label.as_deref() == Some("LLVM Exit->dummyRet")
+            && edge.destination.starts_with("dummyRet::")
+            && edge.source.contains(node_id)
+    ).collect();
+    let [exit] = exits.as_slice() else { return None; };
+    let (_, GlobalICFGNode::Llvm(_)) = icfg.ordered_nodes.iter()
+        .find(|(id, _)| id == &exit.source)? else { return None; };
+    let scope = node_id.rsplit_once("::bb")?.0;
+    let continuation = return_target.as_deref()
+        .map(|target| format!("{scope}::{target}"))
+        .unwrap_or_else(|| format!("{scope}::end"));
+    let returns: Vec<_> = icfg.icfg_edges.iter().filter(|edge|
+        edge.source == exit.destination
+            && edge.destination == continuation
+            && edge.label.as_deref() == Some("dummyRet->MIR Return")
+    ).collect();
+    if returns.len() != 1 { return None; }
+    Some(format!("icfg-ffi-body:{}->{};{}->{}", call_edge.source, llvm_entry.destination, exit.source, continuation))
+}
+
+fn dep1_call_semantic_coverage(
+    icfg: &GlobalICFGOrdered,
+    ele1_bindings: &[ExternalCallBindingV1],
+    ele1_effects: &[ExternalLibraryEffectsV1],
+    reachable_nodes: &BTreeSet<String>,
+) -> Option<(Vec<serde_json::Value>, bool)> {
+    let dep1 = icfg.dependency_body_ingestion_v1.as_ref()?;
+    let mut links: BTreeMap<&str, Vec<&serde_json::Value>> = BTreeMap::new();
+    for link in &dep1.icfg_callsite_links {
+        if let Some(key) = link.get("call_key").and_then(serde_json::Value::as_str) {
+            links.entry(key).or_default().push(link);
+        }
+    }
+    let mut ledger = Vec::new();
+    let mut complete = true;
+    for call in &dep1.exact_call_bindings {
+        let Some(call_key) = call.get("call_key").and_then(serde_json::Value::as_str) else {
+            complete = false;
+            ledger.push(serde_json::json!({
+                "call_key":null,"semantic_coverage_path":"uncovered",
+                "coverage_reference":[],"coverage_status":"missing_call_key"
+            }));
+            continue;
+        };
+        let caller_instance = call.get("caller_instance_id").and_then(serde_json::Value::as_str).unwrap_or("");
+        let bb = call.get("basic_block").and_then(serde_json::Value::as_u64).unwrap_or(u64::MAX);
+        let callee_identity = call.get("resolved_instance_id").and_then(serde_json::Value::as_str)
+            .or_else(|| call.get("resolved_definition_id").and_then(serde_json::Value::as_str))
+            .or_else(|| call.get("operand_definition_id").and_then(serde_json::Value::as_str))
+            .unwrap_or("unresolved");
+        let expected_key = format!("dep1-call-v1:{caller_instance}:bb{bb}:{callee_identity}");
+        if caller_instance.is_empty() || bb == u64::MAX || call_key != expected_key {
+            complete = false;
+            ledger.push(serde_json::json!({
+                "call_key":call_key,"semantic_coverage_path":"uncovered",
+                "coverage_reference":[],"coverage_status":"invalid_call_key"
+            }));
+            continue;
+        }
+        let status = call.get("body_status").and_then(serde_json::Value::as_str).unwrap_or("unknown");
+        let scope_reason = call.get("scope_reason").and_then(serde_json::Value::as_str).unwrap_or("unknown");
+        if status == "out_of_scope" {
+            ledger.push(serde_json::json!({
+                "call_key":call_key,"semantic_coverage_path":"uncovered",
+                "coverage_reference":[],"coverage_status":"out_of_scope",
+                "scope_reason":scope_reason
+            }));
+            continue;
+        }
+        let mut paths: Vec<(&str, String)> = Vec::new();
+        let caller_is_local = dep1.body_statuses.iter().any(|body|
+            body.get("instance_id").and_then(serde_json::Value::as_str) == Some(caller_instance)
+                && body.get("local").and_then(serde_json::Value::as_bool) == Some(true)
+        );
+        let expected_callee = call.get("resolved_instance_id").and_then(serde_json::Value::as_str)
+            .or_else(|| call.get("resolved_definition_id").and_then(serde_json::Value::as_str))
+            .or_else(|| call.get("operand_definition_id").and_then(serde_json::Value::as_str))
+            .unwrap_or("unresolved");
+        let matching_links = links.get(call_key).cloned().unwrap_or_default();
+        let links_are_exact = !matching_links.is_empty() && matching_links.iter().all(|link|
+            link.get("caller_definition_id").and_then(serde_json::Value::as_str)
+                == call.get("caller_definition_id").and_then(serde_json::Value::as_str)
+            && link.get("caller_instance_id").and_then(serde_json::Value::as_str)
+                == call.get("caller_instance_id").and_then(serde_json::Value::as_str)
+            && link.get("basic_block").and_then(serde_json::Value::as_u64) == Some(bb)
+            && link.get("callee_identity").and_then(serde_json::Value::as_str) == Some(expected_callee)
+        );
+        if (caller_is_local && matching_links.len() != 1)
+            || (!matching_links.is_empty() && !links_are_exact)
+        { complete = false; }
+        if status == "represented_body" {
+            let resolved = call.get("resolved_instance_id").and_then(serde_json::Value::as_str);
+            let body_matches = resolved.map(|instance| dep1.body_statuses.iter().filter(|body|
+                body.get("instance_id").and_then(serde_json::Value::as_str) == Some(instance)
+                    && body.get("body_status").and_then(serde_json::Value::as_str) == Some("represented_body")
+            ).count()).unwrap_or_default();
+            let body_is_present = body_matches == 1;
+            if body_is_present {
+                paths.push(("dep1_rust_mir", format!("dep1-exact-call-binding:{call_key};dep1-body-instance:{}", resolved.unwrap())));
+            }
+        }
+        // Inspect existing CREMA/CQPL relations for every linked call so an
+        // already represented DEP1 body cannot silently acquire a second,
+        // incompatible coverage path.
+        if links_are_exact {
+            for link in matching_links {
+                let Some(node) = link.get("icfg_node").and_then(serde_json::Value::as_str) else { continue; };
+                if !reachable_nodes.contains(node) { continue; }
+                if let Some(reference) = crema_ffi_body_coverage_reference(icfg, node) {
+                    paths.push(("crema_ffi_body", reference));
+                }
+                for binding in ele1_bindings.iter().filter(|binding| binding.node == node) {
+                    let accepted_envelope = ele1_effects.iter().filter(|effects|
+                        effects.binding_id == binding.binding_id
+                            && !effects.effect_families.is_empty()
+                            && effects.basis == "crema_external_library_effects_v1"
+                    ).count();
+                    if accepted_envelope == 1 {
+                        paths.push(("cqpl_external_library_model", binding.binding_id.clone()));
+                    } else {
+                        complete = false;
+                    }
+                }
+            }
+        }
+        let forced_incomplete = matches!(status,
+            "unresolved_scope_identity" | "unresolved_instance" | "virtual_or_dynamic_unresolved"
+        ) || (status == "body_unavailable"
+            && call.get("body_unavailable_reason").and_then(serde_json::Value::as_str)
+                == Some("rust_mir_unavailable"));
+        if forced_incomplete {
+            // A different semantic layer cannot erase failed DEP1 identity or
+            // an expected Rust MIR body that the selected Rust path requires.
+            paths.clear();
+            complete = false;
+        }
+        paths.sort();
+        let (path, references, coverage_status) = match paths.as_slice() {
+            [(path, reference)] => (*path, vec![reference.clone()], "covered"),
+            [] => { complete = false; ("uncovered", Vec::new(), "uncovered") },
+            many => {
+                complete = false;
+                ("uncovered", many.iter().map(|(_, reference)| reference.clone()).collect(), "conflicting_coverage")
+            }
+        };
+        ledger.push(serde_json::json!({
+            "call_key":call_key,
+            "semantic_coverage_path":path,
+            "coverage_reference":references,
+            "coverage_status":coverage_status,
+            "body_status":status,
+            "scope_reason":scope_reason
+        }));
+    }
+    ledger.sort_by(|a,b| a.get("call_key").and_then(serde_json::Value::as_str)
+        .cmp(&b.get("call_key").and_then(serde_json::Value::as_str)));
+    Some((ledger, complete))
+}
+
 fn insert_event_source(
     events: &mut EventSourceMap,
     label: EventLabel,
@@ -4929,7 +5165,8 @@ mod tests {
             ordered_nodes: vec![("rust::main::bb0".into(), efm2_call("observe", &["Local(_1)", "Local(_1)"]))],
             icfg_edges: vec![], llvm_memory_effects: None, svf_solved_points_to: None,
             rust_functions: Default::default(), rust_calls: vec![],
-        };
+
+            dependency_body_ingestion_v1: None,};
         // U7/U9/U10: absence never creates either opposite behavior.
         icfg.llvm_memory_effects = Some(efx1_test_artifact("observe", snapshot.clone(), snapshot.clone(), false, false));
         assert!(external_negative_evidence_records(&icfg, &ffi, &HashSet::new()).is_empty());
@@ -4981,7 +5218,8 @@ mod tests {
             if let GlobalICFGNode::Mir(bb) = &mut node {
                 if let Some(MirTerminator::Call { return_place, .. }) = &mut bb.terminator { *return_place = "Local(_9)".into(); }
             }
-            let mut icfg = GlobalICFGOrdered { ordered_nodes:vec![("rust::main::bb0".into(), node)], icfg_edges:vec![], llvm_memory_effects:None, svf_solved_points_to:None, rust_functions:Default::default(), rust_calls:vec![] };
+            let mut icfg = GlobalICFGOrdered { ordered_nodes:vec![("rust::main::bb0".into(), node)], icfg_edges:vec![], llvm_memory_effects:None, svf_solved_points_to:None, rust_functions:Default::default(), rust_calls:vec![],
+            dependency_body_ingestion_v1: None,};
             let (records, bindings) = external_return_relation_records(&icfg, &ffi, &HashSet::new());
             assert_eq!(records.len(), 1);
             assert_eq!(records[0].result_variable, "rust::main::Local(_9)");
@@ -5007,7 +5245,8 @@ mod tests {
             ordered_nodes: vec![("rust::main::bb0".into(), call)], icfg_edges: vec![],
             llvm_memory_effects: None, svf_solved_points_to: None,
             rust_functions: Default::default(), rust_calls: vec![],
-        };
+
+            dependency_body_ingestion_v1: None,};
         let ffi = HashSet::from(["memcpy".into()]);
         let (relations, _) = external_return_relation_records(&icfg, &ffi, &HashSet::new());
         let vars = [1, 2, 9].map(|n| ProgramVariable {
@@ -5099,7 +5338,8 @@ mod tests {
                 ordered_nodes: vec![("rust::main::bb0".into(), call)],
                 icfg_edges: vec![], llvm_memory_effects: None, svf_solved_points_to: None,
                 rust_functions: Default::default(), rust_calls: vec![],
-            };
+
+            dependency_body_ingestion_v1: None,};
             assert!(external_formal_memory_effect_records(&icfg, &ffi, &represented).is_empty());
         }
     }
@@ -5117,7 +5357,8 @@ mod tests {
             svf_solved_points_to: None,
             rust_functions: Default::default(),
             rust_calls: vec![],
-        };
+
+            dependency_body_ingestion_v1: None,};
         let records = external_formal_memory_effect_records(&icfg, &ffi, &HashSet::new());
         assert_eq!(records.len(), 2);
         assert!(records.iter().any(|r| {
@@ -5242,7 +5483,8 @@ mod tests {
             svf_solved_points_to: None,
             rust_functions: Default::default(),
             rust_calls: vec![],
-        };
+
+            dependency_body_ingestion_v1: None,};
         let resolver = LlvmNameResolver::build(&icfg);
         let formal = scoped_svf_var(7, spill_store_id);
         let slot = scoped_svf_var(8, alloca_id);
@@ -5331,7 +5573,8 @@ mod tests {
             svf_solved_points_to: None,
             rust_functions: Default::default(),
             rust_calls: vec![],
-        };
+
+            dependency_body_ingestion_v1: None,};
         let actual = ProgramVarId::rust("main", "Local(_1)").unwrap();
         let formal = ProgramVarId::c("c_free_i32", 36, Some("rust::main::bb3".into()));
         let allocation = AbstractAllocId::new(
@@ -5391,7 +5634,8 @@ mod tests {
             svf_solved_points_to: None,
             rust_functions: Default::default(),
             rust_calls: vec![],
-        };
+
+            dependency_body_ingestion_v1: None,};
 
         let actual = ProgramVarId::rust("main", "Local(_1)").unwrap();
         let formal = ProgramVarId::c("c_mixed", 36, Some("rust::main::bb3".into()));
@@ -5550,7 +5794,8 @@ mod tests {
             icfg_edges: vec![edge("rust::main::bb0", "rust::main::bb1")],
             rust_functions: Default::default(),
             rust_calls: Vec::new(),
-        };
+
+            dependency_body_ingestion_v1: None,};
         let mut s = AbstractState::default();
         let mut mem = AbstractMemory::default();
         mem.set_cell_value(&"Local(_1)".to_string(), CellValue::ALLOC);
@@ -5586,7 +5831,8 @@ mod tests {
             icfg_edges: vec![edge],
             rust_functions: Default::default(),
             rust_calls: Vec::new(),
-        };
+
+            dependency_body_ingestion_v1: None,};
         let mut state = AbstractState::default();
         let mut memory = AbstractMemory::default();
         memory.set_cell_value(&"Local(_1)".to_string(), CellValue::TOP);
@@ -5623,7 +5869,8 @@ mod tests {
             icfg_edges: vec![edge("rust::main::bb0", "rust::main::terminate")],
             rust_functions: Default::default(),
             rust_calls: Vec::new(),
-        };
+
+            dependency_body_ingestion_v1: None,};
         let s = AbstractState::default();
         let path = std::env::temp_dir().join(format!("crema-cqpl-dangling-export-{}.json", std::process::id()));
         let err = export_cqpl_annotated_icfg(&g, &s, "rust::main::bb0", &path).unwrap_err();
@@ -5645,7 +5892,8 @@ mod tests {
             icfg_edges: vec![edge("rust::main::bb0", "rust::main::terminate")],
             rust_functions: Default::default(),
             rust_calls: Vec::new(),
-        };
+
+            dependency_body_ingestion_v1: None,};
         // The exporter intentionally requires a non-empty program-variable
         // domain.  Seed one unrelated tracked variable so this regression test
         // exercises only the canonical terminal-edge property instead of
@@ -5785,7 +6033,8 @@ mod tests {
             ],
             rust_functions,
             rust_calls,
-        };
+
+            dependency_body_ingestion_v1: None,};
 
         let state = AbstractState::default();
         let path = std::env::temp_dir().join(format!(
@@ -5840,7 +6089,8 @@ mod tests {
             icfg_edges: vec![edge("rust::main::bb0", "dummyCall::x")],
             rust_functions: BTreeMap::new(),
             rust_calls: vec![],
-        };
+
+            dependency_body_ingestion_v1: None,};
         g.rust_functions.insert("callee".into(), RustFunctionMetadata {
             name: "callee".into(), arg_count: 0, entry_node: "rust::callee::bb0".into(),
             return_nodes: vec!["rust::callee::bb1".into()],
@@ -5927,7 +6177,8 @@ mod tests {
             icfg_edges: vec![edge(&n0, &n1), edge(&n1, &n2), edge(&n2, &n3)],
             rust_functions: Default::default(),
             rust_calls: Vec::new(),
-        };
+
+            dependency_body_ingestion_v1: None,};
 
         let mut state = AbstractState::default();
         let mut first = AbstractMemory::default();
@@ -6139,7 +6390,8 @@ mod tests {
             icfg_edges: vec![],
             rust_functions: Default::default(),
             rust_calls: Vec::new(),
-        };
+
+            dependency_body_ingestion_v1: None,};
         let state = AbstractState::default();
         let aliases = build_closure_event_aliases(&g, &state);
         assert!(aliases
@@ -6156,6 +6408,7 @@ mod tests {
         let guards = vec![AllocationExistenceGuardRecord {
             allocation: "a#test".into(),
             producer_call_node: "rust::main::bb0".into(),
+            producer_call_canonical_node: None,
             predicate_call_node: "rust::main::bb1".into(),
             switch_node: "rust::main::bb2".into(),
             tested_variable: "rust::main::Local(_1)".into(),
@@ -6193,7 +6446,8 @@ mod tests {
             icfg_edges: vec![],
             rust_functions: Default::default(),
             rust_calls: vec![],
-        };
+
+            dependency_body_ingestion_v1: None,};
 
         let alloc = AbstractAllocId::new(
             AllocationSiteId::Synthetic { scope: "test".into(), label: "A".into() },
@@ -6291,7 +6545,8 @@ mod tests {
             icfg_edges: vec![],
             rust_functions: Default::default(),
             rust_calls: vec![],
-        };
+
+            dependency_body_ingestion_v1: None,};
 
         let a = AbstractAllocId::new(
             AllocationSiteId::Synthetic { scope: "test".into(), label: "A".into() },
@@ -6447,7 +6702,8 @@ mod tests {
             icfg_edges: Vec::new(),
             rust_functions: BTreeMap::new(),
             rust_calls: Vec::new(),
-        };
+
+            dependency_body_ingestion_v1: None,};
         let tested = ProgramVarId::Rust { function: "main".into(), local: 1 };
         assert_eq!(
             c_malloc_origin_return_basis(&icfg, &allocation, "rust::main::bb1", &tested),
@@ -7270,7 +7526,8 @@ mod tests {
             svf_solved_points_to: None,
             rust_functions: BTreeMap::new(),
             rust_calls: vec![],
-        };
+
+            dependency_body_ingestion_v1: None,};
         let ffi = HashSet::from(["free".to_string()]);
         assert!(rust_node_consumes_result_obligation(
             &icfg,
@@ -7292,7 +7549,8 @@ mod tests {
             svf_solved_points_to: None,
             rust_functions: BTreeMap::new(),
             rust_calls: vec![],
-        };
+
+            dependency_body_ingestion_v1: None,};
         assert!(!rust_node_consumes_result_obligation(
             &icfg,
             &node_id,
@@ -7319,7 +7577,8 @@ mod tests {
             svf_solved_points_to: None,
             rust_functions: BTreeMap::new(),
             rust_calls: vec![],
-        };
+
+            dependency_body_ingestion_v1: None,};
         let nodes: BTreeMap<&str, &GlobalICFGNode> = icfg
             .ordered_nodes
             .iter()
@@ -7390,6 +7649,151 @@ mod tests {
         assert!(variables.contains("rust::main::Local(_4)"));
         assert!(variables.contains("rust::main::Local(_5)"));
         assert!(variables.contains("rust::main::Local(_7)"));
+    }
+
+    fn cov1_call(status: &str, reason: Option<&str>) -> serde_json::Value {
+        let mut call = serde_json::json!({
+            "caller_instance_id":"instance-hash-v1:c","caller_definition_id":"defpathhash-v1:c",
+            "basic_block":0,"resolved_definition_id":"defpathhash-v1:d",
+            "resolved_instance_id":"instance-hash-v1:d","body_status":status,
+            "runtime_eligible":true,"scope_reason":"runtime_dependency_eligible"
+        });
+        if let Some(reason) = reason { call["body_unavailable_reason"] = serde_json::json!(reason); }
+        call["call_key"] = serde_json::json!("dep1-call-v1:instance-hash-v1:c:bb0:instance-hash-v1:d");
+        call
+    }
+
+    fn cov1_icfg(call: serde_json::Value, links: Vec<serde_json::Value>, ffi_body: bool) -> GlobalICFGOrdered {
+        let mut nodes = vec![("rust::main::bb0".into(), efm2_call("c_fn", &[]))];
+        let mut edges = vec![];
+        if ffi_body {
+            nodes.push(("llvm::c_fn::entry".into(), GlobalICFGNode::Llvm(crate::structs::LlvmJsonNode {
+                node_id:0,node_type:true,info:"entry".into(),node_kind_string:"FunEntryBlock".into(),
+                node_kind:0,node_source_loc:String::new(),function_name:Some("c_fn".into()),
+                basic_block:None,basic_block_name:None,basic_block_info:None,svf_statements:vec![],
+                incoming_edges:vec![],outgoing_edges:vec![],
+            })));
+            nodes.push(("llvm::c_fn::exit::rust::main::bb0".into(), GlobalICFGNode::Llvm(crate::structs::LlvmJsonNode {
+                node_id:1,node_type:true,info:"exit".into(),node_kind_string:"FunExitBlock".into(),
+                node_kind:1,node_source_loc:String::new(),function_name:Some("c_fn".into()),
+                basic_block:None,basic_block_name:None,basic_block_info:None,svf_statements:vec![],
+                incoming_edges:vec![],outgoing_edges:vec![],
+            })));
+            edges.push(crate::structs::IcfgEdge { source:"rust::main::bb0".into(),destination:"dummy-call".into(),label:Some("FFI Call".into()),source_label:None,destination_label:None });
+            edges.push(crate::structs::IcfgEdge { source:"dummy-call".into(),destination:"llvm::c_fn::entry".into(),label:Some("dummyCall->LLVM Entry".into()),source_label:None,destination_label:None });
+            edges.push(crate::structs::IcfgEdge { source:"llvm::c_fn::exit::rust::main::bb0".into(),destination:"dummyRet::rust::main::bb1::rust::main::bb0".into(),label:Some("LLVM Exit->dummyRet".into()),source_label:None,destination_label:None });
+            edges.push(crate::structs::IcfgEdge { source:"dummyRet::rust::main::bb1::rust::main::bb0".into(),destination:"rust::main::bb1".into(),label:Some("dummyRet->MIR Return".into()),source_label:None,destination_label:None });
+        }
+        let mut body_statuses = vec![serde_json::json!({
+            "instance_id":"instance-hash-v1:c","body_status":"represented_body","local":true
+        })];
+        if call["body_status"] == "represented_body" {
+            body_statuses.push(serde_json::json!({"instance_id":"instance-hash-v1:d","body_status":"represented_body"}));
+        }
+        GlobalICFGOrdered {
+            ordered_nodes:nodes,icfg_edges:edges,llvm_memory_effects:None,svf_solved_points_to:None,
+            rust_functions:Default::default(),rust_calls:vec![],
+            dependency_body_ingestion_v1:Some(crate::structs::DependencyBodyIngestionExport {
+                capability:"dependency_body_ingestion_v1".into(),target_triple:"test-target".into(),
+                crate_correlations:vec![],package_scope:vec![],body_statuses,
+                exact_call_bindings:vec![call],icfg_callsite_links:links,
+                icfg_stitching_v1:None,
+                context_execution_graph_v1:None,
+            }),
+        }
+    }
+
+    fn cov1_link() -> serde_json::Value {
+        serde_json::json!({
+            "call_key":"dep1-call-v1:instance-hash-v1:c:bb0:instance-hash-v1:d",
+            "icfg_node":"rust::main::bb0","caller_definition_id":"defpathhash-v1:c",
+            "caller_instance_id":"instance-hash-v1:c","basic_block":0,"callee_identity":"instance-hash-v1:d"
+        })
+    }
+
+    fn cov1_effect(binding_id: &str) -> ExternalLibraryEffectsV1 {
+        ExternalLibraryEffectsV1 {
+            binding_id:binding_id.into(),effect_families:vec!["return_relation".into()],
+            effect_counts:BTreeMap::new(),basis:"crema_external_library_effects_v1",
+        }
+    }
+
+    #[test]
+    fn cov1_ledger_requires_one_exact_semantic_path() {
+        let key = "dep1-call-v1:instance-hash-v1:c:bb0:instance-hash-v1:d";
+        let reach = BTreeSet::from(["rust::main::bb0".to_string()]);
+        let rust = cov1_icfg(cov1_call("represented_body", None), vec![cov1_link()], false);
+        let (ledger, complete) = dep1_call_semantic_coverage(&rust, &[], &[], &reach).unwrap();
+        assert!(complete);
+        assert_eq!(ledger[0]["semantic_coverage_path"], "dep1_rust_mir");
+        assert_eq!(ledger[0]["call_key"], key);
+
+        let rust_with_ffi = cov1_icfg(cov1_call("represented_body", None), vec![cov1_link()], true);
+        let (ledger, complete) = dep1_call_semantic_coverage(&rust_with_ffi, &[], &[], &reach).unwrap();
+        assert!(!complete);
+        assert_eq!(ledger[0]["coverage_status"], "conflicting_coverage");
+
+        let rust_with_ele1 = cov1_icfg(cov1_call("represented_body", None), vec![cov1_link()], false);
+        let rust_ele1_binding = ExternalCallBindingV1 {
+            binding_id:"ele1:rust::main::bb0".into(),node:"rust::main::bb0".into(),
+            rust_function_scope:"rust::main".into(),callee:"external".into(),arity:0,
+            arguments:vec![],result_variable:None,body_status:"bodyless",
+            basis:"rustc_mir_external_call_binding_v1",
+        };
+        let (ledger, complete) = dep1_call_semantic_coverage(
+            &rust_with_ele1, &[rust_ele1_binding], &[cov1_effect("ele1:rust::main::bb0")], &reach,
+        ).unwrap();
+        assert!(!complete);
+        assert_eq!(ledger[0]["coverage_status"], "conflicting_coverage");
+
+        let unresolved_scope = cov1_icfg(cov1_call("unresolved_scope_identity", None), vec![cov1_link()], false);
+        let (ledger, complete) = dep1_call_semantic_coverage(&unresolved_scope, &[], &[], &reach).unwrap();
+        assert!(!complete);
+        assert_eq!(ledger[0]["semantic_coverage_path"], "uncovered");
+
+        let ffi = cov1_icfg(cov1_call("body_unavailable", Some("intentionally_bodyless_foreign")), vec![cov1_link()], true);
+        assert!(crema_ffi_body_coverage_reference(&ffi, "rust::main::bb0").is_some());
+        let (ledger, complete) = dep1_call_semantic_coverage(&ffi, &[], &[], &reach).unwrap();
+        assert!(complete, "{ledger:?}");
+        assert_eq!(ledger[0]["semantic_coverage_path"], "crema_ffi_body");
+
+        let bodyless = cov1_icfg(cov1_call("body_unavailable", Some("intentionally_bodyless_foreign")), vec![cov1_link()], false);
+        let binding = ExternalCallBindingV1 { binding_id:"ele1:rust::main::bb0".into(),node:"rust::main::bb0".into(),rust_function_scope:"rust::main".into(),callee:"free".into(),arity:1,arguments:vec![],result_variable:None,body_status:"bodyless",basis:"rustc_mir_external_call_binding_v1" };
+        let effects = vec![cov1_effect("ele1:rust::main::bb0")];
+        let (ledger, complete) = dep1_call_semantic_coverage(&bodyless, &[binding.clone()], &effects, &reach).unwrap();
+        assert!(complete);
+        assert_eq!(ledger[0]["semantic_coverage_path"], "cqpl_external_library_model");
+
+        let uncovered = cov1_icfg(cov1_call("body_unavailable", Some("intentionally_bodyless_foreign")), vec![], false);
+        let (ledger, complete) = dep1_call_semantic_coverage(&uncovered, &[], &[], &reach).unwrap();
+        assert!(!complete);
+        assert_eq!(ledger[0]["semantic_coverage_path"], "uncovered");
+
+        let conflict = cov1_icfg(cov1_call("body_unavailable", Some("intentionally_bodyless_foreign")), vec![cov1_link()], true);
+        let (ledger, complete) = dep1_call_semantic_coverage(&conflict, &[binding], &effects, &reach).unwrap();
+        assert!(!complete);
+        assert_eq!(ledger[0]["coverage_status"], "conflicting_coverage");
+    }
+
+    #[test]
+    fn cov1_ledger_rejects_wrong_keys_and_transitive_link_mutations() {
+        let reach = BTreeSet::from(["rust::main::bb0".to_string()]);
+        let mut wrong_key = cov1_call("represented_body", None);
+        wrong_key["call_key"] = serde_json::json!("mutated");
+        let (ledger, complete) = dep1_call_semantic_coverage(&cov1_icfg(wrong_key, vec![], false), &[], &[], &reach).unwrap();
+        assert!(!complete);
+        assert_eq!(ledger[0]["coverage_status"], "invalid_call_key");
+
+        let mut wrong_link = cov1_link();
+        wrong_link["caller_definition_id"] = serde_json::json!("defpathhash-v1:other");
+        let call = cov1_call("body_unavailable", Some("intentionally_bodyless_foreign"));
+        let (ledger, complete) = dep1_call_semantic_coverage(&cov1_icfg(call.clone(), vec![wrong_link], false), &[], &[], &reach).unwrap();
+        assert!(!complete);
+        assert_eq!(ledger[0]["semantic_coverage_path"], "uncovered");
+
+        let (ledger, complete) = dep1_call_semantic_coverage(&cov1_icfg(call, vec![cov1_link(), cov1_link()], false), &[], &[], &reach).unwrap();
+        assert!(!complete);
+        assert_eq!(ledger[0]["semantic_coverage_path"], "uncovered");
     }
 
 }

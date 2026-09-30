@@ -1155,7 +1155,8 @@ mod tests {
             icfg_edges: edges,
             rust_functions: BTreeMap::new(),
             rust_calls: Vec::new(),
-        }
+
+            dependency_body_ingestion_v1: None,}
     }
 
     fn test_edge_transfer(edge: &IcfgEdge, input: &PanicLifecycleMemory) -> PanicLifecycleMemory {
@@ -1399,7 +1400,8 @@ mod tests {
             ],
             rust_functions: BTreeMap::new(),
             rust_calls: Vec::new(),
-        };
+
+            dependency_body_ingestion_v1: None,};
 
         let allocation = AbstractAllocId::new(
             crate::structs::AllocationSiteId::Synthetic {
@@ -1450,7 +1452,8 @@ mod tests {
             icfg_edges: vec![edge(take, exit, "Resolved external Instance summary return")],
             rust_functions: BTreeMap::new(),
             rust_calls: Vec::new(),
-        };
+
+            dependency_body_ingestion_v1: None,};
         let identity = AllocationIdentityState::default();
         let state = fixed_point_real_panic_lifecycle(&icfg, &identity, take).unwrap();
         let exit_state = state.get(exit);
@@ -1663,7 +1666,8 @@ mod tests {
             ],
             rust_functions: BTreeMap::new(),
             rust_calls: Vec::new(),
-        }
+
+            dependency_body_ingestion_v1: None,}
     }
 
     fn panic_guard_test_identity() -> (AllocationIdentityState, AbstractAllocId) {
@@ -1781,7 +1785,8 @@ mod tests {
             ],
             rust_functions: BTreeMap::new(),
             rust_calls: Vec::new(),
-        };
+
+            dependency_body_ingestion_v1: None,};
 
         let allocation = AbstractAllocId::new(
             crate::structs::AllocationSiteId::Synthetic {

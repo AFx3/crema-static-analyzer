@@ -1,9 +1,14 @@
 digraph "Call Graph" {
 	label="Call Graph";
 
-	Node0x634d7bf65980 [shape=record,shape=box,label="{PTACallGraphNode ID: 0 \{fun: register_cb\}}"];
-	Node0x634d7bfc1070 [shape=record,shape=box,label="{PTACallGraphNode ID: 1 \{fun: trigger_cb\}|{<s0>1|<s1>2}}"];
-	Node0x634d7bfc1070:s0 -> Node0x634d7bf9bd30[color=black];
-	Node0x634d7bfc1070:s1 -> Node0x634d7bf9bd30[color=black];
-	Node0x634d7bf9bd30 [shape=record,shape=Mrecord,label="{PTACallGraphNode ID: 2 \{fun: printf\}}"];
+	Node0x61efd44e9ed0 [shape=record,shape=box,label="{PTACallGraphNode ID: 0 \{fun: alloc_c_string\}|{<s0>2|<s1>3|<s2>4}}"];
+	Node0x61efd44e9ed0:s0 -> Node0x61efd44b88d0[color=black];
+	Node0x61efd44e9ed0:s1 -> Node0x61efd44a7c20[color=black];
+	Node0x61efd44e9ed0:s2 -> Node0x61efd44a7d40[color=black];
+	Node0x61efd44a7b00 [shape=record,shape=box,label="{PTACallGraphNode ID: 1 \{fun: free_c_string\}|{<s0>1}}"];
+	Node0x61efd44a7b00:s0 -> Node0x61efd44b89f0[color=black];
+	Node0x61efd44a7c20 [shape=record,shape=Mrecord,label="{PTACallGraphNode ID: 2 \{fun: malloc\}}"];
+	Node0x61efd44a7d40 [shape=record,shape=Mrecord,label="{PTACallGraphNode ID: 3 \{fun: strlen\}}"];
+	Node0x61efd44b88d0 [shape=record,shape=Mrecord,label="{PTACallGraphNode ID: 4 \{fun: strcpy\}}"];
+	Node0x61efd44b89f0 [shape=record,shape=Mrecord,label="{PTACallGraphNode ID: 5 \{fun: free\}}"];
 }

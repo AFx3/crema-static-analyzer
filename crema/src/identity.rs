@@ -2698,7 +2698,8 @@ mod tests {
                 return_node: "rust::main::bb1".to_string(),
                 is_closure: false,
             }],
-        };
+
+            dependency_body_ingestion_v1: None,};
 
         let _ = fixed_point_identity_analysis(&icfg, "rust::main::bb0");
     }
@@ -2779,7 +2780,8 @@ mod tests {
                 return_node: "rust::main::bb2".to_string(),
                 is_closure: false,
             }],
-        };
+
+            dependency_body_ingestion_v1: None,};
 
         let result = fixed_point_identity_analysis(&icfg, "rust::main::bb0");
         let at_return = result.by_node.get("rust::main::bb2").unwrap();
@@ -2871,7 +2873,8 @@ mod tests {
                     return_node: "rust::main::bb1".into(), is_closure: false,
                 },
             ],
-        };
+
+            dependency_body_ingestion_v1: None,};
 
         assert!(has_rust_call_at(&icfg, "rust::main::bb0"));
         assert_eq!(rust_call_for_dummy_call(&icfg, dc0).unwrap().callee_function, "foo");
@@ -2994,7 +2997,8 @@ mod tests {
                 ),
             ]),
             rust_calls: calls,
-        };
+
+            dependency_body_ingestion_v1: None,};
 
         let result = fixed_point_identity_analysis(&icfg, "rust::main::bb0");
         let foo_alloc_state = result.by_node.get("rust::foo::bb0").unwrap();
@@ -3659,7 +3663,8 @@ mod tests {
                 return_node: "rust::main::bb3".to_string(),
                 is_closure: true,
             }],
-        };
+
+            dependency_body_ingestion_v1: None,};
 
         let result = fixed_point_identity_analysis(&icfg, "rust::main::bb0");
         let end = result.by_node.get("rust::main::{closure#0}::bb3").unwrap();
@@ -3945,7 +3950,8 @@ mod tests {
                 },
             )]),
             rust_calls: Vec::new(),
-        };
+
+            dependency_body_ingestion_v1: None,};
 
         let result = fixed_point_identity_analysis(&icfg, "rust::main::bb0");
         let at_return = result.by_node.get("rust::main::bb1").unwrap();
@@ -4458,7 +4464,8 @@ mod tests {
             ],
             rust_functions: BTreeMap::new(),
             rust_calls: Vec::new(),
-        };
+
+            dependency_body_ingestion_v1: None,};
         let states = definitely_null_at_mir_terminators(&icfg, "rust::main::bb0");
         assert!(states["rust::main::bb2"].contains(&rust("main", 2)));
     }
@@ -4516,7 +4523,8 @@ mod tests {
             ],
             rust_functions: BTreeMap::new(),
             rust_calls: Vec::new(),
-        };
+
+            dependency_body_ingestion_v1: None,};
         let states = definitely_null_at_mir_terminators(&icfg, "rust::main::bb9");
         assert!(!states["rust::main::bb2"].contains(&rust("main", 1)));
     }
@@ -4553,7 +4561,8 @@ mod tests {
             ],
             rust_functions: BTreeMap::new(),
             rust_calls: Vec::new(),
-        };
+
+            dependency_body_ingestion_v1: None,};
         let states = definitely_null_at_mir_terminators(&icfg, "rust::main::bb0");
         assert!(!states["rust::main::bb2"].contains(&rust("main", 1)));
     }

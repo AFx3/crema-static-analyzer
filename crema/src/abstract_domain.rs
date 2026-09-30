@@ -4239,7 +4239,8 @@ mod phase6b_interprocedural_protocol_tests {
                 call("rust::main::bb2", "bar", "dummyRet::bar"),
                 call("rust::main::bb3", "foo", "dummyRet::foo2"),
             ],
-        };
+
+            dependency_body_ingestion_v1: None,};
 
         let matched = internal_calls_for_callee(&icfg, "foo");
         let ids: Vec<_> = matched.iter().map(|c| c.call_node.as_str()).collect();
@@ -4259,7 +4260,8 @@ mod phase6b_interprocedural_protocol_tests {
             icfg_edges: Vec::new(),
             rust_functions: BTreeMap::new(),
             rust_calls: vec![a, b],
-        };
+
+            dependency_body_ingestion_v1: None,};
 
         assert_eq!(
             internal_call_for_dummy_call(&icfg, "dummyCall::main::bb5::instance0")
@@ -4344,7 +4346,8 @@ mod phase6b_interprocedural_protocol_tests {
                 return_node: "rust::main::bb2".to_string(),
                 is_closure: true,
             }],
-        };
+
+            dependency_body_ingestion_v1: None,};
 
         let bindings = build_closure_capture_bindings(&icfg);
         let captures = bindings
@@ -6947,7 +6950,8 @@ mod phase5_c_origin_ffi_tests {
             ],
             rust_functions: Default::default(),
             rust_calls: Vec::new(),
-        };
+
+            dependency_body_ingestion_v1: None,};
         let frees = BTreeSet::from(["c_free".to_string()]);
         let uses = BTreeSet::from(["rust_use".to_string()]);
 
@@ -6970,7 +6974,8 @@ mod phase5_c_origin_ffi_tests {
             ],
             rust_functions: Default::default(),
             rust_calls: Vec::new(),
-        };
+
+            dependency_body_ingestion_v1: None,};
         let frees = BTreeSet::from(["c_free".to_string()]);
         let uses = BTreeSet::from(["rust_use".to_string()]);
 
@@ -6993,7 +6998,8 @@ mod phase5_c_origin_ffi_tests {
             ],
             rust_functions: Default::default(),
             rust_calls: Vec::new(),
-        };
+
+            dependency_body_ingestion_v1: None,};
         let frees = BTreeSet::from(["c_free".to_string()]);
         let uses = BTreeSet::from(["rust_use".to_string()]);
 

@@ -5829,6 +5829,7 @@ mod tests {
         k.allocation_existence_guards.push(crate::kripke::AllocationExistenceGuardRecord {
             allocation: "A".into(),
             producer_call_node: "b0".into(),
+            producer_call_canonical_node: None,
             predicate_call_node: "b0".into(),
             switch_node: "guard".into(),
             tested_variable: "rust::main::Local(_1)".into(),
@@ -5974,6 +5975,7 @@ mod tests {
         k.allocation_existence_guards.push(crate::kripke::AllocationExistenceGuardRecord {
             allocation: "A".into(),
             producer_call_node: "b0".into(),
+            producer_call_canonical_node: None,
             predicate_call_node: "b0".into(),
             switch_node: "guard".into(),
             tested_variable: "rust::main::Local(_1)".into(),
@@ -6041,6 +6043,7 @@ mod tests {
         k.allocation_existence_guards.push(crate::kripke::AllocationExistenceGuardRecord {
             allocation: "A".into(),
             producer_call_node: "b0".into(),
+            producer_call_canonical_node: None,
             predicate_call_node: "b0".into(),
             switch_node: "guard".into(),
             tested_variable: "rust::main::Local(_1)".into(),

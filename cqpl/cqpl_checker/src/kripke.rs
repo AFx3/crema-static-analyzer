@@ -761,6 +761,8 @@ pub struct NodeIdentityAnnotation {
 pub struct AllocationExistenceGuardRecord {
     pub allocation: String,
     pub producer_call_node: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub producer_call_canonical_node: Option<String>,
     pub predicate_call_node: String,
     pub switch_node: String,
     pub tested_variable: String,
@@ -844,7 +846,7 @@ fn producer_certified_rn1_source_for_reallocation_boundary(
 
     guards.iter().any(|guard| {
         guard.allocation == record.source_allocation
-            && guard.producer_call_node == site_node
+            && guard.producer_call_canonical_node.as_deref().unwrap_or(&guard.producer_call_node) == site_node
             && guard.tested_variable == record.source_variable
             && guard.non_null_successor == record.node
             && guard.allocation_return_basis == "rust_foreign_decl_c_malloc_contract_v1"
@@ -1280,11 +1282,13 @@ fn validate_allocation_existence_guards(
         let site_kind = site.get("kind").and_then(serde_json::Value::as_str);
         let site_allocator = site.get("allocator").and_then(serde_json::Value::as_str);
         let site_node = site.get("node_id").and_then(serde_json::Value::as_str);
+        let producer_canonical_node = record.producer_call_canonical_node
+            .as_deref().unwrap_or(&record.producer_call_node);
         let return_basis_matches_site = site_node.is_some_and(|node| match record.allocation_return_basis.as_str() {
-            "rust_foreign_decl_c_malloc_contract_v1" => node == record.producer_call_node,
+            "rust_foreign_decl_c_malloc_contract_v1" => node == producer_canonical_node,
             "svf_single_source_c_allocator_return_v1" => {
                 node.starts_with("llvm::")
-                    && node.ends_with(&format!("::{}", record.producer_call_node))
+                    && node.ends_with(&format!("::{producer_canonical_node}"))
             }
             _ => false,
         });
@@ -1294,7 +1298,7 @@ fn validate_allocation_existence_guards(
         {
             return Err(format!(
                 "allocation_existence_guards_v1 allocation '{}' is not a malloc/calloc/RN1-realloc site tied to producer call '{}' by basis '{}'",
-                record.allocation, record.producer_call_node, record.allocation_return_basis
+                record.allocation, producer_canonical_node, record.allocation_return_basis
             ));
         }
         for variable in [&record.tested_variable, &record.predicate_result_variable] {

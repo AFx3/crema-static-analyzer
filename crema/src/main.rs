@@ -9,11 +9,13 @@ extern crate rustc_middle;
 extern crate rustc_hir;
 extern crate rustc_span;
 extern crate rustc_index;
+extern crate rustc_data_structures;
 
 
 mod structs;         
 mod utils;           
 mod icfg;            
+mod execution_graph;
 mod dumpdot;         
 mod abstract_domain; 
 mod cqpl_export;
@@ -32,7 +34,7 @@ use rustc_driver::RunCompiler;
 use std::env;
 use std::fs;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::Path;
 use std::process::{Command, exit};
 use serde_json;
@@ -63,7 +65,7 @@ fn ffi_extraction_args(project_path: &Path, tool_dir: &Path) -> Vec<std::ffi::Os
 }
 use crate::cargo_project::{
     AnalysisMode, CargoBuildInvocation, CargoCliConfig, CargoTargetKind,
-    discover_analysis_plan, isolated_cargo_target_dir, normalize_local_def_path_request, run_selected_target_with_cargo,
+    discover_analysis_plan, ensure_dep1_wrapper_compatibility, isolated_cargo_target_dir, normalize_local_def_path_request, run_selected_target_with_cargo,
     wrapper_selected_source_matches,
 };
 use crate::semantic_coverage::{collect_root_coverage, SemanticCoverageBundle};
@@ -129,7 +131,7 @@ fn main() {
 [--analysis-mode <application|library|workspace>] [-p|--package <name>] \
 [--cargo-kind <bin|lib|example|test|bench>] [--api-root <def-path>]... \
 [--features <a,b>] [--all-features] [--no-default-features] [--target-triple <triple>] \
-[--analysis-out-dir <dir>] [--cargo-plan-out <path>] [--semantic-coverage-out <path>] [--mir-semantics-v2] [--panic-unwind-lifecycle-v1]"
+[--analysis-out-dir <dir>] [--cargo-plan-out <path>] [--semantic-coverage-out <path>] [--mir-semantics-v2] [--panic-unwind-lifecycle-v1] [--dependency-body-ingestion-v1]"
         );
         exit(1);
     }
@@ -161,6 +163,7 @@ fn main() {
     let mut mir_semantics_v2 = false;
     // A3 opt-in: edge-sensitive panic/unwind lifecycle semantics.
     let mut panic_unwind_lifecycle_v1 = false;
+    let mut dependency_body_ingestion_v1 = false;
     let mut idx = 2;
     while idx < args.len() {
         match args[idx].as_str() {
@@ -270,6 +273,10 @@ fn main() {
                 panic_unwind_lifecycle_v1 = true;
                 idx += 1;
             }
+            "--dependency-body-ingestion-v1" => {
+                dependency_body_ingestion_v1 = true;
+                idx += 1;
+            }
             other => {
                 eprintln!("Unknown flag: {}", other);
                 exit(1);
@@ -313,6 +320,7 @@ fn main() {
             all_features,
             no_default_features,
             target_triple,
+            dependency_body_ingestion_v1,
         };
         if let Err(err) = run_v6o_pipeline(
             &project_path,
@@ -393,16 +401,14 @@ cannot claim whole-program C/FFI coverage. Files: {}",
     );
 
 
-    // --- Step 3: dump and analyze the global ICFG ---
-    dump_dot_from_global_icfg(GLOBAL_ICFG_JSON);
-
+    // --- Step 3: construct the authoritative graph before semantic analysis ---
     let mut file = File::open(GLOBAL_ICFG_JSON)
         .expect("Failed to open global_icfg.json file");
     let mut json_str = String::new();
     file.read_to_string(&mut json_str)
         .expect("Failed to read global_icfg.json file");
 
-    let global_icfg: GlobalICFGOrdered = serde_json::from_str(&json_str)
+    let mut global_icfg: GlobalICFGOrdered = serde_json::from_str(&json_str)
         .expect("Failed to deserialize global ICFG");
 
 
@@ -416,6 +422,23 @@ cannot claim whole-program C/FFI coverage. Files: {}",
             eprintln!("Invalid CREMA entry point '{}': {}", requested_entry, err);
             exit(1);
         });
+    let selected_entry = if global_icfg.dependency_body_ingestion_v1.is_some() {
+        match execution_graph::context_expand(&mut global_icfg, &selected_entry) {
+            Ok(entry) => {
+                let encoded = serde_json::to_string_pretty(&global_icfg).expect("serialize context graph");
+                fs::write(GLOBAL_ICFG_JSON, encoded).expect("write authoritative context graph");
+                entry
+            }
+            Err(err) => {
+                if let Ok(encoded) = serde_json::to_string_pretty(&global_icfg) {
+                    let _ = fs::write(GLOBAL_ICFG_JSON, encoded);
+                }
+                eprintln!("DEP1-P2 context graph incomplete: {err}");
+                exit(2);
+            }
+        }
+    } else { selected_entry };
+    dump_dot_from_global_icfg(GLOBAL_ICFG_JSON);
     println!("entrypoint: {}", selected_entry);
     set_entrypoint(selected_entry.clone());
 
@@ -505,6 +528,16 @@ fn run_v6o_rustc_wrapper() -> i32 {
     }
     let real_rustc = &args[1];
     let rustc_tail = &args[2..];
+    if let Ok(log_path) = env::var("CREMA_DEP1_RUSTC_ARGV_LOG") {
+        if let Ok(mut log) = fs::OpenOptions::new().create(true).append(true).open(log_path) {
+            let phase = if env::var_os("CREMA_DEP1_PHASE_A").is_some() { "phase_a" }
+                else if env::var_os("CREMA_DEP1_ANALYSIS_ENABLED").is_some() { "phase_b" }
+                else { "forwarded" };
+            let mut record = serde_json::to_vec(&serde_json::json!({"phase":phase,"argv":rustc_tail})).unwrap_or_default();
+            record.push(b'\n');
+            let _ = log.write_all(&record);
+        }
+    }
     let selected_src = match env::var("CREMA_V6O_SELECTED_SRC") {
         Ok(v) => PathBuf::from(v),
         Err(_) => {
@@ -523,6 +556,15 @@ fn run_v6o_rustc_wrapper() -> i32 {
         };
     }
 
+    // DEP1 Phase A builds the exact selected Cargo plan with CREMA's wrapper
+    // path but deliberately skips analysis while collecting Cargo artifacts.
+    if env::var_os("CREMA_DEP1_PHASE_A").is_some() {
+        return match Command::new(real_rustc).args(rustc_tail).status() {
+            Ok(status) => status.code().unwrap_or(1),
+            Err(err) => { eprintln!("CREMA DEP1 Phase A rustc forwarding failed: {err}"); 2 }
+        };
+    }
+
     let svf_output = env::var("CREMA_V6O_SVF_OUTPUT_DIR").unwrap_or_default();
     let ffi_path = env::var("CREMA_V6O_FFI_FUNCTIONS_PATH").unwrap_or_else(|_| "ffi_functions.json".to_string());
     let icfg_path = env::var("CREMA_V6O_ICFG_OUTPUT_PATH").unwrap_or_else(|_| "global_icfg.json".to_string());
@@ -531,13 +573,11 @@ fn run_v6o_rustc_wrapper() -> i32 {
     let mut compiler_args = Vec::with_capacity(args.len() - 1);
     compiler_args.push(real_rustc.clone());
     compiler_args.extend(rustc_tail.iter().cloned());
-    let mut callbacks = MirExtractor::new_with_operational_paths(
-        svf_output,
-        entry_hint,
-        ffi_path,
-        icfg_path,
-        true,
-    );
+    let mut callbacks = if let Ok(catalog) = env::var("CREMA_DEP1_ARTIFACT_CATALOG") {
+        MirExtractor::new_with_dep1_paths(svf_output, entry_hint, ffi_path, icfg_path, true, catalog)
+    } else {
+        MirExtractor::new_with_operational_paths(svf_output, entry_hint, ffi_path, icfg_path, true)
+    };
     if let Err(err) = RunCompiler::new(&compiler_args, &mut callbacks).run() {
         eprintln!("CREMA v6O selected-target rustc analysis failed: {err:?}");
         return 2;
@@ -560,6 +600,12 @@ fn run_v6o_pipeline(
     cargo_plan_out: Option<&PathBuf>,
     semantic_coverage_out: Option<&PathBuf>,
 ) -> Result<(), String> {
+    if cfg.dependency_body_ingestion_v1 {
+        // Reject user wrappers before Cargo metadata discovery as well as
+        // before Phase A/B. DEP1 must not make a Cargo invocation that silently
+        // shadows an existing wrapper configuration.
+        ensure_dep1_wrapper_compatibility(project_path)?;
+    }
     let plan = discover_analysis_plan(project_path, cfg)?;
     if plan.analysis_roots.len() > 1 && analysis_out_dir.is_none() {
         return Err("multiple library --api-root values require --analysis-out-dir so each root has a distinct artifact".to_string());
@@ -617,10 +663,14 @@ fn run_v6o_pipeline(
     }
 
     let exe = env::current_exe().map_err(|e| format!("failed to locate running CREMA executable: {e}"))?;
+    let run_nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
     let operational_dir = tool_dir
         .join("target")
         .join("crema-v6o-operational")
-        .join(format!("{}", std::process::id()));
+        .join(format!("{}-{run_nonce}", std::process::id()));
     fs::create_dir_all(&operational_dir)
         .map_err(|e| format!("failed to create {}: {e}", operational_dir.display()))?;
 
@@ -668,12 +718,29 @@ fn run_v6o_pipeline(
         dump_dot_from_global_icfg(staged_icfg.to_string_lossy().as_ref());
         let json_str = fs::read_to_string(&icfg_path)
             .map_err(|e| format!("failed to read {}: {e}", icfg_path.display()))?;
-        let global_icfg: GlobalICFGOrdered = serde_json::from_str(&json_str)
+        let mut global_icfg: GlobalICFGOrdered = serde_json::from_str(&json_str)
             .map_err(|e| format!("failed to deserialize {}: {e}", icfg_path.display()))?;
         let selected_entry = resolve_entrypoint(&global_icfg, &normalized_root)
             .map_err(|e| format!(
                 "invalid v6O root '{requested_root}' (normalized local DefPath '{normalized_root}'): {e}"
             ))?;
+        let selected_entry = if global_icfg.dependency_body_ingestion_v1.is_some() {
+            match execution_graph::context_expand(&mut global_icfg, &selected_entry) {
+                Ok(entry) => {
+                    let encoded = serde_json::to_string_pretty(&global_icfg).expect("serialize context graph");
+                    fs::write(&icfg_path, &encoded).map_err(|e| format!("write context graph: {e}"))?;
+                    fs::write(&staged_icfg, encoded).map_err(|e| format!("stage context graph: {e}"))?;
+                    entry
+                }
+                Err(err) => {
+                    if let Ok(encoded) = serde_json::to_string_pretty(&global_icfg) {
+                        let _ = fs::write(&icfg_path, &encoded);
+                        let _ = fs::write(&staged_icfg, encoded);
+                    }
+                    return Err(format!("DEP1-P2 context graph incomplete: {err}"));
+                }
+            }
+        } else { selected_entry };
         println!("entrypoint: {}", selected_entry);
         set_entrypoint(selected_entry.clone());
 

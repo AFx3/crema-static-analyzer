@@ -3,8 +3,149 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+const DEP1_FORCED_MIR_FLAG: &str = "-Zalways-encode-mir=yes";
+const CARGO_ENCODED_SEPARATOR: char = '\u{1f}';
+
+fn cargo_config_value(cwd: &Path, key: &str) -> Result<Option<Value>, String> {
+    let output = Command::new("cargo")
+        .args(["-Z", "unstable-options", "config", "get", "--format", "json-value", key])
+        .current_dir(cwd)
+        .output()
+        .map_err(|e| format!("failed to query Cargo config {key}: {e}"))?;
+    if output.status.success() {
+        return serde_json::from_slice(&output.stdout)
+            .map(Some)
+            .map_err(|e| format!("Cargo config {key} returned invalid JSON: {e}"));
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("is not set") {
+        Ok(None)
+    } else {
+        Err(format!("failed to query Cargo config {key}: {}", stderr.trim()))
+    }
+}
+
+fn dep1_user_wrapper_conflict(
+    environment: &[(&str, Option<String>)],
+    cargo_config: &[(&str, Option<Value>)],
+) -> Option<String> {
+    for (name, value) in environment {
+        if value.as_deref().is_some_and(|value| !value.is_empty()) {
+            return Some(format!(
+                "DEP1 configuration error: preexisting {name} is set; DEP1 refuses to replace or bypass user rustc wrappers"
+            ));
+        }
+    }
+    for (key, value) in cargo_config {
+        if value.as_ref().is_some_and(|value| !value.is_null()) {
+            return Some(format!(
+                "DEP1 configuration error: Cargo config {key} is set; DEP1 refuses to replace or bypass user rustc wrappers"
+            ));
+        }
+    }
+    None
+}
+
+/// Fail before target discovery/build if the caller already selected a rustc
+/// wrapper. Cargo composes `RUSTC_WRAPPER` outside the workspace wrapper; DEP1
+/// cannot safely instrument a selected invocation through an arbitrary user
+/// wrapper while preserving that wrapper's transformations. Rejecting the
+/// configuration is preferable to changing its compiler behavior silently.
+pub fn ensure_dep1_wrapper_compatibility(cwd: &Path) -> Result<(), String> {
+    let env_names = [
+        "RUSTC_WRAPPER",
+        "RUSTC_WORKSPACE_WRAPPER",
+        "CARGO_BUILD_RUSTC_WRAPPER",
+        "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
+    ];
+    let environment: Vec<_> = env_names
+        .iter()
+        .map(|name| (*name, env::var(name).ok()))
+        .collect();
+    if let Some(error) = dep1_user_wrapper_conflict(&environment, &[]) {
+        return Err(error);
+    }
+    let cargo_config = [
+        ("build.rustc-wrapper", cargo_config_value(cwd, "build.rustc-wrapper")?),
+        (
+            "build.rustc-workspace-wrapper",
+            cargo_config_value(cwd, "build.rustc-workspace-wrapper")?,
+        ),
+    ];
+    if let Some(error) = dep1_user_wrapper_conflict(&[], &cargo_config) {
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn config_flag_array(value: Option<Value>, key: &str) -> Result<Option<Vec<String>>, String> {
+    let Some(value) = value else { return Ok(None); };
+    let values = value.as_array().ok_or_else(|| format!("Cargo config {key} must be an array of strings"))?;
+    let mut flags = Vec::with_capacity(values.len());
+    for value in values {
+        flags.push(value.as_str().ok_or_else(|| format!("Cargo config {key} contains a non-string flag"))?.to_string());
+    }
+    Ok(Some(flags))
+}
+
+fn effective_dep1_rustflags(cwd: &Path, target: &str) -> Result<(Vec<String>, &'static str), String> {
+    if let Some(encoded) = env::var_os("CARGO_ENCODED_RUSTFLAGS") {
+        let encoded = encoded.into_string().map_err(|_| "CARGO_ENCODED_RUSTFLAGS is not valid UTF-8".to_string())?;
+        return Ok((select_existing_rustflags(Some(&encoded), None, None, None)?, "CARGO_ENCODED_RUSTFLAGS"));
+    }
+    if let Some(raw) = env::var_os("RUSTFLAGS") {
+        let raw = raw.into_string().map_err(|_| "RUSTFLAGS is not valid UTF-8".to_string())?;
+        return Ok((select_existing_rustflags(None, Some(&raw), None, None)?, "RUSTFLAGS"));
+    }
+
+    // Read the merged Cargo target table so cfg-based rustflags cannot be
+    // silently lost when CREMA installs the composed encoded environment.
+    if let Some(target_table) = cargo_config_value(cwd, "target")? {
+        let table = target_table.as_object().ok_or_else(|| "Cargo target config must be a table".to_string())?;
+        for (selector, entry) in table {
+            if selector != target && entry.get("rustflags").is_some() {
+                return Err(format!("DEP1 cannot safely compose target rustflags selector '{selector}' for explicit target '{target}'; refusing to replace effective flags"));
+            }
+        }
+        if let Some(value) = table.get(target).and_then(|entry| entry.get("rustflags")) {
+            let target_flags = config_flag_array(Some(value.clone()), &format!("target.{target}.rustflags"))?;
+            return Ok((select_existing_rustflags(None, None, target_flags, None)?, "target-specific Cargo config"));
+        }
+    }
+    let flags = config_flag_array(cargo_config_value(cwd, "build.rustflags")?, "build.rustflags")?
+        .unwrap_or_default();
+    Ok((select_existing_rustflags(None, None, None, Some(flags))?, "build.rustflags Cargo config"))
+}
+
+fn select_existing_rustflags(
+    encoded: Option<&str>,
+    raw: Option<&str>,
+    target_config: Option<Vec<String>>,
+    build_config: Option<Vec<String>>,
+) -> Result<Vec<String>, String> {
+    if let Some(value) = encoded {
+        return Ok(value.split(CARGO_ENCODED_SEPARATOR).filter(|x| !x.is_empty()).map(ToOwned::to_owned).collect());
+    }
+    if let Some(value) = raw {
+        return Ok(value.split_whitespace().map(ToOwned::to_owned).collect());
+    }
+    Ok(target_config.or(build_config).unwrap_or_default())
+}
+
+fn compose_dep1_rustflags(mut flags: Vec<String>) -> Result<Vec<String>, String> {
+    let conflict = flags.iter().any(|f| f.starts_with("-Zalways-encode-mir=") && f != DEP1_FORCED_MIR_FLAG);
+    if conflict {
+        return Err("DEP1 forced MIR encoding conflicts with an existing -Zalways-encode-mir setting".to_string());
+    }
+    if !flags.iter().any(|f| f == DEP1_FORCED_MIR_FLAG) {
+        flags.push(DEP1_FORCED_MIR_FLAG.to_string());
+    }
+    Ok(flags)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -74,6 +215,7 @@ pub struct CargoCliConfig {
     pub all_features: bool,
     pub no_default_features: bool,
     pub target_triple: Option<String>,
+    pub dependency_body_ingestion_v1: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -669,6 +811,9 @@ pub fn run_selected_target_with_cargo(
     cfg: &CargoCliConfig,
     invocation: CargoBuildInvocation<'_>,
 ) -> Result<(), String> {
+    if cfg.dependency_body_ingestion_v1 {
+        return run_selected_target_with_dep1(plan, cfg, invocation);
+    }
     fs::create_dir_all(invocation.cargo_target_dir).map_err(|e| {
         format!(
             "failed to create isolated Cargo target dir {}: {e}",
@@ -744,6 +889,238 @@ pub fn run_selected_target_with_cargo(
     Ok(())
 }
 
+fn effective_dep1_target(plan: &CargoAnalysisPlan, cwd: &Path) -> Result<String, String> {
+    if let Some(target) = plan.target_triple.as_ref() {
+        if !target.trim().is_empty() { return Ok(target.clone()); }
+    }
+    if let Some(configured) = cargo_config_value(cwd, "build.target")? {
+        if let Some(target) = configured.as_str() { return Ok(target.to_string()); }
+        if let Some(targets) = configured.as_array() {
+            if targets.len() == 1 {
+                return targets[0].as_str().map(ToOwned::to_owned)
+                    .ok_or_else(|| "Cargo build.target array contains a non-string".to_string());
+            }
+            return Err("DEP1 requires one explicit Cargo target; build.target config selects multiple targets".to_string());
+        }
+        return Err("Cargo build.target must be a string or a one-element array for DEP1".to_string());
+    }
+    let output = Command::new("rustc")
+        .arg("--version")
+        .arg("--verbose")
+        .current_dir(cwd)
+        .output()
+        .map_err(|e| format!("failed to obtain rustc host target for DEP1: {e}"))?;
+    if !output.status.success() {
+        return Err(format!("rustc --version --verbose failed while selecting DEP1 target: {}", String::from_utf8_lossy(&output.stderr)));
+    }
+    String::from_utf8_lossy(&output.stdout).lines()
+        .find_map(|line| line.strip_prefix("host: ").map(ToOwned::to_owned))
+        .ok_or_else(|| "rustc --version --verbose did not report host target".to_string())
+}
+
+fn cargo_target_build_command(
+    plan: &CargoAnalysisPlan,
+    cfg: &CargoCliConfig,
+    invocation: &CargoBuildInvocation<'_>,
+    target: &str,
+    encoded_rustflags: &str,
+    phase_dir: &Path,
+    callback_enabled: bool,
+    catalog_path: Option<&Path>,
+) -> Result<Command, String> {
+    let mut cmd = Command::new("cargo");
+    match plan.selected_target.kind {
+        CargoTargetKind::Test => { cmd.arg("test").arg("--no-run"); }
+        CargoTargetKind::Bench => { cmd.arg("bench").arg("--no-run"); }
+        _ => { cmd.arg("build"); }
+    }
+    append_v6o_build_resolver_args(&mut cmd);
+    cmd.arg("--manifest-path").arg(invocation.project_manifest)
+        .arg("--package").arg(&plan.package_name);
+    match plan.selected_target.kind {
+        CargoTargetKind::Lib => { cmd.arg("--lib"); }
+        kind => { cmd.arg(kind.cargo_selector()).arg(&plan.selected_target.name); }
+    }
+    append_feature_args(&mut cmd, cfg)?;
+    cmd.arg("--target").arg(target)
+        .arg("--target-dir").arg(invocation.cargo_target_dir)
+        .arg("--message-format=json-render-diagnostics");
+    let mut command = cmd;
+    // ID2 established that Cargo includes RUSTC_WORKSPACE_WRAPPER's path in
+    // workspace unit metadata, while RUSTC_WRAPPER's path is neutral. User
+    // wrappers have already been rejected explicitly before Cargo discovery.
+    // DEP1 therefore occupies only the wrapper-neutral RUSTC_WRAPPER slot.
+    command.env("RUSTC_WRAPPER", invocation.tool_executable)
+        .env(
+            "CREMA_DEP1_RUSTC_ARGV_LOG",
+            phase_dir.join(if callback_enabled {
+                "phase-b-rustc-argv.jsonl"
+            } else {
+                "phase-a-rustc-argv.jsonl"
+            }),
+        )
+        .env("CREMA_V6O_RUSTC_WRAPPER_MODE", "1")
+        .env("CREMA_V6O_SELECTED_SRC", &plan.selected_target.src_path)
+        .env("CREMA_V6O_SVF_OUTPUT_DIR", invocation.svf_output_dir)
+        .env("CREMA_V6O_FFI_FUNCTIONS_PATH", invocation.ffi_functions_path)
+        .env("CREMA_V6O_ICFG_OUTPUT_PATH", invocation.icfg_output_path)
+        .env("CREMA_V6O_ENTRY_HINT", invocation.semantic_root)
+        .env("CARGO_TARGET_DIR", invocation.cargo_target_dir)
+        .env("CARGO_INCREMENTAL", "0")
+        .env("CARGO_ENCODED_RUSTFLAGS", encoded_rustflags)
+        .env_remove("RUSTFLAGS")
+        .env_remove("CREMA_DEP1_ANALYSIS_ENABLED")
+        .env_remove("CREMA_DEP1_ARTIFACT_CATALOG");
+    if callback_enabled {
+        command.env("CREMA_DEP1_ANALYSIS_ENABLED", "1")
+            .env("CREMA_DEP1_ARTIFACT_CATALOG", catalog_path.ok_or("DEP1 callback requires catalog path")?);
+    } else {
+        command.env("CREMA_DEP1_PHASE_A", "1");
+    }
+    command.current_dir(Path::new(&plan.package_root));
+    Ok(command)
+}
+
+fn run_cargo_json_capture(mut command: Command, stdout_path: &Path, stderr_path: &Path, label: &str) -> Result<Vec<Value>, String> {
+    let output = command.output().map_err(|e| format!("failed to launch DEP1 {label} Cargo build: {e}"))?;
+    fs::write(stdout_path, &output.stdout).map_err(|e| format!("failed to save {}: {e}", stdout_path.display()))?;
+    fs::write(stderr_path, &output.stderr).map_err(|e| format!("failed to save {}: {e}", stderr_path.display()))?;
+    std::io::stdout().write_all(&output.stdout).ok();
+    std::io::stderr().write_all(&output.stderr).ok();
+    if !output.status.success() {
+        return Err(format!("DEP1 {label} Cargo build failed with {} (see {})", output.status, stderr_path.display()));
+    }
+    let mut artifacts = Vec::new();
+    for (line_no, line) in String::from_utf8_lossy(&output.stdout).lines().enumerate() {
+        let Ok(value) = serde_json::from_str::<Value>(line) else { continue; };
+        if value.get("reason").and_then(Value::as_str) == Some("compiler-artifact") {
+            for field in ["package_id", "manifest_path", "target", "profile", "features", "filenames", "fresh"] {
+                if value.get(field).is_none() {
+                    return Err(format!("DEP1 {label} compiler-artifact JSON line {} lacks {field}", line_no + 1));
+                }
+            }
+            artifacts.push(value);
+        }
+    }
+    Ok(artifacts)
+}
+
+fn artifact_unit_key(row: &Value) -> Result<String, String> {
+    let target = row.get("target").ok_or("artifact target missing")?;
+    Ok(serde_json::to_string(&serde_json::json!({
+        "package_id":row.get("package_id"), "manifest_path":row.get("manifest_path"),
+        "target_name":target.get("name"), "target_kind":target.get("kind"),
+        "crate_types":target.get("crate_types"), "profile":row.get("profile"),
+        "features":row.get("features")
+    })).unwrap())
+}
+
+fn build_dep1_artifact_catalog(artifacts: &[Value]) -> Result<Value, String> {
+    let mut index: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+    for row in artifacts {
+        let filenames = row.get("filenames").and_then(Value::as_array).ok_or("compiler-artifact filenames is not an array")?;
+        for filename in filenames {
+            let original = filename.as_str().ok_or("compiler-artifact filename is not a string")?;
+            let canonical = fs::canonicalize(original).map_err(|e| format!("Cargo artifact path cannot be canonicalized {original}: {e}"))?;
+            let unit = serde_json::json!({"path_original":original,"path_canonical":canonical,"artifact":row});
+            index.entry(original.to_string()).or_default().push(unit.clone());
+            let canonical_s = canonical.to_string_lossy().into_owned();
+            if canonical_s != original { index.entry(canonical_s).or_default().push(unit); }
+        }
+    }
+    Ok(serde_json::json!({"schema":"dep1_p1_cargo_rustc_artifact_catalog_v1","artifact_records":artifacts,"exact_path_index":index}))
+}
+
+fn run_selected_target_with_dep1(
+    plan: &CargoAnalysisPlan,
+    cfg: &CargoCliConfig,
+    invocation: CargoBuildInvocation<'_>,
+) -> Result<(), String> {
+    ensure_dep1_wrapper_compatibility(Path::new(&plan.package_root))?;
+    fs::create_dir_all(invocation.cargo_target_dir).map_err(|e| format!("failed to create Cargo target dir: {e}"))?;
+    if invocation.icfg_output_path.exists() { fs::remove_file(invocation.icfg_output_path).map_err(|e| format!("failed to remove stale ICFG: {e}"))?; }
+    let package_root = Path::new(&plan.package_root);
+    let target = effective_dep1_target(plan, package_root)?;
+    let (existing_flags, source) = effective_dep1_rustflags(package_root, &target)?;
+    let effective_flags = compose_dep1_rustflags(existing_flags.clone())?;
+    let encoded_flags = effective_flags.join(&CARGO_ENCODED_SEPARATOR.to_string());
+    let phase_dir = invocation.icfg_output_path.parent().unwrap_or(invocation.tool_dir).join("dep1-cargo-phases");
+    fs::create_dir_all(&phase_dir).map_err(|e| format!("failed to create DEP1 phase directory: {e}"))?;
+
+    let mut metadata_cmd = Command::new("cargo");
+    metadata_cmd.arg("metadata").arg("--format-version").arg("1")
+        .arg("--filter-platform").arg(&target)
+        .arg("--manifest-path").arg(&plan.package_manifest_path);
+    append_feature_args(&mut metadata_cmd, cfg)?;
+    let metadata_output = metadata_cmd.current_dir(package_root).output()
+        .map_err(|e| format!("failed to run DEP1 Cargo metadata: {e}"))?;
+    fs::write(phase_dir.join("cargo-metadata.json"), &metadata_output.stdout).map_err(|e| e.to_string())?;
+    fs::write(phase_dir.join("cargo-metadata.stderr"), &metadata_output.stderr).map_err(|e| e.to_string())?;
+    if !metadata_output.status.success() { return Err(format!("DEP1 Cargo metadata failed: {}", String::from_utf8_lossy(&metadata_output.stderr))); }
+    let metadata: Value = serde_json::from_slice(&metadata_output.stdout).map_err(|e| format!("invalid DEP1 Cargo metadata JSON: {e}"))?;
+    if metadata.get("version").and_then(Value::as_u64) != Some(1) { return Err("DEP1 Cargo metadata format version is not 1".to_string()); }
+    let matching_packages: Vec<_> = metadata.get("packages").and_then(Value::as_array).into_iter().flatten()
+        .filter(|p| p.get("id").and_then(Value::as_str) == Some(plan.package_id.as_str())).collect();
+    if matching_packages.len() != 1 || matching_packages[0].get("manifest_path").and_then(Value::as_str) != Some(plan.package_manifest_path.as_str()) {
+        return Err("DEP1 selected Cargo PackageId did not resolve uniquely to its planned manifest_path".to_string());
+    }
+
+    let phase_a = cargo_target_build_command(plan, cfg, &invocation, &target, &encoded_flags, &phase_dir, false, None)?;
+    let phase_a_artifacts = run_cargo_json_capture(phase_a, &phase_dir.join("phase-a-cargo.jsonl"), &phase_dir.join("phase-a-cargo.stderr"), "Phase A")?;
+    let selected_target_rows: Vec<_> = phase_a_artifacts.iter().filter(|r| {
+        r.get("package_id").and_then(Value::as_str) == Some(plan.package_id.as_str())
+            && r.get("target").and_then(|t| t.get("name")).and_then(Value::as_str) == Some(plan.selected_target.name.as_str())
+    }).collect();
+    if selected_target_rows.len() != 1 { return Err(format!("DEP1 Phase A expected one selected target compiler-artifact for PackageId {}, found {}", plan.package_id, selected_target_rows.len())); }
+    let catalog = build_dep1_artifact_catalog(&phase_a_artifacts)?;
+    let catalog_path = phase_dir.join("artifact-catalog.json");
+    fs::write(&catalog_path, serde_json::to_vec_pretty(&serde_json::json!({"catalog":catalog,"cargo_metadata":metadata,"selected_package_id":plan.package_id,"selected_target":plan.selected_target,"target_triple":target})).unwrap())
+        .map_err(|e| format!("failed to write DEP1 artifact catalog: {e}"))?;
+    let mut perms = fs::metadata(&catalog_path).map_err(|e| e.to_string())?.permissions();
+    perms.set_readonly(true);
+    fs::set_permissions(&catalog_path, perms).map_err(|e| format!("failed to make artifact catalog read-only: {e}"))?;
+
+    // Verify all non-selected Cargo artifact files survive the accepted clean operation.
+    let mut dependency_hashes = BTreeMap::new();
+    for row in &phase_a_artifacts {
+        if row.get("package_id").and_then(Value::as_str) == Some(plan.package_id.as_str()) { continue; }
+        for path in row.get("filenames").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str) {
+            if let Ok(bytes) = fs::read(path) { dependency_hashes.insert(path.to_string(), crate::utils::compute_hash(&bytes)); }
+        }
+    }
+    let mut clean = Command::new("cargo");
+    clean.arg("clean").arg("--manifest-path").arg(&plan.package_manifest_path)
+        .arg("--package").arg(&plan.package_name).arg("--target").arg(&target)
+        .arg("--target-dir").arg(invocation.cargo_target_dir)
+        .current_dir(package_root);
+    let clean_out = clean.output().map_err(|e| format!("failed to run selected-package DEP1 cargo clean: {e}"))?;
+    fs::write(phase_dir.join("cargo-clean.stdout"), &clean_out.stdout).map_err(|e| e.to_string())?;
+    fs::write(phase_dir.join("cargo-clean.stderr"), &clean_out.stderr).map_err(|e| e.to_string())?;
+    if !clean_out.status.success() { return Err(format!("DEP1 selected-package cargo clean failed: {}", String::from_utf8_lossy(&clean_out.stderr))); }
+    for (path, hash) in &dependency_hashes {
+        let bytes = fs::read(path).map_err(|e| format!("selected-package clean removed dependency artifact {path}: {e}"))?;
+        if crate::utils::compute_hash(&bytes) != *hash { return Err(format!("selected-package clean changed dependency artifact {path}")); }
+    }
+    let selected_files = selected_target_rows[0].get("filenames").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).collect::<Vec<_>>();
+    if !selected_files.iter().any(|path| !Path::new(path).exists()) { return Err("DEP1 cargo clean did not invalidate a selected-target artifact".to_string()); }
+
+    let phase_b = cargo_target_build_command(plan, cfg, &invocation, &target, &encoded_flags, &phase_dir, true, Some(&catalog_path))?;
+    let phase_b_artifacts = run_cargo_json_capture(phase_b, &phase_dir.join("phase-b-cargo.jsonl"), &phase_dir.join("phase-b-cargo.stderr"), "Phase B")?;
+    for row in phase_b_artifacts.iter().filter(|r| r.get("package_id").and_then(Value::as_str) != Some(plan.package_id.as_str())) {
+        let key = artifact_unit_key(row)?;
+        let phase_a_row = phase_a_artifacts.iter().find(|a| artifact_unit_key(a).ok().as_deref() == Some(key.as_str()))
+            .ok_or_else(|| format!("DEP1 Phase B dependency unit absent from Phase A catalog: {key}"))?;
+        let a: BTreeSet<_> = phase_a_row.get("filenames").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).collect();
+        let b: BTreeSet<_> = row.get("filenames").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).collect();
+        if a != b { return Err(format!("DEP1 Phase A/B dependency artifact path changed for unit {key}")); }
+    }
+    if !invocation.icfg_output_path.is_file() { return Err(format!("DEP1 Phase B succeeded without selected-target ICFG {}", invocation.icfg_output_path.display())); }
+
+    let flags_report = serde_json::json!({"schema":"dep1_p1_rustflags_composition_v1","source":source,"preexisting_flags":existing_flags,"effective_flags":effective_flags,"forced_flag":DEP1_FORCED_MIR_FLAG,"explicit_target":target,"target_scoped":true,"phase_a_phase_b_same_encoded_flags":true,"catalog_read_only":true});
+    fs::write(phase_dir.join("rustflags-composition.json"), serde_json::to_vec_pretty(&flags_report).unwrap()).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub fn isolated_cargo_target_dir(tool_dir: &Path, root: &str) -> PathBuf {
     use std::time::{SystemTime, UNIX_EPOCH};
     let nonce = SystemTime::now()
@@ -793,6 +1170,48 @@ mod tests {
         assert_eq!(AnalysisMode::parse("library").unwrap(), AnalysisMode::Library);
         assert_eq!(AnalysisMode::parse("workspace").unwrap(), AnalysisMode::Workspace);
         assert!(AnalysisMode::parse("auto").is_err());
+    }
+
+    #[test]
+    fn dep1_rustflags_composition_preserves_each_supported_precedence_source() {
+        let cases = [
+            ("no flags", None, None, None, None, Vec::<String>::new()),
+            ("RUSTFLAGS", None, Some("-C debuginfo=1 --cfg user_flag"), None, None, vec!["-C".into(), "debuginfo=1".into(), "--cfg".into(), "user_flag".into()]),
+            ("CARGO_ENCODED_RUSTFLAGS", Some("-C\u{1f}debuginfo=2\u{1f}--cfg\u{1f}encoded"), Some("-C ignored"), None, None, vec!["-C".into(), "debuginfo=2".into(), "--cfg".into(), "encoded".into()]),
+            ("build.rustflags", None, None, None, Some(vec!["-C".into(), "debuginfo=3".into()]), vec!["-C".into(), "debuginfo=3".into()]),
+            ("target rustflags override build", None, None, Some(vec!["-C".into(), "opt-level=1".into()]), Some(vec!["-C".into(), "debuginfo=3".into()]), vec!["-C".into(), "opt-level=1".into()]),
+        ];
+        for (label, encoded, raw, target, build, expected) in cases {
+            assert_eq!(select_existing_rustflags(encoded, raw, target, build).unwrap(), expected, "{label}");
+        }
+    }
+
+    #[test]
+    fn dep1_rustflags_composition_rejects_conflicting_forced_mir_values() {
+        assert!(compose_dep1_rustflags(vec!["-Zalways-encode-mir=no".into()]).is_err());
+        assert_eq!(compose_dep1_rustflags(vec!["-Cdebuginfo=1".into()]).unwrap(), vec!["-Cdebuginfo=1", DEP1_FORCED_MIR_FLAG]);
+        assert_eq!(compose_dep1_rustflags(vec![DEP1_FORCED_MIR_FLAG.into()]).unwrap(), vec![DEP1_FORCED_MIR_FLAG]);
+    }
+
+    #[test]
+    fn dep1_wrapper_policy_accepts_only_no_user_wrappers() {
+        assert_eq!(dep1_user_wrapper_conflict(&[], &[]), None);
+        for name in ["RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER"] {
+            let error = dep1_user_wrapper_conflict(&[(name, Some("/user/wrapper".to_string()))], &[])
+                .expect("preexisting wrapper must fail closed");
+            assert!(error.contains(name));
+            assert!(error.contains("refuses to replace or bypass"));
+        }
+        let error = dep1_user_wrapper_conflict(
+            &[("RUSTC_WRAPPER", Some("/outer".into())), ("RUSTC_WORKSPACE_WRAPPER", Some("/inner".into()))],
+            &[],
+        ).unwrap();
+        assert!(error.contains("RUSTC_WRAPPER"));
+        let error = dep1_user_wrapper_conflict(
+            &[],
+            &[("build.rustc-workspace-wrapper", Some(Value::String("/configured".into())))],
+        ).unwrap();
+        assert!(error.contains("build.rustc-workspace-wrapper"));
     }
 
     #[test]
