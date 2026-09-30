@@ -626,7 +626,8 @@ fn expected_typed_edge_flow(label: Option<&str>) -> TypedEdgeFlow {
         | Some("Assert unwind")
         | Some("InlineAsm unwind")
         | Some("Rust unwind propagate")
-        | Some("Rust drop unwind propagate") => TypedEdgeFlow::Unwind,
+        | Some("Rust drop unwind propagate")
+        | Some("DEP1 unwind exit -> matched caller cleanup") => TypedEdgeFlow::Unwind,
         _ => TypedEdgeFlow::Normal,
     }
 }
@@ -5992,6 +5993,22 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("projection mismatch"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn typed_edge_flow_validates_matched_dep1_cleanup_without_rewriting_successors() {
+        let input = typed_edge_test_input();
+        let edges = vec![TypedEdgeRecord {
+            source: "b0".into(), destination: "b1".into(),
+            flow: TypedEdgeFlow::Unwind,
+            label: Some("DEP1 unwind exit -> matched caller cleanup".into()),
+            source_label: None, destination_label: None,
+        }];
+        let k = Kripke::from_annotated_icfg_with_overlays(
+            input, PanicLifecycleOverlay::new(), Some(edges.clone())).unwrap();
+        assert_eq!(k.typed_edges, edges);
+        assert_eq!(k.nodes["b0"].successors, vec!["b1".to_string()]);
+        assert_eq!(expected_typed_edge_flow(Some("not-unwind-diagnostic")), TypedEdgeFlow::Normal);
     }
 
     #[test]

@@ -97,6 +97,12 @@ fn context_edge(source: String, destination: String, label: Option<String>) -> I
     IcfgEdge { source, destination, label, source_label: None, destination_label: None }
 }
 
+/// Canonical interprocedural provenance, reconstructed per exact activation.
+/// IcfgEdge currently serializes labels rather than a semantic edge-kind enum.
+fn is_dep1_matched_unwind_template(edge: &IcfgEdge) -> bool {
+    edge.label.as_deref() == Some("DEP1 unwind exit -> matched caller cleanup")
+}
+
 /// Pinned MIR's cleanup target is serialized as `cleanup(bbN)`.  `continue`
 /// means that unwinding escapes the current body; it is not a normal return.
 fn cleanup_block(target: &str) -> Option<&str> {
@@ -339,6 +345,9 @@ pub fn context_expand(icfg: &mut GlobalICFGOrdered, selected_entry: &str) -> Res
             let represented_call = local_by_static_node.get(static_id.as_str()).copied();
             let is_return = matches!(node, GlobalICFGNode::Mir(MirBasicBlock { terminator: Some(MirTerminator::Return { .. }), .. }));
             for edge in edge_map.get(static_id).into_iter().flatten() {
+                // Never clone a shared callee's canonical cleanup fanout.
+                // The activation-specific reconstruction below owns this pop.
+                if is_dep1_matched_unwind_template(edge) { continue; }
                 if represented_call.is_some() { continue; }
                 if is_return && edge.label.as_deref().is_some_and(|l| l.contains("Return -> dummyRet")) { continue; }
                 let destination = if let Some(mapped) = state_ids.get(&edge.destination) {
@@ -544,6 +553,17 @@ pub fn context_expand(icfg: &mut GlobalICFGOrdered, selected_entry: &str) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn matched_unwind_template_filter_is_exact() {
+        for label in ["Call unwind", "Drop unwind", "Assert unwind", "InlineAsm unwind",
+            "Rust unwind propagate", "Rust drop unwind propagate", "Goto", "not-unwind-diagnostic"] {
+            assert!(!is_dep1_matched_unwind_template(&context_edge("u".into(), "v".into(), Some(label.into()))));
+        }
+        assert!(is_dep1_matched_unwind_template(&context_edge("u".into(), "v".into(),
+            Some("DEP1 unwind exit -> matched caller cleanup".into()))));
+        assert!(!is_dep1_matched_unwind_template(&context_edge("u".into(), "v".into(), None)));
+    }
 
     #[test]
     fn cleanup_target_is_structural_and_exact() {
