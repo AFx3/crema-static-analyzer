@@ -1585,6 +1585,19 @@ fn dep1_body_unavailable_reason(is_foreign_item: bool) -> &'static str {
     }
 }
 
+// Compiler-certified R1 value shapes. This proof is opt-in and is never
+// reconstructed from debug names or the textual MIR exported for diagnostics.
+fn dep1_r1_value_shape<'tcx>(tcx: TyCtxt<'tcx>, ty: ty::Ty<'tcx>) -> &'static str {
+    match ty.kind() {
+        TyKind::RawPtr(..) => "raw_pointer",
+        TyKind::Ref(_, _, Mutability::Mut) => "mutable_reference",
+        TyKind::Ref(..) => "shared_reference",
+        TyKind::Adt(adt, _) if tcx.lang_items().owned_box() == Some(adt.did()) => "owned_box",
+        TyKind::Bool | TyKind::Char | TyKind::Int(_) | TyKind::Uint(_) | TyKind::Float(_) => "scalar",
+        _ => "unsupported_value_shape",
+    }
+}
+
 fn dep1_discover_bodies<'tcx>(
     tcx: TyCtxt<'tcx>,
     entry_hint: &str,
@@ -1638,10 +1651,21 @@ fn dep1_discover_bodies<'tcx>(
             "mir_query":"optimized_mir",
             "instance_context_preserved":true
         }));
+        if crate::identity::p3_actual_formal_enabled() {
+            let abi = if matches!(tcx.def_kind(caller_def), DefKind::Fn | DefKind::AssocFn) {
+                format!("{:?}", tcx.fn_sig(caller_def).instantiate_identity().skip_binder().abi)
+            } else { "unsupported_callable_abi".to_string() };
+            let formals: Vec<_> = (1..=body.arg_count).map(|local| serde_json::json!({
+                "argument_index":local-1,"formal_local":local,
+                "value_shape":dep1_r1_value_shape(tcx, body.local_decls[Local::from_usize(local)].ty)
+            })).collect();
+            let record = body_records.last_mut().expect("represented body record");
+            record["formal_arguments_v1"] = serde_json::json!({"abi":abi,"arg_count":body.arg_count,"arguments":formals,"source":"rustc_optimized_mir_local_decls"});
+        }
 
         for (bb, data) in body.basic_blocks.iter_enumerated() {
             let Some(term) = data.terminator.as_ref() else { continue; };
-            let TerminatorKind::Call { func, .. } = &term.kind else { continue; };
+            let TerminatorKind::Call { func, args: actuals, .. } = &term.kind else { continue; };
             let func_ty = func.ty(&body.local_decls, tcx);
             let (operand_def, args) = match func_ty.kind() {
                 TyKind::FnDef(def_id, args) => (*def_id, *args),
@@ -1720,6 +1744,23 @@ fn dep1_discover_bodies<'tcx>(
                 "body_unavailable_reason":body_unavailable_reason,
                 "trait_or_dispatch_resolution_changed_definition":operand_def != resolved_def
             }));
+            if crate::identity::p3_actual_formal_enabled() {
+                let actual_proofs: Vec<_> = actuals.iter().enumerate().map(|(index, arg)| {
+                    let (operand, place) = match &arg.node {
+                        Operand::Copy(place) => ("copy", Some(place)),
+                        Operand::Move(place) => ("move", Some(place)),
+                        Operand::Constant(_) => ("constant", None),
+                    };
+                    serde_json::json!({
+                        "argument_index":index,"operand":operand,
+                        "actual_local":place.map(|p|p.local.index()),
+                        "direct_local":place.is_some_and(|p|p.projection.is_empty()),
+                        "value_shape":dep1_r1_value_shape(tcx,arg.node.ty(&body.local_decls,tcx)),
+                        "source":"rustc_mir_call_operand"
+                    })
+                }).collect();
+                call_records.last_mut().expect("resolved call record")["actual_operands_v1"] = serde_json::json!(actual_proofs);
+            }
             if body_status == "represented_body" { worklist.push_back(resolved); }
         }
     }

@@ -413,6 +413,8 @@ pub struct IdentityAnalysisPoint {
 /// over contexts and is the representation intended for later CQPL export.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct AllocationIdentityState {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependency_resource_identity_continuity_v1: Option<serde_json::Value>,
     /// Context-sensitive post-state after executing the whole ICFG node.
     pub by_point: BTreeMap<IdentityAnalysisPoint, AllocationIdentityMemory>,
     /// MAY join of `by_point` over bounded contexts.
@@ -433,6 +435,8 @@ pub struct AllocationIdentityState {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AllocationIdentityDump {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dependency_resource_identity_continuity_v1: Option<serde_json::Value>,
     pub schema: &'static str,
     pub by_point: Vec<IdentityPointDump>,
     pub by_node: Vec<IdentityNodeDump>,
@@ -531,6 +535,7 @@ impl IdentityMemoryDump {
 impl AllocationIdentityState {
     pub fn to_dump(&self) -> AllocationIdentityDump {
         AllocationIdentityDump {
+            dependency_resource_identity_continuity_v1: self.dependency_resource_identity_continuity_v1.clone(),
             schema: "CREMA Allocation Identity v6G",
             by_point: self
                 .by_point
@@ -2219,6 +2224,153 @@ pub fn fixed_point_disposition_identity_analysis(
     )
 }
 
+/// Opt-in R1 gate inherited by the compiler wrapper. ProgramVarId and
+/// AbstractAllocId retain their existing meanings.
+pub(crate) fn p3_actual_formal_enabled() -> bool {
+    std::env::var("CREMA_INTERNAL_DEP1_P3_R1").as_deref() == Ok("1")
+}
+
+#[derive(Clone)]
+struct ActualFormalPlan {
+    activation: serde_json::Value,
+    caller_scope: String,
+    callee_scope: String,
+    actuals: Vec<serde_json::Value>,
+    formals: Vec<serde_json::Value>,
+    abi: String,
+}
+
+fn actual_formal_plans(icfg: &GlobalICFGOrdered) -> Result<BTreeMap<String, ActualFormalPlan>, String> {
+    let dep = icfg.dependency_body_ingestion_v1.as_ref().ok_or("p2_control_flow_incomplete: DEP1 absent")?;
+    let graph = dep.context_execution_graph_v1.as_ref().ok_or("p2_control_flow_incomplete: execution graph absent")?;
+    let activations = graph.get("represented_call_activations").and_then(serde_json::Value::as_array)
+        .ok_or("p2_control_flow_incomplete: activation records absent")?;
+    let mut plans = BTreeMap::new();
+    for a in activations {
+        let text = |field: &str| a.get(field).and_then(serde_json::Value::as_str).ok_or_else(|| format!("unresolved_formal: missing {field}"));
+        let key = text("call_key")?;
+        let callee = text("callee_instance_id")?;
+        let caller = text("caller_instance_id")?;
+        let static_matches: Vec<_> = dep.exact_call_bindings.iter().filter(|b| b["call_key"] == key
+            && b["caller_instance_id"] == caller && b["resolved_instance_id"] == callee
+            && b["body_status"] == "represented_body").collect();
+        let [binding] = static_matches.as_slice() else { return Err("unresolved_actual: nonunique P2 binding".into()); };
+        let bodies: Vec<_> = dep.body_statuses.iter().filter(|b| b["instance_id"] == callee && b["body_status"] == "represented_body").collect();
+        let [body] = bodies.as_slice() else { return Err("unresolved_formal: nonunique represented body".into()); };
+        let mut pushed = a["parent_context"].as_array().ok_or("unresolved_actual: parent context")?.clone();
+        pushed.push(serde_json::Value::String(key.into()));
+        if a["callee_context"] != serde_json::Value::Array(pushed) { return Err("p2_control_flow_incomplete: invalid push".into()); }
+        let entry = text("callee_entry_state")?;
+        let scopes: Vec<_> = icfg.rust_functions.iter().filter(|(_,f)| f.entry_node == entry).collect();
+        let [(callee_scope, metadata)] = scopes.as_slice() else { return Err("unresolved_formal: entry scope".into()); };
+        let caller_scope = rust_function_from_node(text("caller_call_state")?).ok_or("unresolved_actual: caller scope")?.to_string();
+        let actuals = binding.get("actual_operands_v1").and_then(serde_json::Value::as_array).ok_or("unresolved_actual: compiler operand proof absent")?.clone();
+        let formal_proof = &body["formal_arguments_v1"];
+        let formals = formal_proof["arguments"].as_array().ok_or("unresolved_formal: compiler locals proof absent")?.clone();
+        if actuals.len() != formals.len() || formals.len() != metadata.arg_count
+            || formal_proof["arg_count"].as_u64() != Some(formals.len() as u64) {
+            return Err("unresolved_formal: ABI/argument cardinality".into());
+        }
+        for (i, (actual, formal)) in actuals.iter().zip(&formals).enumerate() {
+            if actual["argument_index"].as_u64() != Some(i as u64)
+                || formal["argument_index"].as_u64() != Some(i as u64)
+                || formal["formal_local"].as_u64() != Some((i+1) as u64) {
+                return Err("unresolved_formal: compiler argument index".into());
+            }
+        }
+        let proxy = text("dummy_call_state")?.to_string();
+        if !icfg.icfg_edges.iter().any(|e| e.source == proxy && e.destination == entry) {
+            return Err("p2_control_flow_incomplete: certified call-entry edge absent".into());
+        }
+        let plan = ActualFormalPlan { activation:a.clone(), caller_scope, callee_scope:(*callee_scope).clone(),
+            actuals, formals, abi:formal_proof["abi"].as_str().unwrap_or("unsupported_callable_abi").into() };
+        if plans.insert(proxy,plan).is_some() { return Err("p2_control_flow_incomplete: duplicate activation proxy".into()); }
+    }
+    Ok(plans)
+}
+
+/// Import only references reachable from an explicitly bound actual. This is
+/// not a copy of the caller environment. Place/stack-reference edges preserve
+/// their existing scoped identity; no equivalence or heap identity is invented.
+fn import_referents(source: &AllocationIdentityMemory, target: &mut AllocationIdentityMemory, seeds: BTreeSet<PlaceId>) {
+    let mut pending: Vec<_> = seeds.into_iter().collect();
+    let mut seen = BTreeSet::new();
+    while let Some(place) = pending.pop() {
+        if !seen.insert(place.clone()) { continue; }
+        let refs = source.stack_refs_place(&place);
+        if place.projection.is_empty() {
+            target.assign_points_to(place.base.clone(), source.points_to_place(&place));
+            target.assign_stack_refs(place.base.clone(), refs.clone());
+        } else {
+            target.assign_place_points_to(place.clone(), source.points_to_place(&place));
+            target.assign_place_stack_refs(place.clone(), refs.clone());
+        }
+        pending.extend(refs);
+        if place.projection.is_empty() {
+            target.assign_access_bases(place.base.clone(), source.access_bases.get(&place.base).cloned().unwrap_or_default());
+            for (child, allocs) in &source.place_points_to {
+                if child.base == place.base { target.assign_place_points_to(child.clone(),allocs.clone()); }
+            }
+            for (child, refs) in &source.place_stack_refs {
+                if child.base == place.base {
+                    target.assign_place_stack_refs(child.clone(),refs.clone()); pending.extend(refs.iter().cloned());
+                }
+            }
+        }
+    }
+}
+
+fn transfer_actual_formal(plan: &ActualFormalPlan, caller: &AllocationIdentityMemory)
+    -> (AllocationIdentityMemory, Vec<serde_json::Value>) {
+    let mut callee = AllocationIdentityMemory::default();
+    let mut records = Vec::new();
+    for (i,(actual,formal)) in plan.actuals.iter().zip(&plan.formals).enumerate() {
+        let destination = ProgramVarId::Rust { function:plan.callee_scope.clone(),local:(i+1) as u32 };
+        let source = actual["actual_local"].as_u64().map(|local| ProgramVarId::Rust {function:plan.caller_scope.clone(),local:local as u32});
+        let shape = actual["value_shape"].as_str().unwrap_or("unsupported_value_shape");
+        let supported = matches!(shape,"raw_pointer"|"shared_reference"|"mutable_reference"|"owned_box"|"scalar");
+        let status = if plan.abi != "Rust" || !supported || shape != formal["value_shape"].as_str().unwrap_or("")
+            || (actual["operand"] != "constant" && actual["direct_local"] != true)
+            || (actual["operand"] == "constant" && shape != "scalar") {
+            "unsupported_value_shape"
+        } else if shape == "scalar" && source.as_ref().is_none_or(|s|
+            caller.event_allocations(s).is_empty() && caller.stack_refs(s).is_empty()) {
+            "no_tracked_resource"
+        }
+        else if let Some(source) = &source {
+            callee.assign_points_to(destination.clone(),caller.points_to(source));
+            callee.assign_access_bases(destination.clone(),caller.access_bases.get(source).cloned().unwrap_or_default());
+            let refs = caller.stack_refs(source);
+            callee.assign_stack_refs(destination.clone(),refs.clone());
+            import_referents(caller,&mut callee,refs);
+            // Direct value projections are retained only from this bound base.
+            for (p,allocs) in &caller.place_points_to { if &p.base == source {
+                callee.assign_place_points_to(PlaceId{base:destination.clone(),projection:p.projection.clone()},allocs.clone());
+            }}
+            for (p,refs) in &caller.place_stack_refs { if &p.base == source {
+                callee.assign_place_stack_refs(PlaceId{base:destination.clone(),projection:p.projection.clone()},refs.clone());
+                import_referents(caller,&mut callee,refs.clone());
+            }}
+            if caller.event_allocations(source).is_empty() && caller.stack_refs(source).is_empty() {
+                "unresolved_actual"
+            } else { "resource_binding_available" }
+        } else { "unresolved_actual" };
+        let resources = source.as_ref().filter(|_| status=="resource_binding_available")
+            .map(|s|caller.event_allocations(s)).unwrap_or_default();
+        records.push(serde_json::json!({
+            "call_key":plan.activation["call_key"],"caller_instance_id":plan.activation["caller_instance_id"],
+            "concrete_callee_instance":plan.activation["callee_instance_id"],
+            "caller_execution_context":plan.activation["parent_context"],"callee_execution_context":plan.activation["callee_context"],
+            "caller_call_state":plan.activation["caller_call_state"],"callee_entry_state":plan.activation["callee_entry_state"],
+            "argument_index":i,"actual":source,"formal":destination,"operand":actual["operand"],
+            "value_shape":shape,"resources":resources,"status":status,
+            "relation_kind":"actual_to_formal","certainty":"may",
+            "provenance":"rustc_call_operand_and_mir_formal_at_p2_entry_v1"
+        }));
+    }
+    (callee,records)
+}
+
 fn fixed_point_identity_analysis_with_profile(
     icfg: &GlobalICFGOrdered,
     entry: &str,
@@ -2234,6 +2386,11 @@ fn fixed_point_identity_analysis_with_profile(
         node: entry.to_string(),
         context: Vec::new(),
     };
+
+    let r1_enabled = p3_actual_formal_enabled();
+    let r1_plans = if r1_enabled { actual_formal_plans(icfg) } else { Ok(BTreeMap::new()) };
+    let mut r1_records: BTreeMap<String, Vec<serde_json::Value>> = BTreeMap::new();
+    let mut r1_entry_points = BTreeSet::new();
 
     let mut in_states: BTreeMap<IdentityAnalysisPoint, AllocationIdentityMemory> =
         BTreeMap::new();
@@ -2299,6 +2456,22 @@ fn fixed_point_identity_analysis_with_profile(
             event_states.insert(point.clone(), event_summary);
         }
 
+        if let Some(plan) = r1_plans.as_ref().ok().and_then(|plans|plans.get(&point.node)) {
+            if let Some(call) = rust_call_for_dummy_call(icfg, &point.node) {
+                continuations.entry((call.call_node.clone(), point.context.clone())).or_default()
+                    .join_snapshot(&point.context,&post);
+            }
+            let (callee_input,records) = transfer_actual_formal(plan,&post);
+            r1_records.insert(point.node.clone(),records);
+            let callee_point = IdentityAnalysisPoint {
+                node:plan.activation["callee_entry_state"].as_str().expect("validated entry").into(),
+                context:bounded_context(plan.activation["caller_call_state"].as_str().expect("validated call state")),
+            };
+            r1_entry_points.insert(callee_point.clone());
+            if join_input(&mut in_states,callee_point.clone(),callee_input) { worklist.insert(callee_point); }
+            continue;
+        }
+
         if let Some(call) = rust_call_for_dummy_call(icfg, &point.node) {
             let key = (call.call_node.clone(), point.context.clone());
             continuations
@@ -2317,7 +2490,7 @@ fn fixed_point_identity_analysis_with_profile(
                     );
                 }
                 let callee_context = bounded_context(&call.call_node);
-                let callee_input = bind_actuals_to_formals(icfg, call, &post);
+                let callee_input = if r1_enabled { AllocationIdentityMemory::default() } else { bind_actuals_to_formals(icfg, call, &post) };
                 let callee_point = IdentityAnalysisPoint {
                     node: function.entry_node.clone(),
                     context: callee_context,
@@ -2419,7 +2592,22 @@ fn fixed_point_identity_analysis_with_profile(
             .or_insert_with(|| memory.clone());
     }
 
+    let r1_report = r1_enabled.then(|| {
+        let planned = r1_plans.as_ref().map(|p|p.len()).unwrap_or(0);
+        let reached = r1_records.len();
+        let records: Vec<_> = r1_records.into_values().flatten().collect();
+        let complete = r1_plans.is_ok() && planned == reached && records.iter().all(|r| matches!(r["status"].as_str(),Some("resource_binding_available"|"no_tracked_resource")));
+        let entries: Vec<_> = r1_entry_points.iter().filter_map(|p|in_states.get(p).map(|m| IdentityPointDump {
+            node:p.node.clone(),context:p.context.clone(),memory:IdentityMemoryDump::from_memory(m)
+        })).collect();
+        serde_json::json!({"capability":"dependency_resource_identity_continuity_v1","gate":"P3-R1-AF1",
+            "p3_actual_formal_complete":complete,"planned_activations":planned,"reached_activations":reached,"status":r1_plans.err(),"bindings":records,"callee_entry_states":entries,
+            "semantics":"MAY_points_to_at_represented_Rust_call_entry",
+            "return_continuity":"not_evaluated_R1","side_effect_continuity":"not_evaluated_R1",
+            "unwind_resource_continuity":"deferred_to_P3_R3"})
+    });
     AllocationIdentityState {
+        dependency_resource_identity_continuity_v1:r1_report,
         by_point: post_states,
         by_node,
         event_by_point: event_states,
@@ -4711,4 +4899,90 @@ mod tests {
         assert_ne!(a, b);
     }
 
+}
+
+#[cfg(test)]
+mod p3_r1_tests {
+    use super::*;
+    use serde_json::json;
+    use crate::structs::AllocationSiteId;
+
+    fn var(function: &str, local: u32) -> ProgramVarId {
+        ProgramVarId::Rust{function:function.into(),local}
+    }
+    fn alloc(label: &str) -> AbstractAllocId {
+        AbstractAllocId::new(AllocationSiteId::Synthetic{scope:"caller".into(),label:label.into()},vec!["existing_context".into()])
+    }
+    fn plan(actuals: Vec<serde_json::Value>) -> ActualFormalPlan {
+        ActualFormalPlan {
+            activation:json!({"call_key":"K","caller_instance_id":"I0","callee_instance_id":"I1",
+                "parent_context":["outer"],"callee_context":["outer","K"],
+                "caller_call_state":"call","callee_entry_state":"entry"}),
+            caller_scope:"caller".into(),callee_scope:"callee".into(),abi:"Rust".into(),
+            formals:actuals.iter().enumerate().map(|(i,a)|json!({"argument_index":i,"formal_local":i+1,"value_shape":a["value_shape"]})).collect(),actuals,
+        }
+    }
+    fn pointer(local: u32) -> serde_json::Value {
+        json!({"operand":"copy","actual_local":local,"direct_local":true,"value_shape":"raw_pointer"})
+    }
+    #[test]
+    fn p3_r1_may_set_and_scoped_formal_without_caller_environment_copy() {
+        let mut caller=AllocationIdentityMemory::default();
+        let resources=BTreeSet::from([alloc("a"),alloc("b")]);
+        caller.assign_points_to(var("caller",1),resources.clone());
+        caller.assign_fresh(var("caller",8),alloc("unrelated"));
+        let (entry,records)=transfer_actual_formal(&plan(vec![pointer(1)]),&caller);
+        assert_eq!(entry.points_to(&var("callee",1)),resources);
+        assert!(entry.points_to(&var("caller",1)).is_empty());
+        assert!(entry.points_to(&var("callee",8)).is_empty());
+        assert_eq!(records[0]["status"],"resource_binding_available");
+    }
+    #[test]
+    fn p3_r1_distinct_activations_do_not_capture_other_actual() {
+        let mut caller=AllocationIdentityMemory::default();
+        caller.assign_fresh(var("caller",1),alloc("a"));caller.assign_fresh(var("caller",2),alloc("b"));
+        let a=transfer_actual_formal(&plan(vec![pointer(1)]),&caller).0;
+        let b=transfer_actual_formal(&plan(vec![pointer(2)]),&caller).0;
+        assert_eq!(a.points_to(&var("callee",1)),BTreeSet::from([alloc("a")]));
+        assert_eq!(b.points_to(&var("callee",1)),BTreeSet::from([alloc("b")]));
+    }
+    #[test]
+    fn p3_r1_aliases_preserve_same_existing_resource_and_move() {
+        let mut caller=AllocationIdentityMemory::default();caller.assign_fresh(var("caller",1),alloc("a"));
+        caller.assign_fresh(var("caller",2),alloc("a"));
+        let mut moved=pointer(2);moved["operand"]=json!("move");
+        let (entry,_)=transfer_actual_formal(&plan(vec![pointer(1),moved]),&caller);
+        assert_eq!(entry.points_to(&var("callee",1)),entry.points_to(&var("callee",2)));
+        assert_eq!(entry.points_to(&var("callee",1)),BTreeSet::from([alloc("a")]));
+    }
+    #[test]
+    fn p3_r1_scalar_constant_projection_and_unresolved_statuses() {
+        let mut projection=pointer(1);projection["direct_local"]=json!(false);
+        let p=plan(vec![json!({"operand":"constant","value_shape":"scalar"}),projection,pointer(3)]);
+        let (entry,r)=transfer_actual_formal(&p,&AllocationIdentityMemory::default());
+        assert!(entry.points_to.is_empty());
+        assert_eq!(r[0]["status"],"no_tracked_resource");assert_eq!(r[1]["status"],"unsupported_value_shape");
+        assert_eq!(r[2]["status"],"unresolved_actual");
+    }
+    #[test]
+    fn p3_r1_scalar_with_existing_may_relation_is_not_silently_dropped() {
+        let mut caller=AllocationIdentityMemory::default();
+        caller.assign_fresh(var("caller",1),alloc("pointer_bits"));
+        let mut scalar=pointer(1);scalar["value_shape"]=json!("scalar");
+        let (entry,r)=transfer_actual_formal(&plan(vec![scalar]),&caller);
+        assert_eq!(entry.points_to(&var("callee",1)),caller.points_to(&var("caller",1)));
+        assert_eq!(r[0]["status"],"resource_binding_available");
+    }
+
+    #[test]
+    fn p3_r1_reference_import_is_finite_reachable_slice() {
+        let mut caller=AllocationIdentityMemory::default();let place=PlaceId{base:var("caller",2),projection:vec![]};
+        caller.assign_stack_refs(var("caller",1),BTreeSet::from([place.clone()]));
+        caller.assign_fresh(var("caller",2),alloc("a"));caller.assign_fresh(var("caller",8),alloc("unrelated"));
+        let mut a=pointer(1);a["value_shape"]=json!("shared_reference");
+        let (entry,r)=transfer_actual_formal(&plan(vec![a]),&caller);
+        assert_eq!(entry.event_allocations(&var("callee",1)),BTreeSet::from([alloc("a")]));
+        assert_eq!(entry.stack_refs(&var("callee",1)),BTreeSet::from([place]));
+        assert!(entry.points_to(&var("caller",8)).is_empty());assert_eq!(r[0]["status"],"resource_binding_available");
+    }
 }
