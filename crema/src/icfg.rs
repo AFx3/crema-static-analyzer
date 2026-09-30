@@ -1663,9 +1663,16 @@ fn dep1_discover_bodies<'tcx>(
             record["formal_arguments_v1"] = serde_json::json!({"abi":abi,"arg_count":body.arg_count,"arguments":formals,"source":"rustc_optimized_mir_local_decls"});
         }
 
+        if crate::identity::p3_return_continuity_enabled() {
+            let ty = body.local_decls[rustc_middle::mir::RETURN_PLACE].ty;
+            let shape = if matches!(ty.kind(), TyKind::Tuple(fields) if fields.is_empty()) { "unit" }
+                else { dep1_r1_value_shape(tcx,ty) };
+            body_records.last_mut().expect("represented body")["return_place_v1"] = serde_json::json!({
+                "local":rustc_middle::mir::RETURN_PLACE.index(),"value_shape":shape,"source":"rustc_mir_RETURN_PLACE"});
+        }
         for (bb, data) in body.basic_blocks.iter_enumerated() {
             let Some(term) = data.terminator.as_ref() else { continue; };
-            let TerminatorKind::Call { func, args: actuals, .. } = &term.kind else { continue; };
+            let TerminatorKind::Call { func, args: actuals, destination, target, .. } = &term.kind else { continue; };
             let func_ty = func.ty(&body.local_decls, tcx);
             let (operand_def, args) = match func_ty.kind() {
                 TyKind::FnDef(def_id, args) => (*def_id, *args),
@@ -1760,6 +1767,16 @@ fn dep1_discover_bodies<'tcx>(
                     })
                 }).collect();
                 call_records.last_mut().expect("resolved call record")["actual_operands_v1"] = serde_json::json!(actual_proofs);
+            }
+            if crate::identity::p3_return_continuity_enabled() {
+                let fields: Option<Vec<_>> = destination.projection.iter().map(|p| match p {
+                    PlaceElem::Field(index, _) => Some(serde_json::json!({"kind":"field","index":index.index()})),
+                    _ => None,
+                }).collect();
+                call_records.last_mut().expect("resolved call")["return_destination_v1"] = serde_json::json!({
+                    "local":destination.local.index(),"projection":fields,
+                    "supported_projection":fields.is_some(),"has_normal_return":target.is_some(),
+                    "normal_target":target.map(|bb|bb.index()),"source":"rustc_mir_Call_destination"});
             }
             if body_status == "represented_body" { worklist.push_back(resolved); }
         }

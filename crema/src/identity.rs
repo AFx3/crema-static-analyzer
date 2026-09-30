@@ -414,6 +414,8 @@ pub struct IdentityAnalysisPoint {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct AllocationIdentityState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependency_resource_return_continuity_v1: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dependency_resource_identity_continuity_v1: Option<serde_json::Value>,
     /// Context-sensitive post-state after executing the whole ICFG node.
     pub by_point: BTreeMap<IdentityAnalysisPoint, AllocationIdentityMemory>,
@@ -435,6 +437,8 @@ pub struct AllocationIdentityState {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AllocationIdentityDump {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dependency_resource_return_continuity_v1: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dependency_resource_identity_continuity_v1: Option<serde_json::Value>,
     pub schema: &'static str,
@@ -535,6 +539,7 @@ impl IdentityMemoryDump {
 impl AllocationIdentityState {
     pub fn to_dump(&self) -> AllocationIdentityDump {
         AllocationIdentityDump {
+            dependency_resource_return_continuity_v1:self.dependency_resource_return_continuity_v1.clone(),
             dependency_resource_identity_continuity_v1: self.dependency_resource_identity_continuity_v1.clone(),
             schema: "CREMA Allocation Identity v6G",
             by_point: self
@@ -2371,6 +2376,144 @@ fn transfer_actual_formal(plan: &ActualFormalPlan, caller: &AllocationIdentityMe
     (callee,records)
 }
 
+/// R2 is separately opt-in so the accepted R1 transfer remains reproducible.
+pub(crate) fn p3_return_continuity_enabled() -> bool {
+    std::env::var("CREMA_INTERNAL_DEP1_P3_R2").as_deref() == Ok("1")
+}
+
+#[derive(Clone)]
+struct ReturnResourcePlan {
+    entry: ActualFormalPlan,
+    relation: serde_json::Value,
+    destination: Option<PlaceId>,
+    return_shape: String,
+}
+
+fn return_resource_plans(icfg: &GlobalICFGOrdered, entries: &BTreeMap<String, ActualFormalPlan>)
+    -> Result<BTreeMap<String,ReturnResourcePlan>,String> {
+    let dep = icfg.dependency_body_ingestion_v1.as_ref().ok_or("p2_control_flow_incomplete")?;
+    let mut plans = BTreeMap::new();
+    for entry in entries.values() {
+        let a = &entry.activation;
+        let call = dep.exact_call_bindings.iter().find(|b|b["call_key"]==a["call_key"])
+            .ok_or("unresolved_destination: compiler call absent")?;
+        let body = dep.body_statuses.iter().find(|b|b["instance_id"]==a["callee_instance_id"])
+            .ok_or("unresolved_return: compiler body absent")?;
+        let proof = &call["return_destination_v1"];
+        if proof["has_normal_return"] != !a["return_target"].is_null()
+            || proof["normal_target"].as_u64().map(|bb|format!("bb{bb}")) != a["return_target"].as_str().map(str::to_string) {
+            return Err("p2_control_flow_incomplete: compiler normal target mismatch".into());
+        }
+        if body["return_place_v1"]["local"].as_u64()!=Some(0) {
+            return Err("unresolved_return: MIR RETURN_PLACE proof absent".into());
+        }
+        let destination = if proof["supported_projection"]==true {
+            let local = proof["local"].as_u64().ok_or("unresolved_destination: local absent")?;
+            let projection: Vec<PlaceProjection> = serde_json::from_value(proof["projection"].clone())
+                .map_err(|_|"unresolved_destination: projection absent")?;
+            if projection.iter().any(|p| !matches!(p,PlaceProjection::Field{..})) {
+                return Err("unsupported_value_shape: uncertified destination projection".into());
+            }
+            Some(PlaceId {base:ProgramVarId::Rust{function:entry.caller_scope.clone(),local:local as u32},projection})
+        } else { None };
+        let relations = a["normal_return_relations"].as_array().ok_or("p2_control_flow_incomplete: normal relations absent")?;
+        for relation in relations {
+            let source = relation["callee_return_state"].as_str().ok_or("unresolved_return: exit absent")?;
+            let proxy = relation["dummy_ret_state"].as_str().ok_or("unresolved_destination: return proxy absent")?;
+            let next = relation["continuation_state"].as_str().ok_or("unresolved_destination: continuation absent")?;
+            if a["return_target"].is_null() || relation["dummy_ret_state"]!=a["dummy_ret_state"]
+                || relation["continuation_state"]!=a["continuation_state"]
+                || !icfg.icfg_edges.iter().any(|e|e.source==source && e.destination==proxy && e.label.as_deref()==Some("Rust Return -> dummyRet"))
+                || !icfg.icfg_edges.iter().any(|e|e.source==proxy && e.destination==next && e.label.as_deref()==Some("dummyRet -> Rust Continuation"))
+                || !icfg.ordered_nodes.iter().any(|(id,node)|id==source && matches!(node,GlobalICFGNode::Mir(MirBasicBlock{terminator:Some(MirTerminator::Return{..}),..}))) {
+                return Err("p2_control_flow_incomplete: exact normal-return relation absent".into());
+            }
+            let plan = ReturnResourcePlan {entry:entry.clone(),relation:relation.clone(),destination:destination.clone(),
+                return_shape:body["return_place_v1"]["value_shape"].as_str().unwrap_or("unsupported_value_shape").into()};
+            if plans.insert(source.to_string(),plan).is_some() {
+                return Err("p2_control_flow_incomplete: shared or duplicate normal-return activation".into());
+            }
+        }
+    }
+    Ok(plans)
+}
+
+/// Value return only: restore the caller snapshot, then overwrite the exact
+/// destination from _0. Do not join the complete callee environment or effects.
+fn transfer_return_resource(plan: &ReturnResourcePlan, callee: &AllocationIdentityMemory,
+    caller: &AllocationIdentityMemory) -> (AllocationIdentityMemory,serde_json::Value) {
+    let source = ProgramVarId::Rust {function:plan.entry.callee_scope.clone(),local:0};
+    let resources = callee.event_allocations(&source);
+    let refs = callee.stack_refs(&source);
+    let access = callee.access_bases.get(&source).cloned().unwrap_or_default();
+    let mut out = caller.clone();
+    let mut status = if plan.destination.is_none() {"unsupported_destination_shape"}
+        else if !matches!(plan.return_shape.as_str(),"raw_pointer"|"shared_reference"|"mutable_reference"|"owned_box"|"scalar"|"unit") || plan.entry.abi!="Rust" {"unsupported_value_shape"}
+        else if resources.is_empty() && refs.is_empty() {
+            if matches!(plan.return_shape.as_str(),"scalar"|"unit") {"no_tracked_resource"} else {"unresolved_return"}
+        } else {"resource_binding_available"};
+    // Returning a reference is not permission to import changes to preexisting
+    // caller places. Such changes require the later side-effect gate.
+    let mut pending: Vec<_> = refs.iter().cloned().collect();
+    for (place,targets) in &callee.place_stack_refs { if place.base==source {pending.extend(targets.iter().cloned());} }
+    let mut seen = BTreeSet::new();
+    while let Some(place)=pending.pop() {
+        if !seen.insert(place.clone()) {continue;}
+        let callee_owned = matches!(&place.base,ProgramVarId::Rust{function,..} if function==&plan.entry.callee_scope);
+        if !callee_owned && (callee.points_to_place(&place)!=caller.points_to_place(&place)
+            || callee.stack_refs_place(&place)!=caller.stack_refs_place(&place)
+            || (place.projection.is_empty() && callee.access_bases.get(&place.base)!=caller.access_bases.get(&place.base))) {
+            status="unresolved_return";
+        }
+        pending.extend(callee.stack_refs_place(&place));
+    }
+    if let Some(destination)=&plan.destination {
+        if !destination.projection.is_empty() && !access.is_empty() {status="unsupported_value_shape";}
+        // Every supported assignment overwrites its destination, including a
+        // positive nonresource result or an incomplete/unknown result.
+        if destination.projection.is_empty() {out.forget_var(&destination.base);}
+        else {out.assign_place_points_to(destination.clone(),BTreeSet::new());out.assign_place_stack_refs(destination.clone(),BTreeSet::new());}
+        if status=="resource_binding_available" {
+            let mut referents = AllocationIdentityMemory::default();
+            let seeds = seen.clone();
+            import_referents(callee,&mut referents,seeds);
+            let owned = |v:&ProgramVarId| matches!(v,ProgramVarId::Rust{function,..} if function==&plan.entry.callee_scope);
+            referents.points_to.retain(|v,_|owned(v));
+            referents.stack_refs.retain(|v,_|owned(v));
+            referents.access_bases.retain(|v,_|owned(v));
+            referents.place_points_to.retain(|p,_|owned(&p.base));
+            referents.place_stack_refs.retain(|p,_|owned(&p.base));
+            // The equality guard above permits caller-place identity copies,
+            // not changes to caller state. Only return-reachable places enter.
+            out=out.join(&referents);
+            if destination.projection.is_empty() {
+                out.assign_points_to(destination.base.clone(),callee.points_to(&source));
+                out.assign_access_bases(destination.base.clone(),access);
+                out.assign_stack_refs(destination.base.clone(),refs);
+            } else {
+                out.assign_place_points_to(destination.clone(),callee.points_to(&source));
+                out.assign_place_stack_refs(destination.clone(),refs);
+            }
+            for (place,allocs) in &callee.place_points_to {if place.base==source {
+                let mut projection=destination.projection.clone();projection.extend(place.projection.clone());
+                out.assign_place_points_to(PlaceId{base:destination.base.clone(),projection},allocs.clone());
+            }}
+            for (place,targets) in &callee.place_stack_refs {if place.base==source {
+                let mut projection=destination.projection.clone();projection.extend(place.projection.clone());
+                out.assign_place_stack_refs(PlaceId{base:destination.base.clone(),projection},targets.clone());
+            }}
+        }
+    }
+    let a=&plan.entry.activation;
+    let record=serde_json::json!({"call_key":a["call_key"],"caller_instance_id":a["caller_instance_id"],
+        "concrete_callee_instance":a["callee_instance_id"],"caller_execution_context":a["parent_context"],
+        "callee_execution_context":a["callee_context"],"caller_call_state":a["caller_call_state"],
+        "callee_return_variable":source,"caller_destination":plan.destination,"return_shape":plan.return_shape,
+        "normal_return_relation":plan.relation,"resources":resources,"status":status,"certainty":"may",
+        "relation_kind":"callee_return_to_caller_destination","provenance":"rustc_RETURN_PLACE_and_Call_destination_on_P2_matched_normal_return_v1"});
+    (out,record)
+}
+
 fn fixed_point_identity_analysis_with_profile(
     icfg: &GlobalICFGOrdered,
     entry: &str,
@@ -2389,6 +2532,14 @@ fn fixed_point_identity_analysis_with_profile(
 
     let r1_enabled = p3_actual_formal_enabled();
     let r1_plans = if r1_enabled { actual_formal_plans(icfg) } else { Ok(BTreeMap::new()) };
+    let r2_enabled = p3_return_continuity_enabled();
+    let r2_plans = if r2_enabled {r1_plans.as_ref().map_err(Clone::clone).and_then(|p|return_resource_plans(icfg,p))} else {Ok(BTreeMap::new())};
+    let mut graph_reachable=BTreeSet::new();
+    let mut pending=vec![entry.to_string()];
+    while let Some(node)=pending.pop() {if graph_reachable.insert(node.clone()) {pending.extend(succs.get(&node).into_iter().flatten().cloned());}}
+    let mut r2_records = BTreeMap::<String,serde_json::Value>::new();
+    let mut r2_pre_states = BTreeMap::<String,IdentityMemoryDump>::new();
+    let mut r2_post_points = BTreeSet::new();
     let mut r1_records: BTreeMap<String, Vec<serde_json::Value>> = BTreeMap::new();
     let mut r1_entry_points = BTreeSet::new();
 
@@ -2515,6 +2666,24 @@ fn fixed_point_identity_analysis_with_profile(
             })
         );
 
+        if is_return && r2_enabled {
+            if let Some(plan)=r2_plans.as_ref().ok().and_then(|plans|plans.get(&point.node)) {
+                let call_state=plan.entry.activation["caller_call_state"].as_str().expect("certified call");
+                if point.context.last().map(String::as_str)==Some(call_state) {
+                    for ((site,_),continuation) in &continuations {
+                        if site!=call_state || !continuation.initialized {continue;}
+                        let (returned,record)=transfer_return_resource(plan,&post,&continuation.caller_memory);
+                        r2_records.insert(point.node.clone(),record);
+                        r2_pre_states.insert(point.node.clone(),IdentityMemoryDump::from_memory(&continuation.caller_memory));
+                        let return_point=IdentityAnalysisPoint {node:plan.relation["dummy_ret_state"].as_str().expect("certified proxy").into(),context:continuation.caller_context.clone()};
+                        r2_post_points.insert(return_point.clone());
+                        if join_input(&mut in_states,return_point.clone(),returned) {worklist.insert(return_point);}
+                    }
+                }
+            }
+            // Root termination and diverging/unwind exits never invent a return.
+            continue;
+        }
         if is_return {
             if let Some(callee) = rust_function_from_node(&point.node) {
                 for call in rust_calls_for_callee(icfg, callee) {
@@ -2592,6 +2761,19 @@ fn fixed_point_identity_analysis_with_profile(
             .or_insert_with(|| memory.clone());
     }
 
+    let r2_report = r2_enabled.then(|| {
+        let records:Vec<_>=r2_records.values().cloned().collect();
+        let required=r2_plans.as_ref().map(|p|p.keys().filter(|n|graph_reachable.contains(*n)).count()).unwrap_or(0);
+        let complete=r2_plans.is_ok() && required==records.len() && r1_plans.is_ok()
+            && r1_records.values().flatten().all(|r|matches!(r["status"].as_str(),Some("resource_binding_available"|"no_tracked_resource")))
+            && records.iter().all(|r|matches!(r["status"].as_str(),Some("resource_binding_available"|"no_tracked_resource")));
+        let post:Vec<_>=r2_post_points.iter().filter_map(|p|in_states.get(p).map(|m|IdentityPointDump{node:p.node.clone(),context:p.context.clone(),memory:IdentityMemoryDump::from_memory(m)})).collect();
+        serde_json::json!({"capability":"dependency_resource_identity_continuity_v1","gate":"P3-R2-RET1",
+            "p3_return_continuity_complete":complete,"required_normal_returns":required,"observed_normal_returns":records.len(),"status":r2_plans.err(),"return_bindings":records,
+            "caller_pre_return_states":r2_pre_states,"caller_post_return_states":post,
+            "semantics":"MAY_return_value_only_on_P2_normal_pop","side_effect_continuity":"not_evaluated_R2",
+            "unwind_return_continuity":"forbidden","general_unwind_resource_continuity":"deferred_to_P3_R3"})
+    });
     let r1_report = r1_enabled.then(|| {
         let planned = r1_plans.as_ref().map(|p|p.len()).unwrap_or(0);
         let reached = r1_records.len();
@@ -2607,6 +2789,7 @@ fn fixed_point_identity_analysis_with_profile(
             "unwind_resource_continuity":"deferred_to_P3_R3"})
     });
     AllocationIdentityState {
+        dependency_resource_return_continuity_v1:r2_report,
         dependency_resource_identity_continuity_v1:r1_report,
         by_point: post_states,
         by_node,
@@ -4984,5 +5167,60 @@ mod p3_r1_tests {
         assert_eq!(entry.event_allocations(&var("callee",1)),BTreeSet::from([alloc("a")]));
         assert_eq!(entry.stack_refs(&var("callee",1)),BTreeSet::from([place]));
         assert!(entry.points_to(&var("caller",8)).is_empty());assert_eq!(r[0]["status"],"resource_binding_available");
+    }
+}
+
+#[cfg(test)]
+mod p3_r2_tests {
+    use super::*;
+    use serde_json::json;
+    use crate::structs::AllocationSiteId;
+    fn var(f: &str,l:u32)->ProgramVarId {ProgramVarId::Rust{function:f.into(),local:l}}
+    fn resource(s:&str)->AbstractAllocId {AbstractAllocId::new(AllocationSiteId::Synthetic{scope:"existing".into(),label:s.into()},vec!["existing_context".into()])}
+    fn plan(shape:&str)->ReturnResourcePlan {ReturnResourcePlan{
+        entry:ActualFormalPlan{activation:json!({"call_key":"K","caller_instance_id":"I0","callee_instance_id":"I1","parent_context":["outer"],"callee_context":["outer","K"],"caller_call_state":"call"}),caller_scope:"caller".into(),callee_scope:"callee".into(),abi:"Rust".into(),formals:vec![],actuals:vec![]},
+        relation:json!({"callee_return_state":"return","dummy_ret_state":"proxy","continuation_state":"continuation"}),destination:Some(PlaceId{base:var("caller",3),projection:vec![]}),return_shape:shape.into()}}
+    #[test]
+    fn p3_r2_alias_may_set_preserves_existing_ids_without_environment_join() {
+        let a=resource("a");let b=resource("b");let resources=BTreeSet::from([a.clone(),b.clone()]);
+        let mut callee=AllocationIdentityMemory::default();callee.assign_points_to(var("callee",0),resources.clone());callee.assign_fresh(var("callee",8),resource("unrelated"));
+        let mut caller=AllocationIdentityMemory::default();caller.assign_fresh(var("caller",1),a);caller.assign_fresh(var("caller",3),resource("old_destination"));
+        let (out,r)=transfer_return_resource(&plan("raw_pointer"),&callee,&caller);
+        assert_eq!(out.points_to(&var("caller",3)),resources);assert!(out.points_to(&var("callee",8)).is_empty());assert_eq!(out.points_to(&var("caller",1)),caller.points_to(&var("caller",1)));assert_eq!(r["status"],"resource_binding_available");
+    }
+    #[test]
+    fn p3_r2_distinct_activations_and_same_resource_are_not_rekeyed() {
+        let caller=AllocationIdentityMemory::default();let mut a=AllocationIdentityMemory::default();let mut b=a.clone();
+        a.assign_fresh(var("callee",0),resource("a"));b.assign_fresh(var("callee",0),resource("b"));
+        let x=transfer_return_resource(&plan("raw_pointer"),&a,&caller).0;let y=transfer_return_resource(&plan("raw_pointer"),&b,&caller).0;
+        assert_ne!(x.points_to(&var("caller",3)),y.points_to(&var("caller",3)));assert_eq!(x.points_to(&var("caller",3)),a.points_to(&var("callee",0)));
+        let mut other=plan("raw_pointer");other.entry.activation["call_key"]=json!("K2");assert_eq!(transfer_return_resource(&other,&a,&caller).0.points_to(&var("caller",3)),x.points_to(&var("caller",3)));
+    }
+    #[test]
+    fn p3_r2_scalar_resource_and_true_nonresource_overwrite_destination() {
+        let mut callee=AllocationIdentityMemory::default();callee.assign_fresh(var("callee",0),resource("bits"));let mut caller=AllocationIdentityMemory::default();caller.assign_fresh(var("caller",3),resource("old"));
+        let (out,r)=transfer_return_resource(&plan("scalar"),&callee,&caller);assert_eq!(out.points_to(&var("caller",3)),callee.points_to(&var("callee",0)));assert_eq!(r["status"],"resource_binding_available");
+        let (out,r)=transfer_return_resource(&plan("scalar"),&AllocationIdentityMemory::default(),&caller);assert!(out.points_to(&var("caller",3)).is_empty());assert_eq!(r["status"],"no_tracked_resource");
+    }
+    #[test]
+    fn p3_r2_callee_allocation_keeps_origin_and_does_not_capture_caller() {
+        let created=resource("callee_site");let mut callee=AllocationIdentityMemory::default();callee.assign_fresh(var("callee",0),created.clone());let mut caller=AllocationIdentityMemory::default();caller.assign_fresh(var("caller",1),resource("caller_site"));
+        let (out,_)=transfer_return_resource(&plan("owned_box"),&callee,&caller);assert_eq!(out.points_to(&var("caller",3)),BTreeSet::from([created]));assert_eq!(out.points_to(&var("caller",1)),caller.points_to(&var("caller",1)));
+    }
+    #[test]
+    fn p3_r2_unsupported_and_missing_resource_fail_closed() {
+        let (out,r)=transfer_return_resource(&plan("raw_pointer"),&AllocationIdentityMemory::default(),&AllocationIdentityMemory::default());assert!(out.points_to.is_empty());assert_eq!(r["status"],"unresolved_return");
+        let mut p=plan("raw_pointer");p.destination=None;assert_eq!(transfer_return_resource(&p,&AllocationIdentityMemory::default(),&out).1["status"],"unsupported_destination_shape");
+        assert_eq!(transfer_return_resource(&plan("aggregate"),&AllocationIdentityMemory::default(),&out).1["status"],"unsupported_value_shape");
+    }
+    #[test]
+    fn p3_r2_projection_is_exact_and_never_collapsed_to_base() {
+        let mut callee=AllocationIdentityMemory::default();callee.assign_fresh(var("callee",0),resource("a"));let mut caller=AllocationIdentityMemory::default();caller.assign_fresh(var("caller",3),resource("base"));let mut p=plan("raw_pointer");p.destination.as_mut().unwrap().projection=vec![PlaceProjection::Field{index:1}];
+        let (out,r)=transfer_return_resource(&p,&callee,&caller);assert_eq!(out.points_to(&var("caller",3)),caller.points_to(&var("caller",3)));assert_eq!(out.points_to_place(p.destination.as_ref().unwrap()),callee.points_to(&var("callee",0)));assert_eq!(r["status"],"resource_binding_available");
+    }
+    #[test]
+    fn p3_r2_reference_cannot_import_general_caller_side_effect() {
+        let place=PlaceId{base:var("caller",1),projection:vec![]};let mut caller=AllocationIdentityMemory::default();caller.assign_fresh(place.base.clone(),resource("before"));let mut callee=caller.clone();callee.assign_fresh(place.base.clone(),resource("changed"));callee.assign_stack_refs(var("callee",0),BTreeSet::from([place]));
+        let (out,r)=transfer_return_resource(&plan("shared_reference"),&callee,&caller);assert_eq!(r["status"],"unresolved_return");assert_eq!(out.points_to(&var("caller",1)),caller.points_to(&var("caller",1)));assert!(out.points_to(&var("caller",3)).is_empty());
     }
 }
