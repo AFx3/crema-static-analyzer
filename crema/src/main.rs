@@ -134,7 +134,7 @@ fn main() {
 [--analysis-out-dir <dir>] [--cargo-plan-out <path>] [--semantic-coverage-out <path>] [--mir-semantics-v2] [--panic-unwind-lifecycle-v1] \
 [--dependency-body-ingestion-v1] [--dependency-drop-glue-ingestion-v1] \
 [--dependency-resource-identity-continuity-v1] [--dependency-resource-return-continuity-v1] \
-[--dependency-place-resource-relations-v1]"
+[--dependency-place-resource-relations-v1] [--dependency-drop-receiver-resource-continuity-v1]"
         );
         exit(1);
     }
@@ -171,6 +171,7 @@ fn main() {
     let mut dependency_resource_identity_continuity_v1 = false;
     let mut dependency_resource_return_continuity_v1 = false;
     let mut dependency_place_resource_relations_v1 = false;
+    let mut dependency_drop_receiver_resource_continuity_v1 = false;
     let mut idx = 2;
     while idx < args.len() {
         match args[idx].as_str() {
@@ -288,6 +289,10 @@ fn main() {
                 dependency_place_resource_relations_v1 = true;
                 idx += 1;
             }
+            "--dependency-drop-receiver-resource-continuity-v1" => {
+                dependency_drop_receiver_resource_continuity_v1 = true;
+                idx += 1;
+            }
             "--dependency-resource-identity-continuity-v1" => {
                 dependency_resource_identity_continuity_v1 = true;
                 idx += 1;
@@ -332,6 +337,22 @@ fn main() {
     } else {
         std::env::remove_var("CREMA_INTERNAL_DEP1_P3_R1P");
     }
+    // P3-R1D is a strict consumer of the accepted PLACE1 identity relation,
+    // P2 DropGlue control, and ordinary R1.  It does not enable R3 effects.
+    if dependency_drop_receiver_resource_continuity_v1
+        && (!dependency_drop_glue_ingestion_v1
+            || !dependency_resource_identity_continuity_v1
+            || !dependency_place_resource_relations_v1)
+    {
+        eprintln!("--dependency-drop-receiver-resource-continuity-v1 requires --dependency-drop-glue-ingestion-v1, --dependency-resource-identity-continuity-v1, and --dependency-place-resource-relations-v1");
+        exit(1);
+    }
+    if dependency_drop_receiver_resource_continuity_v1 {
+        std::env::set_var("CREMA_INTERNAL_DEP1_P3_R1D", "1");
+    } else {
+        std::env::remove_var("CREMA_INTERNAL_DEP1_P3_R1D");
+    }
+
     if dependency_resource_return_continuity_v1 && !dependency_resource_identity_continuity_v1 {
         eprintln!("--dependency-resource-return-continuity-v1 requires --dependency-resource-identity-continuity-v1");
         exit(1);

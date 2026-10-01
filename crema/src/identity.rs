@@ -649,6 +649,8 @@ fn canonical_resources_for_place(
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct AllocationIdentityState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependency_drop_receiver_resource_continuity_v1: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dependency_resource_return_continuity_v1: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dependency_resource_identity_continuity_v1: Option<serde_json::Value>,
@@ -674,6 +676,8 @@ pub struct AllocationIdentityState {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AllocationIdentityDump {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dependency_drop_receiver_resource_continuity_v1: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dependency_resource_return_continuity_v1: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -795,6 +799,7 @@ impl IdentityMemoryDump {
 impl AllocationIdentityState {
     pub fn to_dump(&self) -> AllocationIdentityDump {
         AllocationIdentityDump {
+            dependency_drop_receiver_resource_continuity_v1: self.dependency_drop_receiver_resource_continuity_v1.clone(),
             dependency_resource_return_continuity_v1:self.dependency_resource_return_continuity_v1.clone(),
             dependency_resource_identity_continuity_v1: self.dependency_resource_identity_continuity_v1.clone(),
             dependency_place_resource_relations_v1: self.dependency_place_resource_relations_v1.clone(),
@@ -2582,6 +2587,460 @@ fn apply_certified_place_relation(
     }
 }
 
+/// Opt-in P3-R1D Drop/receiver resource-identity gate.
+///
+/// This capability is intentionally separate from ordinary R1/R2 and from
+/// resource-state effects.  It consumes only P2-certified `mir_drop`
+/// activations plus PLACE1's authoritative typed-Place resource relation.
+pub(crate) fn p3_drop_receiver_enabled() -> bool {
+    std::env::var("CREMA_INTERNAL_DEP1_P3_R1D").as_deref() == Ok("1")
+}
+
+#[derive(Clone)]
+struct DropReceiverPlan {
+    activation: serde_json::Value,
+    caller_scope: String,
+    place: serde_json::Value,
+    receiver: ProgramVarId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DropSourceResolution {
+    places: BTreeSet<PlaceId>,
+    resources: BTreeSet<AbstractAllocId>,
+    status: &'static str,
+}
+
+fn drop_receiver_plans(
+    icfg: &GlobalICFGOrdered,
+) -> Result<BTreeMap<String, DropReceiverPlan>, String> {
+    let dep = icfg
+        .dependency_body_ingestion_v1
+        .as_ref()
+        .ok_or("p2_control_flow_incomplete: DEP1 absent")?;
+    let graph = dep
+        .context_execution_graph_v1
+        .as_ref()
+        .ok_or("p2_control_flow_incomplete: execution graph absent")?;
+    let activations = graph
+        .get("represented_call_activations")
+        .and_then(serde_json::Value::as_array)
+        .ok_or("p2_control_flow_incomplete: activation records absent")?;
+
+    let mut plans = BTreeMap::new();
+    for activation in activations
+        .iter()
+        .filter(|activation| activation["activation_kind"] == "mir_drop")
+    {
+        let text = |key: &str| {
+            activation[key]
+                .as_str()
+                .ok_or_else(|| format!("unresolved_drop_identity: {key}"))
+        };
+        let call_key = text("call_key")?;
+        let caller_instance = text("caller_instance_id")?;
+        let callee_instance = text("callee_instance_id")?;
+
+        // P3-R1D consumes the exact P2 binding; it never resolves a destructor
+        // again by type/name at identity-analysis time.
+        let bindings: Vec<_> = dep
+            .exact_call_bindings
+            .iter()
+            .filter(|binding| {
+                binding["call_key"] == activation["call_key"]
+                    && binding["activation_kind"] == "mir_drop"
+                    && binding["caller_instance_id"] == activation["caller_instance_id"]
+                    && binding["resolved_instance_id"] == activation["callee_instance_id"]
+                    && binding["body_status"] == "represented_body"
+            })
+            .collect();
+        let [binding] = bindings.as_slice() else {
+            return Err(format!(
+                "unresolved_drop_identity: nonunique exact binding for {call_key}"
+            ));
+        };
+
+        let bodies: Vec<_> = dep
+            .body_statuses
+            .iter()
+            .filter(|body| {
+                body["instance_id"] == activation["callee_instance_id"]
+                    && body["body_status"] == "represented_body"
+                    && body["body_provider_kind"] == "compiler_generated_instance_mir"
+            })
+            .collect();
+        let [body] = bodies.as_slice() else {
+            return Err(format!(
+                "unresolved_receiver: nonunique compiler-generated body for {callee_instance}"
+            ));
+        };
+
+        let receiver_proof = &body["drop_receiver_v1"];
+        if receiver_proof["source"] != "rustc_instance_mir_args_iter_local_decls" {
+            return Err("unresolved_receiver: compiler receiver proof missing".into());
+        }
+        let arguments = receiver_proof["arguments"]
+            .as_array()
+            .ok_or("unresolved_receiver: compiler argument proof missing")?;
+        let [argument] = arguments.as_slice() else {
+            return Err("unsupported_receiver: DropGlue must have exactly one MIR argument".into());
+        };
+        if receiver_proof["arg_count"].as_u64() != Some(1)
+            || argument["raw_mutable_pointer"] != true
+        {
+            return Err("unsupported_receiver: compiler signature is not one mutable raw pointer".into());
+        }
+        let receiver_local = argument["local"]
+            .as_u64()
+            .ok_or("unresolved_receiver: compiler local missing")?;
+
+        let entry = text("callee_entry_state")?;
+        let scopes: Vec<_> = icfg
+            .rust_functions
+            .iter()
+            .filter(|(_, function)| function.entry_node == entry)
+            .collect();
+        let [(callee_scope, _)] = scopes.as_slice() else {
+            return Err("unresolved_receiver: callee entry scope is not unique".into());
+        };
+        let caller_scope = rust_function_from_node(text("caller_call_state")?)
+            .ok_or("unresolved_drop_identity: caller scope")?
+            .to_string();
+
+        let mut pushed = activation["parent_context"]
+            .as_array()
+            .ok_or("p2_control_flow_incomplete: parent context")?
+            .clone();
+        pushed.push(serde_json::Value::String(call_key.to_string()));
+        if activation["callee_context"] != serde_json::Value::Array(pushed) {
+            return Err("p2_control_flow_incomplete: invalid Drop context push".into());
+        }
+        let proxy = text("dummy_call_state")?;
+        if !icfg
+            .icfg_edges
+            .iter()
+            .any(|edge| edge.source == proxy && edge.destination == entry)
+        {
+            return Err("p2_control_flow_incomplete: certified Drop entry edge absent".into());
+        }
+
+        let place = binding["drop_place_v1"]["typed_place_v1"].clone();
+        if place["source"] != "rustc_mir_Drop_Place"
+            || place["local"].as_u64().is_none()
+            || !place["projection"].is_array()
+        {
+            return Err("unresolved_drop_identity: typed Drop Place proof absent".into());
+        }
+        let receiver = ProgramVarId::Rust {
+            function: (*callee_scope).clone(),
+            local: receiver_local as u32,
+        };
+        if plans
+            .insert(
+                proxy.to_string(),
+                DropReceiverPlan {
+                    activation: activation.clone(),
+                    caller_scope,
+                    place,
+                    receiver,
+                },
+            )
+            .is_some()
+        {
+            return Err(format!(
+                "p2_control_flow_incomplete: duplicate Drop activation proxy for {caller_instance}"
+            ));
+        }
+    }
+    Ok(plans)
+}
+
+fn typed_drop_place(plan: &DropReceiverPlan) -> Result<PlaceId, &'static str> {
+    let local = plan.place["local"].as_u64().ok_or("unresolved_identity")? as u32;
+    let mut projection = Vec::new();
+    for component in plan.place["projection"]
+        .as_array()
+        .ok_or("unresolved_identity")?
+    {
+        match component["kind"].as_str() {
+            Some("field") => projection.push(PlaceProjection::Field {
+                index: component["index"].as_u64().ok_or("unsupported_place")? as u32,
+            }),
+            Some("deref") => projection.push(PlaceProjection::Deref),
+            _ => return Err("unsupported_place"),
+        }
+    }
+    Ok(PlaceId {
+        base: ProgramVarId::Rust {
+            function: plan.caller_scope.clone(),
+            local,
+        },
+        projection,
+    })
+}
+
+/// Resolve the exact storage Place(s) named by a compiler-certified MIR Drop.
+///
+/// A terminal dereference may be justified directly by PLACE1's authoritative
+/// `Place -> MAY {resource}` relation even when no stack Place exists for the
+/// heap object.  Deeper projections still require exact stack-reference edges;
+/// this preserves PLACE1's fail-closed heap-shape boundary.
+fn canonical_resources_in_exact_place_subtree(
+    memory: &AllocationIdentityMemory,
+    root: &PlaceId,
+) -> BTreeSet<AbstractAllocId> {
+    let mut resources = canonical_resources_for_place(memory, root.clone());
+    let mut descendants = BTreeSet::new();
+    for place in memory
+        .place_points_to
+        .keys()
+        .chain(memory.place_stack_refs.keys())
+        .chain(memory.place_resources.keys())
+    {
+        if place.base == root.base
+            && place.projection.len() >= root.projection.len()
+            && place.projection[..root.projection.len()] == root.projection[..]
+        {
+            descendants.insert(place.clone());
+        }
+    }
+    for place in descendants {
+        resources.extend(canonical_resources_for_place(memory, place));
+    }
+    resources
+}
+
+fn resolve_drop_source(
+    plan: &DropReceiverPlan,
+    memory: &AllocationIdentityMemory,
+) -> DropSourceResolution {
+    let query = match typed_drop_place(plan) {
+        Ok(query) => query,
+        Err(status) => {
+            return DropSourceResolution {
+                places: BTreeSet::new(),
+                resources: BTreeSet::new(),
+                status,
+            }
+        }
+    };
+
+    let place_resource = resolve_resource_place(memory, &query);
+    let mut places = BTreeSet::from([PlaceId {
+        base: query.base.clone(),
+        projection: Vec::new(),
+    }]);
+
+    for (position, component) in query.projection.iter().enumerate() {
+        let terminal = position + 1 == query.projection.len();
+        match component {
+            PlaceProjection::Field { index } => {
+                places = places
+                    .into_iter()
+                    .map(|mut place| {
+                        place.projection.push(PlaceProjection::Field { index: *index });
+                        place
+                    })
+                    .collect();
+            }
+            PlaceProjection::Deref => {
+                let mut referents = BTreeSet::new();
+                for place in &places {
+                    referents.extend(memory.stack_refs_place(place));
+                }
+                if !referents.is_empty() {
+                    places = referents;
+                    continue;
+                }
+
+                // PLACE1 may authoritatively identify a terminal heap Place
+                // (the saved Box `_6 -> *_6` blocker) without fabricating a
+                // stack referent.  The exact MIR Drop Place itself is the
+                // storage identity used for the DropGlue receiver relation.
+                if terminal
+                    && matches!(&place_resource, ResourcePlaceResolution::Resolved(_))
+                {
+                    places = BTreeSet::from([query.clone()]);
+                    continue;
+                }
+                return DropSourceResolution {
+                    places: BTreeSet::new(),
+                    resources: BTreeSet::new(),
+                    status: "unresolved_identity",
+                };
+            }
+            PlaceProjection::Index { .. } | PlaceProjection::Opaque { .. } => {
+                return DropSourceResolution {
+                    places: BTreeSet::new(),
+                    resources: BTreeSet::new(),
+                    status: "unsupported_place",
+                }
+            }
+        }
+    }
+
+    let mut resources = match place_resource {
+        ResourcePlaceResolution::Resolved(resources) => resources,
+        ResourcePlaceResolution::UnresolvedIdentity => BTreeSet::new(),
+        ResourcePlaceResolution::UnsupportedPlace => {
+            return DropSourceResolution {
+                places: BTreeSet::new(),
+                resources: BTreeSet::new(),
+                status: "unsupported_place",
+            }
+        }
+    };
+    for place in &places {
+        resources.extend(canonical_resources_in_exact_place_subtree(memory, place));
+    }
+
+    // An exact direct/field Place with no tracked relation is a proved
+    // non-resource in this identity abstraction.  A dereference without a
+    // proof never reaches this point; it is unresolved above.
+    let status = if resources.is_empty() {
+        "no_tracked_resource"
+    } else {
+        "resource_binding_available"
+    };
+    DropSourceResolution {
+        places,
+        resources,
+        status,
+    }
+}
+
+/// Copy only represented descendants of the exact dropped storage into the
+/// receiver-local namespace.  This is a structural rebase, not heap-shape
+/// inference: only relations already present below an exact source prefix are
+/// copied, and canonical allocation IDs are never changed or created.
+fn import_drop_subtree(
+    caller: &AllocationIdentityMemory,
+    callee: &mut AllocationIdentityMemory,
+    source: &PlaceId,
+    receiver: &ProgramVarId,
+) {
+    let prefix_len = source.projection.len();
+    for (place, allocs) in &caller.place_points_to {
+        if place.base == source.base
+            && place.projection.len() >= prefix_len
+            && place.projection[..prefix_len] == source.projection[..]
+        {
+            let suffix = &place.projection[prefix_len..];
+            if suffix.is_empty() {
+                continue;
+            }
+            callee.assign_place_points_to(
+                PlaceId {
+                    base: receiver.clone(),
+                    projection: suffix.to_vec(),
+                },
+                allocs.clone(),
+            );
+        }
+    }
+    for (place, refs) in &caller.place_stack_refs {
+        if place.base == source.base
+            && place.projection.len() >= prefix_len
+            && place.projection[..prefix_len] == source.projection[..]
+        {
+            let suffix = &place.projection[prefix_len..];
+            if suffix.is_empty() {
+                continue;
+            }
+            callee.assign_place_stack_refs(
+                PlaceId {
+                    base: receiver.clone(),
+                    projection: suffix.to_vec(),
+                },
+                refs.clone(),
+            );
+        }
+    }
+    for (place, resources) in &caller.place_resources {
+        if place.base == source.base
+            && place.projection.len() >= prefix_len
+            && place.projection[..prefix_len] == source.projection[..]
+        {
+            let mut projection = vec![PlaceProjection::Deref];
+            projection.extend(place.projection[prefix_len..].iter().cloned());
+            callee.assign_place_resources(
+                PlaceId {
+                    base: receiver.clone(),
+                    projection,
+                },
+                resources.clone(),
+            );
+        }
+    }
+}
+
+fn drop_callee_context(plan: &DropReceiverPlan) -> Option<Vec<String>> {
+    plan.activation["caller_call_state"]
+        .as_str()
+        .map(bounded_context)
+}
+
+fn drop_same_context_successors(
+    successors: &BTreeSet<String>,
+    matched_cross_body_unwind_successors: &BTreeSet<String>,
+) -> BTreeSet<String> {
+    successors
+        .difference(matched_cross_body_unwind_successors)
+        .cloned()
+        .collect()
+}
+
+fn transfer_drop_receiver(
+    plan: &DropReceiverPlan,
+    caller: &AllocationIdentityMemory,
+) -> (AllocationIdentityMemory, serde_json::Value) {
+    let resolution = resolve_drop_source(plan, caller);
+    let mut callee = AllocationIdentityMemory::default();
+
+    if matches!(resolution.status, "resource_binding_available" | "no_tracked_resource") {
+        for place in &resolution.places {
+            import_referents(caller, &mut callee, BTreeSet::from([place.clone()]));
+            import_drop_subtree(caller, &mut callee, place, &plan.receiver);
+        }
+        callee.assign_points_to(plan.receiver.clone(), resolution.resources.clone());
+        callee.assign_stack_refs(plan.receiver.clone(), resolution.places.clone());
+        if !resolution.resources.is_empty() {
+            callee.assign_place_resources(
+                PlaceId {
+                    base: plan.receiver.clone(),
+                    projection: vec![PlaceProjection::Deref],
+                },
+                resolution.resources.clone(),
+            );
+        }
+    }
+
+    let activation = &plan.activation;
+    let record = serde_json::json!({
+        "call_key": activation["call_key"],
+        "activation_kind": "mir_drop",
+        "caller_instance_id": activation["caller_instance_id"],
+        "concrete_callee_instance": activation["callee_instance_id"],
+        "caller_execution_context": activation["parent_context"],
+        "callee_execution_context": activation["callee_context"],
+        "caller_call_state": activation["caller_call_state"],
+        "dummy_call_state": activation["dummy_call_state"],
+        "dummy_ret_state": activation["dummy_ret_state"],
+        "callee_entry_state": activation["callee_entry_state"],
+        "dropped_place": plan.place,
+        "resolved_places": resolution.places,
+        "receiver": plan.receiver,
+        "resources": resolution.resources,
+        "status": resolution.status,
+        "certainty": "may",
+        "relation_kind": "drop_place_to_glue_receiver",
+        "provenance": "rustc_typed_Drop_Place_plus_instance_mir_receiver_plus_PLACE1_v1",
+        "resource_effects": "not_evaluated_R1D",
+        "ownership_liveness": "not_inferred",
+    });
+    (callee, record)
+}
+
 /// Opt-in R1 gate inherited by the compiler wrapper. ProgramVarId and
 /// AbstractAllocId retain their existing meanings.
 pub(crate) fn p3_actual_formal_enabled() -> bool {
@@ -2885,6 +3344,17 @@ fn fixed_point_identity_analysis_with_profile(
         context: Vec::new(),
     };
 
+    let r1d_enabled = p3_drop_receiver_enabled();
+    let r1d_plans = if r1d_enabled {
+        drop_receiver_plans(icfg)
+    } else {
+        Ok(BTreeMap::new())
+    };
+    let mut r1d_records = BTreeMap::<String, serde_json::Value>::new();
+    let mut r1d_entry_points = BTreeSet::new();
+    let mut r1d_snapshots =
+        BTreeMap::<String, (Vec<String>, AllocationIdentityMemory)>::new();
+
     let r1_enabled = p3_actual_formal_enabled();
     let r1_plans = if r1_enabled { actual_formal_plans(icfg) } else { Ok(BTreeMap::new()) };
     let r2_enabled = p3_return_continuity_enabled();
@@ -2962,6 +3432,35 @@ fn fixed_point_identity_analysis_with_profile(
             event_states.insert(point.clone(), event_summary);
         }
 
+        if let Some(plan) = r1d_plans
+            .as_ref()
+            .ok()
+            .and_then(|plans| plans.get(&point.node))
+        {
+            r1d_snapshots
+                .entry(point.node.clone())
+                .and_modify(|(_, memory)| *memory = memory.join(&post))
+                .or_insert((point.context.clone(), post.clone()));
+            let (callee_input, record) = transfer_drop_receiver(plan, &post);
+            r1d_records.insert(point.node.clone(), record);
+            let callee_point = IdentityAnalysisPoint {
+                node: plan.activation["callee_entry_state"]
+                    .as_str()
+                    .expect("validated Drop entry")
+                    .to_string(),
+                context: bounded_context(
+                    plan.activation["caller_call_state"]
+                        .as_str()
+                        .expect("validated Drop caller state"),
+                ),
+            };
+            r1d_entry_points.insert(callee_point.clone());
+            if join_input(&mut in_states, callee_point.clone(), callee_input) {
+                worklist.insert(callee_point);
+            }
+            continue;
+        }
+
         if let Some(plan) = r1_plans.as_ref().ok().and_then(|plans|plans.get(&point.node)) {
             if let Some(call) = rust_call_for_dummy_call(icfg, &point.node) {
                 continuations.entry((call.call_node.clone(), point.context.clone())).or_default()
@@ -3020,6 +3519,73 @@ fn fixed_point_identity_analysis_with_profile(
                 ..
             })
         );
+
+        // R1D return routing is edge-sensitive.  A P2 unwind relation can
+        // originate at a callee block that also has a normal intra-callee
+        // successor (for example Box DropGlue calling `<Box as Drop>::drop`).
+        // In that case the unwind branch must pop to the caller context without
+        // consuming the normal callee path.  Only a matched normal Drop return
+        // is terminal for the current callee activation.
+        let mut r1d_matched_normal_return = false;
+        let mut r1d_cross_body_unwind_successors = BTreeSet::new();
+        if r1d_enabled {
+            if let Ok(plans) = &r1d_plans {
+                for (proxy, plan) in plans {
+                    let Some((caller_context, snapshot)) = r1d_snapshots.get(proxy) else {
+                        continue;
+                    };
+                    // A compiler-generated DropGlue body can be reused by many
+                    // concrete Drop activations.  Node identity alone therefore
+                    // cannot select a return continuation: require the exact
+                    // k=1 callee context created for this P2 activation before
+                    // restoring its caller snapshot.
+                    if drop_callee_context(plan).as_ref() != Some(&point.context) {
+                        continue;
+                    }
+                    for relation in plan.activation["normal_return_relations"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                    {
+                        if relation["callee_return_state"] == point.node {
+                            let next = IdentityAnalysisPoint {
+                                node: relation["dummy_ret_state"]
+                                    .as_str()
+                                    .expect("P2 Drop normal return proxy")
+                                    .to_string(),
+                                context: caller_context.clone(),
+                            };
+                            if join_input(&mut in_states, next.clone(), snapshot.clone()) {
+                                worklist.insert(next);
+                            }
+                            r1d_matched_normal_return = true;
+                        }
+                    }
+                    for relation in plan.activation["unwind_return_relations"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                    {
+                        if relation["callee_unwind_state"] == point.node {
+                            let next = IdentityAnalysisPoint {
+                                node: relation["caller_unwind_state"]
+                                    .as_str()
+                                    .expect("P2 Drop unwind continuation")
+                                    .to_string(),
+                                context: caller_context.clone(),
+                            };
+                            r1d_cross_body_unwind_successors.insert(next.node.clone());
+                            if join_input(&mut in_states, next.clone(), snapshot.clone()) {
+                                worklist.insert(next);
+                            }
+                        }
+                    }
+                }
+            }
+            if r1d_matched_normal_return {
+                continue;
+            }
+        }
 
         if is_return && r2_enabled {
             if let Some(plan)=r2_plans.as_ref().ok().and_then(|plans|plans.get(&point.node)) {
@@ -3088,9 +3654,18 @@ fn fixed_point_identity_analysis_with_profile(
         }
 
         if let Some(nexts) = succs.get(&point.node) {
-            for succ in nexts {
+            let same_context_nexts = drop_same_context_successors(
+                nexts,
+                &r1d_cross_body_unwind_successors,
+            );
+            for succ in same_context_nexts {
+                // A matched P2 Drop unwind edge has already been propagated
+                // above with the caller context and caller snapshot.  Other
+                // successors from the same callee node remain live; this is
+                // essential for nodes that can both return normally and unwind
+                // (for example a bodyless destructor summary call).
                 let succ_point = IdentityAnalysisPoint {
-                    node: succ.clone(),
+                    node: succ,
                     context: point.context.clone(),
                 };
                 if join_input(&mut in_states, succ_point.clone(), post.clone()) {
@@ -3115,6 +3690,70 @@ fn fixed_point_identity_analysis_with_profile(
             .and_modify(|current| *current = current.join(memory))
             .or_insert_with(|| memory.clone());
     }
+
+    let r1d_report = r1d_enabled.then(|| {
+        let records: Vec<_> = r1d_records.values().cloned().collect();
+        let required_nodes = r1d_plans
+            .as_ref()
+            .map(|plans| {
+                plans
+                    .keys()
+                    .filter(|node| graph_reachable.contains(*node))
+                    .cloned()
+                    .collect::<BTreeSet<_>>()
+            })
+            .unwrap_or_default();
+        let observed_nodes = r1d_records.keys().cloned().collect::<BTreeSet<_>>();
+        let required = required_nodes.len();
+        let complete = r1d_plans.is_ok()
+            && required_nodes == observed_nodes
+            && records.iter().all(|record| {
+                matches!(
+                    record["status"].as_str(),
+                    Some("resource_binding_available" | "no_tracked_resource")
+                )
+            });
+        let entries: Vec<_> = r1d_entry_points
+            .iter()
+            .filter_map(|point| {
+                in_states.get(point).map(|memory| IdentityPointDump {
+                    node: point.node.clone(),
+                    context: point.context.clone(),
+                    memory: IdentityMemoryDump::from_memory(memory),
+                })
+            })
+            .collect();
+        let caller_pre: Vec<_> = r1d_snapshots
+            .iter()
+            .map(|(node, (context, memory))| IdentityPointDump {
+                node: node.clone(),
+                context: context.clone(),
+                memory: IdentityMemoryDump::from_memory(memory),
+            })
+            .collect();
+        serde_json::json!({
+            "capability": "dependency_drop_receiver_resource_continuity_v1",
+            "gate": "P3-R1D-DRB2",
+            "place_relation_prerequisite": "P3-R1P-PLACE1",
+            "p3_drop_receiver_complete": complete,
+            "required_drop_activations": required,
+            "observed_drop_activations": records.len(),
+            "p2_graph_reachable_drop_activations": required,
+            "required_drop_proxies": required_nodes,
+            "observed_drop_proxies": observed_nodes,
+            "required_scope": "all_P2_graph_reachable_mir_drop_activations",
+            "deferred_drop_activations": 0,
+            "deferred_drop_proxies": Vec::<String>::new(),
+            "status": r1d_plans.as_ref().err(),
+            "bindings": records,
+            "callee_entry_states": entries,
+            "caller_pre_drop_states": caller_pre,
+            "semantics": "MAY_same_canonical_resource_on_P2_mir_drop_receiver_entry",
+            "resource_effect_continuity": "not_implemented_R1D",
+            "ownership_liveness": "not_inferred",
+            "fresh_resource_creation": "forbidden",
+        })
+    });
 
     let r2_report = r2_enabled.then(|| {
         let records:Vec<_>=r2_records.values().cloned().collect();
@@ -3170,6 +3809,7 @@ fn fixed_point_identity_analysis_with_profile(
             "unwind_resource_continuity":"deferred_to_P3_R3"})
     });
     AllocationIdentityState {
+        dependency_drop_receiver_resource_continuity_v1:r1d_report,
         dependency_resource_return_continuity_v1:r2_report,
         dependency_resource_identity_continuity_v1:r1_report,
         dependency_place_resource_relations_v1:r1p_report,
@@ -5993,4 +6633,404 @@ mod p3_r1p_tests {
         let q = PlaceId { base: c, projection: vec![PlaceProjection::Deref] };
         assert_eq!(resolve_resource_place(&memory, &q), ResourcePlaceResolution::Resolved(BTreeSet::from([alloc("other")])));
     }
+}
+
+#[cfg(test)]
+mod p3_r1d_tests {
+    use super::*;
+    use crate::structs::AllocationSiteId;
+
+    fn var(function: &str, local: u32) -> ProgramVarId {
+        ProgramVarId::Rust { function: function.into(), local }
+    }
+
+    fn resource(label: &str) -> AbstractAllocId {
+        AbstractAllocId {
+            site: AllocationSiteId::RustCall {
+                node_id: label.into(),
+                callee: "std::alloc::alloc".into(),
+            },
+            context: Vec::new(),
+        }
+    }
+
+    fn place(base: ProgramVarId, projection: Vec<PlaceProjection>) -> PlaceId {
+        PlaceId { base, projection }
+    }
+
+    fn field(base: ProgramVarId, indices: &[u32]) -> PlaceId {
+        PlaceId {
+            base,
+            projection: indices
+                .iter()
+                .map(|index| PlaceProjection::Field { index: *index })
+                .collect(),
+        }
+    }
+
+    fn plan(key: &str, local: u32, projection: serde_json::Value) -> DropReceiverPlan {
+        DropReceiverPlan {
+            activation: serde_json::json!({
+                "call_key": key,
+                "activation_kind": "mir_drop",
+                "caller_instance_id": "native-caller",
+                "callee_instance_id": "native-glue",
+                "parent_context": ["outer"],
+                "callee_context": ["outer", key],
+                "caller_call_state": "caller-state",
+                "callee_entry_state": "entry",
+            }),
+            caller_scope: "caller".into(),
+            place: serde_json::json!({
+                "local": local,
+                "projection": projection,
+                "source": "rustc_mir_Drop_Place",
+            }),
+            receiver: var(key, 1),
+        }
+    }
+
+    #[test]
+    fn saved_box_terminal_deref_consumes_place1_resource_relation() {
+        let mut caller = AllocationIdentityMemory::default();
+        let r = resource("R");
+        let dropped = place(var("caller", 6), vec![PlaceProjection::Deref]);
+        caller.assign_place_resources(dropped.clone(), BTreeSet::from([r.clone()]));
+
+        let p = plan("KD", 6, serde_json::json!([{"kind":"deref"}]));
+        let (entry, record) = transfer_drop_receiver(&p, &caller);
+
+        assert_eq!(record["status"], "resource_binding_available");
+        assert_eq!(entry.points_to(&p.receiver), BTreeSet::from([r.clone()]));
+        assert_eq!(entry.stack_refs(&p.receiver), BTreeSet::from([dropped]));
+        assert_eq!(
+            entry.resources_for_place(&place(
+                p.receiver.clone(),
+                vec![PlaceProjection::Deref]
+            )),
+            BTreeSet::from([r]),
+        );
+    }
+
+    #[test]
+    fn direct_drop_receiver_preserves_same_canonical_resource() {
+        let mut caller = AllocationIdentityMemory::default();
+        let r = resource("A");
+        caller.assign_fresh(var("caller", 1), r.clone());
+        let p = plan("KD", 1, serde_json::json!([]));
+        let (entry, record) = transfer_drop_receiver(&p, &caller);
+        assert_eq!(record["status"], "resource_binding_available");
+        assert_eq!(entry.points_to(&p.receiver), BTreeSet::from([r]));
+        assert_eq!(entry.stack_refs(&p.receiver), BTreeSet::from([field(var("caller", 1), &[])]));
+    }
+
+    #[test]
+    fn may_drop_set_is_preserved_without_collapse() {
+        let mut caller = AllocationIdentityMemory::default();
+        let expected = BTreeSet::from([resource("A"), resource("B")]);
+        caller.assign_points_to(var("caller", 1), expected.clone());
+        let p = plan("KD", 1, serde_json::json!([]));
+        let (entry, _) = transfer_drop_receiver(&p, &caller);
+        assert_eq!(entry.points_to(&p.receiver), expected);
+    }
+
+    #[test]
+    fn terminal_raw_pointer_deref_preserves_place1_may_set() {
+        let mut caller = AllocationIdentityMemory::default();
+        let expected = BTreeSet::from([resource("A"), resource("B")]);
+        caller.assign_points_to(var("caller", 6), expected.clone());
+        let p = plan("KD", 6, serde_json::json!([{"kind":"deref"}]));
+        let (entry, record) = transfer_drop_receiver(&p, &caller);
+        assert_eq!(record["status"], "resource_binding_available");
+        assert_eq!(entry.points_to(&p.receiver), expected);
+    }
+
+    #[test]
+    fn distinct_drop_activations_do_not_cross_bind() {
+        let mut a = AllocationIdentityMemory::default();
+        let mut b = AllocationIdentityMemory::default();
+        a.assign_fresh(var("caller", 1), resource("A"));
+        b.assign_fresh(var("caller", 1), resource("B"));
+        let pa = plan("KDA", 1, serde_json::json!([]));
+        let pb = plan("KDB", 1, serde_json::json!([]));
+        assert_eq!(transfer_drop_receiver(&pa, &a).0.points_to(&pa.receiver), BTreeSet::from([resource("A")]));
+        assert_eq!(transfer_drop_receiver(&pb, &b).0.points_to(&pb.receiver), BTreeSet::from([resource("B")]));
+    }
+
+    #[test]
+    fn same_resource_is_not_rekeyed_by_drop_context() {
+        let mut caller = AllocationIdentityMemory::default();
+        caller.assign_fresh(var("caller", 1), resource("R"));
+        for key in ["KDA", "KDB"] {
+            let p = plan(key, 1, serde_json::json!([]));
+            assert_eq!(transfer_drop_receiver(&p, &caller).0.points_to(&p.receiver), BTreeSet::from([resource("R")]));
+        }
+    }
+
+    #[test]
+    fn exact_fields_remain_projection_specific() {
+        let mut caller = AllocationIdentityMemory::default();
+        caller.assign_place_resources(field(var("caller", 1), &[0]), BTreeSet::from([resource("A")]));
+        caller.assign_place_resources(field(var("caller", 1), &[1]), BTreeSet::from([resource("B")]));
+
+        for (index, label) in [(0, "A"), (1, "B")] {
+            let p = plan("KD", 1, serde_json::json!([{"kind":"field","index":index}]));
+            let (entry, record) = transfer_drop_receiver(&p, &caller);
+            assert_eq!(record["status"], "resource_binding_available");
+            assert_eq!(entry.points_to(&p.receiver), BTreeSet::from([resource(label)]));
+        }
+    }
+
+    #[test]
+    fn field_owner_imports_only_its_existing_structural_subtree() {
+        let mut caller = AllocationIdentityMemory::default();
+        caller.assign_place_points_to(field(var("caller", 1), &[0, 0]), BTreeSet::from([resource("A")]));
+        caller.assign_place_points_to(field(var("caller", 1), &[1, 0]), BTreeSet::from([resource("B")]));
+
+        let a = plan("KA", 1, serde_json::json!([{"kind":"field","index":0}]));
+        let b = plan("KB", 1, serde_json::json!([{"kind":"field","index":1}]));
+        let (a_entry, a_record) = transfer_drop_receiver(&a, &caller);
+        let (b_entry, b_record) = transfer_drop_receiver(&b, &caller);
+
+        assert_eq!(a_record["status"], "resource_binding_available");
+        assert_eq!(b_record["status"], "resource_binding_available");
+        assert_eq!(a_entry.points_to(&a.receiver), BTreeSet::from([resource("A")]));
+        assert_eq!(b_entry.points_to(&b.receiver), BTreeSet::from([resource("B")]));
+        assert!(!a_entry.points_to(&a.receiver).contains(&resource("B")));
+        assert!(!b_entry.points_to(&b.receiver).contains(&resource("A")));
+    }
+
+    #[test]
+    fn nested_deref_field_uses_only_exact_stack_referent() {
+        let mut caller = AllocationIdentityMemory::default();
+        let referent = field(var("app", 8), &[2]);
+        caller.assign_stack_refs(var("caller", 1), BTreeSet::from([referent]));
+        caller.assign_place_resources(field(var("app", 8), &[2, 1]), BTreeSet::from([resource("R")]));
+        let p = plan("KD", 1, serde_json::json!([
+            {"kind":"deref"},
+            {"kind":"field","index":1}
+        ]));
+        let (entry, record) = transfer_drop_receiver(&p, &caller);
+        assert_eq!(record["status"], "resource_binding_available");
+        assert_eq!(entry.points_to(&p.receiver), BTreeSet::from([resource("R")]));
+    }
+
+    #[test]
+    fn heap_field_after_unlocated_deref_remains_unresolved() {
+        let mut caller = AllocationIdentityMemory::default();
+        caller.assign_points_to(var("caller", 1), BTreeSet::from([resource("R")]));
+        let p = plan("KD", 1, serde_json::json!([
+            {"kind":"deref"},
+            {"kind":"field","index":0}
+        ]));
+        let (_, record) = transfer_drop_receiver(&p, &caller);
+        assert_eq!(record["status"], "unresolved_identity");
+    }
+
+    #[test]
+    fn direct_nonresource_is_proved_empty_without_fabrication() {
+        let p = plan("KD", 1, serde_json::json!([]));
+        let (entry, record) = transfer_drop_receiver(&p, &AllocationIdentityMemory::default());
+        assert_eq!(record["status"], "no_tracked_resource");
+        assert!(entry.points_to(&p.receiver).is_empty());
+        assert_eq!(entry.stack_refs(&p.receiver), BTreeSet::from([field(var("caller", 1), &[])]));
+    }
+
+    #[test]
+    fn unproved_deref_is_unresolved_not_successful_empty() {
+        let p = plan("KD", 1, serde_json::json!([{"kind":"deref"}]));
+        let (entry, record) = transfer_drop_receiver(&p, &AllocationIdentityMemory::default());
+        assert_eq!(record["status"], "unresolved_identity");
+        assert!(entry.points_to(&p.receiver).is_empty());
+        assert!(entry.stack_refs(&p.receiver).is_empty());
+    }
+
+    #[test]
+    fn unsupported_projection_is_fail_closed() {
+        let p = plan("KD", 1, serde_json::json!([{"kind":"unsupported","diagnostic":"Index"}]));
+        let (_, record) = transfer_drop_receiver(&p, &AllocationIdentityMemory::default());
+        assert_eq!(record["status"], "unsupported_place");
+    }
+
+    #[test]
+    fn place_resource_descendants_are_rebased_below_receiver_deref() {
+        let mut caller = AllocationIdentityMemory::default();
+        caller.assign_place_resources(field(var("caller", 1), &[0]), BTreeSet::from([resource("ROOT")]));
+        caller.assign_place_resources(field(var("caller", 1), &[0, 2]), BTreeSet::from([resource("CHILD")]));
+        let p = plan("KD", 1, serde_json::json!([{"kind":"field","index":0}]));
+        let (entry, _) = transfer_drop_receiver(&p, &caller);
+        assert_eq!(
+            entry.resources_for_place(&place(
+                p.receiver.clone(),
+                vec![PlaceProjection::Deref, PlaceProjection::Field { index: 2 }]
+            )),
+            BTreeSet::from([resource("CHILD")]),
+        );
+    }
+
+    #[test]
+    fn drop_receiver_composes_with_ordinary_r1_without_new_resource() {
+        let mut caller = AllocationIdentityMemory::default();
+        caller.assign_place_resources(field(var("caller", 1), &[0]), BTreeSet::from([resource("R")]));
+        let p = plan("KD", 1, serde_json::json!([{"kind":"field","index":0}]));
+        let (mut entry, _) = transfer_drop_receiver(&p, &caller);
+        entry.assign_stack_refs(
+            var("KD", 2),
+            BTreeSet::from([PlaceId { base: p.receiver.clone(), projection: Vec::new() }]),
+        );
+        let r1 = ActualFormalPlan {
+            activation: serde_json::json!({}),
+            caller_scope: "KD".into(),
+            callee_scope: "dtor".into(),
+            actuals: vec![serde_json::json!({
+                "actual_local": 2,
+                "operand": "copy",
+                "direct_local": true,
+                "value_shape": "mutable_reference"
+            })],
+            formals: vec![serde_json::json!({"value_shape":"mutable_reference"})],
+            abi: "Rust".into(),
+        };
+        let (dtor, records) = transfer_actual_formal(&r1, &entry);
+        assert_eq!(records[0]["resources"], serde_json::json!([resource("R")]));
+        assert_eq!(dtor.event_allocations(&var("dtor", 1)), BTreeSet::from([resource("R")]));
+    }
+
+    #[test]
+    fn moved_away_resource_is_not_recreated_at_drop_boundary() {
+        let mut caller = AllocationIdentityMemory::default();
+        caller.assign_fresh(var("caller", 1), resource("R"));
+        caller.forget_var(&var("caller", 1));
+        let p = plan("KD", 1, serde_json::json!([]));
+        let (entry, record) = transfer_drop_receiver(&p, &caller);
+        assert_eq!(record["status"], "no_tracked_resource");
+        assert!(entry.points_to(&p.receiver).is_empty());
+    }
+
+    #[test]
+    fn reused_drop_glue_return_is_selected_by_exact_activation_context() {
+        let mut a = plan("KA", 1, serde_json::json!([]));
+        let mut b = plan("KB", 1, serde_json::json!([]));
+
+        // IdentityAnalysis uses the context-qualified P2 caller execution-state
+        // as its k=1 callee context at DropGlue entry and again at return.
+        // The call key / reused callee body is therefore not sufficient to
+        // select a return continuation.
+        a.activation["caller_call_state"] = serde_json::json!("caller-A");
+        b.activation["caller_call_state"] = serde_json::json!("caller-B");
+
+        assert_eq!(drop_callee_context(&a), Some(vec!["caller-A".to_string()]));
+        assert_eq!(drop_callee_context(&b), Some(vec!["caller-B".to_string()]));
+        assert_ne!(drop_callee_context(&a), drop_callee_context(&b));
+
+        let mut same_activation_context = b.clone();
+        same_activation_context.activation["call_key"] = serde_json::json!("K-OTHER");
+        assert_eq!(
+            drop_callee_context(&b),
+            drop_callee_context(&same_activation_context),
+        );
+    }
+
+    #[test]
+    fn unwind_pop_does_not_consume_parallel_normal_callee_successor() {
+        let nexts = BTreeSet::from([
+            "caller-cleanup".to_string(),
+            "callee-normal".to_string(),
+        ]);
+        let matched_unwind = BTreeSet::from(["caller-cleanup".to_string()]);
+
+        assert_eq!(
+            drop_same_context_successors(&nexts, &matched_unwind),
+            BTreeSet::from(["callee-normal".to_string()]),
+        );
+    }
+
+    #[test]
+    fn unwind_only_exit_does_not_reenter_caller_with_callee_context() {
+        let nexts = BTreeSet::from(["caller-cleanup".to_string()]);
+        let matched_unwind = BTreeSet::from(["caller-cleanup".to_string()]);
+
+        assert!(drop_same_context_successors(&nexts, &matched_unwind).is_empty());
+    }
+
+    #[test]
+    fn saved_box_chain_outer_drop_place1_copy_for_deref_inner_drop_keeps_one_id() {
+        use crate::structs::{RustPlaceRelationEvidence, RustPlaceRelationEvidenceKind, SourceInfoData};
+
+        let r = resource("BOX-R");
+        let mut caller = AllocationIdentityMemory::default();
+        caller.assign_fresh(var("caller", 4), r.clone());
+
+        // Outer MIR Drop binds the Box storage to the compiler-generated Box
+        // DropGlue receiver.
+        let outer = DropReceiverPlan {
+            activation: serde_json::json!({
+                "call_key":"K-OUTER","activation_kind":"mir_drop",
+                "caller_instance_id":"caller-instance","callee_instance_id":"box-glue",
+                "parent_context":[],"callee_context":["K-OUTER"],
+                "caller_call_state":"caller-bb","callee_entry_state":"box-entry"
+            }),
+            caller_scope: "caller".into(),
+            place: serde_json::json!({"local":4,"projection":[],"source":"rustc_mir_Drop_Place"}),
+            receiver: var("box-glue", 1),
+        };
+        let (mut box_entry, outer_record) = transfer_drop_receiver(&outer, &caller);
+        assert_eq!(outer_record["status"], "resource_binding_available");
+        assert_eq!(box_entry.points_to(&var("box-glue", 1)), BTreeSet::from([r.clone()]));
+
+        // PLACE1 producer-certified CopyForDeref carries the same allocation
+        // into Box glue's raw data pointer `_6` and materializes `resources(*_6)`.
+        let stmt = MirStatement {
+            source_info: SourceInfoData { span: "test".into(), scope: "test".into() },
+            kind: "Assign".into(),
+            details: "audit-only".into(),
+            place: Some("audit-only".into()),
+            is_mutable: Some(true),
+            rvalue: Some("audit-only".into()),
+            resource_place_relation_v1: Some(RustPlaceRelationEvidence {
+                kind: RustPlaceRelationEvidenceKind::OwnedBoxDataPointerCopyForDeref,
+                source_local: 1,
+                destination_local: 6,
+                source_projection: vec![
+                    PlaceProjection::Deref,
+                    PlaceProjection::Field { index: 0 },
+                    PlaceProjection::Field { index: 0 },
+                    PlaceProjection::Field { index: 0 },
+                ],
+                owner_def_path: "diagnostic-only".into(),
+                source_type_diagnostic: "diagnostic-only".into(),
+                result_type_diagnostic: "diagnostic-only".into(),
+                transparent_wrapper_depth: 2,
+            }),
+        };
+        assert!(apply_certified_place_relation("box-glue", &stmt, &mut box_entry));
+        assert_eq!(
+            box_entry.resources_for_place(&place(
+                var("box-glue", 6),
+                vec![PlaceProjection::Deref]
+            )),
+            BTreeSet::from([r.clone()]),
+        );
+
+        // The child `Drop(*_6)` must consume that authoritative PLACE1 fact
+        // and bind the child DropGlue receiver to the exact same canonical R.
+        let child = DropReceiverPlan {
+            activation: serde_json::json!({
+                "call_key":"K-CHILD","activation_kind":"mir_drop",
+                "caller_instance_id":"box-glue","callee_instance_id":"u64-glue",
+                "parent_context":["K-OUTER"],"callee_context":["K-OUTER","K-CHILD"],
+                "caller_call_state":"box-bb0","callee_entry_state":"u64-entry"
+            }),
+            caller_scope: "box-glue".into(),
+            place: serde_json::json!({
+                "local":6,"projection":[{"kind":"deref"}],"source":"rustc_mir_Drop_Place"
+            }),
+            receiver: var("u64-glue", 1),
+        };
+        let (child_entry, child_record) = transfer_drop_receiver(&child, &box_entry);
+        assert_eq!(child_record["status"], "resource_binding_available");
+        assert_eq!(child_record["resources"], serde_json::json!([r.clone()]));
+        assert_eq!(child_entry.points_to(&var("u64-glue", 1)), BTreeSet::from([r]));
+    }
+
 }

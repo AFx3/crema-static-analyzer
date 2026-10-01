@@ -1975,6 +1975,30 @@ fn dep1_discover_bodies<'tcx>(
             record["formal_arguments_v1"] = serde_json::json!({"abi":abi,"arg_count":body.arg_count,"arguments":formals,"source":if provider == Dep1BodyProvider::CompilerGeneratedInstanceMir { "rustc_instance_mir_local_decls" } else { "rustc_optimized_mir_local_decls" }});
         }
 
+        // P3-R1D: compiler-side proof of the exact DropGlue receiver ABI.
+        // This metadata is emitted only for compiler-generated instance MIR;
+        // consumers must not reconstruct it from rendered type names.
+        if crate::identity::p3_drop_receiver_enabled()
+            && provider == Dep1BodyProvider::CompilerGeneratedInstanceMir
+        {
+            let arguments: Vec<_> = body
+                .args_iter()
+                .map(|local| {
+                    let ty = body.local_decls[local].ty;
+                    serde_json::json!({
+                        "local": local.index(),
+                        "type_diagnostic": format!("{ty:?}"),
+                        "raw_mutable_pointer": matches!(ty.kind(), TyKind::RawPtr(_, Mutability::Mut)),
+                    })
+                })
+                .collect();
+            body_records.last_mut().expect("represented body")["drop_receiver_v1"] = serde_json::json!({
+                "arg_count": body.arg_count,
+                "arguments": arguments,
+                "source": "rustc_instance_mir_args_iter_local_decls",
+            });
+        }
+
         if crate::identity::p3_return_continuity_enabled() {
             let ty = body.local_decls[rustc_middle::mir::RETURN_PLACE].ty;
             let shape = if matches!(ty.kind(), TyKind::Tuple(fields) if fields.is_empty()) { "unit" }
@@ -1999,6 +2023,19 @@ fn dep1_discover_bodies<'tcx>(
                         "projection_diagnostic":format!("{:?}",place.projection),"concrete_type_diagnostic":format!("{concrete_ty:?}"),
                         "resolution_basis":"Instance::resolve_drop_in_place"});
                     origins.entry(glue_id.clone()).or_default().push(origin.clone());
+                    let mut drop_place_proof = origin;
+                    if crate::identity::p3_drop_receiver_enabled() {
+                        let projections: Vec<_> = place.projection.iter().map(|projection| match projection {
+                            PlaceElem::Deref => serde_json::json!({"kind":"deref"}),
+                            PlaceElem::Field(index, _) => serde_json::json!({"kind":"field","index":index.index()}),
+                            _ => serde_json::json!({"kind":"unsupported","diagnostic":format!("{projection:?}")}),
+                        }).collect();
+                        drop_place_proof["typed_place_v1"] = serde_json::json!({
+                            "local": place.local.index(),
+                            "projection": projections,
+                            "source": "rustc_mir_Drop_Place",
+                        });
+                    }
                     call_records.push(serde_json::json!({
                         "caller_instance_id":caller_instance_id,"caller_definition_id":dep1_stable_def_id(tcx,caller_def),
                         "basic_block":bb.index(),"activation_kind":"mir_drop",
@@ -2008,7 +2045,7 @@ fn dep1_discover_bodies<'tcx>(
                         "scope_reason":"represented_drop_reachability","required_program_body":true,
                         "body_classification":"required_compiler_generated_body",
                         "normal_target":target.index(),"unwind_action":unwind_action_to_string(unwind),
-                        "drop_place_v1":origin,"normal_return_value_destination":null,
+                        "drop_place_v1":drop_place_proof,"normal_return_value_destination":null,
                     }));
                     worklist.push_back(glue);
                     continue;
