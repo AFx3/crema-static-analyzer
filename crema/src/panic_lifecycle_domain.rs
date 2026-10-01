@@ -898,12 +898,48 @@ pub fn fixed_point_real_panic_lifecycle(
         .map(|(id, node)| (id.as_str(), node))
         .collect();
     let panic_guards = collect_panic_guard_evidence(icfg);
+    // Consume existing P2 activation provenance; this is not call/unwind
+    // resolution and creates no program node, successor, or lifecycle fact.
+    let mut dep1_unwind_edges = BTreeMap::<(String, String), Vec<serde_json::Value>>::new();
+    if let Some(graph) = icfg.dependency_body_ingestion_v1.as_ref()
+        .and_then(|dep| dep.context_execution_graph_v1.as_ref()) {
+        if let Some(activations) = graph["represented_call_activations"].as_array() {
+            for activation in activations {
+                if let Some(relations) = activation["unwind_return_relations"].as_array() {
+                    for relation in relations {
+                        if let (Some(source), Some(destination)) = (
+                            relation["callee_unwind_state"].as_str(),
+                            relation["caller_unwind_state"].as_str(),
+                        ) {
+                            dep1_unwind_edges.entry((source.to_owned(),destination.to_owned()))
+                                .or_default().push(serde_json::json!({
+                                    "call_key":activation["call_key"],
+                                    "activation_kind":activation["activation_kind"],
+                                    "caller_instance_id":activation["caller_instance_id"],
+                                    "callee_instance_id":activation["callee_instance_id"],
+                                    "caller_context":activation["parent_context"],
+                                    "callee_context":activation["callee_context"],
+                                    "source":source,"destination":destination,
+                                }));
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     fixed_point_lifecycle_with_transfer(
         icfg,
         entry,
         &PanicLifecycleMemory::default(),
         |edge, input| {
+            if let Some(provenance) = dep1_unwind_edges.get(&(edge.source.clone(),edge.destination.clone())) {
+                for record in provenance {
+                    let mut record = record.clone();
+                    record["flow"] = serde_json::json!(format!("{:?}",edge_flow_kind(edge)));
+                    eprintln!("A3_DEP1_LIFECYCLE_EDGE_V1: {}",record);
+                }
+            }
             let mut out = input.clone();
             let Some(GlobalICFGNode::Mir(block)) = nodes.get(edge.source.as_str()).copied() else {
                 return out;

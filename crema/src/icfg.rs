@@ -1402,6 +1402,122 @@ struct Dep1DiscoveredBody<'tcx> {
     body: &'tcx Body<'tcx>,
 }
 
+/// Certify a lifecycle request against authoritative native DEP1 identity.
+/// Definition/path equality never substitutes for concrete Instance equality.
+fn a3_dep1_certify_request(
+    request: &mut serde_json::Value,
+    bodies: &[serde_json::Value],
+    calls: &[serde_json::Value],
+) -> Result<(), String> {
+    let identity = request["instance_id"].as_str().ok_or(
+        "P2_R10_SEMANTIC_OWNERSHIP_BLOCKER: lifecycle request lacks concrete Instance")?;
+    let Some(body) = bodies.iter().find(|b| b["instance_id"] == identity
+        && b["body_status"] == "represented_body"
+        && b["definition_id"] == request["definition_id"]) else {
+        // Lifecycle may see a sysroot user destructor behind represented glue.
+        // Its exact accepted leaf classification does not acquire its body.
+        if let Some(leaf) = calls.iter().find(|c| c["resolved_instance_id"] == identity
+            && c["resolved_definition_id"] == request["definition_id"]
+            && c["body_status"] == "out_of_scope") {
+            request["classification"] = serde_json::json!("A3_ONLY_OUT_OF_SCOPE_INFORMATION");
+            request["scope_reason"] = leaf["scope_reason"].clone();
+            request["program_body_imported"] = serde_json::json!(false);
+            return Ok(());
+        }
+        return Err(format!("P2_R10_RESIDUAL_DEP1_ACQUISITION_GAP: required lifecycle body {identity} absent from DEP1"));
+    };
+    if request["request_kind"] == "mir_call" {
+        let Some(call) = calls.iter().find(|c| c["caller_instance_id"] == request["caller_instance_id"]
+            && c["basic_block"] == request["basic_block"]
+            && c["resolved_instance_id"] == request["instance_id"]
+            && c["body_status"] == "represented_body") else {
+            return Err("P2_R10_SEMANTIC_OWNERSHIP_BLOCKER: lifecycle Call request has no exact DEP1 activation".into());
+        };
+        request["call_key"] = call["call_key"].clone();
+        request["activation_kind"] = serde_json::json!("mir_call");
+    }
+    request["classification"] = serde_json::json!("EXACT_DEP1_BODY_OVERLAP");
+    request["activation_classification"] = serde_json::json!("EXACT_DEP1_ACTIVATION_OVERLAP");
+    request["lifecycle_body_source"] = serde_json::json!("dep1_authoritative_body");
+    request["body_provider_kind"] = body["body_provider_kind"].clone();
+    request["package_id"] = body["package_id"].clone();
+    Ok(())
+}
+
+/// A3 body requests are analysis provenance when DEP1 owns the exact Instance.
+/// The legacy DefPath is only a worklist/display key: overlap decisions use
+/// native Instance hashes produced in the same rustc callback. Drop requests
+/// use the user-destructor Call *inside the exact compiler-certified glue*,
+/// never replace the original Drop activation with that user body.
+fn a3_dep1_body_reuse_requests<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    represented: &[Dep1DiscoveredBody<'tcx>],
+    bodies: &[serde_json::Value],
+    calls: &[serde_json::Value],
+    native_calls: &[serde_json::Value],
+) -> Result<BTreeMap<String, Vec<serde_json::Value>>, String> {
+    let mut requests = native_calls.to_vec();
+    for caller in represented {
+        let caller_id = dep1_stable_instance_id(tcx, caller.instance);
+        for (bb, data) in caller.body.basic_blocks.iter_enumerated() {
+            let Some(term) = data.terminator.as_ref() else { continue; };
+            let TerminatorKind::Drop { place, .. } = &term.kind else { continue; };
+            let concrete_ty = caller.instance.try_instantiate_mir_and_normalize_erasing_regions(
+                tcx, ty::TypingEnv::fully_monomorphized(),
+                ty::EarlyBinder::bind(place.ty(&caller.body.local_decls, tcx).ty),
+            ).map_err(|_| "P2_R10_SEMANTIC_OWNERSHIP_BLOCKER: unresolved concrete lifecycle Drop type")?;
+            let TyKind::Adt(adt, _) = concrete_ty.kind() else { continue; };
+            let Some(destructor) = adt.destructor(tcx) else { continue; };
+            let Some(drop) = calls.iter().find(|c| c["caller_instance_id"] == caller_id
+                && c["basic_block"] == bb.index() && c["activation_kind"] == "mir_drop") else {
+                return Err(format!("P2_R10_RESIDUAL_DEP1_ACQUISITION_GAP: lifecycle Drop lacks exact DEP1 activation {caller_id}:bb{}",bb.index()));
+            };
+            let glue = drop["resolved_instance_id"].as_str().ok_or("P2_R10_SEMANTIC_OWNERSHIP_BLOCKER: unresolved lifecycle glue")?;
+            let definition = dep1_stable_def_id(tcx, destructor.did);
+            let targets: Vec<_> = calls.iter().filter(|c| c["caller_instance_id"] == glue
+                && (c["resolved_definition_id"] == definition || c["operand_definition_id"] == definition)).collect();
+            let native_targets: BTreeSet<_> = targets.iter().filter_map(|c| c["resolved_instance_id"].as_str()).collect();
+            if native_targets.len() != 1 {
+                return Err(format!("P2_R10_SEMANTIC_OWNERSHIP_BLOCKER: lifecycle destructor request not certified by unique glue Call {glue}"));
+            }
+            let target = targets[0];
+            requests.push(serde_json::json!({
+                "request_kind":"mir_drop_user_destructor_information",
+                "caller_instance_id":caller_id,"basic_block":bb.index(),
+                "activation_kind":"mir_drop","call_key":drop["call_key"],
+                "glue_instance_id":glue,"destructor_call_key":target["call_key"],
+                "destructor_call_keys":targets.iter().map(|c| c["call_key"].clone()).collect::<Vec<_>>(),
+                "requested_operand_definition_id":definition,
+                "instance_id":target["resolved_instance_id"],"definition_id":target["resolved_definition_id"],
+                "stable_crate_id":target["resolved_definition_id"].as_str().and_then(|d| d.strip_prefix("defpathhash-v1:")).map(|d| &d[..16]),
+            }));
+        }
+    }
+    let mut by_definition = BTreeMap::<String, Vec<serde_json::Value>>::new();
+    for mut request in requests {
+        a3_dep1_certify_request(&mut request, bodies, calls)?;
+        let definition = request["definition_id"].as_str().ok_or("missing compiler definition")?.to_owned();
+        let entries = by_definition.entry(definition).or_default();
+        if !entries.contains(&request) { entries.push(request); }
+    }
+    for requests in by_definition.values_mut() {
+        requests.sort_by_key(|r| r.to_string());
+        for request in requests.iter() { eprintln!("A3_DEP1_REQUEST_V1: {}", request); }
+    }
+    // Out-of-scope leaves remain explicit information; MIR availability is not
+    // permission to promote them into represented program-control bodies.
+    for call in calls.iter().filter(|c| c["body_status"] == "out_of_scope") {
+        eprintln!("A3_DEP1_LEAF_V1: {}", serde_json::json!({
+            "classification":"A3_ONLY_OUT_OF_SCOPE_INFORMATION",
+            "caller_instance_id":call["caller_instance_id"],"basic_block":call["basic_block"],
+            "call_key":call["call_key"],"instance_id":call["resolved_instance_id"],
+            "definition_id":call["resolved_definition_id"],"scope_reason":call["scope_reason"],
+            "program_body_imported":false,
+        }));
+    }
+    Ok(by_definition)
+}
+
 fn dep1_materialize_dependency_bodies<'tcx>(
     extractor: &mut MirExtractor,
     tcx: TyCtxt<'tcx>,
@@ -1973,6 +2089,8 @@ struct ReachableInstanceDispatch {
     /// available in crate metadata. Keyed by canonical DefPath for stable
     /// serialization/lookup; DefId is used only inside this rustc session.
     external_mir_bodies: BTreeMap<String, DefId>,
+    /// Concrete requests retained before the legacy path-keyed import loses args.
+    native_external_requests: Vec<serde_json::Value>,
 }
 
 /// Resolve reachable generic/trait calls in a monomorphic rustc context.
@@ -2046,6 +2164,7 @@ fn resolve_reachable_instance_dispatch<'tcx>(
                 &local_body_paths,
             ),
             external_mir_bodies: BTreeMap::new(),
+            native_external_requests: Vec::new(),
         });
     }
     let entry = ty::Instance::mono(tcx, entry_def);
@@ -2064,6 +2183,7 @@ fn resolve_reachable_instance_dispatch<'tcx>(
     let mut seen: Vec<ty::Instance<'tcx>> = Vec::new();
     let mut out: BTreeMap<(String, usize), ConcreteCallDispatch> = BTreeMap::new();
     let mut external_mir_bodies: BTreeMap<String, DefId> = BTreeMap::new();
+    let mut native_external_requests = Vec::new();
 
     while let Some(caller) = worklist.pop_front() {
         if seen.contains(&caller) {
@@ -2130,6 +2250,14 @@ fn resolve_reachable_instance_dispatch<'tcx>(
                         external_mir_bodies
                             .entry(callee_path)
                             .or_insert(callee.def_id());
+                        native_external_requests.push(serde_json::json!({
+                            "request_kind":"mir_call",
+                            "caller_instance_id":dep1_stable_instance_id(tcx,caller),
+                            "basic_block":bb.index(),
+                            "instance_id":dep1_stable_instance_id(tcx,callee),
+                            "definition_id":dep1_stable_def_id(tcx,callee.def_id()),
+                            "stable_crate_id":format!("{:016x}",tcx.stable_crate_id(callee.def_id().krate).as_u64()),
+                        }));
                         worklist.push_back(callee);
                     } else {
                         // Sysroot MIR deliberately remains behind CREMA's
@@ -2144,6 +2272,7 @@ fn resolve_reachable_instance_dispatch<'tcx>(
     Ok(ReachableInstanceDispatch {
         calls: out,
         external_mir_bodies,
+        native_external_requests,
     })
 }
 
@@ -2943,7 +3072,13 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                 .insert(function_name.clone(), body.arg_count);
             self.mir_representation.functions.insert(function_name, function_blocks);
         }
+        let mut a3_dep1_reuse = None;
         if let Some((bodies, mut calls, represented)) = dep1_pending.take() {
+            if panic_unwind_lifecycle_v1_enabled() {
+                a3_dep1_reuse = Some(a3_dep1_body_reuse_requests(
+                    tcx, &represented, &bodies, &calls, &reachable_dispatch.native_external_requests,
+                ).unwrap_or_else(|err| panic!("{err}")));
+            }
             dep1_materialize_dependency_bodies(self, tcx, represented, &bodies, &mut calls);
             self.dep1_body_statuses = bodies;
             self.dep1_exact_call_bindings = calls;
@@ -3011,6 +3146,12 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                             &body.local_decls,
                         )
                     {
+                        if a3_dep1_reuse.is_some() {
+                            // Legacy callback discovery carries only DefId, not
+                            // a concrete Instance certificate. It must not reuse
+                            // a different instantiation sharing that definition.
+                            panic!("P2_R10_SEMANTIC_OWNERSHIP_BLOCKER: IDENTITY_MISMATCH: A3 callback request lacks concrete Instance certificate {}", dep1_stable_def_id(tcx,callback_def));
+                        }
                         if external_mir_scheduled.insert(callback_path.clone()) {
                             eprintln!(
                                 "A3_EXTERNAL_CALLBACK_MIR_DISCOVERED: caller={} callback={}",
@@ -3037,6 +3178,24 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                             external_mir_worklist.push_back((drop_path, drop_def));
                         }
                     }
+                }
+
+                if let Some(reuse) = &a3_dep1_reuse {
+                    let definition = dep1_stable_def_id(tcx, def_id);
+                    if let Some(requests) = reuse.get(&definition) {
+                        // Exact native requests were validated above. Do not
+                        // rematerialize the legacy path-keyed program body or
+                        // write historical Drop shortcuts into DEP1 control.
+                        eprintln!("A3_DEP1_BODY_REUSED_V1: {}",serde_json::json!({
+                            "definition_id":definition,"requests":requests,
+                            "program_body_materialized":false,
+                            "has_authoritative_body":requests.iter().any(|r| r["classification"] == "EXACT_DEP1_BODY_OVERLAP"),
+                        }));
+                        continue;
+                    }
+                    // An A3-only eligible executable request is not hidden.
+                    // Acquisition/coherence must be repaired in its own gate.
+                    panic!("P2_R10_RESIDUAL_DEP1_ACQUISITION_GAP: A3 requested in-scope body without certified concrete DEP1 overlap {definition}");
                 }
 
                 let mut function_blocks = Vec::new();
@@ -5375,5 +5534,48 @@ mod dg2_body_provider_tests {
     #[test]
     fn dg2_mir_availability_does_not_override_sysroot_scope() {
         assert_eq!(dep1_classify_resolved_body_status(false,"sysroot_out_of_scope",||true),"out_of_scope");
+    }
+}
+
+#[cfg(test)]
+mod a3_dep1_reuse_tests {
+    use super::*;
+    fn body() -> serde_json::Value { serde_json::json!({"instance_id":"native-T1", "definition_id":"native-definition", "body_status":"represented_body", "body_provider_kind":"item_mir", "package_id":"exact-PackageId"}) }
+    fn request() -> serde_json::Value { serde_json::json!({"request_kind":"mir_call", "caller_instance_id":"native-caller", "basic_block":2,"instance_id":"native-T1", "definition_id":"native-definition"}) }
+    fn call() -> serde_json::Value { serde_json::json!({"caller_instance_id":"native-caller", "basic_block":2,"resolved_instance_id":"native-T1", "body_status":"represented_body", "call_key":"exact-call-key"}) }
+    #[test] fn r10_reuses_exact_native_instance_and_activation() {
+        let mut r=request();a3_dep1_certify_request(&mut r,&[body()],&[call()]).unwrap();
+        assert_eq!(r["call_key"],"exact-call-key");assert_eq!(r["lifecycle_body_source"],"dep1_authoritative_body");
+    }
+    #[test] fn r10_same_definition_other_generic_instance_is_not_overlap() {
+        let mut r=request();r["instance_id"]=serde_json::json!("native-T2");
+        assert!(a3_dep1_certify_request(&mut r,&[body()],&[call()]).unwrap_err().contains("RESIDUAL_DEP1_ACQUISITION_GAP"));
+    }
+    #[test] fn r10_definition_only_callback_request_cannot_reuse_body() {
+        let mut r=serde_json::json!({"definition_id":"native-definition","request_kind":"callback"});
+        assert!(a3_dep1_certify_request(&mut r,&[body()],&[call()]).unwrap_err().contains("lacks concrete Instance"));
+    }
+    #[test] fn r10_required_missing_body_fails_closed() {
+        assert!(a3_dep1_certify_request(&mut request(),&[],&[call()]).is_err());
+    }
+    #[test] fn r10_wrong_callsite_is_not_activation_overlap() {
+        let mut r=request();r["basic_block"]=serde_json::json!(3);
+        assert!(a3_dep1_certify_request(&mut r,&[body()],&[call()]).is_err());
+    }
+    #[test] fn r10_out_of_scope_body_is_not_promoted_by_mir_availability() {
+        let mut b=body();b["body_status"]=serde_json::json!("out_of_scope");b["mir_available"]=serde_json::json!(true);
+        assert!(a3_dep1_certify_request(&mut request(),&[b],&[call()]).is_err());
+    }
+}
+
+#[cfg(test)]
+mod a3_dep1_scope_tests {
+    use super::*;
+    #[test] fn r10_known_out_of_scope_destructor_remains_information_only() {
+        let mut request=serde_json::json!({"instance_id":"sysroot-native","definition_id":"sysroot-definition","request_kind":"mir_drop_user_destructor_information"});
+        let leaf=serde_json::json!({"resolved_instance_id":"sysroot-native","resolved_definition_id":"sysroot-definition","body_status":"out_of_scope","scope_reason":"sysroot_out_of_scope"});
+        a3_dep1_certify_request(&mut request,&[],&[leaf]).unwrap();
+        assert_eq!(request["classification"],"A3_ONLY_OUT_OF_SCOPE_INFORMATION");
+        assert_eq!(request["program_body_imported"],false);
     }
 }
