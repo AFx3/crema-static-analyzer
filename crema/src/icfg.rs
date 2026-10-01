@@ -1370,6 +1370,33 @@ fn dep1_instance_node_id(instance_id: &str, basic_block: usize) -> String {
     format!("rust::{}::bb{basic_block}", dep1_instance_function_key(instance_id))
 }
 
+/// Staged P2 generated-body gate. Scope is inherited from a represented Drop,
+/// never from the compiler definition crate of a generated shim.
+pub(crate) fn dep1_drop_glue_enabled() -> bool {
+    std::env::var("CREMA_INTERNAL_DEP1_DG2").as_deref() == Ok("1")
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Dep1BodyProvider { ItemMir, CompilerGeneratedInstanceMir }
+
+impl Dep1BodyProvider {
+    fn for_instance(instance: ty::Instance<'_>) -> Self {
+        if matches!(instance.def, ty::InstanceKind::DropGlue(..)) {
+            Self::CompilerGeneratedInstanceMir
+        } else { Self::ItemMir }
+    }
+    fn name(self) -> &'static str {
+        match self { Self::ItemMir => "item_mir", Self::CompilerGeneratedInstanceMir => "compiler_generated_instance_mir" }
+    }
+    fn query(self) -> &'static str {
+        match self { Self::ItemMir => "optimized_mir", Self::CompilerGeneratedInstanceMir => "instance_mir" }
+    }
+}
+
+fn dep1_drop_key(caller: &str, bb: u64, glue: &str) -> String {
+    format!("dep1-drop-v1:{caller}:bb{bb}:mir_drop:{glue}")
+}
+
 struct Dep1DiscoveredBody<'tcx> {
     instance: ty::Instance<'tcx>,
     body: &'tcx Body<'tcx>,
@@ -1390,6 +1417,10 @@ fn dep1_materialize_dependency_bodies<'tcx>(
         .filter(|r| r.get("body_status").and_then(serde_json::Value::as_str) == Some("represented_body")
             && r.get("local").and_then(serde_json::Value::as_bool) == Some(false))
         .filter_map(|r| r.get("instance_id").and_then(serde_json::Value::as_str).map(str::to_string))
+        .collect();
+    let local_function_keys: BTreeMap<String,String> = represented.iter()
+        .filter(|body| body.instance.def_id().is_local())
+        .map(|body| (dep1_stable_instance_id(tcx,body.instance),tcx.def_path_str(body.instance.def_id())))
         .collect();
     let mut call_index = BTreeMap::<(String, u64), usize>::new();
     for (index, call) in call_records.iter().enumerate() {
@@ -1424,8 +1455,10 @@ fn dep1_materialize_dependency_bodies<'tcx>(
                     let call = &call_records[call_idx];
                     let status = call.get("body_status").and_then(serde_json::Value::as_str).unwrap_or("unknown");
                     let target = call.get("resolved_instance_id").and_then(serde_json::Value::as_str).unwrap_or("");
-                    if status == "represented_body" && represented_ids.contains(target) && non_local_ids.contains(target) {
-                        resolved_instance_callees.push(dep1_instance_function_key(target));
+                    if status == "represented_body" && represented_ids.contains(target)
+                        && (non_local_ids.contains(target) || (dep1_drop_glue_enabled() && local_function_keys.contains_key(target))) {
+                        resolved_instance_callees.push(local_function_keys.get(target).cloned()
+                            .unwrap_or_else(|| dep1_instance_function_key(target)));
                         *instance_dispatch_external = false;
                     } else if matches!(status, "unresolved_instance" | "virtual_or_dynamic_unresolved" | "unresolved_scope_identity") {
                         *instance_dispatch_unresolved = true;
@@ -1433,6 +1466,11 @@ fn dep1_materialize_dependency_bodies<'tcx>(
                     call_records[call_idx]["icfg_node"] = serde_json::Value::String(
                         dep1_instance_node_id(&instance_id, bb.index())
                     );
+                }
+            }
+            if dep1_drop_glue_enabled() {
+                if let Some(index) = call_index.get(&(instance_id.clone(),bb.index() as u64)).copied() {
+                    call_records[index]["icfg_node"] = serde_json::json!(dep1_instance_node_id(&instance_id,bb.index()));
                 }
             }
             blocks.push(MirBasicBlock {
@@ -1493,8 +1531,25 @@ fn dep1_materialize_dependency_bodies<'tcx>(
                 .unwrap_or("unresolved")
         }));
     }
+    if dep1_drop_glue_enabled() {
+        for link in &mut all_links {
+            if let Some(binding) = call_records.iter().find(|b| b["call_key"] == link["call_key"]) {
+                link["caller_definition_id"] = binding["caller_definition_id"].clone();
+            }
+        }
+    }
     all_links.sort_by(|a,b| a.get("call_key").and_then(serde_json::Value::as_str).cmp(&b.get("call_key").and_then(serde_json::Value::as_str)));
     all_links.dedup_by(|a,b| a.get("call_key") == b.get("call_key") && a.get("icfg_node") == b.get("icfg_node"));
+    if dep1_drop_glue_enabled() {
+        for call in call_records.iter().filter(|c| c["activation_kind"] == "mir_drop") {
+            let node = call.get("icfg_node").and_then(serde_json::Value::as_str)
+                .or_else(|| all_links.iter().find(|l| l["call_key"] == call["call_key"]).and_then(|l| l["icfg_node"].as_str()));
+            let Some((function,bb)) = node.and_then(|n| n.strip_prefix("rust::")).and_then(|n| n.rsplit_once("::bb")) else { continue; };
+            let bb: usize = bb.parse().expect("compiler linked block");
+            let target = call["resolved_instance_id"].as_str().expect("Drop Instance");
+            extractor.drop_destructors.insert((function.to_owned(),bb),dep1_instance_function_key(target));
+        }
+    }
     extractor.dep1_icfg_callsite_links = all_links;
 }
 
@@ -1620,12 +1675,15 @@ fn dep1_discover_bodies<'tcx>(
     let mut body_records = Vec::new();
     let mut call_records = Vec::new();
     let mut represented = Vec::new();
+    let generated_enabled = dep1_drop_glue_enabled();
+    let mut origins = BTreeMap::<String, Vec<serde_json::Value>>::new();
 
     while let Some(caller) = worklist.pop_front() {
         let caller_instance_id = dep1_stable_instance_id(tcx, caller);
         if !visited_ids.insert(caller_instance_id.clone()) { continue; }
         let caller_def = caller.def_id();
-        if !tcx.is_mir_available(caller_def) {
+        let provider = if generated_enabled { Dep1BodyProvider::for_instance(caller) } else { Dep1BodyProvider::ItemMir };
+        if provider == Dep1BodyProvider::ItemMir && !tcx.is_mir_available(caller_def) {
             body_records.push(serde_json::json!({
                 "instance_id":caller_instance_id,
                 "definition_id":dep1_stable_def_id(tcx,caller_def),
@@ -1635,7 +1693,10 @@ fn dep1_discover_bodies<'tcx>(
             }));
             continue;
         }
-        let body = tcx.optimized_mir(caller_def);
+        let body = match provider {
+            Dep1BodyProvider::ItemMir => tcx.optimized_mir(caller_def),
+            Dep1BodyProvider::CompilerGeneratedInstanceMir => tcx.instance_mir(caller.def),
+        };
         represented.push(Dep1DiscoveredBody { instance: caller, body });
         let caller_package = if caller_def.is_local() { None } else {
             by_stable_crate.get(&format!("{:016x}", tcx.stable_crate_id(caller_def.krate)))
@@ -1651,6 +1712,17 @@ fn dep1_discover_bodies<'tcx>(
             "mir_query":"optimized_mir",
             "instance_context_preserved":true
         }));
+        if generated_enabled {
+            let record = body_records.last_mut().expect("represented body");
+            record["body_provider_kind"] = serde_json::json!(provider.name());
+            record["mir_query"] = serde_json::json!(provider.query());
+            record["compiler_definition_origin"] = serde_json::json!({
+                "stable_crate_id":format!("{:016x}", tcx.stable_crate_id(caller_def.krate).as_u64()),
+                "definition_id":dep1_stable_def_id(tcx,caller_def),
+            });
+            record["required_program_body"] = serde_json::json!(true);
+            record["body_classification"] = serde_json::json!(if provider == Dep1BodyProvider::CompilerGeneratedInstanceMir { "required_compiler_generated_body" } else { "in_scope_item_body" });
+        }
         if crate::identity::p3_actual_formal_enabled() {
             let abi = if matches!(tcx.def_kind(caller_def), DefKind::Fn | DefKind::AssocFn) {
                 format!("{:?}", tcx.fn_sig(caller_def).instantiate_identity().skip_binder().abi)
@@ -1660,7 +1732,7 @@ fn dep1_discover_bodies<'tcx>(
                 "value_shape":dep1_r1_value_shape(tcx, body.local_decls[Local::from_usize(local)].ty)
             })).collect();
             let record = body_records.last_mut().expect("represented body record");
-            record["formal_arguments_v1"] = serde_json::json!({"abi":abi,"arg_count":body.arg_count,"arguments":formals,"source":"rustc_optimized_mir_local_decls"});
+            record["formal_arguments_v1"] = serde_json::json!({"abi":abi,"arg_count":body.arg_count,"arguments":formals,"source":if provider == Dep1BodyProvider::CompilerGeneratedInstanceMir { "rustc_instance_mir_local_decls" } else { "rustc_optimized_mir_local_decls" }});
         }
 
         if crate::identity::p3_return_continuity_enabled() {
@@ -1672,6 +1744,36 @@ fn dep1_discover_bodies<'tcx>(
         }
         for (bb, data) in body.basic_blocks.iter_enumerated() {
             let Some(term) = data.terminator.as_ref() else { continue; };
+            if generated_enabled {
+                if let TerminatorKind::Drop { place, target, unwind, .. } = &term.kind {
+                    let concrete_ty = caller.try_instantiate_mir_and_normalize_erasing_regions(
+                        tcx, typing_env, ty::EarlyBinder::bind(place.ty(&body.local_decls,tcx).ty))
+                        .map_err(|_| format!("unsupported_drop_semantics: type normalization failed for {caller_instance_id} bb{}",bb.index()))?;
+                    let glue = ty::Instance::resolve_drop_in_place(tcx,concrete_ty);
+                    if !matches!(glue.def, ty::InstanceKind::DropGlue(..)) {
+                        return Err(format!("unsupported_drop_semantics: non-DropGlue executable Instance at {caller_instance_id} bb{}",bb.index()));
+                    }
+                    let glue_id = dep1_stable_instance_id(tcx,glue);
+                    let origin = serde_json::json!({"acquisition_origin":"mir_drop","caller_instance_id":caller_instance_id,
+                        "basic_block":bb.index(),"dropped_place_local":place.local.index(),
+                        "projection_diagnostic":format!("{:?}",place.projection),"concrete_type_diagnostic":format!("{concrete_ty:?}"),
+                        "resolution_basis":"Instance::resolve_drop_in_place"});
+                    origins.entry(glue_id.clone()).or_default().push(origin.clone());
+                    call_records.push(serde_json::json!({
+                        "caller_instance_id":caller_instance_id,"caller_definition_id":dep1_stable_def_id(tcx,caller_def),
+                        "basic_block":bb.index(),"activation_kind":"mir_drop",
+                        "resolved_instance_id":glue_id,"resolved_definition_id":dep1_stable_def_id(tcx,glue.def_id()),
+                        "resolved_diagnostic_name":format!("{:?}",glue),"package_id":null,
+                        "body_status":"represented_body","runtime_eligible":true,
+                        "scope_reason":"represented_drop_reachability","required_program_body":true,
+                        "body_classification":"required_compiler_generated_body",
+                        "normal_target":target.index(),"unwind_action":unwind_action_to_string(unwind),
+                        "drop_place_v1":origin,"normal_return_value_destination":null,
+                    }));
+                    worklist.push_back(glue);
+                    continue;
+                }
+            }
             let TerminatorKind::Call { func, args: actuals, destination, target, .. } = &term.kind else { continue; };
             let func_ty = func.ty(&body.local_decls, tcx);
             let (operand_def, args) = match func_ty.kind() {
@@ -1778,7 +1880,29 @@ fn dep1_discover_bodies<'tcx>(
                     "supported_projection":fields.is_some(),"has_normal_return":target.is_some(),
                     "normal_target":target.map(|bb|bb.index()),"source":"rustc_mir_Call_destination"});
             }
+            if generated_enabled {
+                let record = call_records.last_mut().expect("resolved Call");
+                record["activation_kind"] = serde_json::json!("mir_call");
+                record["required_program_body"] = serde_json::json!(eligible && !tcx.is_foreign_item(resolved_def));
+                record["body_classification"] = serde_json::json!(if eligible && !tcx.is_foreign_item(resolved_def) { "in_scope_item_body" } else { "external_leaf" });
+                record["observed_call"] = serde_json::json!(true);
+                record["semantic_provider_required_for_current_gate"] = serde_json::json!(false);
+                record["proof_depends_on_leaf_semantics"] = serde_json::json!(false);
+                if body_status == "represented_body" {
+                    origins.entry(resolved_instance_id.clone()).or_default().push(serde_json::json!({
+                        "acquisition_origin":"mir_call","caller_instance_id":caller_instance_id,"basic_block":bb.index()}));
+                }
+            }
             if body_status == "represented_body" { worklist.push_back(resolved); }
+        }
+    }
+    if generated_enabled {
+        for record in &mut body_records {
+            if let Some(id) = record["instance_id"].as_str() {
+                let mut reasons = origins.remove(id).unwrap_or_else(|| vec![serde_json::json!({"acquisition_origin":"entry"})]);
+                reasons.sort_by_key(|v| v.to_string()); reasons.dedup();
+                record["acquisition_provenance"] = serde_json::json!(reasons);
+            }
         }
     }
     body_records.sort_by(|a,b| a.get("instance_id").and_then(serde_json::Value::as_str).cmp(&b.get("instance_id").and_then(serde_json::Value::as_str)));
@@ -1789,7 +1913,7 @@ fn dep1_discover_bodies<'tcx>(
             .or_else(|| call.get("resolved_definition_id").and_then(serde_json::Value::as_str))
             .or_else(|| call.get("operand_definition_id").and_then(serde_json::Value::as_str))
             .unwrap_or("unresolved");
-        call["call_key"] = serde_json::Value::String(dep1_call_key(caller, bb, target));
+        call["call_key"] = serde_json::Value::String(if call["activation_kind"] == "mir_drop" { dep1_drop_key(caller,bb,target) } else { dep1_call_key(caller, bb, target) });
     }
     call_records.sort_by(|a,b| {
         (a.get("caller_instance_id").and_then(serde_json::Value::as_str),a.get("basic_block").and_then(serde_json::Value::as_u64),a.get("resolved_instance_id").and_then(serde_json::Value::as_str))
@@ -2423,8 +2547,13 @@ fn dep1_build_icfg_stitching_v1(
         let GlobalICFGNode::Mir(call_block) = call_block else {
             return Err(format!("callsite is not a MIR block for {call_key}"));
         };
-        let Some(MirTerminator::Call { return_target, unwind_target, .. }) = call_block.terminator.as_ref() else {
-            return Err(format!("callsite link does not point to MIR Call for {call_key}"));
+        let drop_return;
+        let (return_target,unwind_target) = match call_block.terminator.as_ref() {
+            Some(MirTerminator::Call { return_target,unwind_target,.. }) if call["activation_kind"] != "mir_drop" => (return_target,unwind_target),
+            Some(MirTerminator::Drop { return_target,unwind_target,.. }) if call["activation_kind"] == "mir_drop" => {
+                drop_return=Some(return_target.clone()); (&drop_return,unwind_target)
+            },
+            _ => return Err(format!("activation kind/terminator mismatch for {call_key}")),
         };
         let call_relations: Vec<_> = rust_calls.iter().filter(|relation|
             relation.call_node == call_node && relation.callee_function == *callee_function
@@ -3542,10 +3671,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                             callee_function: callee.clone(),
                             dummy_call_node: dummy_call_id.clone(),
                             dummy_ret_node: dummy_ret_id.clone(),
-                            arguments: vec![MirCallArgument {
-                                arg: dropped_value.clone(),
-                                is_mutable: Some(true),
-                            }],
+                            arguments: if dep1_is_stitched_call_node(self,&call_site) { Vec::new() } else { vec![MirCallArgument { arg:dropped_value.clone(),is_mutable:Some(true) }] },
                             return_place: String::new(),
                             return_node: caller_return.clone(),
                             is_closure: false,
@@ -3576,7 +3702,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                         icfg_edges.push(IcfgEdge {
                             source: dummy_ret_id,
                             destination: caller_return,
-                            label: Some("dummyRet -> Rust Drop Continuation".to_string()),
+                            label: Some(if dep1_is_stitched_call_node(self,&src) { "dummyRet -> Rust Continuation" } else { "dummyRet -> Rust Drop Continuation" }.to_string()),
                             source_label: Some(dropped_value.clone()),
                             destination_label: None,
                         });
@@ -3594,7 +3720,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                                 icfg_edges.push(IcfgEdge {
                                     source: unwind_exit,
                                     destination: dst.clone(),
-                                    label: Some("Rust drop unwind propagate".to_string()),
+                                    label: Some(if dep1_is_stitched_call_node(self,&src) { "DEP1 unwind exit -> matched caller cleanup" } else { "Rust drop unwind propagate" }.to_string()),
                                     source_label: Some(format!(
                                         "destructor={} caller_bb={}",
                                         callee, block.block_id
@@ -5225,4 +5351,29 @@ mod phase5_ffi_bridge_tests {
         assert_eq!(svf_function_return_var_id(&exit), None);
     }
 
+}
+
+#[cfg(test)]
+mod dg2_body_provider_tests {
+    use super::*;
+    #[test]
+    fn dg2_generated_provider_uses_instance_mir() {
+        assert_eq!(Dep1BodyProvider::CompilerGeneratedInstanceMir.query(), "instance_mir");
+        assert_eq!(Dep1BodyProvider::CompilerGeneratedInstanceMir.name(), "compiler_generated_instance_mir");
+    }
+    #[test]
+    fn dg2_item_provider_remains_optimized_mir() {
+        assert_eq!(Dep1BodyProvider::ItemMir.query(), "optimized_mir");
+        assert_eq!(Dep1BodyProvider::ItemMir.name(), "item_mir");
+    }
+    #[test]
+    fn dg2_drop_key_is_instance_and_kind_exact() {
+        assert_ne!(dep1_drop_key("caller",3,"glue-A"),dep1_drop_key("caller",3,"glue-B"));
+        assert_ne!(dep1_drop_key("caller",3,"glue-A"),dep1_call_key("caller",3,"glue-A"));
+        assert_ne!(dep1_drop_key("caller",3,"glue-A"),dep1_drop_key("other-caller",3,"glue-A"));
+    }
+    #[test]
+    fn dg2_mir_availability_does_not_override_sysroot_scope() {
+        assert_eq!(dep1_classify_resolved_body_status(false,"sysroot_out_of_scope",||true),"out_of_scope");
+    }
 }

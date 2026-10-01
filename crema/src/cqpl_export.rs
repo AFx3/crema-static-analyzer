@@ -4255,7 +4255,9 @@ fn dep1_call_semantic_coverage(
             .or_else(|| call.get("resolved_definition_id").and_then(serde_json::Value::as_str))
             .or_else(|| call.get("operand_definition_id").and_then(serde_json::Value::as_str))
             .unwrap_or("unresolved");
-        let expected_key = format!("dep1-call-v1:{caller_instance}:bb{bb}:{callee_identity}");
+        let expected_key = if call["activation_kind"] == "mir_drop" {
+            format!("dep1-drop-v1:{caller_instance}:bb{bb}:mir_drop:{callee_identity}")
+        } else { format!("dep1-call-v1:{caller_instance}:bb{bb}:{callee_identity}") };
         if caller_instance.is_empty() || bb == u64::MAX || call_key != expected_key {
             complete = false;
             ledger.push(serde_json::json!({

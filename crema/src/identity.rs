@@ -2252,6 +2252,8 @@ fn actual_formal_plans(icfg: &GlobalICFGOrdered) -> Result<BTreeMap<String, Actu
         .ok_or("p2_control_flow_incomplete: activation records absent")?;
     let mut plans = BTreeMap::new();
     for a in activations {
+        // P2 Drop is control-only; receiver continuity belongs to P3-R1D.
+        if a.get("activation_kind").and_then(serde_json::Value::as_str) == Some("mir_drop") { continue; }
         let text = |field: &str| a.get(field).and_then(serde_json::Value::as_str).ok_or_else(|| format!("unresolved_formal: missing {field}"));
         let key = text("call_key")?;
         let callee = text("callee_instance_id")?;

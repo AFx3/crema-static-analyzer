@@ -132,7 +132,24 @@ pub fn context_expand(icfg: &mut GlobalICFGOrdered, selected_entry: &str) -> Res
     let Some(dep) = icfg.dependency_body_ingestion_v1.clone() else {
         return Ok(selected_entry.to_owned());
     };
+    if dep.context_execution_graph_v1.is_none() && dep.exact_call_bindings.iter().any(|b| b["activation_kind"] == "mir_drop") {
+        // Optional evidence snapshot of the real producer graph before mutation.
+        // It never changes graph construction or downstream program semantics.
+        if let Ok(path) = std::env::var("CREMA_INTERNAL_DG2_CANONICAL_GRAPH") {
+            let bytes = serde_json::to_vec_pretty(icfg).map_err(|e| e.to_string())?;
+            std::fs::write(path,bytes).map_err(|e| format!("DG2 canonical evidence write failed: {e}"))?;
+        }
+    }
     let represented = represented_statuses(&dep)?;
+    let generated_drop_control = dep.exact_call_bindings.iter().any(|b| b["activation_kind"] == "mir_drop");
+    for binding in &dep.exact_call_bindings {
+        if binding["required_program_body"] != true { continue; }
+        let target = binding["resolved_instance_id"].as_str()
+            .ok_or("required_program_body_unrepresented: unresolved Instance")?;
+        if binding["body_status"] != "represented_body" || !represented.contains_key(target) {
+            return Err(format!("required_program_body_unrepresented: {target}"));
+        }
+    }
     let mut instance_function = BTreeMap::<String, String>::new();
     let mut callsite_node_by_key = BTreeMap::<String, String>::new();
     for link in &dep.icfg_callsite_links {
@@ -366,9 +383,16 @@ pub fn context_expand(icfg: &mut GlobalICFGOrdered, selected_entry: &str) -> Res
             }
 
             let Some((call_key, callee_id, binding, relation)) = represented_call else { continue; };
-            let MirTerminator::Call { return_target, unwind_target, .. } =
-                (match node { GlobalICFGNode::Mir(block) => block.terminator.as_ref().ok_or("call node without terminator")?, _ => unreachable!() })
-            else { return Err(format!("exact represented relation {call_key} does not point to a MIR Call")); };
+            let drop_return;
+            let (return_target,unwind_target) = match node {
+                GlobalICFGNode::Mir(MirBasicBlock {terminator:Some(MirTerminator::Call {return_target,unwind_target,..}),..})
+                    if binding["activation_kind"] != "mir_drop" => (return_target,unwind_target),
+                GlobalICFGNode::Mir(MirBasicBlock {terminator:Some(MirTerminator::Drop {return_target,unwind_target,..}),..})
+                    if binding["activation_kind"] == "mir_drop" => {
+                        drop_return=Some(return_target.clone()); (&drop_return,unwind_target)
+                    },
+                _ => return Err(format!("exact represented activation {call_key} has mismatched MIR kind")),
+            };
             let old_call_proxy = relation.map(|r| r.dummy_call_node.as_str()).or_else(|| edge_map.get(static_id).into_iter().flatten().find(|e| e.label.as_deref()==Some("Rust Call -> dummyCall")).map(|e| e.destination.as_str()));
             let call_proxy = encoded_proxy_id("dummyCall", call_key, &activation.context);
             let mut call_dummy = old_call_proxy.and_then(|id| node_map.get(id)).and_then(|n| match n { GlobalICFGNode::DummyCall(d) => Some(d.clone()), _ => None })
@@ -420,7 +444,7 @@ pub fn context_expand(icfg: &mut GlobalICFGOrdered, selected_entry: &str) -> Res
             }
             // Preserve MIR unwind action as provenance. Cleanup edges are added
             // only when the original call carries a concrete cleanup target.
-            if let Some(target) = cleanup_block(unwind_target) {
+            if let Some(target) = cleanup_block(unwind_target).filter(|_| !generated_drop_control) {
                 let caller_scope = scope_of_node(static_id).ok_or("invalid caller scope")?;
                 let cleanup_static = format!("rust::{caller_scope}::{target}");
                 if let Some(cleanup_exec) = state_ids.get(&cleanup_static) {
@@ -450,8 +474,63 @@ pub fn context_expand(icfg: &mut GlobalICFGOrdered, selected_entry: &str) -> Res
                 "unwind_action":unwind_target,
                 "callee_body_status":"represented_body"
             }));
+            if generated_drop_control {
+                let record = represented_call_records.last_mut().expect("activation record");
+                record["activation_kind"] = json!(if binding["activation_kind"] == "mir_drop" { "mir_drop" } else { "mir_call" });
+            }
             if let Some(call_meta) = call_meta { generated_calls.push(call_meta); }
             let _ = binding;
+        }
+    }
+
+    if generated_drop_control {
+        // Generated shim CFGs contain nested Continue/Terminate actions. Build
+        // unwind returns bottom-up over the already certified activation tree;
+        // no compiler call resolution or name-based matching is repeated here.
+        let mut exits = BTreeMap::<Activation,BTreeSet<String>>::new();
+        let mut ordered_activations: Vec<_> = activations.iter().cloned().collect();
+        ordered_activations.sort_by(|a,b| b.context.len().cmp(&a.context.len()).then(a.cmp(b)));
+        for owner in ordered_activations {
+            let function = &instance_function[&owner.instance];
+            let mut owner_exits = BTreeSet::new();
+            for (static_id,node) in &nodes_by_scope[function] {
+                // A represented Call/Drop with Continue is an activation, not
+                // an ordinary unwind-exit bypass at its caller callsite.
+                if represented_calls.contains_key(&(owner.instance.clone(),static_id.clone())) { continue; }
+                if !is_unwind_exit(node) { continue; }
+                let GlobalICFGNode::Mir(block)=node else { continue; };
+                owner_exits.insert(execution_state_node_id(&ExecutionStateIdentity {
+                    code:CanonicalCodeNodeIdentity {concrete_instance_id:owner.instance.clone(),basic_block:block.block_id as u32},context:owner.context.clone()}));
+            }
+            for record in represented_call_records.iter_mut().filter(|r| r["caller_instance_id"]==owner.instance && r["parent_context"]==json!(owner.context)) {
+                let key=record["call_key"].as_str().ok_or("activation without key")?.to_owned();
+                let child=Activation {instance:record["callee_instance_id"].as_str().ok_or("callee Instance")?.to_owned(),context:record["callee_context"].as_array().ok_or("callee context")?.iter().map(|s|s.as_str().map(str::to_owned).ok_or("invalid context")).collect::<Result<_,_>>()?};
+                let child_exits=exits.get(&child).ok_or("unwind child activation absent")?;
+                let action=record["unwind_action"].as_str().ok_or("unwind action")?.to_owned();
+                let destination=if let Some(bb)=cleanup_block(&action) {
+                    let index=bb.strip_prefix("bb").and_then(|s|s.parse::<u32>().ok()).ok_or("invalid cleanup BB")?;
+                    Some(execution_state_node_id(&ExecutionStateIdentity {code:CanonicalCodeNodeIdentity {concrete_instance_id:owner.instance.clone(),basic_block:index},context:owner.context.clone()}))
+                } else if action=="continue" && !child_exits.is_empty() {
+                    let proxy=encoded_proxy_id("unwindExit",&key,&owner.context);
+                    generated_nodes.insert(proxy.clone(),GlobalICFGNode::DummyRet(DummyNode {
+                        dummy_node_name:"unwindExit".into(),incoming_edge:String::new(),outgoing_edge:String::new(),id:proxy.clone(),mir_var:None,llvm_var:None,argument_bindings:vec![],is_internal:Some(true)}));
+                    owner_exits.insert(proxy.clone()); Some(proxy)
+                } else if action=="terminate" && !child_exits.is_empty() {
+                    let terminal=encoded_proxy_id("terminal",&key,&owner.context);
+                    generated_nodes.insert(terminal.clone(),GlobalICFGNode::Terminal(crate::structs::TerminalNode {reason:"unwind_terminate".into()}));Some(terminal)
+                } else { None };
+                let mut relations=Vec::new();
+                if let Some(to)=destination {
+                    if !generated_nodes.contains_key(&to) {return Err(format!("matched unwind destination missing for {key}"));}
+                    for from in child_exits {
+                        generated_edges.push(context_edge(from.clone(),to.clone(),Some("DEP1 unwind exit -> matched caller cleanup".into())));
+                        relations.push(json!({"callee_unwind_state":from,"caller_unwind_state":to,"unwind_action":action,
+                            "caller_context":owner.context,"callee_context":child.context}));
+                    }
+                }
+                record["unwind_return_relations"]=json!(relations);
+            }
+            exits.insert(owner,owner_exits);
         }
     }
 
@@ -595,5 +674,38 @@ mod tests {
             encoded_proxy_id("dummyRet", "site-A", &["outer-A".into()]),
             encoded_proxy_id("dummyRet", "site-B", &["outer-B".into()]),
         );
+    }
+}
+
+#[cfg(test)]
+mod dg2_required_body_tests {
+    use super::*;
+    fn graph(required: bool) -> GlobalICFGOrdered {
+        serde_json::from_value(json!({"ordered_nodes":[],"icfg_edges":[],"rust_functions":{},"rust_calls":[],
+            "dependency_body_ingestion_v1":{"capability":"dependency_body_ingestion_v1","target_triple":"test",
+            "crate_correlations":[],"package_scope":[],"body_statuses":[],
+            "exact_call_bindings":[{"required_program_body":required,"resolved_instance_id":"child","body_status":"out_of_scope"}]}})).unwrap()
+    }
+    #[test]
+    fn dg2_missing_required_body_fails_closed() {
+        let error=context_expand(&mut graph(true),"rust::root::bb0").unwrap_err();
+        assert!(error.starts_with("required_program_body_unrepresented:"));
+    }
+    #[test]
+    fn dg2_foreign_cross_body_guard_remains_fail_closed() {
+        let mut g=graph(false);
+        let dep=g.dependency_body_ingestion_v1.as_mut().unwrap();
+        dep.exact_call_bindings.clear();
+        dep.body_statuses.push(json!({"instance_id":"root-instance","body_status":"represented_body","local":true}));
+        g.rust_functions.insert("root".into(),RustFunctionMetadata {name:"root".into(),arg_count:0,entry_node:"rust::root::bb0".into(),return_nodes:vec!["rust::root::bb0".into()]});
+        let block=GlobalICFGNode::Mir(MirBasicBlock {block_id:0,statements:vec![],terminator:Some(MirTerminator::Return {details:String::new(),source_info:String::new()})});
+        g.ordered_nodes=vec![("rust::root::bb0".into(),block.clone()),("rust::foreign::bb0".into(),block)];
+        g.icfg_edges.push(context_edge("rust::root::bb0".into(),"rust::foreign::bb0".into(),Some("Goto".into())));
+        assert!(context_expand(&mut g,"rust::root::bb0").unwrap_err().contains("unrepresented cross-body Rust edge"));
+    }
+    #[test]
+    fn dg2_uncovered_leaf_is_not_required_body_failure() {
+        let error=context_expand(&mut graph(false),"rust::root::bb0").unwrap_err();
+        assert!(!error.starts_with("required_program_body_unrepresented:"));
     }
 }

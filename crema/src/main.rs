@@ -164,6 +164,7 @@ fn main() {
     // A3 opt-in: edge-sensitive panic/unwind lifecycle semantics.
     let mut panic_unwind_lifecycle_v1 = false;
     let mut dependency_body_ingestion_v1 = false;
+    let mut dependency_drop_glue_ingestion_v1 = false;
     let mut dependency_resource_identity_continuity_v1 = false;
     let mut dependency_resource_return_continuity_v1 = false;
     let mut idx = 2;
@@ -283,6 +284,10 @@ fn main() {
                 dependency_resource_identity_continuity_v1 = true;
                 idx += 1;
             }
+            "--dependency-drop-glue-ingestion-v1" => {
+                dependency_drop_glue_ingestion_v1 = true;
+                idx += 1;
+            }
             "--dependency-body-ingestion-v1" => {
                 dependency_body_ingestion_v1 = true;
                 idx += 1;
@@ -294,6 +299,15 @@ fn main() {
         }
     }
 
+    if dependency_drop_glue_ingestion_v1 && !dependency_body_ingestion_v1 {
+        eprintln!("--dependency-drop-glue-ingestion-v1 requires --dependency-body-ingestion-v1");
+        exit(1);
+    }
+    if dependency_drop_glue_ingestion_v1 {
+        std::env::set_var("CREMA_INTERNAL_DEP1_DG2", "1");
+    } else {
+        std::env::remove_var("CREMA_INTERNAL_DEP1_DG2");
+    }
     if dependency_resource_return_continuity_v1 && !dependency_resource_identity_continuity_v1 {
         eprintln!("--dependency-resource-return-continuity-v1 requires --dependency-resource-identity-continuity-v1");
         exit(1);
