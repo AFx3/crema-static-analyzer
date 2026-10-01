@@ -4303,6 +4303,7 @@ mod phase6b_interprocedural_protocol_tests {
         };
 
         let closure_env_stmt = MirStatement {
+            resource_place_relation_v1: None,
             source_info: SourceInfoData {
                 span: "test.rs:1:1:1:1 (#0)".to_string(),
                 scope: "scope[0]".to_string(),
@@ -6373,6 +6374,7 @@ mod boxtimes_transfer_tests {
 
     fn assign_stmt(place: &str, rvalue: &str) -> MirStatement {
         MirStatement {
+            resource_place_relation_v1: None,
             source_info: SourceInfoData {
                 span: "<test>".to_string(),
                 scope: "<test>".to_string(),
@@ -6630,6 +6632,7 @@ mod phase5_c_origin_ffi_tests {
 
     fn assign_stmt(place: &str, rvalue: &str) -> MirStatement {
         MirStatement {
+            resource_place_relation_v1: None,
             source_info: SourceInfoData {
                 span: "<phase5-test>".to_string(),
                 scope: "<phase5-test>".to_string(),
@@ -7221,6 +7224,7 @@ mod phase4_std_memory_tests {
 
     fn assign_stmt(place: &str, rvalue: &str) -> MirStatement {
         MirStatement {
+            resource_place_relation_v1: None,
             source_info: SourceInfoData {
                 span: "<phase4-test>".to_string(),
                 scope: "<phase4-test>".to_string(),
@@ -7928,6 +7932,7 @@ mod v6p_mir_extension_tests {
 
     fn assign(place: &str, rvalue: &str) -> MirStatement {
         MirStatement {
+            resource_place_relation_v1: None,
             source_info: SourceInfoData { span: "test".into(), scope: "test".into() },
             kind: "Assign".into(),
             details: format!("{place} = {rvalue}"),
@@ -7963,6 +7968,7 @@ mod v6p_mir_extension_tests {
 
     fn stmt(kind: &str, place: Option<&str>, details: &str) -> MirStatement {
         MirStatement {
+            resource_place_relation_v1: None,
             source_info: SourceInfoData { span: "test".into(), scope: "test".into() },
             kind: kind.into(),
             details: details.into(),

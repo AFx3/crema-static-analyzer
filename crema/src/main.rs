@@ -131,7 +131,10 @@ fn main() {
 [--analysis-mode <application|library|workspace>] [-p|--package <name>] \
 [--cargo-kind <bin|lib|example|test|bench>] [--api-root <def-path>]... \
 [--features <a,b>] [--all-features] [--no-default-features] [--target-triple <triple>] \
-[--analysis-out-dir <dir>] [--cargo-plan-out <path>] [--semantic-coverage-out <path>] [--mir-semantics-v2] [--panic-unwind-lifecycle-v1] [--dependency-body-ingestion-v1]"
+[--analysis-out-dir <dir>] [--cargo-plan-out <path>] [--semantic-coverage-out <path>] [--mir-semantics-v2] [--panic-unwind-lifecycle-v1] \
+[--dependency-body-ingestion-v1] [--dependency-drop-glue-ingestion-v1] \
+[--dependency-resource-identity-continuity-v1] [--dependency-resource-return-continuity-v1] \
+[--dependency-place-resource-relations-v1]"
         );
         exit(1);
     }
@@ -167,6 +170,7 @@ fn main() {
     let mut dependency_drop_glue_ingestion_v1 = false;
     let mut dependency_resource_identity_continuity_v1 = false;
     let mut dependency_resource_return_continuity_v1 = false;
+    let mut dependency_place_resource_relations_v1 = false;
     let mut idx = 2;
     while idx < args.len() {
         match args[idx].as_str() {
@@ -280,6 +284,10 @@ fn main() {
                 dependency_resource_return_continuity_v1 = true;
                 idx += 1;
             }
+            "--dependency-place-resource-relations-v1" => {
+                dependency_place_resource_relations_v1 = true;
+                idx += 1;
+            }
             "--dependency-resource-identity-continuity-v1" => {
                 dependency_resource_identity_continuity_v1 = true;
                 idx += 1;
@@ -307,6 +315,22 @@ fn main() {
         std::env::set_var("CREMA_INTERNAL_DEP1_DG2", "1");
     } else {
         std::env::remove_var("CREMA_INTERNAL_DEP1_DG2");
+    }
+    // P3-R1P is an independent Place/resource-identity gate.  It uses the
+    // authoritative AllocationIdentityMemory domain but does not require the
+    // P3-R1 actual/formal capability to be enabled: the saved R1D blocker is
+    // replayed against an authoritative source state, and full R1D composition
+    // is deliberately deferred until after this gate is frozen.
+    if dependency_place_resource_relations_v1
+        && (!dependency_body_ingestion_v1 || cqpl_schema_version != 2)
+    {
+        eprintln!("--dependency-place-resource-relations-v1 requires --dependency-body-ingestion-v1 and --cqpl-schema-version 2");
+        exit(1);
+    }
+    if dependency_place_resource_relations_v1 {
+        std::env::set_var("CREMA_INTERNAL_DEP1_P3_R1P", "1");
+    } else {
+        std::env::remove_var("CREMA_INTERNAL_DEP1_P3_R1P");
     }
     if dependency_resource_return_continuity_v1 && !dependency_resource_identity_continuity_v1 {
         eprintln!("--dependency-resource-return-continuity-v1 requires --dependency-resource-identity-continuity-v1");

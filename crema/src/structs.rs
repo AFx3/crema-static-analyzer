@@ -207,6 +207,43 @@ pub struct RustCallMetadata {
 // -----------------------
 // RUST MIR
 // -----------------------
+
+/// P3-R1P producer-certified evidence that a MIR rvalue extracts the data
+/// pointer of an already-tracked owned Box value through rustc-certified
+/// representation-preserving field projections.
+///
+/// The consumer MUST match only `kind` and the structured source local/place.
+/// Diagnostic strings are audit provenance and are never proof.  In
+/// particular, no consumer may recognize `Box`, `Unique`, `NonNull`, `_6`, or
+/// `drop_in_place` from rendered text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RustPlaceRelationEvidenceKind {
+    /// `CopyForDeref` reads the raw data pointer reached from rustc's
+    /// `owned_box` lang item, then only through field-0 `repr(transparent)`
+    /// wrappers, ending in a raw pointer to the same Box element type.
+    OwnedBoxDataPointerCopyForDeref,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RustPlaceRelationEvidence {
+    pub kind: RustPlaceRelationEvidenceKind,
+    /// MIR local at the base of the producer-certified source Place.
+    pub source_local: u32,
+    /// Direct destination local receiving the certified raw pointer.
+    pub destination_local: u32,
+    /// Exact supported source projection.  P3-R1P currently emits only
+    /// `Deref` followed by field projections certified by rustc.
+    pub source_projection: Vec<PlaceProjection>,
+    /// Audit-only canonical DefPath after structural lang-item matching.
+    pub owner_def_path: String,
+    /// Audit-only rendered types. Consumers MUST NOT infer semantics from them.
+    pub source_type_diagnostic: String,
+    pub result_type_diagnostic: String,
+    /// Number of transparent wrapper fields after the Box payload field.
+    pub transparent_wrapper_depth: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MirStatement {
     pub source_info: SourceInfoData,  
@@ -214,7 +251,12 @@ pub struct MirStatement {
     pub details: String,          
     pub place: Option<String>,
     pub is_mutable: Option<bool>, // if the place is mutable
-    pub rvalue: Option<String>,   
+    pub rvalue: Option<String>,
+    /// Optional typed producer evidence for the P3-R1P Place/resource gate.
+    /// Old artifacts deserialize with `None`; when absent, identity transfer
+    /// retains the committed R10 behavior.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_place_relation_v1: Option<RustPlaceRelationEvidence>,
 }
 // new struct to represent a call argument and its mutability
 #[derive(Debug, Clone, Serialize, Deserialize)]

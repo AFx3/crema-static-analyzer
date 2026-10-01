@@ -1,4 +1,4 @@
-use crate::structs::{AbstractAllocId, PlaceId, PlaceProjection, ProgramVarId};
+use crate::structs::{AbstractAllocId, PlaceId, PlaceProjection, ProgramVarId, RustPlaceRelationEvidenceKind};
 use crate::memory_events::{self, RustAllocationSemantics};
 use crate::utils::load_ffi_functions;
 use serde::{Deserialize, Serialize};
@@ -153,6 +153,18 @@ pub struct AllocationIdentityMemory {
     pub place_points_to: BTreeMap<PlaceId, BTreeSet<AbstractAllocId>>,
     #[serde(default)]
     pub place_stack_refs: BTreeMap<PlaceId, BTreeSet<PlaceId>>,
+
+    /// Authoritative resource identity for MIR Places whose denotation is a
+    /// tracked canonical allocation but is not itself a pointer-valued value.
+    ///
+    /// P3-R1P uses this relation for typed pointee Places such as `*p`.  It is
+    /// intentionally distinct from `place_points_to`: the latter describes a
+    /// pointer value stored in a projected Place, whereas this map describes
+    /// the resource denoted by the Place itself.  Keeping the relations
+    /// separate avoids pretending that a scalar pointee value "points to" its
+    /// enclosing allocation.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub place_resources: BTreeMap<PlaceId, BTreeSet<AbstractAllocId>>,
 }
 
 impl AllocationIdentityMemory {
@@ -176,6 +188,12 @@ impl AllocationIdentityMemory {
             return self.stack_refs(&place.base);
         }
         self.place_stack_refs.get(place).cloned().unwrap_or_default()
+    }
+
+    /// Exact authoritative resource relation for a MIR Place.  This does not
+    /// fall back to pointer-value or access-provenance relations.
+    pub fn resources_for_place(&self, place: &PlaceId) -> BTreeSet<AbstractAllocId> {
+        self.place_resources.get(place).cloned().unwrap_or_default()
     }
 
     /// Resolve the abstract allocations denoted by an event subject.
@@ -295,12 +313,28 @@ impl AllocationIdentityMemory {
         }
     }
 
+    /// Strong overwrite of the resource denoted by one non-empty MIR Place.
+    /// Only typed/certified P3-R1P transfers should populate this relation.
+    pub fn assign_place_resources(
+        &mut self,
+        place: PlaceId,
+        resources: BTreeSet<AbstractAllocId>,
+    ) {
+        debug_assert!(!place.projection.is_empty());
+        if resources.is_empty() {
+            self.place_resources.remove(&place);
+        } else {
+            self.place_resources.insert(place, resources);
+        }
+    }
+
     pub fn forget_var(&mut self, var: &ProgramVarId) {
         self.access_bases.remove(var);
         self.points_to.remove(var);
         self.stack_refs.remove(var);
         self.place_points_to.retain(|place, _| &place.base != var);
         self.place_stack_refs.retain(|place, _| &place.base != var);
+        self.place_resources.retain(|place, _| &place.base != var);
     }
 
     /// MAY alias is intersection of points-to sets, not equivalence closure.
@@ -358,6 +392,13 @@ impl AllocationIdentityMemory {
                 .extend(refs.iter().cloned());
         }
 
+        for (place, resources) in &other.place_resources {
+            out.place_resources
+                .entry(place.clone())
+                .or_default()
+                .extend(resources.iter().cloned());
+        }
+
         out
     }
 
@@ -380,10 +421,15 @@ impl AllocationIdentityMemory {
             refs.is_subset(&other.stack_refs_place(place))
         });
 
+        let place_resources_leq = self.place_resources.iter().all(|(place, resources)| {
+            resources.is_subset(&other.resources_for_place(place))
+        });
+
         let access_leq = self.access_bases.iter().all(|(var, allocs)| {
             allocs.is_subset(&other.access_bases.get(var).cloned().unwrap_or_default())
         });
-        points_to_leq && refs_leq && place_points_to_leq && place_refs_leq && access_leq
+        points_to_leq && refs_leq && place_points_to_leq && place_refs_leq
+            && place_resources_leq && access_leq
     }
 }
 
@@ -407,9 +453,198 @@ pub struct IdentityAnalysisPoint {
     pub context: Vec<String>,
 }
 
-/// Result of the Phase-6C allocation-identity analysis.
+/// P3-R1P result for a query over the authoritative Place/resource domain.
 ///
-/// `by_point` is the context-sensitive post-state.  `by_node` is its MAY join
+/// `Resolved` is emitted only when every traversed projection is supported and
+/// the existing MAY relations justify at least one canonical allocation.  An
+/// empty relation is deliberately not promoted to success: callers that need a
+/// proved non-resource case must establish that fact in a separate typed gate.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ResourcePlaceResolution {
+    Resolved(BTreeSet<AbstractAllocId>),
+    UnresolvedIdentity,
+    UnsupportedPlace,
+}
+
+/// Resolve canonical allocation identities for a supported MIR Place without
+/// inventing heap shape.
+///
+/// Supported semantics:
+/// - exact field projections remain exact `PlaceId` projections;
+/// - dereferencing a value with `points_to` yields exactly that MAY allocation
+///   set when the dereference is terminal;
+/// - dereferencing a value with `stack_refs` follows only those already-proved
+///   referents and may continue through exact fields/dereferences;
+/// - a field after a heap dereference is unresolved because the current domain
+///   does not model arbitrary heap contents; and
+/// - Index/Opaque projections fail closed.
+///
+/// This is intentionally narrower than a heap-shape analysis and is the API a
+/// later R1D retry should consume instead of collapsing `*p` to `p`.
+pub(crate) fn resolve_resource_place(
+    memory: &AllocationIdentityMemory,
+    query: &PlaceId,
+) -> ResourcePlaceResolution {
+    // A producer-certified relation is already authoritative for the exact
+    // Place.  This is the path used by the saved Box/Unique/NonNull witness
+    // after the pointer-carrier assignment has executed.
+    let certified = memory.resources_for_place(query);
+    if !certified.is_empty() {
+        return ResourcePlaceResolution::Resolved(certified);
+    }
+
+    let mut places = BTreeSet::from([PlaceId {
+        base: query.base.clone(),
+        projection: Vec::new(),
+    }]);
+
+    if query.projection.is_empty() {
+        let mut resources = BTreeSet::new();
+        for place in places {
+            resources.extend(canonical_resources_for_place(memory, place));
+        }
+        return if resources.is_empty() {
+            ResourcePlaceResolution::UnresolvedIdentity
+        } else {
+            ResourcePlaceResolution::Resolved(resources)
+        };
+    }
+
+    for (position, projection) in query.projection.iter().enumerate() {
+        let last = position + 1 == query.projection.len();
+        match projection {
+            PlaceProjection::Field { index } => {
+                places = places
+                    .into_iter()
+                    .map(|mut place| {
+                        place.projection.push(PlaceProjection::Field { index: *index });
+                        place
+                    })
+                    .collect();
+            }
+            PlaceProjection::Deref => {
+                let mut referents = BTreeSet::new();
+                let mut terminal_resources = BTreeSet::new();
+                let mut saw_supported_edge = false;
+
+                for place in &places {
+                    // If this exact typed Deref Place has already been
+                    // producer-certified, it is authoritative for a terminal
+                    // resource query.  For deeper projections it does not by
+                    // itself justify heap contents.
+                    let mut deref_place = place.clone();
+                    deref_place.projection.push(PlaceProjection::Deref);
+                    let explicit = memory.resources_for_place(&deref_place);
+
+                    // `points_to` is likewise sufficient for the terminal
+                    // pointee resource, but not for arbitrary fields beneath
+                    // that heap object.
+                    let heap = memory.points_to_place(place);
+
+                    // Exact stack references preserve Place identity and are
+                    // therefore the only current relation that may continue
+                    // through later exact field/deref projections.  A logical
+                    // resource relation may coexist with this edge (as in a
+                    // DropGlue receiver) and must not suppress it.
+                    let refs = memory.stack_refs_place(place);
+
+                    if last {
+                        if !explicit.is_empty() {
+                            saw_supported_edge = true;
+                            terminal_resources.extend(explicit);
+                        }
+                        if !heap.is_empty() {
+                            saw_supported_edge = true;
+                            terminal_resources.extend(heap);
+                        }
+                        if !refs.is_empty() {
+                            saw_supported_edge = true;
+                            referents.extend(refs);
+                        }
+                    } else if !refs.is_empty() {
+                        saw_supported_edge = true;
+                        referents.extend(refs);
+                    } else if !explicit.is_empty() || !heap.is_empty() {
+                        // We know the resource reached by this dereference but
+                        // have no exact Place edge for the requested deeper
+                        // projection.  Do not invent heap shape.
+                        return ResourcePlaceResolution::UnresolvedIdentity;
+                    }
+                }
+
+                if !saw_supported_edge {
+                    return ResourcePlaceResolution::UnresolvedIdentity;
+                }
+
+                if last {
+                    for referent in referents {
+                        terminal_resources
+                            .extend(canonical_resources_for_place(memory, referent));
+                    }
+                    return if terminal_resources.is_empty() {
+                        ResourcePlaceResolution::UnresolvedIdentity
+                    } else {
+                        ResourcePlaceResolution::Resolved(terminal_resources)
+                    };
+                }
+
+                if referents.is_empty() {
+                    return ResourcePlaceResolution::UnresolvedIdentity;
+                }
+                places = referents;
+            }
+            PlaceProjection::Index { .. } | PlaceProjection::Opaque { .. } => {
+                return ResourcePlaceResolution::UnsupportedPlace;
+            }
+        }
+    }
+
+    let mut resources = BTreeSet::new();
+    for place in places {
+        resources.extend(canonical_resources_for_place(memory, place));
+    }
+    if resources.is_empty() {
+        ResourcePlaceResolution::UnresolvedIdentity
+    } else {
+        ResourcePlaceResolution::Resolved(resources)
+    }
+}
+
+/// Canonical identity of one exact Place without ERR1 access provenance.
+///
+/// This helper follows only already-proved points-to, explicit P3-R1P resource
+/// relations, and exact stack references.  It deliberately does not consult
+/// `access_bases`, because an access-only alias is not a pointee-identity proof.
+fn canonical_resources_for_place(
+    memory: &AllocationIdentityMemory,
+    start: PlaceId,
+) -> BTreeSet<AbstractAllocId> {
+    let mut out = BTreeSet::new();
+    let mut pending = vec![start];
+    let mut seen = BTreeSet::new();
+
+    while let Some(place) = pending.pop() {
+        if !seen.insert(place.clone()) {
+            continue;
+        }
+        out.extend(memory.resources_for_place(&place));
+        out.extend(memory.points_to_place(&place));
+        pending.extend(memory.stack_refs_place(&place));
+
+        // Rebase an exact projection through a previously-proved base
+        // reference.  This is the same structural principle used elsewhere in
+        // the identity domain and does not invent heap aliases.
+        for mut base_target in memory.stack_refs(&place.base) {
+            base_target.projection.extend(place.projection.iter().cloned());
+            pending.push(base_target);
+        }
+    }
+    out
+}
+
+/// Result of the context-sensitive allocation-identity analysis.
+///
+/// `by_point` is the context-sensitive post-state. `by_node` is its MAY join
 /// over contexts and is the representation intended for later CQPL export.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct AllocationIdentityState {
@@ -417,6 +652,8 @@ pub struct AllocationIdentityState {
     pub dependency_resource_return_continuity_v1: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dependency_resource_identity_continuity_v1: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dependency_place_resource_relations_v1: Option<serde_json::Value>,
     /// Context-sensitive post-state after executing the whole ICFG node.
     pub by_point: BTreeMap<IdentityAnalysisPoint, AllocationIdentityMemory>,
     /// MAY join of `by_point` over bounded contexts.
@@ -441,6 +678,8 @@ pub struct AllocationIdentityDump {
     pub dependency_resource_return_continuity_v1: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dependency_resource_identity_continuity_v1: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dependency_place_resource_relations_v1: Option<serde_json::Value>,
     pub schema: &'static str,
     pub by_point: Vec<IdentityPointDump>,
     pub by_node: Vec<IdentityNodeDump>,
@@ -467,6 +706,9 @@ pub struct IdentityMemoryDump {
     pub stack_refs: Vec<VariableStackRefsDump>,
     pub place_points_to: Vec<PlacePointsToDump>,
     pub place_stack_refs: Vec<PlaceStackRefsDump>,
+    /// P3-R1P authoritative resource relation for typed MIR Places.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub place_resources: Vec<PlaceResourcesDump>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -493,6 +735,12 @@ pub struct PlacePointsToDump {
 pub struct PlaceStackRefsDump {
     pub place: PlaceId,
     pub targets: Vec<PlaceId>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PlaceResourcesDump {
+    pub place: PlaceId,
+    pub resources: Vec<AbstractAllocId>,
 }
 
 impl IdentityMemoryDump {
@@ -532,6 +780,14 @@ impl IdentityMemoryDump {
                     targets: targets.iter().cloned().collect(),
                 })
                 .collect(),
+            place_resources: memory
+                .place_resources
+                .iter()
+                .map(|(place, resources)| PlaceResourcesDump {
+                    place: place.clone(),
+                    resources: resources.iter().cloned().collect(),
+                })
+                .collect(),
         }
     }
 }
@@ -541,6 +797,7 @@ impl AllocationIdentityState {
         AllocationIdentityDump {
             dependency_resource_return_continuity_v1:self.dependency_resource_return_continuity_v1.clone(),
             dependency_resource_identity_continuity_v1: self.dependency_resource_identity_continuity_v1.clone(),
+            dependency_place_resource_relations_v1: self.dependency_place_resource_relations_v1.clone(),
             schema: "CREMA Allocation Identity v6G",
             by_point: self
                 .by_point
@@ -1440,6 +1697,12 @@ fn transfer_statement_with_profile(
         return;
     }
 
+    // P3-R1P consumes only structured producer evidence and therefore runs
+    // before the frozen legacy parser touches rendered Place/Rvalue text.
+    if p3_place_relation_enabled() && apply_certified_place_relation(function, stmt, memory) {
+        return;
+    }
+
     let Some(place) = stmt.place.as_deref() else { return; };
     let Some(dest) = assignment_destination(function, place, profile) else { return; };
     let Some(rvalue) = stmt.rvalue.as_deref() else {
@@ -2229,6 +2492,96 @@ pub fn fixed_point_disposition_identity_analysis(
     )
 }
 
+/// Opt-in P3-R1P Place/resource-relation gate.  Disabled mode preserves the
+/// committed R10 statement-transfer semantics.
+pub(crate) fn p3_place_relation_enabled() -> bool {
+    std::env::var("CREMA_INTERNAL_DEP1_P3_R1P").as_deref() == Ok("1")
+}
+
+/// Return only canonical allocation identities already justified for a value.
+/// Stack references are followed because they identify exact stack Places;
+/// `access_bases` are intentionally excluded because ERR1 access provenance is
+/// not a pointee-identity proof.
+fn tracked_resources_of_value(
+    memory: &AllocationIdentityMemory,
+    source: &ProgramVarId,
+) -> BTreeSet<AbstractAllocId> {
+    let mut resources = memory.points_to(source);
+    for referent in memory.stack_refs(source) {
+        resources.extend(canonical_resources_for_place(memory, referent));
+    }
+    resources
+}
+
+/// Cheap structural integrity check for producer evidence.  The semantic type
+/// proof is performed in `icfg.rs` while rustc types/DefIds are available; this
+/// consumer additionally refuses malformed/mutated evidence instead of
+/// silently broadening it.
+fn certified_owned_box_source_shape(evidence: &crate::structs::RustPlaceRelationEvidence) -> bool {
+    if evidence.source_projection.len() != evidence.transparent_wrapper_depth + 2 {
+        return false;
+    }
+    if !matches!(evidence.source_projection.first(), Some(PlaceProjection::Deref)) {
+        return false;
+    }
+    evidence.source_projection[1..]
+        .iter()
+        .all(|projection| matches!(projection, PlaceProjection::Field { index: 0 }))
+}
+
+/// Apply one producer-certified pointer-carrier assignment.  This transfer is
+/// deliberately separate from generic textual `deref_copy` handling: the
+/// serialized evidence was established from rustc type/DefId facts at the
+/// producer, and consumers never recover it from pretty MIR text.
+fn apply_certified_place_relation(
+    function: &str,
+    stmt: &MirStatement,
+    memory: &mut AllocationIdentityMemory,
+) -> bool {
+    let Some(evidence) = stmt.resource_place_relation_v1.as_ref() else {
+        return false;
+    };
+    let destination = ProgramVarId::Rust {
+        function: function.to_string(),
+        local: evidence.destination_local,
+    };
+
+    match &evidence.kind {
+        RustPlaceRelationEvidenceKind::OwnedBoxDataPointerCopyForDeref => {
+            if !certified_owned_box_source_shape(evidence) {
+                return false;
+            }
+
+            // The producer proof says the CopyForDeref result is the raw data
+            // pointer carried by the same owned Box value.  Therefore the raw
+            // pointer denotes exactly the already-tracked MAY allocation set of
+            // the source value/referent.  No new resource ID or stack Place is
+            // created.
+            let source = ProgramVarId::Rust {
+                function: function.to_string(),
+                local: evidence.source_local,
+            };
+            let resources = tracked_resources_of_value(memory, &source);
+            clear_destination(memory, &destination);
+            memory.assign_points_to(destination.clone(), resources.clone());
+
+            // Materialize the typed pointee relation in the authoritative
+            // identity state.  This is intentionally *not* encoded as
+            // `place_points_to`: `*destination` denotes the allocation itself;
+            // it does not mean the scalar/object stored there is another
+            // pointer to that allocation.
+            memory.assign_place_resources(
+                PlaceId {
+                    base: destination,
+                    projection: vec![PlaceProjection::Deref],
+                },
+                resources,
+            );
+            true
+        }
+    }
+}
+
 /// Opt-in R1 gate inherited by the compiler wrapper. ProgramVarId and
 /// AbstractAllocId retain their existing meanings.
 pub(crate) fn p3_actual_formal_enabled() -> bool {
@@ -2776,6 +3129,32 @@ fn fixed_point_identity_analysis_with_profile(
             "semantics":"MAY_return_value_only_on_P2_normal_pop","side_effect_continuity":"not_evaluated_R2",
             "unwind_return_continuity":"forbidden","general_unwind_resource_continuity":"deferred_to_P3_R3"})
     });
+    let r1p_report = p3_place_relation_enabled().then(|| {
+        let mut relations = Vec::new();
+        for (point, memory) in &post_states {
+            for (place, resources) in &memory.place_resources {
+                relations.push(serde_json::json!({
+                    "node": point.node.clone(),
+                    "context": point.context.clone(),
+                    "place": place.clone(),
+                    "resources": resources.clone(),
+                    "certainty": "may",
+                    "relation_kind": "typed_place_to_canonical_resource",
+                }));
+            }
+        }
+        serde_json::json!({
+            "capability": "dependency_place_resource_relations_v1",
+            "gate": "P3-R1P-PLACE1",
+            "status": "candidate_requires_independent_gate_verification",
+            "authoritative_relation_count": relations.len(),
+            "relations": relations,
+            "semantics": "typed_MIR_place_resource_identity_only",
+            "resource_state_effects": "not_evaluated",
+            "ownership_liveness": "not_inferred",
+            "heap_shape": "not_inferred",
+        })
+    });
     let r1_report = r1_enabled.then(|| {
         let planned = r1_plans.as_ref().map(|p|p.len()).unwrap_or(0);
         let reached = r1_records.len();
@@ -2793,6 +3172,7 @@ fn fixed_point_identity_analysis_with_profile(
     AllocationIdentityState {
         dependency_resource_return_continuity_v1:r2_report,
         dependency_resource_identity_continuity_v1:r1_report,
+        dependency_place_resource_relations_v1:r1p_report,
         by_point: post_states,
         by_node,
         event_by_point: event_states,
@@ -2964,6 +3344,7 @@ mod tests {
 
     fn copy_statement(dest: u32, source: u32) -> MirStatement {
         MirStatement {
+            resource_place_relation_v1: None,
             source_info: source_info(),
             kind: "Assign".to_string(),
             details: format!("Assign((_{dest}, copy _{source}))"),
@@ -3401,6 +3782,7 @@ mod tests {
         input.assign_fresh(replacement.clone(), b.clone());
 
         let read_stmt = MirStatement {
+            resource_place_relation_v1: None,
             source_info: source_info(),
             kind: "Assign".to_string(),
             details: "Assign((_2, copy (*_1)))".to_string(),
@@ -3442,6 +3824,7 @@ mod tests {
         mem.assign_fresh(raw.clone(), allocation);
 
         let stmt = MirStatement {
+            resource_place_relation_v1: None,
             source_info: source_info(),
             kind: "Assign".to_string(),
             details: "Assign(((*_9), move (_14.0: i32)))".to_string(),
@@ -3463,6 +3846,7 @@ mod tests {
         mem.assign_fresh(raw.clone(), allocation.clone());
 
         let stmt = MirStatement {
+            resource_place_relation_v1: None,
             source_info: source_info(),
             kind: "Assign".to_string(),
             details: "Assign(((*_9), move (_14.0: i32)))".to_string(),
@@ -3489,6 +3873,7 @@ mod tests {
         mem.assign_fresh(base.clone(), allocation.clone());
 
         let stmt = MirStatement {
+            resource_place_relation_v1: None,
             source_info: source_info(),
             kind: "Assign".to_string(),
             details: "Assign(((_9.0: i32), const 1_i32))".to_string(),
@@ -3515,6 +3900,7 @@ mod tests {
         mem.assign_fresh(local.clone(), allocation);
 
         let stmt = MirStatement {
+            resource_place_relation_v1: None,
             source_info: source_info(),
             kind: "Assign".to_string(),
             details: "Assign((_9, const 1_i32))".to_string(),
@@ -3538,6 +3924,7 @@ mod tests {
         mem.assign_fresh(owner.clone(), a.clone());
 
         let ref_stmt = MirStatement {
+            resource_place_relation_v1: None,
             source_info: source_info(),
             kind: "Assign".to_string(),
             details: "Assign((_2, &_1))".to_string(),
@@ -3551,6 +3938,7 @@ mod tests {
         assert_eq!(mem.stack_refs(&reference).len(), 1);
 
         let load_stmt = MirStatement {
+            resource_place_relation_v1: None,
             source_info: source_info(),
             kind: "Assign".to_string(),
             details: "Assign((_3, copy (*_2)))".to_string(),
@@ -3815,6 +4203,7 @@ mod tests {
             block_id: 2,
             statements: vec![
                 MirStatement {
+                    resource_place_relation_v1: None,
                     source_info: source_info(),
                     kind: "Assign".to_string(),
                     details: "Assign((_4, &_2))".to_string(),
@@ -3823,6 +4212,7 @@ mod tests {
                     rvalue: Some("&_2".to_string()),
                 },
                 MirStatement {
+                    resource_place_relation_v1: None,
                     source_info: source_info(),
                     kind: "Assign".to_string(),
                     details: "Assign((_3, {closure@test.rs:1:1: 1:2} { ptr: move _4 }))".to_string(),
@@ -3831,6 +4221,7 @@ mod tests {
                     rvalue: Some("{closure@test.rs:1:1: 1:2} { ptr: move _4 }".to_string()),
                 },
                 MirStatement {
+                    resource_place_relation_v1: None,
                     source_info: source_info(),
                     kind: "Assign".to_string(),
                     details: "Assign((_6, &_3))".to_string(),
@@ -3874,6 +4265,7 @@ mod tests {
             block_id: 0,
             statements: vec![
                 MirStatement {
+                    resource_place_relation_v1: None,
                     source_info: source_info(),
                     kind: "Assign".to_string(),
                     details: "Assign((_8, deref_copy ((*_1).0: &*mut i32)))".to_string(),
@@ -3882,6 +4274,7 @@ mod tests {
                     rvalue: Some("deref_copy ((*_1).0: &*mut i32)".to_string()),
                 },
                 MirStatement {
+                    resource_place_relation_v1: None,
                     source_info: source_info(),
                     kind: "Assign".to_string(),
                     details: "Assign((_4, copy (*_8)))".to_string(),
@@ -3926,6 +4319,7 @@ mod tests {
             block_id: 2,
             statements: vec![
                 MirStatement {
+                    resource_place_relation_v1: None,
                     source_info: source_info(),
                     kind: "Assign".to_string(),
                     details: "Assign((_9, deref_copy ((*_1).0: &*mut i32)))".to_string(),
@@ -3934,6 +4328,7 @@ mod tests {
                     rvalue: Some("deref_copy ((*_1).0: &*mut i32)".to_string()),
                 },
                 MirStatement {
+                    resource_place_relation_v1: None,
                     source_info: source_info(),
                     kind: "Assign".to_string(),
                     details: "Assign((_7, copy (*_9)))".to_string(),
@@ -4503,6 +4898,7 @@ mod tests {
         );
 
         let stmt = MirStatement {
+            resource_place_relation_v1: None,
             source_info: source_info(),
             kind: "Assign".to_string(),
             details: "Assign((_27, &mut ((*_1).0: std::mem::ManuallyDrop<std::boxed::Box<[T]>>)))".to_string(),
@@ -4540,6 +4936,7 @@ mod tests {
         );
 
         let aligned_box = MirStatement {
+            resource_place_relation_v1: None,
             source_info: source_info(),
             kind: "Assign".to_string(),
             details: "Assign((_0, aligned_box::AlignedBox::<[T]> { container: move _3, layout: copy _2 }))".to_string(),
@@ -4555,6 +4952,7 @@ mod tests {
         );
 
         let ok = MirStatement {
+            resource_place_relation_v1: None,
             source_info: source_info(),
             kind: "Assign".to_string(),
             details: "Assign((_5, std::result::Result::<aligned_box::AlignedBox<[T]>, E>::Ok(move _0)))".to_string(),
@@ -4583,6 +4981,7 @@ mod tests {
         );
 
         let continue_value = MirStatement {
+            resource_place_relation_v1: None,
             source_info: source_info(),
             kind: "Assign".to_string(),
             details: "Assign((_7, move ((_6 as Continue).0: aligned_box::AlignedBox<[T]>)))".to_string(),
@@ -4598,6 +4997,7 @@ mod tests {
         );
 
         let ok_again = MirStatement {
+            resource_place_relation_v1: None,
             source_info: source_info(),
             kind: "Assign".to_string(),
             details: "Assign((_8, std::result::Result::<aligned_box::AlignedBox<[T]>, E>::Ok(move _7)))".to_string(),
@@ -4626,6 +5026,7 @@ mod tests {
         );
 
         let ref_container = MirStatement {
+            resource_place_relation_v1: None,
             source_info: source_info(),
             kind: "Assign".to_string(),
             details: "Assign((_10, &mut (_9.0: std::mem::ManuallyDrop<std::boxed::Box<[T]>>)))".to_string(),
@@ -4854,6 +5255,7 @@ mod tests {
         let unknown = MirBasicBlock {
             block_id: 1,
             statements: vec![MirStatement {
+                resource_place_relation_v1: None,
                 source_info: source_info(),
                 kind: "Assign".into(),
                 details: "Assign((_1, move _9))".into(),
@@ -5224,5 +5626,371 @@ mod p3_r2_tests {
     fn p3_r2_reference_cannot_import_general_caller_side_effect() {
         let place=PlaceId{base:var("caller",1),projection:vec![]};let mut caller=AllocationIdentityMemory::default();caller.assign_fresh(place.base.clone(),resource("before"));let mut callee=caller.clone();callee.assign_fresh(place.base.clone(),resource("changed"));callee.assign_stack_refs(var("callee",0),BTreeSet::from([place]));
         let (out,r)=transfer_return_resource(&plan("shared_reference"),&callee,&caller);assert_eq!(r["status"],"unresolved_return");assert_eq!(out.points_to(&var("caller",1)),caller.points_to(&var("caller",1)));assert!(out.points_to(&var("caller",3)).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod p3_r1p_tests {
+    use super::*;
+    use crate::structs::{
+        AllocationSiteId, RustPlaceRelationEvidence, SourceInfoData,
+    };
+
+    fn var(function: &str, local: u32) -> ProgramVarId {
+        ProgramVarId::Rust { function: function.into(), local }
+    }
+
+    fn alloc(label: &str) -> AbstractAllocId {
+        AbstractAllocId {
+            site: AllocationSiteId::Synthetic {
+                scope: "p3-r1p-test".into(),
+                label: label.into(),
+            },
+            context: Vec::new(),
+        }
+    }
+
+    fn fields(base: ProgramVarId, indices: &[u32]) -> PlaceId {
+        PlaceId {
+            base,
+            projection: indices
+                .iter()
+                .map(|index| PlaceProjection::Field { index: *index })
+                .collect(),
+        }
+    }
+
+    fn box_pointer_evidence(source_local: u32, destination_local: u32) -> RustPlaceRelationEvidence {
+        RustPlaceRelationEvidence {
+            kind: RustPlaceRelationEvidenceKind::OwnedBoxDataPointerCopyForDeref,
+            source_local,
+            destination_local,
+            source_projection: vec![
+                PlaceProjection::Deref,
+                PlaceProjection::Field { index: 0 },
+                PlaceProjection::Field { index: 0 },
+                PlaceProjection::Field { index: 0 },
+            ],
+            owner_def_path: "audit-only-owned-box".into(),
+            source_type_diagnostic: "*mut Box<T>".into(),
+            result_type_diagnostic: "*const T".into(),
+            transparent_wrapper_depth: 2,
+        }
+    }
+
+    fn certified_stmt(source_local: u32, destination_local: u32) -> MirStatement {
+        MirStatement {
+            resource_place_relation_v1: Some(box_pointer_evidence(source_local, destination_local)),
+            source_info: SourceInfoData { span: "test".into(), scope: "test".into() },
+            kind: "Assign".into(),
+            details: "producer-certified; rendered text is audit-only".into(),
+            place: Some(format!("Local(_{destination_local})")),
+            is_mutable: Some(true),
+            rvalue: Some("intentionally_not_parsed_by_P3_R1P".into()),
+        }
+    }
+
+    #[test]
+    fn direct_pointer_deref_preserves_exact_may_set() {
+        let p = var("f", 1);
+        let expected = BTreeSet::from([alloc("A"), alloc("B")]);
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_points_to(p.clone(), expected.clone());
+
+        let query = PlaceId { base: p, projection: vec![PlaceProjection::Deref] };
+        assert_eq!(
+            resolve_resource_place(&memory, &query),
+            ResourcePlaceResolution::Resolved(expected)
+        );
+    }
+
+    #[test]
+    fn exact_pointer_field_deref_is_projection_specific() {
+        let owner = var("f", 1);
+        let a = alloc("A");
+        let b = alloc("B");
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_place_points_to(fields(owner.clone(), &[0]), BTreeSet::from([a.clone()]));
+        memory.assign_place_points_to(fields(owner.clone(), &[1]), BTreeSet::from([b.clone()]));
+
+        let qa = PlaceId {
+            base: owner.clone(),
+            projection: vec![PlaceProjection::Field { index: 0 }, PlaceProjection::Deref],
+        };
+        let qb = PlaceId {
+            base: owner,
+            projection: vec![PlaceProjection::Field { index: 1 }, PlaceProjection::Deref],
+        };
+        assert_eq!(resolve_resource_place(&memory, &qa), ResourcePlaceResolution::Resolved(BTreeSet::from([a])));
+        assert_eq!(resolve_resource_place(&memory, &qb), ResourcePlaceResolution::Resolved(BTreeSet::from([b])));
+    }
+
+    #[test]
+    fn stack_reference_deref_uses_only_exact_referent() {
+        let p = var("f", 1);
+        let owner = var("f", 9);
+        let target = fields(owner, &[2]);
+        let expected = BTreeSet::from([alloc("R")]);
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_stack_refs(p.clone(), BTreeSet::from([target.clone()]));
+        memory.assign_place_points_to(target, expected.clone());
+
+        let query = PlaceId { base: p, projection: vec![PlaceProjection::Deref] };
+        assert_eq!(resolve_resource_place(&memory, &query), ResourcePlaceResolution::Resolved(expected));
+    }
+
+    #[test]
+    fn exact_stack_referent_can_continue_below_deref_despite_carried_resource_relation() {
+        let receiver = var("callee", 1);
+        let caller_owner = var("caller", 4);
+        let field_resource = alloc("field-R");
+        let carried_resource = alloc("container-R");
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_points_to(receiver.clone(), BTreeSet::from([carried_resource]));
+        memory.assign_stack_refs(
+            receiver.clone(),
+            BTreeSet::from([PlaceId {
+                base: caller_owner.clone(),
+                projection: Vec::new(),
+            }]),
+        );
+        memory.assign_place_points_to(
+            PlaceId {
+                base: caller_owner,
+                projection: vec![PlaceProjection::Field { index: 0 }],
+            },
+            BTreeSet::from([field_resource.clone()]),
+        );
+
+        let query = PlaceId {
+            base: receiver,
+            projection: vec![
+                PlaceProjection::Deref,
+                PlaceProjection::Field { index: 0 },
+            ],
+        };
+        assert_eq!(
+            resolve_resource_place(&memory, &query),
+            ResourcePlaceResolution::Resolved(BTreeSet::from([field_resource])),
+        );
+    }
+
+    #[test]
+    fn unknown_and_unsupported_places_fail_closed() {
+        let p = var("f", 1);
+        let memory = AllocationIdentityMemory::default();
+        let unknown = PlaceId { base: p.clone(), projection: vec![PlaceProjection::Deref] };
+        assert_eq!(resolve_resource_place(&memory, &unknown), ResourcePlaceResolution::UnresolvedIdentity);
+
+        let unsupported = PlaceId {
+            base: p,
+            projection: vec![PlaceProjection::Index { local: var("f", 2) }],
+        };
+        assert_eq!(resolve_resource_place(&memory, &unsupported), ResourcePlaceResolution::UnsupportedPlace);
+    }
+
+    #[test]
+    fn heap_field_after_deref_is_not_invented() {
+        let p = var("f", 1);
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_points_to(p.clone(), BTreeSet::from([alloc("heap")])) ;
+        let query = PlaceId {
+            base: p,
+            projection: vec![PlaceProjection::Deref, PlaceProjection::Field { index: 0 }],
+        };
+        assert_eq!(resolve_resource_place(&memory, &query), ResourcePlaceResolution::UnresolvedIdentity);
+    }
+
+    #[test]
+    fn certified_box_pointer_carrier_populates_raw_pointer_then_deref() {
+        let source = var("glue", 1);
+        let destination = var("glue", 6);
+        let expected = BTreeSet::from([alloc("A"), alloc("B")]);
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_points_to(source, expected.clone());
+
+        assert!(apply_certified_place_relation("glue", &certified_stmt(1, 6), &mut memory));
+        assert_eq!(memory.points_to(&destination), expected.clone());
+        assert!(memory.stack_refs(&destination).is_empty());
+
+        let dropped = PlaceId { base: destination, projection: vec![PlaceProjection::Deref] };
+        assert_eq!(memory.resources_for_place(&dropped), expected.clone());
+        assert_eq!(resolve_resource_place(&memory, &dropped), ResourcePlaceResolution::Resolved(expected));
+    }
+
+    #[test]
+    fn malformed_certification_fails_closed_without_overwriting_destination() {
+        let destination = var("glue", 6);
+        let existing = BTreeSet::from([alloc("existing")]);
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_points_to(destination.clone(), existing.clone());
+        let mut statement = certified_stmt(1, 6);
+        statement
+            .resource_place_relation_v1
+            .as_mut()
+            .unwrap()
+            .source_projection[1] = PlaceProjection::Field { index: 1 };
+
+        assert!(!apply_certified_place_relation("glue", &statement, &mut memory));
+        assert_eq!(memory.points_to(&destination), existing);
+        assert!(memory.resources_for_place(&PlaceId {
+            base: destination,
+            projection: vec![PlaceProjection::Deref],
+        }).is_empty());
+    }
+
+    #[test]
+    fn saved_box_blocker_source_shape_materializes_exact_pointee_resource() {
+        // Mirrors the decisive blocker shape: the DropGlue receiver local has
+        // both a canonical resource relation and an exact stack referent to the
+        // caller Box, while the CopyForDeref destination starts empty.
+        let receiver = var("drop_glue_box", 1);
+        let caller_box = var("caller", 4);
+        let raw = var("drop_glue_box", 6);
+        let a = alloc("box_new_A");
+        let b = alloc("box_new_B");
+        let expected = BTreeSet::from([a, b]);
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_points_to(receiver.clone(), expected.clone());
+        memory.assign_stack_refs(
+            receiver,
+            BTreeSet::from([PlaceId {
+                base: caller_box.clone(),
+                projection: Vec::new(),
+            }]),
+        );
+        memory.assign_points_to(caller_box, expected.clone());
+
+        assert!(apply_certified_place_relation(
+            "drop_glue_box",
+            &certified_stmt(1, 6),
+            &mut memory,
+        ));
+
+        assert_eq!(memory.points_to(&raw), expected.clone());
+        let pointee = PlaceId {
+            base: raw,
+            projection: vec![PlaceProjection::Deref],
+        };
+        assert_eq!(memory.resources_for_place(&pointee), expected.clone());
+        assert_eq!(
+            resolve_resource_place(&memory, &pointee),
+            ResourcePlaceResolution::Resolved(expected),
+        );
+    }
+
+    #[test]
+    fn certified_carrier_can_read_exact_box_referent_without_copying_stack_identity() {
+        let receiver = var("glue", 1);
+        let caller_box = var("caller", 4);
+        let raw = var("glue", 6);
+        let expected = BTreeSet::from([alloc("R")]);
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_points_to(caller_box.clone(), expected.clone());
+        memory.assign_stack_refs(receiver, BTreeSet::from([PlaceId { base: caller_box, projection: Vec::new() }]));
+
+        assert!(apply_certified_place_relation("glue", &certified_stmt(1, 6), &mut memory));
+        assert_eq!(memory.points_to(&raw), expected);
+        assert!(memory.stack_refs(&raw).is_empty(), "raw heap pointer must not become a stack reference");
+    }
+
+    #[test]
+    fn certified_carrier_does_not_upgrade_access_provenance_or_fabricate_empty_source() {
+        let source = var("glue", 1);
+        let destination = var("glue", 6);
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_access_bases(source, BTreeSet::from([alloc("access-only")]));
+
+        assert!(apply_certified_place_relation("glue", &certified_stmt(1, 6), &mut memory));
+        assert!(memory.points_to(&destination).is_empty());
+        let query = PlaceId { base: destination, projection: vec![PlaceProjection::Deref] };
+        assert_eq!(resolve_resource_place(&memory, &query), ResourcePlaceResolution::UnresolvedIdentity);
+    }
+
+    #[test]
+    fn place_resource_component_is_a_may_lattice_and_forget_is_strong() {
+        let base = var("f", 1);
+        let place = PlaceId {
+            base: base.clone(),
+            projection: vec![PlaceProjection::Deref],
+        };
+        let a = alloc("A");
+        let b = alloc("B");
+
+        let mut left = AllocationIdentityMemory::default();
+        left.assign_place_resources(place.clone(), BTreeSet::from([a.clone()]));
+        let mut right = AllocationIdentityMemory::default();
+        right.assign_place_resources(place.clone(), BTreeSet::from([b.clone()]));
+
+        let joined = left.join(&right);
+        assert_eq!(
+            joined.resources_for_place(&place),
+            BTreeSet::from([a.clone(), b.clone()]),
+        );
+        assert!(left.leq(&joined));
+        assert!(right.leq(&joined));
+        assert!(!joined.leq(&left));
+
+        let mut forgotten = joined;
+        forgotten.forget_var(&base);
+        assert!(forgotten.resources_for_place(&place).is_empty());
+    }
+
+    #[test]
+    fn diagnostic_strings_are_not_semantic_inputs() {
+        let source = var("glue", 1);
+        let destination = var("glue", 6);
+        let expected = BTreeSet::from([alloc("R")]);
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_points_to(source, expected.clone());
+
+        let mut statement = certified_stmt(1, 6);
+        let evidence = statement.resource_place_relation_v1.as_mut().unwrap();
+        evidence.owner_def_path = "not-a-box-name".into();
+        evidence.source_type_diagnostic = "deliberately-mutated-audit-text".into();
+        evidence.result_type_diagnostic = "also-not-semantic".into();
+        statement.place = Some("untrusted rendered destination text".into());
+        statement.rvalue = Some("untrusted rendered rvalue text".into());
+
+        assert!(apply_certified_place_relation("glue", &statement, &mut memory));
+        assert_eq!(memory.points_to(&destination), expected);
+    }
+
+    #[test]
+    fn absent_place_resource_relation_does_not_change_legacy_json_shape() {
+        let dump = IdentityMemoryDump::from_memory(&AllocationIdentityMemory::default());
+        let json = serde_json::to_value(dump).expect("serialize identity memory dump");
+        assert!(json.get("place_resources").is_none());
+
+        let statement = MirStatement {
+            resource_place_relation_v1: None,
+            source_info: SourceInfoData { span: "test".into(), scope: "test".into() },
+            kind: "Nop".into(),
+            details: "Nop".into(),
+            place: None,
+            is_mutable: None,
+            rvalue: None,
+        };
+        let statement_json = serde_json::to_value(statement).expect("serialize MIR statement");
+        assert!(statement_json.get("resource_place_relation_v1").is_none());
+    }
+
+    #[test]
+    fn aliases_preserve_one_canonical_id_and_distinct_resources_do_not_merge() {
+        let r = alloc("shared");
+        let a = var("f", 1);
+        let b = var("f", 2);
+        let c = var("f", 3);
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_points_to(a.clone(), BTreeSet::from([r.clone()]));
+        memory.assign_points_to(b.clone(), BTreeSet::from([r.clone()]));
+        memory.assign_points_to(c.clone(), BTreeSet::from([alloc("other")]));
+
+        for alias in [a, b] {
+            let q = PlaceId { base: alias, projection: vec![PlaceProjection::Deref] };
+            assert_eq!(resolve_resource_place(&memory, &q), ResourcePlaceResolution::Resolved(BTreeSet::from([r.clone()])));
+        }
+        let q = PlaceId { base: c, projection: vec![PlaceProjection::Deref] };
+        assert_eq!(resolve_resource_place(&memory, &q), ResourcePlaceResolution::Resolved(BTreeSet::from([alloc("other")])));
     }
 }

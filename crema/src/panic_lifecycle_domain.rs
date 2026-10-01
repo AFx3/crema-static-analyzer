@@ -1346,6 +1346,7 @@ mod tests {
 
     fn assign_statement(place: &str, rvalue: &str) -> MirStatement {
         MirStatement {
+            resource_place_relation_v1: None,
             source_info: test_source_info(),
             kind: "Assign".to_string(),
             details: format!("Assign(({place}, {rvalue}))"),

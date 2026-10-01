@@ -1,6 +1,6 @@
 use rustc_driver::Callbacks;
 use rustc_interface::Queries;
-use rustc_middle::mir::{Body, Place, PlaceElem, Statement, StatementKind, Terminator, TerminatorKind, Operand, NonDivergingIntrinsic};
+use rustc_middle::mir::{Body, Place, PlaceElem, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, Operand, NonDivergingIntrinsic};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::{Write, Read};
@@ -22,7 +22,7 @@ use crate::structs::{MirStatement, MirTerminator, MirBasicBlock, MirRepresentati
     RustFunctionMetadata, RustCallMetadata, TerminalNode, RustDropAllocatorEvidence, RustDropAllocatorEvidenceKind,
     RustCallDeallocatorEvidence, RustCallDeallocatorEvidenceKind, RustAllocationDispositionEvidence,
     RustAllocationDispositionEvidenceKind, RustHigherOrderCallEvidence,
-    RustHigherOrderCallEvidenceKind };
+    RustHigherOrderCallEvidenceKind, RustPlaceRelationEvidence, RustPlaceRelationEvidenceKind, PlaceProjection };
 use crate::utils::{unwind_action_to_string,compute_hash, load_ffi_functions};
 use crate::mir_semantics::mir_semantics_v2_enabled;
 use crate::panic_unwind::panic_unwind_lifecycle_v1_enabled;
@@ -760,8 +760,129 @@ impl MirExtractor {
         extractor
     }
     
+    /// P3-R1P producer proof for the exact pointer-carrier family needed by
+    /// compiler-generated `DropGlue<Box<T, A>>`.  This classifier runs while
+    /// rustc semantic type identity is available.  It never recognizes rendered
+    /// names such as `Box`, `Unique`, or `NonNull`.
+    ///
+    /// Accepted source shape:
+    ///   CopyForDeref( Deref(base) . box_payload . transparent* . raw_pointer )
+    /// where:
+    /// - the dereferenced owner is rustc's `owned_box` lang item;
+    /// - the Box payload is field 0 (the observed/compiler representation);
+    /// - every later wrapper is `repr(transparent)` and uses field 0; and
+    /// - the final raw pointer points to the same T as Box<T, A>.
+    ///
+    /// Any representation change fails closed by returning `None`.
+    fn p3_r1p_place_relation_evidence<'tcx>(
+        &self,
+        destination: &Place<'tcx>,
+        rvalue: &Rvalue<'tcx>,
+        local_decls: &IndexVec<Local, LocalDecl<'tcx>>,
+        tcx: TyCtxt<'tcx>,
+    ) -> Option<RustPlaceRelationEvidence> {
+        if !crate::identity::p3_place_relation_enabled() {
+            return None;
+        }
+        let Rvalue::CopyForDeref(source) = rvalue else {
+            return None;
+        };
+
+        let source_type = local_decls.get(source.local)?.ty;
+        let mut current_ty = source_type;
+        let mut projection = Vec::new();
+        let mut elems = source.projection.iter();
+
+        // The current blocker comes from the compiler DropGlue receiver, whose
+        // base is a raw pointer.  References are also safe here because both
+        // pointer kinds have a compiler-defined pointee type.
+        match elems.next()? {
+            PlaceElem::Deref => {
+                projection.push(PlaceProjection::Deref);
+                current_ty = match current_ty.kind() {
+                    TyKind::RawPtr(pointee, _) => *pointee,
+                    TyKind::Ref(_, pointee, _) => *pointee,
+                    _ => return None,
+                };
+            }
+            _ => return None,
+        }
+
+        let TyKind::Adt(owner_def, owner_args) = current_ty.kind() else {
+            return None;
+        };
+        if tcx.lang_items().owned_box() != Some(owner_def.did()) {
+            return None;
+        }
+        let box_element_ty = owner_args.types().next()?;
+        let owner_def_path = tcx.def_path_str(owner_def.did());
+
+        let mut saw_box_payload = false;
+        let mut transparent_wrapper_depth = 0usize;
+        for elem in elems {
+            let PlaceElem::Field(index, field_ty) = elem else {
+                return None;
+            };
+            if index.index() != 0 {
+                return None;
+            }
+
+            if !saw_box_payload {
+                // The first field is the Box data-pointer carrier.  The owner
+                // identity above is a lang-item proof, not a source-name match.
+                saw_box_payload = true;
+            } else {
+                // Subsequent compiler wrappers must be representation-
+                // transparent.  This proves the selected field preserves the
+                // pointer payload without naming Unique/NonNull.
+                let TyKind::Adt(wrapper_def, _) = current_ty.kind() else {
+                    return None;
+                };
+                if !wrapper_def.repr().transparent() {
+                    return None;
+                }
+                transparent_wrapper_depth += 1;
+            }
+
+            projection.push(PlaceProjection::Field { index: index.index() as u32 });
+            current_ty = field_ty;
+        }
+
+        if !saw_box_payload {
+            return None;
+        }
+        let TyKind::RawPtr(result_pointee, _) = current_ty.kind() else {
+            return None;
+        };
+        if *result_pointee != box_element_ty {
+            return None;
+        }
+
+        // The gate currently materializes identity only for a fresh/direct MIR
+        // local.  Projected writes require a separate overwrite/alias proof and
+        // therefore fail closed here.
+        if !destination.projection.is_empty() {
+            return None;
+        }
+        let destination_ty = local_decls.get(destination.local)?.ty;
+        if destination_ty != current_ty {
+            return None;
+        }
+
+        Some(RustPlaceRelationEvidence {
+            kind: RustPlaceRelationEvidenceKind::OwnedBoxDataPointerCopyForDeref,
+            source_local: source.local.index() as u32,
+            destination_local: destination.local.index() as u32,
+            source_projection: projection,
+            owner_def_path,
+            source_type_diagnostic: format!("{:?}", source_type),
+            result_type_diagnostic: format!("{:?}", current_ty),
+            transparent_wrapper_depth,
+        })
+    }
+
     // NOTE: now pass the local declarations so that we can check a place’s mutability, store this info also in mir terminator's call arguments
-    pub fn convert_statement(&self, statement: &Statement<'_>, local_decls: &IndexVec<Local, LocalDecl>) -> MirStatement {
+    pub fn convert_statement<'tcx>(&self, statement: &Statement<'tcx>, local_decls: &IndexVec<Local, LocalDecl<'tcx>>, tcx: TyCtxt<'tcx>) -> MirStatement {
         let source_info = statement.source_info.clone();
 
         let source_info_data = SourceInfoData {
@@ -794,12 +915,14 @@ impl MirExtractor {
         let mut place_info: Option<String> = None;
         let mut rvalue: Option<String> = None;
         let mut is_mutable: Option<bool> = None;
+        let mut resource_place_relation_v1: Option<RustPlaceRelationEvidence> = None;
         let mut details = format!("{:?}", statement.kind);
 
         match &statement.kind {
             StatementKind::Assign(box (lhs, rhs)) => {
                 let (place_desc, mutable_flag) = self.describe_place(lhs, local_decls);
                 place_info = Some(place_desc);
+                resource_place_relation_v1 = self.p3_r1p_place_relation_evidence(lhs, rhs, local_decls, tcx);
                 rvalue = Some(format!("{:?}", rhs));
                 is_mutable = Some(mutable_flag);
             }
@@ -866,6 +989,7 @@ impl MirExtractor {
             place: place_info,
             rvalue,
             is_mutable,
+            resource_place_relation_v1,
         }
     }
 
@@ -1592,7 +1716,7 @@ fn dep1_materialize_dependency_bodies<'tcx>(
             blocks.push(MirBasicBlock {
                 block_id: bb.index(),
                 statements: data.statements.iter()
-                    .map(|stmt| extractor.convert_statement(stmt, &body.local_decls))
+                    .map(|stmt| extractor.convert_statement(stmt, &body.local_decls, tcx))
                     .collect(),
                 terminator,
             });
@@ -3063,7 +3187,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                 }
                 let mir_basic_block = MirBasicBlock {
                     block_id: bb.index(),
-                    statements: data.statements.iter().map(|stmt| self.convert_statement(stmt, &body.local_decls)).collect(),
+                    statements: data.statements.iter().map(|stmt| self.convert_statement(stmt, &body.local_decls, tcx)).collect(),
                     terminator,
                 };
                 function_blocks.push(mir_basic_block);
@@ -3247,7 +3371,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                     function_blocks.push(MirBasicBlock {
                         block_id: bb.index(),
                         statements: data.statements.iter()
-                            .map(|stmt| self.convert_statement(stmt, &body.local_decls))
+                            .map(|stmt| self.convert_statement(stmt, &body.local_decls, tcx))
                             .collect(),
                         terminator,
                     });

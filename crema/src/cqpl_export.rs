@@ -5664,6 +5664,7 @@ mod tests {
         let bb = MirBasicBlock {
             block_id: 0,
             statements: vec![MirStatement {
+                resource_place_relation_v1: None,
                 source_info: SourceInfoData { span: "x".into(), scope: "0".into() },
                 kind: "Assign".into(),
                 details: "(*_1) = copy (*_2)".into(),
@@ -5698,6 +5699,7 @@ mod tests {
         let node = GlobalICFGNode::Mir(MirBasicBlock {
             block_id: 0,
             statements: vec![MirStatement {
+                resource_place_relation_v1: None,
                 source_info: SourceInfoData { span: statement_span.into(), scope: "0".into() },
                 kind: "Assign".into(),
                 details: "(*_1) = copy (*_2)".into(),
@@ -6111,6 +6113,7 @@ mod tests {
     #[test]
     fn closure_event_aliases_connect_repeated_reads_of_the_same_capture_field() {
         let mk_stmt = |place: &str, rvalue: &str| MirStatement {
+            resource_place_relation_v1: None,
             source_info: SourceInfoData { span: "x".into(), scope: "0".into() },
             kind: "Assign".into(),
             details: format!("{place} = {rvalue}"),
@@ -6366,6 +6369,7 @@ mod tests {
     #[test]
     fn closure_event_aliases_do_not_merge_distinct_capture_fields() {
         let mk_stmt = |place: &str, rvalue: &str| MirStatement {
+            resource_place_relation_v1: None,
             source_info: SourceInfoData { span: "x".into(), scope: "0".into() },
             kind: "Assign".into(),
             details: format!("{place} = {rvalue}"),
@@ -6522,6 +6526,7 @@ mod tests {
             block_id: 0,
             statements: vec![
                 MirStatement {
+                    resource_place_relation_v1: None,
                     source_info: SourceInfoData { span: "x".into(), scope: "0".into() },
                     kind: "Assign".into(),
                     details: "Assign((_2, copy (*_1)))".into(),
@@ -6530,6 +6535,7 @@ mod tests {
                     rvalue: Some("copy (*_1)".into()),
                 },
                 MirStatement {
+                    resource_place_relation_v1: None,
                     source_info: SourceInfoData { span: "x".into(), scope: "0".into() },
                     kind: "Assign".into(),
                     details: "Assign((_1, copy _4))".into(),
@@ -7381,6 +7387,7 @@ mod tests {
 
     fn cr1_stmt(place: &str, rvalue: &str) -> MirStatement {
         MirStatement {
+            resource_place_relation_v1: None,
             source_info: SourceInfoData {
                 span: "test.rs:1:1: 1:1 (#0)".into(),
                 scope: "scope[0]".into(),
