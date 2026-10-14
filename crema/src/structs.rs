@@ -177,6 +177,89 @@ pub enum PlaceProjection {
     Opaque { text: String },
 }
 
+/// F6C1A operational metadata only. Definition/instance identities are obtained
+/// from rustc, never reconstructed from the diagnostic ICFG node spelling.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct RustDropNodeIdentity {
+    pub definition_id: String,
+    pub instance_id: Option<String>,
+    pub basic_block: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum RustDropOwnerPlace {
+    Supported { place: PlaceId },
+    Unresolved { reason: RustDropOwnerPlaceUnresolved },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RustDropOwnerPlaceUnresolved {
+    MissingLocalDeclaration,
+    UnsupportedProjection { position: usize, projection_kind: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RustDropOwnerPlaceRecord {
+    pub drop_identity: RustDropNodeIdentity,
+    /// Explicit binding to the existing producer function/ICFG key. This is
+    /// copied at construction, not parsed to recover structural identity.
+    pub function_key: String,
+    pub node_id: String,
+    pub original_local: u32,
+    pub owner: RustDropOwnerPlace,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RustDropOwnerPlaceMetadataV1 {
+    pub schema_version: u32,
+    pub records: Vec<RustDropOwnerPlaceRecord>,
+}
+
+impl RustDropOwnerPlaceMetadataV1 {
+    pub fn new(mut records: Vec<RustDropOwnerPlaceRecord>) -> Result<Self, String> {
+        records.sort_by(|a, b| a.drop_identity.cmp(&b.drop_identity));
+        let mut nodes = std::collections::BTreeSet::new();
+        let mut keys = std::collections::BTreeSet::new();
+        for record in &records {
+            if !nodes.insert(record.node_id.clone()) || !keys.insert(record.drop_identity.clone()) {
+                return Err("duplicate Rust Drop owner metadata".into());
+            }
+            if let RustDropOwnerPlace::Supported { place } = &record.owner {
+                if place.base != (ProgramVarId::Rust {
+                    function: record.function_key.clone(), local: record.original_local,
+                }) {
+                    return Err("Rust Drop owner metadata base mismatch".into());
+                }
+            }
+        }
+        Ok(Self { schema_version: 1, records })
+    }
+
+    /// Exact coverage of represented MIR Drop nodes. Unrepresented extraction
+    /// records are excluded; a missing record is an error, never guessed from
+    /// dropped_value or labels. The table is deliberately not a field of the
+    /// GlobalICFGOrdered type consumed by CQPL/identity.
+    pub fn for_graph(&self, graph: &GlobalICFGOrdered) -> Result<Self, String> {
+        let by_node: BTreeMap<_, _> = self.records.iter().map(|r| (r.node_id.as_str(), r)).collect();
+        let mut selected = Vec::new();
+        for (node_id, node) in &graph.ordered_nodes {
+            if let GlobalICFGNode::Mir(bb) = node {
+                if matches!(bb.terminator, Some(MirTerminator::Drop { .. })) {
+                    let record = by_node.get(node_id.as_str())
+                        .ok_or_else(|| format!("missing structural Rust Drop owner metadata: {node_id}"))?;
+                    if record.drop_identity.basic_block != bb.block_id {
+                        return Err("Rust Drop owner metadata block mismatch".into());
+                    }
+                    selected.push((*record).clone());
+                }
+            }
+        }
+        Self::new(selected)
+    }
+}
+
 /// Function metadata needed for callsite-matched interprocedural analysis.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RustFunctionMetadata {
@@ -202,6 +285,223 @@ pub struct RustCallMetadata {
     pub return_place: String,
     pub return_node: String,
     pub is_closure: bool,
+}
+
+/// Internal higher-order activation policy already decided by the MIR producer.
+/// Moved from icfg.rs so stable activation provenance reuses the same enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HigherOrderCallSemantics {
+    LazyCarrier,
+    RepeatedCallbacks,
+    SpawnMayOnce,
+    ConditionalCallbackOnce,
+    Unknown,
+}
+
+/// Existing callsite/proxy identity, with no parsing of opaque node IDs.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RustActivationIdentity {
+    pub caller_function: String,
+    pub call_node: String,
+    pub dummy_call_node: String,
+    pub callee_function: String,
+}
+
+impl From<&RustCallMetadata> for RustActivationIdentity {
+    fn from(call: &RustCallMetadata) -> Self {
+        Self { caller_function: call.caller_function.clone(), call_node: call.call_node.clone(),
+            dummy_call_node: call.dummy_call_node.clone(), callee_function: call.callee_function.clone() }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RustActivationKind { Direct, SynchronousCallback, DetachedCallback, Unresolved }
+
+/// Stable projection of MIR UnwindAction. Existing MirTerminator stores its
+/// normalized action as a string; rustc's BB-indexed enum is not serde wire data.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum RustActivationUnwindAction {
+    Cleanup { target: String }, Continue, Terminate, Unreachable,
+}
+
+impl RustActivationUnwindAction {
+    pub fn from_mir_action(action: &str) -> Result<Self, String> {
+        match action {
+            "continue" => Ok(Self::Continue), "terminate" => Ok(Self::Terminate),
+            "unreachable" => Ok(Self::Unreachable),
+            _ => {
+                let target = action.strip_prefix("cleanup(").and_then(|s| s.strip_suffix(')'));
+                match target {
+                    Some(bb) if bb.strip_prefix("bb").is_some_and(|n| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit())) =>
+                        Ok(Self::Cleanup { target: bb.into() }),
+                    _ => Err("unsupported structured MIR unwind action".into()),
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum RustActivationMetadataSource {
+    MirCall, MirDrop,
+    HigherOrderPolicy { policy: HigherOrderCallSemantics },
+    ExecutionActivation { call_key: String },
+    MissingPolicy,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RustActivationUnwindEdge {
+    pub source_node: String,
+    pub destination_node: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RustActivationUnresolvedReason {
+    MissingCallbackPolicy, MissingCallbackUnwindEvidence, UnsupportedMirUnwindAction,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum RustActivationUnwindSemantics {
+    Direct { action: RustActivationUnwindAction },
+    CertifiedCallback { action: RustActivationUnwindAction, unwind_edges: Vec<RustActivationUnwindEdge> },
+    DetachedNoCallerUnwind,
+    Unresolved { reason: RustActivationUnresolvedReason },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RustActivationUnwindMetadata {
+    pub activation: RustActivationIdentity,
+    pub activation_kind: RustActivationKind,
+    pub source: RustActivationMetadataSource,
+    pub unwind: RustActivationUnwindSemantics,
+}
+
+impl RustActivationUnwindMetadata {
+    pub fn direct(call: &RustCallMetadata, action: &str, is_drop: bool) -> Self {
+        let unwind = match RustActivationUnwindAction::from_mir_action(action) {
+            Ok(action) => RustActivationUnwindSemantics::Direct { action },
+            Err(_) => RustActivationUnwindSemantics::Unresolved {
+                reason: RustActivationUnresolvedReason::UnsupportedMirUnwindAction },
+        };
+        Self { activation: call.into(), activation_kind: RustActivationKind::Direct,
+            source: if is_drop { RustActivationMetadataSource::MirDrop } else { RustActivationMetadataSource::MirCall }, unwind }
+    }
+
+    /// The provider's MIR unwind is deliberately not an input to this factory.
+    pub fn callback(call: &RustCallMetadata, policy: Option<HigherOrderCallSemantics>) -> Self {
+        let (activation_kind, unwind) = match policy {
+            Some(HigherOrderCallSemantics::SpawnMayOnce) =>
+                (RustActivationKind::DetachedCallback, RustActivationUnwindSemantics::DetachedNoCallerUnwind),
+            Some(HigherOrderCallSemantics::RepeatedCallbacks | HigherOrderCallSemantics::ConditionalCallbackOnce) =>
+                (RustActivationKind::SynchronousCallback, RustActivationUnwindSemantics::Unresolved {
+                    reason: RustActivationUnresolvedReason::MissingCallbackUnwindEvidence }),
+            _ => (RustActivationKind::Unresolved, RustActivationUnwindSemantics::Unresolved {
+                reason: RustActivationUnresolvedReason::MissingCallbackPolicy }),
+        };
+        Self { activation: call.into(), activation_kind,
+            source: policy.map(|policy| RustActivationMetadataSource::HigherOrderPolicy { policy })
+                .unwrap_or(RustActivationMetadataSource::MissingPolicy), unwind }
+    }
+}
+
+/// Operational producer metadata only. Serialized beside the existing raw
+/// ICFG fields across the rustc-wrapper boundary; never added to CQPL export.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RustActivationUnwindMetadataV1 {
+    pub schema_version: u32,
+    pub activations: Vec<RustActivationUnwindMetadata>,
+}
+
+impl RustActivationUnwindMetadataV1 {
+    pub fn new(records: impl IntoIterator<Item = RustActivationUnwindMetadata>) -> Result<Self, String> {
+        let mut by_activation = BTreeMap::new();
+        for record in records {
+            let coherent = matches!((&record.activation_kind, &record.unwind),
+                (RustActivationKind::Direct, RustActivationUnwindSemantics::Direct { .. })
+                | (RustActivationKind::Direct, RustActivationUnwindSemantics::Unresolved {
+                    reason: RustActivationUnresolvedReason::UnsupportedMirUnwindAction })
+                | (RustActivationKind::SynchronousCallback, RustActivationUnwindSemantics::CertifiedCallback { .. })
+                | (RustActivationKind::SynchronousCallback, RustActivationUnwindSemantics::Unresolved {
+                    reason: RustActivationUnresolvedReason::MissingCallbackUnwindEvidence })
+                | (RustActivationKind::DetachedCallback, RustActivationUnwindSemantics::DetachedNoCallerUnwind)
+                | (RustActivationKind::Unresolved, RustActivationUnwindSemantics::Unresolved {
+                    reason: RustActivationUnresolvedReason::MissingCallbackPolicy }));
+            if !coherent { return Err("activation kind conflicts with unwind semantics".into()); }
+            let source_kind = match &record.source {
+                RustActivationMetadataSource::MirCall | RustActivationMetadataSource::MirDrop => RustActivationKind::Direct,
+                RustActivationMetadataSource::HigherOrderPolicy { policy } => match policy {
+                    HigherOrderCallSemantics::SpawnMayOnce => RustActivationKind::DetachedCallback,
+                    HigherOrderCallSemantics::RepeatedCallbacks | HigherOrderCallSemantics::ConditionalCallbackOnce =>
+                        RustActivationKind::SynchronousCallback,
+                    _ => RustActivationKind::Unresolved,
+                },
+                RustActivationMetadataSource::MissingPolicy => RustActivationKind::Unresolved,
+                RustActivationMetadataSource::ExecutionActivation { call_key } => {
+                    if call_key.is_empty() { return Err("missing producer activation key".into()); }
+                    record.activation_kind
+                }
+            };
+            if source_kind != record.activation_kind { return Err("activation kind conflicts with producer policy".into()); }
+            if [&record.activation.caller_function, &record.activation.call_node,
+                &record.activation.dummy_call_node, &record.activation.callee_function].iter().any(|s| s.is_empty()) {
+                return Err("empty activation identity".into());
+            }
+            if let RustActivationUnwindSemantics::CertifiedCallback { action, unwind_edges } = &record.unwind {
+                if !matches!(record.source, RustActivationMetadataSource::ExecutionActivation { .. }) {
+                    return Err("callback unwind certification requires activation relation evidence".into());
+                }
+                if unwind_edges.is_empty() || !unwind_edges.windows(2).all(|pair| pair[0] < pair[1])
+                    || matches!(action, RustActivationUnwindAction::Unreachable) {
+                    return Err("invalid certified callback unwind relations".into());
+                }
+            }
+            if let Some(previous) = by_activation.insert(record.activation.clone(), record.clone()) {
+                if previous != record { return Err("conflicting activation unwind metadata".into()); }
+            }
+        }
+        Ok(Self { schema_version: 1, activations: by_activation.into_values().collect() })
+    }
+
+    pub fn validate_calls(&self, calls: &[RustCallMetadata]) -> Result<(), String> {
+        let expected: BTreeMap<_, _> = calls.iter().map(|c| (RustActivationIdentity::from(c), c)).collect();
+        if expected.len() != calls.len() || expected.len() != self.activations.len()
+            || self.activations.iter().any(|r| !expected.contains_key(&r.activation)) {
+            return Err("activation metadata is not one-to-one with rust_calls".into());
+        }
+        Ok(())
+    }
+
+    /// Explicit operational importer for later producer consumers. Legacy
+    /// GlobalICFGOrdered serde intentionally ignores the additive metadata.
+    pub fn from_operational_json(raw: &serde_json::Value) -> Result<Option<Self>, String> {
+        if raw.get("dependency_body_ingestion_v1")
+            .and_then(|dep| dep.get("context_execution_graph_v1")).is_some_and(|value| value.is_object()) {
+            let graph: GlobalICFGOrdered = serde_json::from_value(raw.clone()).map_err(|e| e.to_string())?;
+            return crate::execution_graph::rust_activation_unwind_metadata_from_execution_graph(&graph);
+        }
+        let Some(value) = raw.get("rust_activation_unwind_metadata_v1") else { return Ok(None); };
+        let table: Self = serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
+        if table.schema_version != 1 { return Err("unsupported internal activation metadata version".into()); }
+        let canonical = Self::new(table.activations.clone())?;
+        if table.activations.iter().any(|r| matches!(r.source, RustActivationMetadataSource::ExecutionActivation { .. })) {
+            return Err("execution activation evidence requires the existing execution ledger".into());
+        }
+        if table != canonical { return Err("activation metadata must be canonical and unique".into()); }
+        let calls: Vec<RustCallMetadata> = serde_json::from_value(raw.get("rust_calls").cloned()
+            .ok_or("missing rust_calls for activation metadata")?).map_err(|e| e.to_string())?;
+        table.validate_calls(&calls)?;
+        Ok(Some(table))
+    }
 }
 
 // -----------------------
@@ -292,6 +592,9 @@ pub enum RustDropAllocatorEvidenceKind {
     /// `CString` stores its owned bytes in `Box<[u8]>`; the canonical
     /// `cstring_type` diagnostic item therefore has a Global-backed drop.
     CStringGlobal,
+    /// `String` owns its byte buffer through the standard library's Global-
+    /// backed `Vec<u8>` representation on the pinned toolchain.
+    StringGlobal,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -383,6 +686,49 @@ pub struct RustAllocationDispositionEvidence {
     /// Exact rustc owner type when the evidence is tied to Box.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub owner_def_path: Option<String>,
+}
+
+/// AP1 producer-certified standard-library AtomicPtr operation.
+///
+/// The producer classifies these calls while rustc DefId/type identity is
+/// available.  Consumers must not infer AtomicPtr semantics from pretty MIR
+/// strings.  The closed operation set intentionally covers only operations
+/// whose pointer-value effect is specified directly by the public API on the
+/// pinned toolchain.
+///
+/// Official Rust semantics:
+/// - `AtomicPtr::new(p)` creates an atomic pointer initialized with `p`;
+/// - `load` returns the currently stored pointer without modifying it;
+/// - `store` replaces the stored pointer;
+/// - `swap` stores a new pointer and returns the previous pointer;
+/// - `compare_exchange`/`compare_exchange_weak` return the previous pointer in
+///   either Result variant, and write `new` only on success;
+/// - `compare_and_swap` (deprecated but present on the pinned toolchain)
+///   returns the previous pointer and conditionally writes `new`; and
+/// - `into_inner` consumes the atomic and returns its contained pointer.
+///
+/// https://doc.rust-lang.org/std/sync/atomic/struct.AtomicPtr.html
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RustAtomicPtrCallEvidenceKind {
+    New,
+    Load,
+    Store,
+    Swap,
+    CompareExchange,
+    CompareExchangeWeak,
+    CompareAndSwap,
+    IntoInner,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RustAtomicPtrCallEvidence {
+    pub kind: RustAtomicPtrCallEvidenceKind,
+    /// Audit-only canonical DefPath.  Semantic classification is already
+    /// complete when this string is serialized.
+    pub callee_def_path: String,
+    /// Exact canonical owner DefPath proved by the producer.
+    pub owner_def_path: String,
 }
 
 /// v6P-r1b producer-certified evidence for narrowly supported higher-order APIs.
@@ -498,6 +844,10 @@ pub enum MirTerminator {
         /// `drop(*mut T)` is a raw-pointer value drop and does not free T.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         allocation_disposition_evidence: Option<RustAllocationDispositionEvidence>,
+        /// AP1: producer-certified AtomicPtr pointer-storage semantics.
+        /// Historical MIR/ICFG JSON remains readable.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        atomic_ptr_evidence: Option<RustAtomicPtrCallEvidence>,
         /// v6P-r1b: producer-certified structural evidence for supported
         /// higher-order API contracts. Historical MIR JSON remains readable.
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1063,5 +1413,145 @@ mod execution_state_identity_tests {
         assert_ne!(execution_state_node_id(&state(&["outer", "inner"])),
                    execution_state_node_id(&state(&["inner", "outer"])));
         assert!(execution_state_node_id(&a).ends_with("::bb7"));
+    }
+}
+#[cfg(test)]
+mod rust_activation_unwind_metadata_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn call(index: usize) -> RustCallMetadata {
+        RustCallMetadata { caller_function: "caller".into(), call_node: format!("site{index}"),
+            dummy_call_node: format!("proxy{index}"), callee_function: "callee".into(),
+            dummy_ret_node: format!("return{index}"), arguments: vec![], return_place: "_0".into(),
+            return_node: format!("continuation{index}"), is_closure: false }
+    }
+    fn graph() -> GlobalICFGOrdered {
+        GlobalICFGOrdered { ordered_nodes: vec![], icfg_edges: vec![], llvm_memory_effects: None,
+            svf_solved_points_to: None, rust_functions: BTreeMap::new(), rust_calls: vec![call(0)],
+            dependency_body_ingestion_v1: None }
+    }
+
+    #[test]
+    fn rust_activation_unwind_metadata_direct_cleanup() {
+        let r = RustActivationUnwindMetadata::direct(&call(0), "cleanup(bb7)", false);
+        assert_eq!(r.activation_kind, RustActivationKind::Direct);
+        assert_eq!(r.source, RustActivationMetadataSource::MirCall);
+        assert_eq!(r.unwind, RustActivationUnwindSemantics::Direct {
+            action: RustActivationUnwindAction::Cleanup { target: "bb7".into() } });
+    }
+    #[test]
+    fn rust_activation_unwind_metadata_direct_continue() {
+        assert_eq!(RustActivationUnwindMetadata::direct(&call(0), "continue", false).unwind,
+            RustActivationUnwindSemantics::Direct { action: RustActivationUnwindAction::Continue });
+    }
+    #[test]
+    fn rust_activation_unwind_metadata_direct_terminate() {
+        assert_eq!(RustActivationUnwindMetadata::direct(&call(0), "terminate", false).unwind,
+            RustActivationUnwindSemantics::Direct { action: RustActivationUnwindAction::Terminate });
+    }
+    #[test]
+    fn rust_activation_unwind_metadata_direct_unreachable() {
+        assert_eq!(RustActivationUnwindMetadata::direct(&call(0), "unreachable", false).unwind,
+            RustActivationUnwindSemantics::Direct { action: RustActivationUnwindAction::Unreachable });
+    }
+    #[test]
+    fn rust_activation_unwind_metadata_custom_drop() {
+        let a = RustActivationUnwindMetadata::direct(&call(0), "cleanup(bb3)", true);
+        let b = RustActivationUnwindMetadata::direct(&call(1), "terminate", true);
+        assert_eq!(a.source, RustActivationMetadataSource::MirDrop);
+        assert_ne!(a.activation, b.activation); assert_ne!(a.unwind, b.unwind);
+    }
+    #[test]
+    fn rust_activation_unwind_metadata_synchronous_callback_without_relations() {
+        let r = RustActivationUnwindMetadata::callback(&call(0), Some(HigherOrderCallSemantics::RepeatedCallbacks));
+        assert_eq!(r.activation_kind, RustActivationKind::SynchronousCallback);
+        assert_eq!(r.unwind, RustActivationUnwindSemantics::Unresolved {
+            reason: RustActivationUnresolvedReason::MissingCallbackUnwindEvidence });
+    }
+    #[test]
+    fn rust_activation_unwind_metadata_detached_callback() {
+        let r = RustActivationUnwindMetadata::callback(&call(0), Some(HigherOrderCallSemantics::SpawnMayOnce));
+        assert_eq!(r.activation_kind, RustActivationKind::DetachedCallback);
+        assert_eq!(r.unwind, RustActivationUnwindSemantics::DetachedNoCallerUnwind);
+    }
+    #[test]
+    fn rust_activation_unwind_metadata_provider_collision() {
+        let provider = json!({"kind":"Call", "details":"", "source_info":"", "function_called":"opaque",
+            "arguments":[], "return_place":"_0", "return_target":"bb1", "unwind_target":"continue"});
+        let before: MirTerminator = serde_json::from_value(provider.clone()).unwrap();
+        let synchronous = RustActivationUnwindMetadata::callback(&call(0), Some(HigherOrderCallSemantics::RepeatedCallbacks));
+        let detached = RustActivationUnwindMetadata::callback(&call(0), Some(HigherOrderCallSemantics::SpawnMayOnce));
+        assert_ne!(synchronous.activation_kind, detached.activation_kind);
+        assert_ne!(synchronous.unwind, detached.unwind);
+        // Neither callback factory takes or consults the provider MIR action.
+        assert_eq!(serde_json::to_value(before).unwrap(), serde_json::to_value(
+            serde_json::from_value::<MirTerminator>(provider).unwrap()).unwrap());
+    }
+    #[test]
+    fn rust_activation_unwind_metadata_missing_callback_policy() {
+        for policy in [None, Some(HigherOrderCallSemantics::Unknown), Some(HigherOrderCallSemantics::LazyCarrier)] {
+            let r = RustActivationUnwindMetadata::callback(&call(0), policy);
+            assert_eq!(r.activation_kind, RustActivationKind::Unresolved);
+            assert_eq!(r.unwind, RustActivationUnwindSemantics::Unresolved {
+                reason: RustActivationUnresolvedReason::MissingCallbackPolicy });
+        }
+    }
+    #[test]
+    fn rust_activation_unwind_metadata_shared_callee_separate_activations() {
+        let a = RustActivationUnwindMetadata::callback(&call(0), Some(HigherOrderCallSemantics::RepeatedCallbacks));
+        let b = RustActivationUnwindMetadata::callback(&call(1), Some(HigherOrderCallSemantics::SpawnMayOnce));
+        let table = RustActivationUnwindMetadataV1::new([a.clone(), b.clone()]).unwrap();
+        assert_eq!(table.activations, vec![a, b]);
+        assert_eq!(table.activations[0].activation.callee_function, table.activations[1].activation.callee_function);
+    }
+    #[test]
+    fn rust_activation_unwind_metadata_deterministic() {
+        let a = RustActivationUnwindMetadata::direct(&call(0), "continue", false);
+        let b = RustActivationUnwindMetadata::direct(&call(1), "terminate", true);
+        let first = RustActivationUnwindMetadataV1::new([a.clone(), b.clone(), a.clone()]).unwrap();
+        let second = RustActivationUnwindMetadataV1::new([b, a]).unwrap();
+        assert_eq!(serde_json::to_string(&first).unwrap(), serde_json::to_string(&second).unwrap());
+    }
+    #[test]
+    fn rust_activation_unwind_metadata_no_cqpl_artifact_effect() {
+        let original = serde_json::to_value(graph()).unwrap();
+        let mut operational = original.clone();
+        operational["rust_activation_unwind_metadata_v1"] = serde_json::to_value(
+            RustActivationUnwindMetadataV1::new([RustActivationUnwindMetadata::direct(&call(0), "continue", false)]).unwrap()).unwrap();
+        assert!(RustActivationUnwindMetadataV1::from_operational_json(&operational).unwrap().is_some());
+        // All inputs to the frozen CQPL exporter are identical after crossing
+        // the operational serde boundary; new provenance is not part of that model.
+        let consumed: GlobalICFGOrdered = serde_json::from_value(operational).unwrap();
+        assert_eq!(serde_json::to_value(consumed).unwrap(), original);
+    }
+    #[test]
+    fn rust_activation_unwind_metadata_existing_rust_calls_preserved() {
+        let calls = vec![call(0), call(1)];
+        let original = serde_json::to_value(&calls).unwrap();
+        let table = RustActivationUnwindMetadataV1::new(calls.iter().map(|c|
+            RustActivationUnwindMetadata::direct(c, "unreachable", false))).unwrap();
+        let raw = json!({"rust_calls":calls, "rust_activation_unwind_metadata_v1":table});
+        let loaded = RustActivationUnwindMetadataV1::from_operational_json(&raw).unwrap().unwrap();
+        assert_eq!(loaded.activations.len(), 2);
+        assert_eq!(raw["rust_calls"], original);
+    }
+    #[test]
+    fn rust_activation_unwind_metadata_ambiguous_or_malformed_fail_closed() {
+        let a = RustActivationUnwindMetadata::direct(&call(0), "continue", false);
+        let b = RustActivationUnwindMetadata::direct(&call(0), "terminate", false);
+        assert!(RustActivationUnwindMetadataV1::new([a,b]).is_err());
+        let mut inconsistent = RustActivationUnwindMetadata::callback(&call(0), Some(HigherOrderCallSemantics::Unknown));
+        inconsistent.activation_kind = RustActivationKind::DetachedCallback;
+        inconsistent.unwind = RustActivationUnwindSemantics::DetachedNoCallerUnwind;
+        assert!(RustActivationUnwindMetadataV1::new([inconsistent]).is_err());
+        let mut policy_only = RustActivationUnwindMetadata::callback(&call(0), Some(HigherOrderCallSemantics::RepeatedCallbacks));
+        policy_only.unwind = RustActivationUnwindSemantics::CertifiedCallback {
+            action: RustActivationUnwindAction::Continue,
+            unwind_edges: vec![RustActivationUnwindEdge { source_node: "exit".into(), destination_node: "proxy".into() }] };
+        assert!(RustActivationUnwindMetadataV1::new([policy_only]).is_err());
+        let r = RustActivationUnwindMetadata::direct(&call(0), "cleanup(garbage)", false);
+        assert_eq!(r.unwind, RustActivationUnwindSemantics::Unresolved {
+            reason: RustActivationUnresolvedReason::UnsupportedMirUnwindAction });
     }
 }

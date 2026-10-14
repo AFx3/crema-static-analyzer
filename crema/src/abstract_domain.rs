@@ -237,6 +237,18 @@ impl AbstractMemory {
         pairs
     }
 
+    /// Index the first value encountered for each name, including BOTTOM.
+    /// The source iteration order is the same as `get_cell_value`.
+    fn first_value_index(&self) -> BTreeMap<Name, CellValue> {
+        let mut index = BTreeMap::new();
+        for (allocation, &value) in &self.state {
+            for name in &allocation.set {
+                index.entry(name.clone()).or_insert(value);
+            }
+        }
+        index
+    }
+
     /// Pointwise CellValue order plus inclusion of implementation-level
     /// may-alias information.
     ///
@@ -273,6 +285,9 @@ impl AbstractMemory {
         if all_vars.is_empty() {
             return AbstractMemory::default();
         }
+
+        let index_left = self.first_value_index();
+        let index_right = other.first_value_index();
 
         // Build the undirected graph induced by alias components from both
         // incoming memories. Connecting each member to a representative is
@@ -330,9 +345,11 @@ impl AbstractMemory {
             // sound CellValue.
             let mut component_value = CellValue::BOTTOM;
             for var in &component {
-                let pointwise = self
-                    .get_cell_value(var)
-                    .join(other.get_cell_value(var));
+                let pointwise = index_left
+                    .get(var)
+                    .copied()
+                    .unwrap_or(CellValue::BOTTOM)
+                    .join(index_right.get(var).copied().unwrap_or(CellValue::BOTTOM));
                 component_value = component_value.join(pointwise);
             }
 
@@ -695,13 +712,23 @@ pub fn transfer_function(
 }
 
 
-// normalize var names di var (eg. "_5") in "Local(_5)"
-fn normalize(var: &str) -> String {
-    if let Some(inner) = var.strip_prefix("Local ") {
-        format!("Local({})", inner.trim())
-    } else {
-        format!("Local({})", var.trim_start_matches('_'))
+/// Canonicalize a local in the internal Rust return bridge. Both fields of
+/// that bridge describe MIR locals, including the legacy `Local _0` source.
+/// Do not interpret arbitrary LLVM names or projected places as MIR locals.
+fn canonical_internal_return_local(var: &str) -> Option<Name> {
+    let local = var.strip_prefix("Local(")
+        .and_then(|s| s.strip_suffix(')'))
+        .or_else(|| var.strip_prefix("Local "))
+        .unwrap_or(var);
+    let digits = local.strip_prefix('_')?;
+    if digits.is_empty() || !digits.bytes().all(|c| c.is_ascii_digit()) {
+        return None;
     }
+    let index = digits.parse::<u32>().ok()?;
+    if index.to_string() != digits {
+        return None;
+    }
+    Some(format!("Local(_{digits})"))
 }
 
 pub fn transfer_dummyret_node(
@@ -714,8 +741,13 @@ pub fn transfer_dummyret_node(
 
     if let (Some(mir_var), Some(llvm_var)) = (&dummy.mir_var, &dummy.llvm_var) {
         if dummy.is_internal.unwrap_or(false) {
-            let full_mir = normalize(mir_var);
-            let full_llvm = normalize(llvm_var);
+            let (Some(full_mir), Some(full_llvm)) = (
+                canonical_internal_return_local(mir_var),
+                canonical_internal_return_local(llvm_var),
+            ) else {
+                // Missing/unsupported binding is not evidence for a destination.
+                return (mem_ret, taint_ret);
+            };
 
             let old = mem_ret.get_cell_value(&full_mir);
             let ret = mem_ret.get_cell_value(&full_llvm);
@@ -1673,6 +1705,67 @@ fn widen_all_tracked_to_top(mem: &AbstractMemory) -> AbstractMemory {
     out
 }
 
+/// Conservative effect of a pure allocator deallocation, without a destructor.
+/// All represented heap-dependent observers may be affected. Alias membership
+/// is preserved: freeing a block does not change the addresses in stack slots.
+/// This does not summarize arbitrary destructor writes or opaque FFI effects.
+fn conservative_deallocation_effect(mem: &AbstractMemory) -> AbstractMemory {
+    let mut out = mem.clone();
+    for value in out.state.values_mut() {
+        if matches!(
+            *value,
+            CellValue::ALLOC | CellValue::MB | CellValue::IMMB | CellValue::MV | CellValue::TOP
+        ) {
+            *value = CellValue::TOP;
+        }
+    }
+    out
+}
+
+/// Weakly update every represented observer connected to a target.
+/// Preserve raw keys and their first-match order, including overlapping keys.
+/// The closure can over-approximate MAY aliases; it is not a MUST certificate.
+fn weak_update_alias_observers(
+    mem: &AbstractMemory,
+    target: &Name,
+    effect: CellValue,
+) -> AbstractMemory {
+    let mut affected = BTreeSet::from([target.clone()]);
+    loop {
+        let before = affected.len();
+        for allocation in mem.state.keys() {
+            if allocation.set.iter().any(|name| affected.contains(name)) {
+                affected.extend(allocation.set.iter().cloned());
+            }
+        }
+        if affected.len() == before {
+            break;
+        }
+    }
+    let mut out = mem.clone();
+    for (allocation, value) in &mut out.state {
+        if allocation.set.iter().any(|name| affected.contains(name)) {
+            *value = value.join(effect);
+        }
+    }
+    if effect != CellValue::BOTTOM && mem.get_allocation(target).is_none() {
+        out.state.insert(Allocation::new(target.clone()), effect);
+    }
+    out
+}
+
+/// Pure drop/owned deallocation in the manuscript fragment. Heap observers
+/// are conservatively invalidated, including owned descendants. A consumed
+/// binding is only weakly FREED, because its MAY component need not denote one
+/// concrete cell. Arbitrary destructor writes require additional coverage.
+fn conservative_drop_effect(mem: &AbstractMemory, target: &Name) -> AbstractMemory {
+    weak_update_alias_observers(
+        &conservative_deallocation_effect(mem),
+        target,
+        CellValue::FREED,
+    )
+}
+
 /// `StorageLive(local)` allocates fresh *uninitialized* stack storage in the
 /// pinned rustc MIR semantics.  The formal stack abstraction maps an existing
 /// uninitialized local to BOXTIMES; BOTTOM is reserved for an absent/unallocated
@@ -1800,11 +1893,66 @@ fn apply_mir_statement_v2_extension(
     }
 }
 
+/// Flat, single-dereference heap borrow in the pinned MIR spelling.
+/// Other projections require their own location/coverage proof.
+fn transfer_simple_heap_borrow(
+    mem: &AbstractMemory,
+    taint: &mut TaintStateMap,
+    stmt: &MirStatement,
+) -> Option<AbstractMemory> {
+    if stmt.kind != "Assign" || statement_place_is_projected(stmt) {
+        return None;
+    }
+    static BORROW: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(r"^&(?:(mut)\s*)?\(\*(_[0-9]+)\)$").unwrap()
+    });
+    let captures = BORROW.captures(stmt.rvalue.as_deref()?.trim())?;
+    let source = full_local_name(&captures[2]);
+    let destination = full_local_name(stmt.place.as_deref()?);
+    canonical_internal_return_local(&destination)?;
+    let borrow = if captures.get(1).is_some() { CellValue::MB } else { CellValue::IMMB };
+    let mut out = mem.clone();
+    // Unmodified observers are included by the join. This covers all heap
+    // observers even when a represented MAY group is not a MUST target.
+    for value in out.state.values_mut() {
+        if is_heap_dependent_value(*value) {
+            *value = value.join(borrow);
+        }
+    }
+    out = weak_update_alias_observers(&out, &destination, CellValue::TOP);
+    if mem.get_cell_value(&source) != CellValue::BOTTOM {
+        let mut affected = BTreeSet::from([source.clone(), destination.clone()]);
+        loop {
+            let before = affected.len();
+            for allocation in out.state.keys() {
+                if allocation.set.iter().any(|name| affected.contains(name)) {
+                    affected.extend(allocation.set.iter().cloned());
+                }
+            }
+            if affected.len() == before {
+                break;
+            }
+        }
+        // Join only the components involved in the new reference. Unrelated
+        // raw components, including empty keys and explicit BOTTOM, survive.
+        out.state.retain(|allocation, _| {
+            !allocation.set.iter().any(|name| affected.contains(name))
+        });
+        out.state.insert(Allocation { set: affected }, CellValue::TOP);
+    }
+    let tags = taint.get(&source).cloned().unwrap_or_default();
+    taint.entry(destination).or_default().extend(tags);
+    Some(out)
+}
+
 pub fn apply_mir_statement_with_extensions(
     mem: &AbstractMemory,
     taint: &mut TaintStateMap,
     stmt: &MirStatement,
 ) -> AbstractMemory {
+    if let Some(updated) = transfer_simple_heap_borrow(mem, taint, stmt) {
+        return updated;
+    }
     if let Some(updated) = apply_mir_statement_v2_extension(mem, taint, stmt) {
         updated
     } else {
@@ -1967,11 +2115,10 @@ fn apply_mir_terminator_for_edge_enabled(
                 apply_call_unwind_effect(mem, taint, arguments, return_place)
             }
             MirTerminator::Drop { dropped_value, .. } => {
-                let mut out = mem.clone();
                 let dropped = full_local_name(dropped_value);
-                if out.get_allocation(&dropped).is_some() {
-                    out.set_cell_value(&dropped, CellValue::TOP);
-                }
+                let out = weak_update_alias_observers(
+                    &conservative_deallocation_effect(mem), &dropped, CellValue::TOP,
+                );
                 taint
                     .entry(dropped)
                     .or_default()
@@ -1988,12 +2135,44 @@ fn apply_mir_terminator_for_edge_enabled(
     }
 }
 
+fn is_opaque_memory_summary_edge(edge: &IcfgEdge) -> bool {
+    matches!(edge.label.as_deref(),
+        Some("DYNAMIC_TRAIT_DROP_SUMMARY_V1")
+            | Some("DYNAMIC_TRAIT_DROP_SUMMARY_UNWIND_V1")
+            | Some("OPAQUE_HIGHER_ORDER_CALLBACK_SUMMARY_V1")
+            | Some("OPAQUE_HIGHER_ORDER_CALLBACK_SUMMARY_UNWIND_V1"))
+}
+
 pub fn apply_mir_terminator_for_edge_with_extensions(
     mem: &AbstractMemory,
     taint: &mut TaintStateMap,
     term: &MirTerminator,
     edge: &IcfgEdge,
 ) -> AbstractMemory {
+    // Opaque Rust boundaries are used only when CREMA can certify that some
+    // runtime behavior exists but cannot certify its exact body/ABI.  The
+    // current CellValue domain cannot localize arbitrary hidden memory effects,
+    // so TOP is the conservative MAY abstraction.  Exact callbacks and exact
+    // destructor Instances never take this path.
+    if is_opaque_memory_summary_edge(edge) {
+        let mut out = widen_all_tracked_to_top(mem);
+        // For an opaque Call boundary the hidden provider result is unknown on
+        // a normal/self-loop edge, while MIR guarantees that the destination
+        // is not assigned on unwind.  Materialize that distinction even when
+        // the return local was not previously present in the abstract memory.
+        if let MirTerminator::Call { return_place, .. } = term {
+            if !return_place.trim().is_empty() {
+                let ret = full_local_name(return_place);
+                if edge.label.as_deref() == Some("OPAQUE_HIGHER_ORDER_CALLBACK_SUMMARY_UNWIND_V1") {
+                    out.assign_local_value(&ret, CellValue::BOTTOM);
+                } else {
+                    out.assign_local_value(&ret, CellValue::TOP);
+                }
+                taint.remove(&ret);
+            }
+        }
+        return out;
+    }
     if !panic_unwind_lifecycle_v1_enabled() {
         return apply_mir_terminator_with_extensions(mem, taint, term);
     }
@@ -2259,6 +2438,16 @@ fn replace_consumed_local_with(
 //////////////////////////////////////////////////////////////////////////////////
 
 pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place: &str) -> (CellValue, AbstractMemory) {
+    let (value, memory, _) = transfer_call_effect(mem, func_call_details, return_place);
+    (value, memory)
+}
+
+/// Reuse the same FFI registry snapshot for the effect and unit-return policy.
+fn transfer_call_effect(
+    mem: &AbstractMemory,
+    func_call_details: &str,
+    return_place: &str,
+) -> (CellValue, AbstractMemory, bool) {
     let ffi_functions = match load_ffi_functions("./ffi_functions.json") {
         Ok(set) => set,
         Err(e) => {
@@ -2266,7 +2455,11 @@ pub fn transfer_call(mem: &AbstractMemory, func_call_details: &str, return_place
             std::collections::HashSet::new()
         }
     };
-    transfer_call_with_ffi(mem, func_call_details, return_place, &ffi_functions)
+    let unit_heap_effect = is_raw_dealloc_call(func_call_details)
+        || is_c_free_call_text(func_call_details, &ffi_functions)
+        || is_ptr_drop_in_place_call(func_call_details);
+    let (value, memory) = transfer_call_with_ffi(mem, func_call_details, return_place, &ffi_functions);
+    (value, memory, unit_heap_effect)
 }
 
 fn transfer_call_with_ffi(
@@ -2471,21 +2664,18 @@ fn transfer_call_with_ffi(
         CellValue::TOP
 
     } else if is_raw_dealloc_call(func_call_details) {
-        // dealloc invalidates the allocation but returns ().
-        if let Some(source) = first_call_local_from_details(func_call_details) {
-            if new_mem.get_allocation(&source).is_some() {
-                new_mem = update_state(new_mem, &source, CellValue::FREED);
-            }
-        }
+        // A MAY component can contain observers of different concrete blocks.
+        // Do not mark every member definitely FREED. Include unaffected/live
+        // and deallocated alternatives, including observers outside that group.
+        new_mem = conservative_deallocation_effect(&new_mem);
         CellValue::BOXTIMES
 
     } else if is_c_free_call_text(func_call_details, ffi_functions) {
         // A Rust call site can still invoke the C malloc-family deallocator.
         //
-        // Keep the primary abstract state conservative: a C-origin pointer is
-        // nullable and CellValue has no NULL element/path split.  The detector
-        // records the explicit free event after complete alias/provenance
-        // discovery.
+        // Include both free(NULL)'s no-op and a valid block deallocation.
+        // No precise FREED fact is assigned to a nullable MAY component.
+        new_mem = conservative_deallocation_effect(&new_mem);
         CellValue::BOXTIMES
 
     } else if is_ptr_read_call(func_call_details) {
@@ -2495,12 +2685,15 @@ fn transfer_call_with_ffi(
         // Keep the memory unchanged and conservatively classify only the return.
         CellValue::TOP
 
-    } else if is_ptr_write_call(func_call_details)
-        || is_ptr_drop_in_place_call(func_call_details)
-    {
-        // Both APIs require a valid destination pointer.  Their nested
-        // destructor/resource effect is type-dependent and is handled only as
-        // a deferred "use" in the detector for now.
+    } else if is_ptr_drop_in_place_call(func_call_details) {
+        // Pure owned destruction can free reachable children while leaving
+        // the backing pointer/storage intact. Include all heap observers.
+        // Arbitrary user destructor writes still require separate coverage.
+        new_mem = conservative_deallocation_effect(&new_mem);
+        CellValue::BOXTIMES
+
+    } else if is_ptr_write_call(func_call_details) {
+        // Pointer writes belong to the separate memory-transfer gate.
         CellValue::BOXTIMES
 
     } else if is_raw_realloc_call(func_call_details) {
@@ -2694,13 +2887,10 @@ fn transfer_call_with_ffi(
             // defined non-heap value represented by BOXTIMES.
             CellValue::BOXTIMES
         } else {
-            // For an owning value, free ONLY the tracked allocation that
-            // contains the dropped argument. Never mark the entire abstract
-            // memory as FREED.
+            // Owning drop can affect heap observers and owned descendants.
+            // A MAY group must include modified and unmodified alternatives.
             if let Some(full_dropped) = explicit_drop_arg_from_details(func_call_details) {
-                if new_mem.get_allocation(&full_dropped).is_some() {
-                    new_mem = update_state(new_mem, &full_dropped, CellValue::FREED);
-                }
+                new_mem = conservative_drop_effect(&new_mem, &full_dropped);
             }
 
             // std::mem::drop returns `()`: no heap allocation is produced,
@@ -2800,6 +2990,9 @@ pub fn has_explicit_rust_call_summary(s: &str) -> bool {
 }
 
 pub fn apply_mir_statement(mem: &AbstractMemory, taint: &mut TaintStateMap, stmt: &MirStatement) -> AbstractMemory {
+    if let Some(updated) = transfer_simple_heap_borrow(mem, taint, stmt) {
+        return updated;
+    }
     let mut new_mem = mem.clone();
     match stmt.kind.as_str() {
         "Nop" => { /* no change */ }
@@ -3089,20 +3282,22 @@ pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term:
                 // equivalent to the historical textual branch on the frozen
                 // corpus, but prevents a future formatter change from turning
                 // `drop(*mut T)` into a heap deallocation.
-                let (ret_value, updated_mem) = if certified_raw_pointer_drop {
-                    (CellValue::BOXTIMES, new_mem.clone())
+                let (ret_value, updated_mem, unit_heap_effect) = if certified_raw_pointer_drop {
+                    (CellValue::BOXTIMES, new_mem.clone(), false)
                 } else {
-                    transfer_call(&new_mem, details, return_place)
+                    transfer_call_effect(&new_mem, details, return_place)
                 };
                 new_mem = updated_mem;
                 let full_ret_place = full_local_name(return_place);
 
-                // transfer_call applies the heap effect of std::mem::drop
-                // to the argument. The MIR destination still receives `()`,
-                // represented by BOXTIMES. Overwrite/detach that local without
-                // manufacturing a heap alias.
-                if explicit_drop {
-                    new_mem.assign_local_value(&full_ret_place, CellValue::BOXTIMES);
+                // transfer_call applies the heap effect of std::mem::drop or
+                // allocator deallocation. The MIR destination receives `()`,
+                // represented by BOXTIMES. Weakly include it without deleting
+                // a raw key and exposing a previously masked observer value.
+                if explicit_drop || unit_heap_effect {
+                    new_mem = weak_update_alias_observers(
+                        &new_mem, &full_ret_place, CellValue::BOXTIMES,
+                    );
                 } else {
                     new_mem = update_state(new_mem, &full_ret_place, ret_value);
                 }
@@ -3341,7 +3536,7 @@ pub fn apply_mir_terminator(mem: &AbstractMemory,taint: &mut TaintStateMap,term:
         }
         MirTerminator::Drop { dropped_value, .. } => {
             let full_dropped = full_local_name(dropped_value);
-            new_mem = update_state(new_mem, &full_dropped, CellValue::FREED);
+            new_mem = conservative_drop_effect(&new_mem, &full_dropped);
             taint.entry(full_dropped.clone())
                 .or_insert_with(HashSet::new)
                 .insert("free".to_string());
@@ -3880,6 +4075,43 @@ fn internal_calls_for_callee<'a>(
         .collect()
 }
 
+/// Static normal-return readers of each shared caller snapshot. A callsite
+/// with several represented targets still has one continuation, so a change
+/// to it invalidates the return contributions of every target, not just the
+/// target whose activation observed the change. Metadata never supplies edges.
+fn internal_continuation_return_dependencies(
+    icfg: &GlobalICFGOrdered,
+) -> BTreeMap<String, BTreeSet<String>> {
+    let has_normal_edge = |source: &str, destination: &str| {
+        icfg.icfg_edges.iter().any(|edge| {
+            edge.source == source && edge.destination == destination
+                && edge_flow_kind(edge) == EdgeFlowKind::Normal
+        })
+    };
+    let mut dependencies: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for call in &icfg.rust_calls {
+        let Some(function) = icfg.rust_functions.get(&call.callee_function) else {
+            continue;
+        };
+        if !has_normal_edge(&call.dummy_call_node, &function.entry_node) {
+            continue;
+        }
+        for ret in &function.return_nodes {
+            if rust_function_from_mir_node_id(ret) != Some(call.callee_function.as_str())
+                || !has_normal_edge(ret, &call.dummy_ret_node)
+                || !icfg.ordered_nodes.iter().any(|(id, node)| {
+                    id == ret && matches!(node, GlobalICFGNode::Mir(bb)
+                        if matches!(bb.terminator, Some(MirTerminator::Return { .. })))
+                })
+            {
+                continue;
+            }
+            dependencies.entry(call.call_node.clone()).or_default().insert(ret.clone());
+        }
+    }
+    dependencies
+}
+
 fn mir_argument_local(argument: &crate::structs::MirCallArgument) -> Option<Name> {
     first_call_local_from_details(&argument.arg).or_else(|| {
         LOCAL_TOKEN_RE
@@ -3914,6 +4146,13 @@ fn bind_internal_actuals(
     (out_mem, out_taint)
 }
 
+// Test-only access to the final summaries permits an independent return
+// contribution check, rather than treating worklist quiescence as a proof.
+#[cfg(test)]
+thread_local! {
+    static RETURN_P0_TRACE: RefCell<(BTreeMap<String, InternalCallContinuation>, Vec<String>)> = RefCell::new(Default::default());
+}
+
 pub fn fixed_point_analysis(icfg: &GlobalICFGOrdered) -> (AbstractState, TaintState) {
 
     let mut succs_map: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
@@ -3944,6 +4183,7 @@ pub fn fixed_point_analysis(icfg: &GlobalICFGOrdered) -> (AbstractState, TaintSt
     // This replaces the traversal-order-dependent global LIFO call stack.
     let mut internal_continuations: BTreeMap<String, InternalCallContinuation> =
         BTreeMap::new();
+    let continuation_return_dependencies = internal_continuation_return_dependencies(icfg);
     let mut visit_order: Vec<String> = Vec::new();
 
     // entrypoint
@@ -4123,7 +4363,7 @@ pub fn fixed_point_analysis(icfg: &GlobalICFGOrdered) -> (AbstractState, TaintSt
             }
 
             if continuation_changed {
-                for ret in &function.return_nodes {
+                for ret in continuation_return_dependencies.get(&call.call_node).into_iter().flatten() {
                     if abs_state.state_map.contains_key(ret) {
                         worklist.insert(ret.clone());
                     }
@@ -4186,6 +4426,8 @@ pub fn fixed_point_analysis(icfg: &GlobalICFGOrdered) -> (AbstractState, TaintSt
         set_last_visited(last.clone());
     }
 
+    #[cfg(test)]
+    RETURN_P0_TRACE.with(|slot| *slot.borrow_mut() = (internal_continuations, visit_order));
     (abs_state, taint_state)
 }
 
@@ -4379,7 +4621,7 @@ mod panic_unwind_lifecycle_v1_tests {
     }
 
     #[test]
-    fn drop_normal_and_unwind_have_distinct_post_states() {
+    fn drop_normal_and_unwind_preserve_distinct_effect_evidence() {
         let mut mem = AbstractMemory::default();
         mem.set_cell_value(&"Local(_1)".to_string(), CellValue::ALLOC);
         let term = MirTerminator::Drop {
@@ -4399,7 +4641,10 @@ mod panic_unwind_lifecycle_v1_tests {
             &term,
             &edge("Drop return", "rust::main::bb1"),
         );
-        assert_eq!(normal.get_cell_value(&"Local(_1)".to_string()), CellValue::FREED);
+        assert_eq!(normal.get_cell_value(&"Local(_1)".to_string()), CellValue::TOP);
+        assert!(normal_taint
+            .get("Local(_1)")
+            .is_some_and(|tags| tags.contains("free") && !tags.contains("unwind_partial_drop")));
 
         let mut unwind_taint = TaintStateMap::new();
         let unwind = apply_mir_terminator_for_edge_enabled(
@@ -7372,6 +7617,7 @@ mod phase4_std_memory_tests {
             callee_def_path: None,
             deallocator_evidence: None,
             allocation_disposition_evidence: None,
+            atomic_ptr_evidence: None,
             higher_order_evidence: None,
             callee_is_local: false,
             callback_def_paths: Vec::new(),
@@ -7765,7 +8011,7 @@ mod phase4_std_memory_tests {
     }
 
     #[test]
-    fn raw_dealloc_frees_tracked_raw_allocation_and_returns_unit() {
+    fn raw_dealloc_preserves_live_or_freed_alternatives_and_returns_unit() {
         let mut mem = AbstractMemory::default();
         mem.set_cell_value(&n("Local(_1)"), CellValue::MV);
 
@@ -7774,7 +8020,7 @@ mod phase4_std_memory_tests {
         let (ret, mem) = transfer_call(&mem, details, "_0");
 
         assert_eq!(ret, CellValue::BOXTIMES);
-        assert_eq!(mem.get_cell_value(&n("Local(_1)")), CellValue::FREED);
+        assert_eq!(mem.get_cell_value(&n("Local(_1)")), CellValue::TOP);
     }
 
     #[test]
@@ -7794,6 +8040,7 @@ mod phase4_std_memory_tests {
             callee_def_path: None,
             deallocator_evidence: None,
             allocation_disposition_evidence: None,
+            atomic_ptr_evidence: None,
             higher_order_evidence: None,
             callee_is_local: false,
             callback_def_paths: Vec::new(),
@@ -7866,7 +8113,7 @@ mod phase4_std_memory_tests {
         let (ret, mem2) = transfer_call(&mem, details, "_0");
 
         assert_eq!(ret, CellValue::BOXTIMES);
-        assert_eq!(mem2.get_cell_value(&n("Local(_1)")), CellValue::MV);
+        assert_eq!(mem2.get_cell_value(&n("Local(_1)")), CellValue::TOP);
     }
 
     #[test]
@@ -7901,6 +8148,7 @@ mod phase4_std_memory_tests {
                 callee_def_path: "core::mem::drop".to_string(),
                 owner_def_path: None,
             }),
+            atomic_ptr_evidence: None,
             higher_order_evidence: None,
             callee_is_local: false,
             callback_def_paths: Vec::new(),
@@ -8061,6 +8309,46 @@ mod v6p_mir_extension_tests {
     }
 
     #[test]
+    fn dynamic_trait_drop_summary_widens_memory_on_normal_and_unwind_edges() {
+        let mut mem=AbstractMemory::default();
+        let key=full_local_name("Local(_1)");
+        mem.assign_local_value(&key,CellValue::ALLOC);
+        let term=MirTerminator::Drop {
+            details:String::new(),source_info:String::new(),return_target:"bb1".into(),
+            unwind_target:"cleanup(bb2)".into(),dropped_value:"Local(_1)".into(),
+            is_mutable:false,deallocator_evidence:None,
+        };
+        let edge=|label:&str| IcfgEdge {
+            source:"rust::f::bb0".into(),destination:"rust::f::bb1".into(),
+            label:Some(label.into()),source_label:None,destination_label:None,
+        };
+        let mut taint=TaintStateMap::new();
+        let normal=apply_mir_terminator_for_edge_with_extensions(
+            &mem,&mut taint,&term,&edge("DYNAMIC_TRAIT_DROP_SUMMARY_V1"));
+        assert_eq!(normal.get_cell_value(&key),CellValue::TOP);
+        let unwind=apply_mir_terminator_for_edge_with_extensions(
+            &mem,&mut taint,&term,&edge("DYNAMIC_TRAIT_DROP_SUMMARY_UNWIND_V1"));
+        assert_eq!(unwind.get_cell_value(&key),CellValue::TOP);
+
+        let call=MirTerminator::Call {
+            details:String::new(),source_info:String::new(),function_called:"opaque_provider".into(),
+            callee_def_path:None,deallocator_evidence:None,allocation_disposition_evidence:None, atomic_ptr_evidence:None,
+            higher_order_evidence:None,callee_is_local:false,callback_def_paths:vec!["f::{closure#0}".into()],
+            resolved_instance_callees:vec![],instance_dispatch_observed:true,instance_dispatch_external:true,
+            instance_dispatch_unresolved:false,arguments:vec![],return_place:"_0".into(),
+            return_target:Some("bb1".into()),unwind_target:"continue".into(),
+        };
+        let hoc=apply_mir_terminator_for_edge_with_extensions(
+            &mem,&mut taint,&call,&edge("OPAQUE_HIGHER_ORDER_CALLBACK_SUMMARY_V1"));
+        assert_eq!(hoc.get_cell_value(&key),CellValue::TOP);
+        assert_eq!(hoc.get_cell_value(&full_local_name("_0")),CellValue::TOP);
+        let hoc_unwind=apply_mir_terminator_for_edge_with_extensions(
+            &mem,&mut taint,&call,&edge("OPAQUE_HIGHER_ORDER_CALLBACK_SUMMARY_UNWIND_V1"));
+        assert_eq!(hoc_unwind.get_cell_value(&key),CellValue::TOP);
+        assert_eq!(hoc_unwind.get_cell_value(&full_local_name("_0")),CellValue::BOTTOM);
+    }
+
+    #[test]
     fn copy_nonoverlapping_globally_widens_without_points_to_proof() {
         let mut mem = AbstractMemory::default();
         let one = full_local_name("Local(_1)");
@@ -8075,5 +8363,325 @@ mod v6p_mir_extension_tests {
         let out = transfer_intrinsic_v2(&mem, &statement);
         assert_eq!(out.get_cell_value(&one), CellValue::TOP);
         assert_eq!(out.get_cell_value(&two), CellValue::TOP);
+    }
+}
+
+#[cfg(test)]
+mod legacy_return_p0_d1_tests {
+    use super::*;
+
+    fn dummy(destination: Option<&str>, source: Option<&str>, internal: bool) -> DummyNode {
+        DummyNode { dummy_node_name: "dummyRet".into(), incoming_edge: "callee".into(), outgoing_edge: "caller".into(), id: "return_bridge".into(), mir_var: destination.map(str::to_owned), llvm_var: source.map(str::to_owned), argument_bindings: vec![], is_internal: Some(internal) }
+    }
+    fn transfer(destination: &str, value: CellValue) -> (AbstractMemory, TaintStateMap) {
+        let mut memory = AbstractMemory::default();
+        memory.set_cell_value(&"Local(_0)".into(), value);
+        transfer_dummyret_node(&dummy(Some(destination), Some("Local _0"), true), &memory, &TaintStateMap::default())
+    }
+    #[test] fn legacy_return_p0_d1_raw_local() { assert_eq!(transfer("_6", CellValue::ALLOC).0.get_cell_value(&"Local(_6)".into()), CellValue::ALLOC); }
+    #[test] fn legacy_return_p0_d1_canonical_local() { assert_eq!(transfer("Local(_6)", CellValue::ALLOC).0.get_cell_value(&"Local(_6)".into()), CellValue::ALLOC); }
+    #[test] fn legacy_return_p0_d1_metadata_local() { assert_eq!(transfer("Local _6", CellValue::ALLOC).0.get_cell_value(&"Local(_6)".into()), CellValue::ALLOC); }
+    #[test] fn legacy_return_p0_d1_no_wrong_key() { assert_eq!(transfer("_6", CellValue::ALLOC).0.get_cell_value(&"Local(6)".into()), CellValue::BOTTOM); }
+    #[test] fn legacy_return_p0_d1_return_local_zero() { assert_eq!(transfer("_0", CellValue::ALLOC).0.get_cell_value(&"Local(_0)".into()), CellValue::ALLOC); }
+    #[test] fn legacy_return_p0_d1_multidigit() { assert_eq!(transfer("_123", CellValue::ALLOC).0.get_cell_value(&"Local(_123)".into()), CellValue::ALLOC); }
+    #[test] fn legacy_return_p0_d1_missing_metadata() {
+        let mut m=AbstractMemory::default();m.set_cell_value(&"Local(_0)".into(),CellValue::ALLOC);
+        for (dst,src) in [(None,Some("Local _0")),(Some("_6"),None),(None,None)] { assert_eq!(transfer_dummyret_node(&dummy(dst,src,true),&m,&TaintStateMap::default()).0,m); }
+    }
+    #[test] fn legacy_return_p0_d1_return_without_value() { assert!(transfer("_6",CellValue::BOTTOM).0.all_vars().is_empty()); }
+    #[test] fn legacy_return_p0_d1_alloc() { assert_eq!(transfer("_6",CellValue::ALLOC).0.get_cell_value(&"Local(_6)".into()),CellValue::ALLOC); }
+    #[test] fn legacy_return_p0_d1_freed() { assert_eq!(transfer("_6",CellValue::FREED).0.get_cell_value(&"Local(_6)".into()),CellValue::FREED); }
+    #[test] fn legacy_return_p0_d1_top() { assert_eq!(transfer("_6",CellValue::TOP).0.get_cell_value(&"Local(_6)".into()),CellValue::TOP); }
+    #[test] fn legacy_return_p0_d1_bottom() { assert_eq!(transfer("_6",CellValue::BOTTOM).0.get_cell_value(&"Local(_6)".into()),CellValue::BOTTOM); }
+    #[test] fn legacy_return_p0_d1_existing_value_join() {
+        let mut m=AbstractMemory::default();m.set_cell_value(&"Local(_0)".into(),CellValue::ALLOC);m.set_cell_value(&"Local(_6)".into(),CellValue::FREED);
+        let a=transfer_dummyret_node(&dummy(Some("_6"),Some("Local _0"),true),&m,&TaintStateMap::default()).0;
+        assert_eq!(a.get_cell_value(&"Local(_6)".into()),CellValue::TOP);assert_eq!(a.get_cell_value(&"Local(_0)".into()),CellValue::ALLOC);
+    }
+    fn taint_case(destination_tags: bool) -> TaintStateMap {
+        let mut t=TaintStateMap::default();t.entry("Local(_0)".into()).or_default().extend(["source".into(),"shared".into()]);
+        if destination_tags {t.entry("Local(_6)".into()).or_default().extend(["destination".into(),"shared".into()]);}
+        transfer_dummyret_node(&dummy(Some("_6"),Some("Local _0"),true),&AbstractMemory::default(),&t).1
+    }
+    #[test] fn legacy_return_p0_d1_source_taint() {let t=taint_case(false);assert_eq!(t["Local(_6)"].len(),2);assert!(!t.contains_key("Local(_0)"));}
+    #[test] fn legacy_return_p0_d1_both_taints() {let t=taint_case(true);assert!(t["Local(_6)"].contains("source")&&t["Local(_6)"].contains("destination"));}
+    #[test] fn legacy_return_p0_d1_no_duplicate_taint() {assert_eq!(taint_case(true)["Local(_6)"].len(),3);}
+    #[test] fn legacy_return_p0_d1_same_local_taint() {let mut t=TaintStateMap::default();t.entry("Local(_0)".into()).or_default().insert("source".into());assert_eq!(transfer_dummyret_node(&dummy(Some("_0"),Some("Local _0"),true),&AbstractMemory::default(),&t).1,t);}
+    #[test] fn legacy_return_p0_d1_c_to_rust() {
+        let mut t=TaintStateMap::default();t.entry("7@callsite".into()).or_default().insert(TAINT_C_MALLOC_FAMILY.into());
+        let (m,t)=transfer_dummyret_node(&dummy(Some("_6"),Some("7@callsite"),false),&AbstractMemory::default(),&t);
+        assert_eq!(m.get_cell_value(&"Local(_6)".into()),CellValue::TOP);assert!(t["Local(_6)"].contains(TAINT_C_MALLOC_FAMILY));assert!(t["Local(_6)"].contains(TAINT_ASSIGN));assert!(t.contains_key("7@callsite"));
+    }
+    #[test] fn legacy_return_p0_d1_c_to_rust_no_origin() {assert!(transfer_dummyret_node(&dummy(Some("_6"),Some("7@callsite"),false),&AbstractMemory::default(),&TaintStateMap::default()).0.all_vars().is_empty());}
+}
+
+#[cfg(test)]
+mod legacy_return_p0_d1_name_contract_tests {
+    use super::*;
+    #[test] fn legacy_return_p0_d1_idempotent() {
+        for v in ["_0", "_6", "_123", "Local(_6)", "Local _6"] {
+            let c=canonical_internal_return_local(v).unwrap();
+            assert_eq!(canonical_internal_return_local(&c),Some(c));
+        }
+    }
+    #[test] fn legacy_return_p0_d1_unsupported_names() {
+        for v in ["", "()", "6", "Local(6)", "_01", "_4294967296", "%6", "6@callsite", "_6.0", "(*_6)", "Local(_6) [mutable]"] {
+            assert_eq!(canonical_internal_return_local(v),None,"{v}");
+        }
+    }
+    #[test] fn legacy_return_p0_d1_invalid_binding_preserves_input() {
+        let d=DummyNode { dummy_node_name:"dummyRet".into(),incoming_edge:"callee".into(),outgoing_edge:"caller".into(),id:"return_bridge".into(),mir_var:Some("_6.0".into()),llvm_var:Some("Local _0".into()),argument_bindings:vec![],is_internal:Some(true) };
+        let mut m=AbstractMemory::default();m.set_cell_value(&"Local(_0)".into(),CellValue::ALLOC);
+        let mut t=TaintStateMap::default();t.entry("Local(_0)".into()).or_default().insert("source".into());
+        assert_eq!(transfer_dummyret_node(&d,&m,&t),(m,t));
+    }
+}
+
+#[cfg(test)]
+mod legacy_return_p0_d2_tests {
+ use super::*;
+ fn stmt(kind:&str,place:&str,rv:&str)->MirStatement {MirStatement{resource_place_relation_v1:None,source_info:crate::structs::SourceInfoData{span:"<diagnostic>".into(),scope:"<diagnostic>".into()},kind:kind.into(),details:format!("{}({}, {})",kind,place,rv),place:Some(place.into()),is_mutable:Some(true),rvalue:Some(rv.into())}}
+ fn dummy(id:&str)->GlobalICFGNode{GlobalICFGNode::DummyCall(DummyNode{dummy_node_name:"dummyCall".into(),incoming_edge:"".into(),outgoing_edge:"".into(),id:id.into(),mir_var:None,llvm_var:None,argument_bindings:vec![],is_internal:Some(true)})}
+ fn ret_dummy(id:&str)->GlobalICFGNode {let mut d=match dummy(id){GlobalICFGNode::DummyCall(d)=>d,_=>unreachable!()};d.dummy_node_name="dummyRet".into();d.mir_var=Some("_0".into());d.llvm_var=Some("Local _0".into());GlobalICFGNode::DummyRet(d)}
+ fn node(id:usize,ss:Vec<MirStatement>,ret:bool)->GlobalICFGNode {GlobalICFGNode::Mir(MirBasicBlock{block_id:id,statements:ss,terminator:if ret {Some(MirTerminator::Return{details:"Return".into(),source_info:"test".into()})}else{None}})}
+ fn graph(nodes:Vec<(&str,GlobalICFGNode)>,edges:Vec<(&str,&str,&str)>)->GlobalICFGOrdered{GlobalICFGOrdered{ordered_nodes:nodes.into_iter().map(|(n,v)|(n.into(),v)).collect(),icfg_edges:edges.into_iter().map(|(s,d,l)|IcfgEdge{source:s.into(),destination:d.into(),label:Some(l.into()),source_label:None,destination_label:None}).collect(),llvm_memory_effects:None,svf_solved_points_to:None,rust_functions:BTreeMap::new(),rust_calls:vec![],dependency_body_ingestion_v1:None}}
+ fn fanout_graph()->GlobalICFGOrdered {
+ let mut g=graph(vec![("rust::main::bb0",node(0,vec![],false)),("rust::main::bb1",node(1,vec![],false)),("rust::main::bb9",node(9,vec![stmt("Assign","Local(_7)","const 7_i32")],false)),("dummyCall::A",dummy("dummyCall::A")),("dummyCall::B",dummy("dummyCall::B")),("rust::alpha::bb0",node(0,vec![stmt("StorageDead","Local(_7)",""),stmt("Assign","Local(_0)","const ()")],true)),("rust::beta::bb0",node(0,vec![stmt("StorageDead","Local(_7)",""),stmt("Assign","Local(_0)","const ()")],true)),("dummyRet::A",ret_dummy("dummyRet::A")),("dummyRet::B",ret_dummy("dummyRet::B"))],vec![("rust::main::bb0","rust::main::bb1","normal"),("rust::main::bb0","rust::main::bb9","normal"),("rust::main::bb9","rust::main::bb1","normal"),("rust::main::bb1","dummyCall::A","Rust Call -> dummyCall"),("rust::main::bb1","dummyCall::B","Rust Call -> dummyCall"),("dummyCall::A","rust::alpha::bb0","dummyCall -> Rust Entry"),("dummyCall::B","rust::beta::bb0","dummyCall -> Rust Entry"),("rust::alpha::bb0","dummyRet::A","Rust Return -> dummyRet"),("rust::beta::bb0","dummyRet::B","Rust Return -> dummyRet")]);
+ g.ordered_nodes.push(("rust::main::bb2".into(),node(2,vec![],true)));
+ for ret in ["dummyRet::A","dummyRet::B"] {g.icfg_edges.push(IcfgEdge{source:ret.into(),destination:"rust::main::bb2".into(),label:Some("dummyRet -> Rust Continuation".into()),source_label:None,destination_label:None});}
+ if let GlobalICFGNode::Mir(bb)=&mut g.ordered_nodes.iter_mut().find(|(n,_)|n=="rust::main::bb1").unwrap().1 {bb.terminator=Some(serde_json::from_value(serde_json::json!({"kind":"Call","details":"dispatch()","source_info":"diagnostic","function_called":"dispatch","callee_def_path":null,"callee_is_local":true,"resolved_instance_callees":["alpha","beta"],"instance_dispatch_observed":true,"arguments":[],"return_place":"_0","return_target":"bb2","unwind_target":"continue"})).unwrap());}
+ for (callee,call,ret) in [("alpha","dummyCall::A","dummyRet::A"),("beta","dummyCall::B","dummyRet::B")] {g.rust_functions.insert(callee.into(),crate::structs::RustFunctionMetadata{name:callee.into(),arg_count:0,entry_node:format!("rust::{}::bb0",callee),return_nodes:vec![format!("rust::{}::bb0",callee)]});g.rust_calls.push(RustCallMetadata{caller_function:"main".into(),call_node:"rust::main::bb1".into(),callee_function:callee.into(),dummy_call_node:call.into(),dummy_ret_node:ret.into(),arguments:vec![],return_place:"_0".into(),return_node:"rust::main::bb2".into(),is_closure:false});}g
+ }
+
+ fn edge(g:&mut GlobalICFGOrdered,src:&str,dst:&str,label:&str){g.icfg_edges.push(IcfgEdge{source:src.into(),destination:dst.into(),label:Some(label.into()),source_label:None,destination_label:None});}
+ fn block_mut<'a>(g:&'a mut GlobalICFGOrdered,id:&str)->&'a mut MirBasicBlock {match &mut g.ordered_nodes.iter_mut().find(|(n,_)|n==id).unwrap().1 {GlobalICFGNode::Mir(bb)=>bb,_=>panic!("not MIR")}}
+ fn check(g:&GlobalICFGOrdered)->(AbstractState,TaintState,Vec<String>) {
+ crate::mir_semantics::set_mir_semantics_v2_enabled(true);crate::panic_unwind::set_panic_unwind_lifecycle_v1_enabled(true);set_entrypoint("rust::main::bb0".into());
+ let (m,t)=fixed_point_analysis(g);let (ks,visits)=RETURN_P0_TRACE.with(|x|x.borrow().clone());let mut checked=0;
+ // Independently enumerate the represented contributions. This does not use
+ // the notification relation or the worklist's own change flags.
+ for call in &g.rust_calls {let Some(k)=ks.get(&call.call_node) else {continue};let Some(f)=g.rust_functions.get(&call.callee_function) else {continue};
+ for ret in &f.return_nodes {let Some(cm)=m.get(ret) else {continue};
+ if !matches!(get_node_by_id(g,ret),GlobalICFGNode::Mir(bb) if matches!(bb.terminator,Some(MirTerminator::Return{..}))) {continue;}
+ assert!(g.icfg_edges.iter().any(|e|e.source==*ret&&e.destination==call.dummy_ret_node&&edge_flow_kind(e)==EdgeFlowKind::Normal));
+ let c=k.caller_mem.union(&cm);let ct=join_taint_maps(&k.caller_taint,&t.get(ret).cloned().unwrap_or_default(),&c);
+ let (c,ct)=transfer_function(&call.dummy_ret_node,&get_node_by_id(g,&call.dummy_ret_node),&c,&ct);
+ let stored=m.get(&call.dummy_ret_node).expect("represented return must have a state");let st=t.get(&call.dummy_ret_node).cloned().unwrap_or_default();
+ assert!(c.leq(&stored),"unclosed memory: {} -> {}",ret,call.dummy_ret_node);
+ assert!(ct.iter().all(|(n,v)|st.get(n).is_some_and(|x|v.is_subset(x))),"unclosed taint: {}",call.dummy_ret_node);checked+=1;
+ }}assert!(checked>0,"closure check must not be vacuous");(m,t,visits)
+ }
+ fn distinct_keys(g:&mut GlobalICFGOrdered){g.rust_calls[1].call_node="rust::main::bb8".into();g.ordered_nodes.push(("rust::main::bb8".into(),node(8,vec![],false)));g.icfg_edges.retain(|e|!(e.source=="rust::main::bb1"&&e.destination=="dummyCall::B"));edge(g,"rust::main::bb1","rust::main::bb8","normal");edge(g,"rust::main::bb8","dummyCall::B","Rust Call -> dummyCall");}
+ #[test] fn legacy_return_p0_d2_one_callee(){let mut g=fanout_graph();g.rust_calls.truncate(1);g.icfg_edges.retain(|e|!e.source.contains("::B")&&!e.destination.contains("::B"));check(&g);}
+ #[test] fn legacy_return_p0_d2_two_targets(){let g=fanout_graph();let (m,_,_)=check(&g);for c in &g.rust_calls {assert_eq!(m.get(&c.dummy_ret_node).unwrap().get_cell_value(&"Local(_7)".into()),CellValue::BOXTIMES);}}
+ #[test] fn legacy_return_p0_d2_three_targets(){let mut g=fanout_graph();g.ordered_nodes.push(("dummyCall::C".into(),dummy("dummyCall::C")));g.ordered_nodes.push(("dummyRet::C".into(),ret_dummy("dummyRet::C")));g.ordered_nodes.push(("rust::gamma::bb0".into(),node(0,vec![stmt("StorageDead","Local(_7)",""),stmt("Assign","Local(_0)","const ()")],true)));let mut c=g.rust_calls[1].clone();c.callee_function="gamma".into();c.dummy_call_node="dummyCall::C".into();c.dummy_ret_node="dummyRet::C".into();g.rust_calls.push(c);let mut f=g.rust_functions["beta"].clone();f.name="gamma".into();f.entry_node="rust::gamma::bb0".into();f.return_nodes=vec![f.entry_node.clone()];g.rust_functions.insert("gamma".into(),f);for (s,d,l) in [("rust::main::bb1","dummyCall::C","Rust Call -> dummyCall"),("dummyCall::C","rust::gamma::bb0","dummyCall -> Rust Entry"),("rust::gamma::bb0","dummyRet::C","Rust Return -> dummyRet"),("dummyRet::C","rust::main::bb2","dummyRet -> Rust Continuation")]{edge(&mut g,s,d,l);}check(&g);}
+ #[test] fn legacy_return_p0_d2_distinct_calls_same_callee(){let mut g=fanout_graph();distinct_keys(&mut g);g.rust_calls[1].callee_function="alpha".into();for e in &mut g.icfg_edges {if e.source=="dummyCall::B"{e.destination="rust::alpha::bb0".into();}if e.source=="rust::beta::bb0"{e.source="rust::alpha::bb0".into();}}let d=internal_continuation_return_dependencies(&g);assert_eq!(d.len(),2);check(&g);}
+ #[test] fn legacy_return_p0_d2_distinct_calls_distinct_callees(){let mut g=fanout_graph();distinct_keys(&mut g);let d=internal_continuation_return_dependencies(&g);assert_eq!(d["rust::main::bb1"],BTreeSet::from(["rust::alpha::bb0".into()]));assert_eq!(d["rust::main::bb8"],BTreeSet::from(["rust::beta::bb0".into()]));check(&g);}
+ #[test] fn legacy_return_p0_d2_callback(){let mut g=fanout_graph();for c in &mut g.rust_calls {c.is_closure=true;}for e in &mut g.icfg_edges {if e.label.as_deref()==Some("Rust Call -> dummyCall"){e.label=Some("Higher-order callback -> dummyCall".into());}}check(&g);}
+ #[test] fn legacy_return_p0_d2_kill_overwrite(){check(&fanout_graph());}
+ #[test] fn legacy_return_p0_d2_no_kill(){let mut g=fanout_graph();for f in ["rust::alpha::bb0","rust::beta::bb0"]{block_mut(&mut g,f).statements.clear();}check(&g);}
+ #[test] fn legacy_return_p0_d2_return_already_visited(){let (_,_,v)=check(&fanout_graph());let delayed=v.iter().position(|n|n=="rust::main::bb9").unwrap();assert!(v[..delayed].iter().any(|n|n=="rust::beta::bb0"));assert!(v[delayed..].iter().any(|n|n=="rust::beta::bb0"));}
+ #[test] fn legacy_return_p0_d2_return_not_yet_visited(){let mut g=fanout_graph();g.icfg_edges.retain(|e|!(e.source=="rust::main::bb0"&&e.destination=="rust::main::bb1"));let (_,_,v)=check(&g);assert!(v.iter().position(|n|n=="rust::main::bb9")<v.iter().position(|n|n=="rust::beta::bb0"));}
+ #[test] fn legacy_return_p0_d2_memory_only_increment(){let mut k=InternalCallContinuation::default();let t=TaintStateMap::default();assert!(k.join_caller_snapshot(&AbstractMemory::default(),&t));let mut m=AbstractMemory::default();m.set_cell_value(&"Local(_7)".into(),CellValue::ALLOC);assert!(k.join_caller_snapshot(&m,&t));assert_eq!(k.caller_taint,t);check(&fanout_graph());}
+ #[test] fn legacy_return_p0_d2_taint_only_increment(){let mut k=InternalCallContinuation::default();let m=AbstractMemory::default();assert!(k.join_caller_snapshot(&m,&TaintStateMap::default()));let mut t=TaintStateMap::default();t.entry("Local(_7)".into()).or_default().insert("origin".into());assert!(k.join_caller_snapshot(&m,&t));assert_eq!(k.caller_mem,m);assert!(!k.join_caller_snapshot(&m,&t));
+ // Keep the callsite memory at TOP while a later allocator path contributes
+ // only a new provenance tag to K. Callee kills make notification necessary.
+ let mut g=fanout_graph();block_mut(&mut g,"rust::main::bb0").statements=vec![stmt("Assign","Local(_7)","&raw const _8")];
+ let bb=block_mut(&mut g,"rust::main::bb9");bb.statements.clear();bb.terminator=Some(serde_json::from_value(serde_json::json!({"kind":"Call","details":"std::alloc::alloc(copy _8)","source_info":"test","function_called":"std::alloc::alloc","arguments":[],"return_place":"_7","return_target":"bb1","unwind_target":"continue"})).unwrap());
+ let (_,t,_)=check(&g);assert!(t["dummyRet::B"]["Local(_7)"].contains(TAINT_ASSIGN));
+ RETURN_P0_TRACE.with(|slot|assert_eq!(slot.borrow().0["rust::main::bb1"].caller_mem.get_cell_value(&"Local(_7)".into()),CellValue::TOP));
+ }
+ #[test] fn legacy_return_p0_d2_taint_fanout_closure(){let mut g=fanout_graph();let bb=block_mut(&mut g,"rust::main::bb9");bb.statements.clear();bb.terminator=Some(serde_json::from_value(serde_json::json!({"kind":"Call","details":"std::alloc::alloc(copy _8)","source_info":"test","function_called":"std::alloc::alloc","arguments":[],"return_place":"_7","return_target":"bb1","unwind_target":"continue"})).unwrap());let (_,t,_)=check(&g);assert!(t["dummyRet::B"]["Local(_7)"].contains(TAINT_ASSIGN));}
+ #[test] fn legacy_return_p0_d2_unchanged_snapshot(){let mut k=InternalCallContinuation::default();let m=AbstractMemory::default();let t=TaintStateMap::default();assert!(k.join_caller_snapshot(&m,&t));for _ in 0..10 {assert!(!k.join_caller_snapshot(&m,&t));}}
+
+ fn recursive_graph(mutual:bool)->GlobalICFGOrdered {
+ let mut g=fanout_graph();let functions=if mutual {vec!["alpha","beta"]}else{vec!["alpha"]};
+ for f in &functions {
+ let entry=format!("rust::{f}::bb0");let ret=format!("rust::{f}::bb1");let callsite=format!("rust::{f}::bb2");
+ for e in &mut g.icfg_edges {if e.source==entry && e.label.as_deref()==Some("Rust Return -> dummyRet"){e.source=ret.clone();}}
+ g.rust_functions.get_mut(*f).unwrap().return_nodes=vec![ret.clone()];
+ block_mut(&mut g,&entry).terminator=Some(MirTerminator::SwitchInt{details:"branch".into(),source_info:"test".into(),targets:vec!["bb1".into()],discr:"copy _1".into(),otherwise:Some("bb2".into())});
+ g.ordered_nodes.push((ret.clone(),node(1,vec![],true)));g.ordered_nodes.push((callsite.clone(),node(2,vec![],false)));edge(&mut g,&entry,&ret,"SwitchInt");edge(&mut g,&entry,&callsite,"SwitchInt");
+ }
+ for f in functions {
+ let target=if mutual {if f=="alpha"{"beta"}else{"alpha"}}else{"alpha"};
+ let site=format!("rust::{f}::bb2");let continuation=format!("rust::{f}::bb1");let dc=format!("dummyCall::{f}_recursive");let dr=format!("dummyRet::{f}_recursive");let target_entry=format!("rust::{target}::bb0");let target_ret=format!("rust::{target}::bb1");
+ block_mut(&mut g,&site).terminator=Some(serde_json::from_value(serde_json::json!({"kind":"Call","details":"recursive()","source_info":"test","function_called":target,"callee_is_local":true,"arguments":[],"return_place":"_0","return_target":"bb1","unwind_target":"continue"})).unwrap());
+ g.ordered_nodes.push((dc.clone(),dummy(&dc)));g.ordered_nodes.push((dr.clone(),ret_dummy(&dr)));
+ g.rust_calls.push(RustCallMetadata{caller_function:f.into(),call_node:site.clone(),callee_function:target.into(),dummy_call_node:dc.clone(),dummy_ret_node:dr.clone(),arguments:vec![],return_place:"_0".into(),return_node:continuation.clone(),is_closure:false});
+ edge(&mut g,&site,&dc,"Rust Call -> dummyCall");edge(&mut g,&dc,&target_entry,"dummyCall -> Rust Entry");edge(&mut g,&target_ret,&dr,"Rust Return -> dummyRet");edge(&mut g,&dr,&continuation,"dummyRet -> Rust Continuation");
+ }
+ g
+ }
+ #[test] fn legacy_return_p0_d2_recursion(){check(&recursive_graph(false));}
+ #[test] fn legacy_return_p0_d2_mutual_recursion(){check(&recursive_graph(true));}
+ #[test] fn legacy_return_p0_d2_normal_return(){assert_eq!(internal_continuation_return_dependencies(&fanout_graph())["rust::main::bb1"].len(),2);check(&fanout_graph());}
+ #[test] fn legacy_return_p0_d2_unwind_not_normal_dependency(){let mut g=fanout_graph();block_mut(&mut g,"rust::beta::bb0").terminator=Some(MirTerminator::UnwindResume{details:"resume".into(),source_info:"test".into()});g.icfg_edges.retain(|e|!(e.source=="rust::beta::bb0"&&e.destination=="dummyRet::B"));g.ordered_nodes.push(("rust::main::bb3".into(),node(3,vec![],false)));block_mut(&mut g,"rust::main::bb3").terminator=Some(MirTerminator::UnwindResume{details:"resume".into(),source_info:"test".into()});edge(&mut g,"rust::beta::bb0","rust::main::bb3","Rust unwind propagate");let d=internal_continuation_return_dependencies(&g);assert_eq!(d["rust::main::bb1"].len(),1);let (m,_,_)=check(&g);assert!(m.get(&"dummyRet::B".into()).is_none());}
+ #[test] #[should_panic(expected="metadata return")] fn legacy_return_p0_d2_missing_return_edge_fail_closed(){let mut g=fanout_graph();g.icfg_edges.retain(|e|!(e.source=="rust::beta::bb0"&&e.destination=="dummyRet::B"));check(&g);}
+ #[test] #[should_panic(expected="metadata activation")] fn legacy_return_p0_d2_missing_activation_edge_fail_closed(){let mut g=fanout_graph();g.icfg_edges.retain(|e|!(e.source=="dummyCall::B"&&e.destination=="rust::beta::bb0"));check(&g);}
+ #[test] fn legacy_return_p0_d2_incongruent_metadata(){let mut g=fanout_graph();g.rust_calls[1].callee_function="not_represented".into();let d=internal_continuation_return_dependencies(&g);assert_eq!(d["rust::main::bb1"].len(),1);let (m,_,_)=check(&g);assert!(m.get(&"dummyRet::B".into()).is_none());}
+ #[test] fn legacy_return_p0_d2_quiescence(){let g=fanout_graph();let (a,t,v)=check(&g);let (b,u,w)=check(&g);assert_eq!(a.state_map,b.state_map);assert_eq!(t,u);assert_eq!(v,w);assert!(v.len()<100);}
+}
+
+#[cfg(test)]
+mod union_value_index_tests {
+    use super::*;
+
+    #[test]
+    fn union_value_index_first_bottom_masks_later_value() {
+        for later in [CellValue::ALLOC, CellValue::FREED, CellValue::TOP] {
+            let mut memory = AbstractMemory::default();
+            memory.state.insert(
+                Allocation {
+                    set: BTreeSet::from(["a".into(), "b".into()]),
+                },
+                CellValue::BOTTOM,
+            );
+            memory.state.insert(Allocation::new("b".into()), later);
+            assert_eq!(
+                memory.first_value_index().get("b"),
+                Some(&CellValue::BOTTOM)
+            );
+            assert_eq!(memory.get_cell_value(&"b".into()), CellValue::BOTTOM);
+            assert_eq!(memory.union(&memory), AbstractMemory::default());
+        }
+    }
+
+    #[test]
+    fn union_value_index_overlap_keeps_legacy_normalization() {
+        let mut memory = AbstractMemory::default();
+        memory.set_cell_value(&"a".into(), CellValue::ALLOC);
+        memory.assign_local_value(&"a.f".into(), CellValue::FREED);
+        let index = memory.first_value_index();
+        assert_eq!(index.get("a"), Some(&CellValue::ALLOC));
+        assert_eq!(index.get("a.f"), Some(&CellValue::FREED));
+        let mut expected = AbstractMemory::default();
+        expected.state.insert(
+            Allocation {
+                set: BTreeSet::from(["a".into(), "a.f".into()]),
+            },
+            CellValue::TOP,
+        );
+        assert_ne!(memory, expected);
+        assert_eq!(memory.union(&memory), expected);
+    }
+
+    #[test]
+    fn union_value_index_empty_key_missing_and_empty_name() {
+        let mut memory = AbstractMemory::default();
+        memory.state.insert(
+            Allocation {
+                set: BTreeSet::new(),
+            },
+            CellValue::TOP,
+        );
+        assert!(memory.first_value_index().is_empty());
+        assert_eq!(memory.union(&memory), AbstractMemory::default());
+        memory
+            .state
+            .insert(Allocation::new(String::new()), CellValue::ALLOC);
+        let index = memory.first_value_index();
+        assert_eq!(index.get(""), Some(&CellValue::ALLOC));
+        assert_eq!(
+            index.get("absent").copied().unwrap_or(CellValue::BOTTOM),
+            memory.get_cell_value(&"absent".into())
+        );
+        let mut expected = AbstractMemory::default();
+        expected
+            .state
+            .insert(Allocation::new(String::new()), CellValue::ALLOC);
+        assert_eq!(memory.union(&AbstractMemory::default()), expected);
+    }
+}
+
+#[cfg(test)]
+mod conservative_deallocation_tests {
+    use super::*;
+
+    #[test]
+    fn preserves_alias_keys_and_non_heap_values_including_explicit_bottom() {
+        let mut memory = AbstractMemory::default();
+        for (name, value) in [
+            ("a", CellValue::BOTTOM),
+            ("b", CellValue::BOXTIMES),
+            ("c", CellValue::FREED),
+            ("d", CellValue::ALLOC),
+            ("e", CellValue::MB),
+            ("f", CellValue::IMMB),
+            ("g", CellValue::MV),
+            ("h", CellValue::TOP),
+        ] {
+            memory.state.insert(Allocation::new(name.into()), value);
+        }
+        memory.state.insert(
+            Allocation {
+                set: BTreeSet::new(),
+            },
+            CellValue::ALLOC,
+        );
+        let output = conservative_deallocation_effect(&memory);
+        assert_eq!(
+            memory.state.keys().collect::<Vec<_>>(),
+            output.state.keys().collect::<Vec<_>>()
+        );
+        for name in ["a", "b", "c"] {
+            assert_eq!(
+                output.get_cell_value(&name.into()),
+                memory.get_cell_value(&name.into())
+            );
+        }
+        for name in ["d", "e", "f", "g", "h"] {
+            assert_eq!(output.get_cell_value(&name.into()), CellValue::TOP);
+        }
+        assert!(memory.leq(&output));
+    }
+
+    #[test]
+    fn may_targets_include_unchanged_and_freed_alternatives() {
+        let mut memory = AbstractMemory::default();
+        let names = BTreeSet::from(["Local(_1)".into(), "Local(_2)".into(), "Local(_3)".into()]);
+        memory
+            .state
+            .insert(Allocation { set: names.clone() }, CellValue::MV);
+        let (unit, output) = transfer_call_with_ffi(
+            &memory,
+            "std::alloc::dealloc(copy _1, copy _9)",
+            "_0",
+            &HashSet::new(),
+        );
+        assert_eq!(unit, CellValue::BOXTIMES);
+        for name in names {
+            let value = output.get_cell_value(&name);
+            assert!(CellValue::MV.leq(value));
+            assert!(CellValue::FREED.leq(value));
+        }
+        assert_eq!(memory.alias_pairs(), output.alias_pairs());
+    }
+
+    #[test]
+    fn unit_destination_weak_update_preserves_other_observers() {
+        let mut memory = AbstractMemory::default();
+        memory.state.insert(
+            Allocation {
+                set: BTreeSet::from(["Local(_1)".into(), "Local(_2)".into(), "Local(_3)".into()]),
+            },
+            CellValue::MV,
+        );
+        let term: MirTerminator = serde_json::from_value(serde_json::json!({
+            "kind": "Call", "details": "std::alloc::dealloc(copy _1, copy _9)",
+            "source_info": "test", "function_called": "std::alloc::dealloc",
+            "arguments": [{"arg": "Local(_1)", "is_mutable": false}],
+            "return_place": "_2", "return_target": "bb1", "unwind_target": "continue",
+            "callee_is_local": false
+        }))
+        .unwrap();
+        let output = apply_mir_terminator(&memory, &mut TaintStateMap::new(), &term);
+        assert!(CellValue::BOXTIMES.leq(output.get_cell_value(&"Local(_2)".into())));
+        assert_eq!(output.get_cell_value(&"Local(_1)".into()), CellValue::TOP);
+        assert_eq!(output.get_cell_value(&"Local(_3)".into()), CellValue::TOP);
+        assert_eq!(memory.alias_pairs(), output.alias_pairs());
+        assert!(output
+            .alias_pairs()
+            .contains(&("Local(_1)".into(), "Local(_3)".into())));
     }
 }

@@ -13,7 +13,10 @@ pub use explain::{
 };
 pub use kripke::{
     allocation_existence_guard_overlay_from_json, conditional_reallocation_overlay_from_json,
-    panic_lifecycle_overlay_from_json, reallocation_boundary_overlay_from_json,
+    opaque_memory_effect_overlay_from_json, panic_lifecycle_overlay_from_json,
+    reallocation_boundary_overlay_from_json, rust_call_return_relation_overlay_from_json,
+    rust_call_unwind_relation_overlay_from_json, rust_unwind_edge_scope_overlay_from_json,
+    RustCallReturnRelationRecord, RustCallReturnRelationOverlay,
     source_provenance_overlay_from_json, typed_edge_overlay_from_json, AnnotatedIcfg, Kripke,
 };
 pub use model_checker::{Binding, Env, ModelChecker};

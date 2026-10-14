@@ -9,7 +9,9 @@ use crate::structs::{
     PlaceId, PlaceProjection, ProgramVarId, RustDropAllocatorEvidenceKind,
     RustCallDeallocatorEvidenceKind, RustAllocationDispositionEvidenceKind, SvfStatement,
     LlvmMemoryEffectsArtifactV1, LlvmFunctionEffectsRecordV1, LlvmFunctionEffectsSnapshotV1,
-    SvfSolvedPointsToArtifactV1,
+    SvfSolvedPointsToArtifactV1, RustActivationUnwindMetadataV1, RustActivationUnwindSemantics,
+    RustActivationUnwindAction, RustActivationUnwindEdge, RustActivationIdentity, RustActivationKind,
+    RustActivationMetadataSource, RustActivationUnresolvedReason,
 };
 use crate::utils::load_ffi_functions;
 use regex::Regex;
@@ -19,6 +21,341 @@ use std::error::Error;
 use std::fs::File;
 use std::path::Path;
 use once_cell::sync::Lazy;
+
+/// Exact callsite pairing owned by the Rust producer metadata.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct RustCallReturnRelationV1 {
+    caller_function: String,
+    call_node: String,
+    dummy_call_node: String,
+    callee_function: String,
+    callee_entry_node: String,
+    callee_return_nodes: Vec<String>,
+    dummy_ret_node: String,
+    continuation_node: String,
+    basis: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum RustCallUnwindSemanticsV1 {
+    Cleanup, Continue, Terminate, Unreachable, CertifiedCallback,
+    DetachedNoCallerUnwind, Unresolved,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum RustCallUnwindActionV1 {
+    Cleanup { target: String }, Continue, Terminate, Unreachable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum RustCallUnwindReasonV1 {
+    MissingCallbackPolicy, MissingCallbackUnwindEvidence, UnsupportedMirUnwindAction,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct RustCallUnwindRelationV1 {
+    caller_function: String,
+    call_node: String,
+    dummy_call_node: String,
+    callee_function: String,
+    callee_entry_node: String,
+    activation_kind: RustActivationKind,
+    activation_source: RustActivationMetadataSource,
+    unwind_semantics: RustCallUnwindSemanticsV1,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unwind_action: Option<RustCallUnwindActionV1>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unresolved_reason: Option<RustCallUnwindReasonV1>,
+    unwind_edges: Vec<RustActivationUnwindEdge>,
+    basis: &'static str,
+}
+
+fn rust_call_unwind_wire_action(action: &RustActivationUnwindAction) -> RustCallUnwindActionV1 {
+    match action {
+        RustActivationUnwindAction::Cleanup { target } => RustCallUnwindActionV1::Cleanup { target: target.clone() },
+        RustActivationUnwindAction::Continue => RustCallUnwindActionV1::Continue,
+        RustActivationUnwindAction::Terminate => RustCallUnwindActionV1::Terminate,
+        RustActivationUnwindAction::Unreachable => RustCallUnwindActionV1::Unreachable,
+    }
+}
+
+/// F6B0 chooses the activation policy/destination before the graph is examined.
+/// Canonical edges never choose a caller or resolve callback semantics.
+fn rust_call_unwind_relation_records(
+    icfg: &GlobalICFGOrdered,
+    metadata: &RustActivationUnwindMetadataV1,
+    returns: &[RustCallReturnRelationV1],
+    typed: &[TypedEdgeRecord],
+    node_ids: &BTreeSet<String>,
+) -> Result<Vec<RustCallUnwindRelationV1>, Box<dyn Error>> {
+    if metadata.schema_version != 1 { return Err("unsupported activation unwind metadata version".into()); }
+    let mut by_activation = BTreeMap::new();
+    for record in &metadata.activations {
+        if by_activation.insert(record.activation.clone(), record).is_some() {
+            return Err("duplicate F6B0 unwind activation".into());
+        }
+    }
+    RustActivationUnwindMetadataV1::new(metadata.activations.clone())?;
+    metadata.validate_calls(&icfg.rust_calls)?;
+    let nodes: BTreeMap<_, _> = icfg.ordered_nodes.iter().map(|(id, node)| (id.as_str(), node)).collect();
+    let mut result = Vec::new();
+    let mut seen = BTreeSet::new();
+    for call in &icfg.rust_calls {
+        let key = RustActivationIdentity::from(call);
+        if !seen.insert(key.clone()) { return Err("duplicate represented unwind activation".into()); }
+        let record = by_activation.get(&key).ok_or("missing F6B0 unwind activation")?;
+        let function = icfg.rust_functions.get(&call.callee_function).ok_or("missing unwind callee metadata")?;
+        let matched: Vec<_> = returns.iter().filter(|r| r.caller_function == key.caller_function
+            && r.call_node == key.call_node && r.dummy_call_node == key.dummy_call_node
+            && r.callee_function == key.callee_function && r.callee_entry_node == function.entry_node).collect();
+        if matched.len() != 1 { return Err("F2/unwind activation consistency mismatch".into()); }
+        for node in [&call.call_node, &call.dummy_call_node, &function.entry_node] {
+            if !node_ids.contains(node) { return Err("unwind activation references missing node".into()); }
+        }
+        let mut edges = BTreeSet::new();
+        let mut reason = None;
+        let (semantics, action) = match &record.unwind {
+            RustActivationUnwindSemantics::Direct { action } => {
+                // DEP1 exposes exact activation-specific pairs, including real
+                // Continue proxies and terminal nodes. Reuse those rows only.
+                if let RustActivationMetadataSource::ExecutionActivation { call_key } = &record.source {
+                    let ledger = icfg.dependency_body_ingestion_v1.as_ref()
+                        .and_then(|d| d.context_execution_graph_v1.as_ref())
+                        .and_then(|g| g.get("represented_call_activations"))
+                        .and_then(serde_json::Value::as_array).ok_or("missing activation unwind ledger")?;
+                    let rows: Vec<_> = ledger.iter().filter(|r| r["call_key"].as_str() == Some(call_key.as_str())
+                        && r["caller_call_state"].as_str() == Some(call.call_node.as_str())
+                        && r["dummy_call_state"].as_str() == Some(call.dummy_call_node.as_str())
+                        && r["callee_entry_state"].as_str() == Some(function.entry_node.as_str())).collect();
+                    if rows.len() != 1 { return Err("ambiguous native unwind activation".into()); }
+                    for relation in rows[0].get("unwind_return_relations").and_then(serde_json::Value::as_array)
+                        .ok_or("missing native unwind relations")? {
+                        let relation_action = RustActivationUnwindAction::from_mir_action(
+                            relation["unwind_action"].as_str().ok_or("missing native unwind action")?)?;
+                        if &relation_action != action { return Err("native unwind action conflicts with F6B0".into()); }
+                        edges.insert(RustActivationUnwindEdge {
+                            source_node: relation["callee_unwind_state"].as_str().ok_or("missing native unwind source")?.into(),
+                            destination_node: relation["caller_unwind_state"].as_str().ok_or("missing native unwind destination")?.into(),
+                        });
+                    }
+                } else if let RustActivationUnwindAction::Cleanup { target } = action {
+                    // Standard F6B0 certifies a relative caller MIR BB. Resolve
+                    // its registered node, never an edge-selected destination.
+                    let destination = format!("rust::{}::{target}", call.caller_function);
+                    if !node_ids.contains(&destination) { return Err("missing certified cleanup destination".into()); }
+                    for edge in typed.iter().filter(|edge| edge.destination == destination) {
+                        let owned = match nodes.get(edge.source.as_str()) {
+                            Some(GlobalICFGNode::Mir(block)) => edge.source == format!(
+                                "rust::{}::bb{}", call.callee_function, block.block_id),
+                            _ => false,
+                        };
+                        if owned {
+                            edges.insert(RustActivationUnwindEdge { source_node: edge.source.clone(), destination_node: destination.clone() });
+                        }
+                    }
+                }
+                let semantics = match action {
+                    RustActivationUnwindAction::Cleanup { .. } => RustCallUnwindSemanticsV1::Cleanup,
+                    RustActivationUnwindAction::Continue => RustCallUnwindSemanticsV1::Continue,
+                    RustActivationUnwindAction::Terminate => RustCallUnwindSemanticsV1::Terminate,
+                    RustActivationUnwindAction::Unreachable => RustCallUnwindSemanticsV1::Unreachable,
+                };
+                (semantics, Some(rust_call_unwind_wire_action(action)))
+            }
+            RustActivationUnwindSemantics::CertifiedCallback { action, unwind_edges } => {
+                edges.extend(unwind_edges.iter().cloned());
+                (RustCallUnwindSemanticsV1::CertifiedCallback, Some(rust_call_unwind_wire_action(action)))
+            }
+            RustActivationUnwindSemantics::DetachedNoCallerUnwind =>
+                (RustCallUnwindSemanticsV1::DetachedNoCallerUnwind, None),
+            RustActivationUnwindSemantics::Unresolved { reason: why } => {
+                reason = Some(match why {
+                    RustActivationUnresolvedReason::MissingCallbackPolicy => RustCallUnwindReasonV1::MissingCallbackPolicy,
+                    RustActivationUnresolvedReason::MissingCallbackUnwindEvidence => RustCallUnwindReasonV1::MissingCallbackUnwindEvidence,
+                    RustActivationUnresolvedReason::UnsupportedMirUnwindAction => RustCallUnwindReasonV1::UnsupportedMirUnwindAction,
+                });
+                (RustCallUnwindSemanticsV1::Unresolved, None)
+            }
+        };
+        for edge in &edges {
+            if !node_ids.contains(&edge.source_node) || !node_ids.contains(&edge.destination_node) {
+                return Err("certified unwind edge references missing node".into());
+            }
+            if !typed.iter().any(|t| t.source == edge.source_node && t.destination == edge.destination_node && t.flow == "unwind") {
+                return Err("certified unwind edge missing canonical Unwind flow".into());
+            }
+            if let Some(RustCallUnwindActionV1::Terminate) = &action {
+                if !matches!(nodes.get(edge.destination_node.as_str()), Some(GlobalICFGNode::Terminal(_))) {
+                    return Err("terminate relation targets a cleanup".into());
+                }
+            }
+            if let Some(RustCallUnwindActionV1::Unreachable) = &action {
+                return Err("unreachable activation acquired unwind edge".into());
+            }
+        }
+        result.push(RustCallUnwindRelationV1 { caller_function: call.caller_function.clone(),
+            call_node: call.call_node.clone(), dummy_call_node: call.dummy_call_node.clone(),
+            callee_function: call.callee_function.clone(), callee_entry_node: function.entry_node.clone(),
+            activation_kind: record.activation_kind, activation_source: record.source.clone(),
+            unwind_semantics: semantics, unwind_action: action, unresolved_reason: reason,
+            unwind_edges: edges.into_iter().collect(), basis: "rust_activation_unwind_metadata_v1" });
+    }
+    result.sort_by(|a,b| (&a.caller_function,&a.call_node,&a.dummy_call_node,&a.callee_function)
+        .cmp(&(&b.caller_function,&b.call_node,&b.dummy_call_node,&b.callee_function)));
+    Ok(result)
+}
+
+/// Read-only transport of facts already known at node/edge creation. Scope IDs
+/// are opaque body-membership tokens, not function-name classifiers.
+#[derive(Debug, Clone, Serialize, serde::Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RustUnwindScopeEvidenceV1 {
+    pub schema_version: u32,
+    pub node_owners: BTreeMap<String, String>,
+    pub boundary_edges: Vec<RustActivationUnwindEdge>,
+}
+
+impl RustUnwindScopeEvidenceV1 {
+    pub(crate) fn from_operational_json(raw: &serde_json::Value) -> Result<Option<Self>, String> {
+        let Some(value) = raw.get("rust_unwind_scope_evidence_v1") else { return Ok(None); };
+        let evidence: Self = serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
+        if evidence.schema_version != 1 || evidence.node_owners.iter().any(|(n,o)| n.is_empty() || o.is_empty())
+            || !evidence.boundary_edges.windows(2).all(|p| p[0] < p[1]) {
+            return Err("invalid canonical unwind scope evidence".into());
+        }
+        Ok(Some(evidence))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum RustUnwindEdgeScopeKindV1 { IntraActivation, RustActivationBoundary, NonRust, Unresolved }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum RustUnwindEdgeScopeBasisV1 {
+    RustActivationUnwindMetadataV1, CanonicalRustFunctionMembershipV1,
+    NonRustUnwindScopeV1, UnresolvedUnwindScopeV1, ExecutionContextMembershipV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct RustUnwindEdgeScopeV1 {
+    source_node: String,
+    destination_node: String,
+    scope: RustUnwindEdgeScopeKindV1,
+    /// Canonical set approved for shared edges certified for multiple callsites.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    activation: Option<Vec<RustActivationIdentity>>,
+    basis: RustUnwindEdgeScopeBasisV1,
+}
+
+fn rust_unwind_scope_native_evidence(icfg: &GlobalICFGOrdered) -> Result<Option<RustUnwindScopeEvidenceV1>, Box<dyn Error>> {
+    let Some(graph) = icfg.dependency_body_ingestion_v1.as_ref().and_then(|d| d.context_execution_graph_v1.as_ref()) else {
+        return Ok(None);
+    };
+    if graph.get("p2_control_flow_complete").and_then(serde_json::Value::as_bool) != Some(true) {
+        return Ok(Some(RustUnwindScopeEvidenceV1 { schema_version:1, ..Default::default() }));
+    }
+    let mut owners = BTreeMap::new();
+    for state in graph.get("states").and_then(serde_json::Value::as_array).ok_or("missing execution states")? {
+        let node = state["execution_node"].as_str().ok_or("missing execution node")?;
+        let instance = state["concrete_instance_id"].as_str().ok_or("missing owner instance")?;
+        let context = state.get("context").and_then(serde_json::Value::as_array).ok_or("missing owner context")?;
+        let owner = serde_json::to_string(&serde_json::json!({"instance":instance,"context":context}))?;
+        if owners.insert(node.into(), owner).is_some() { return Err("duplicate execution owner".into()); }
+    }
+    let mut boundary = BTreeSet::new();
+    for record in graph.get("represented_call_activations").and_then(serde_json::Value::as_array)
+        .ok_or("missing activation ledger")? {
+        for edge in record.get("unwind_return_relations").and_then(serde_json::Value::as_array)
+            .ok_or("missing activation unwind relations")? {
+            boundary.insert(RustActivationUnwindEdge {
+                source_node:edge["callee_unwind_state"].as_str().ok_or("missing native source")?.into(),
+                destination_node:edge["caller_unwind_state"].as_str().ok_or("missing native destination")?.into(),
+            });
+        }
+    }
+    Ok(Some(RustUnwindScopeEvidenceV1 { schema_version:1, node_owners:owners, boundary_edges:boundary.into_iter().collect() }))
+}
+
+fn rust_unwind_edge_scope_records(
+    icfg: &GlobalICFGOrdered,
+    typed: &[TypedEdgeRecord],
+    relations: &[RustCallUnwindRelationV1],
+    evidence: Option<&RustUnwindScopeEvidenceV1>,
+) -> Result<Vec<RustUnwindEdgeScopeV1>, Box<dyn Error>> {
+    let native = rust_unwind_scope_native_evidence(icfg)?;
+    let evidence = native.as_ref().or(evidence);
+    let nodes: BTreeMap<_,_> = icfg.ordered_nodes.iter().map(|(id,n)|(id.as_str(),n)).collect();
+    let pairs: BTreeSet<_> = typed.iter().filter(|e|e.flow=="unwind")
+        .map(|e|(e.source.clone(),e.destination.clone())).collect();
+    let mut claims = BTreeMap::<_,BTreeSet<RustActivationIdentity>>::new();
+    for r in relations {
+        let key=RustActivationIdentity {caller_function:r.caller_function.clone(),call_node:r.call_node.clone(),
+            dummy_call_node:r.dummy_call_node.clone(),callee_function:r.callee_function.clone()};
+        for edge in &r.unwind_edges {
+            if !pairs.contains(&(edge.source_node.clone(),edge.destination_node.clone())) {
+                return Err("F6B1 scope claim lacks typed Unwind edge".into());
+            }
+            claims.entry((edge.source_node.clone(),edge.destination_node.clone())).or_default().insert(key.clone());
+        }
+    }
+    let boundary: BTreeSet<_> = evidence.into_iter().flat_map(|e| &e.boundary_edges)
+        .map(|e|(e.source_node.as_str(),e.destination_node.as_str())).collect();
+    let mut result=Vec::new();
+    for (source,destination) in &pairs {
+        if !nodes.contains_key(source.as_str()) || !nodes.contains_key(destination.as_str()) {
+            return Err("scope edge references missing canonical node".into());
+        }
+        let (scope,activation,basis)=if let Some(keys)=claims.get(&(source.clone(),destination.clone())) {
+            (RustUnwindEdgeScopeKindV1::RustActivationBoundary,Some(keys.iter().cloned().collect()),
+                RustUnwindEdgeScopeBasisV1::RustActivationUnwindMetadataV1)
+        } else if boundary.contains(&(source.as_str(),destination.as_str())) {
+            // Known boundary but no concrete F6B1 certificate; do not invent
+            // an activation from same-owner or flat fan-out evidence.
+            (RustUnwindEdgeScopeKindV1::Unresolved,None,RustUnwindEdgeScopeBasisV1::UnresolvedUnwindScopeV1)
+        } else if evidence.is_some_and(|e| e.node_owners.get(source).is_some()
+            && e.node_owners.get(source)==e.node_owners.get(destination)) {
+            (RustUnwindEdgeScopeKindV1::IntraActivation,None,
+                if native.is_some() { RustUnwindEdgeScopeBasisV1::ExecutionContextMembershipV1 }
+                else { RustUnwindEdgeScopeBasisV1::CanonicalRustFunctionMembershipV1 })
+        } else if matches!(nodes[source.as_str()],GlobalICFGNode::Llvm(_))
+            && matches!(nodes[destination.as_str()],GlobalICFGNode::Llvm(_)) {
+            (RustUnwindEdgeScopeKindV1::NonRust,None,RustUnwindEdgeScopeBasisV1::NonRustUnwindScopeV1)
+        } else {
+            (RustUnwindEdgeScopeKindV1::Unresolved,None,RustUnwindEdgeScopeBasisV1::UnresolvedUnwindScopeV1)
+        };
+        result.push(RustUnwindEdgeScopeV1 {source_node:source.clone(),destination_node:destination.clone(),scope,activation,basis});
+    }
+    validate_rust_unwind_edge_scopes(&result,&pairs,&claims)?;
+    Ok(result)
+}
+
+fn validate_rust_unwind_edge_scopes(
+    records: &[RustUnwindEdgeScopeV1],
+    pairs: &BTreeSet<(String,String)>,
+    claims: &BTreeMap<(String,String),BTreeSet<RustActivationIdentity>>,
+) -> Result<(),Box<dyn Error>> {
+    let mut seen=BTreeSet::new();
+    for r in records {
+        let pair=(r.source_node.clone(),r.destination_node.clone());
+        if !pairs.contains(&pair) || !seen.insert(pair.clone()) {return Err("duplicate or foreign unwind scope record".into());}
+        if r.scope==RustUnwindEdgeScopeKindV1::RustActivationBoundary {
+            let keys=r.activation.as_ref().ok_or("missing boundary activation set")?;
+            if keys.is_empty() || !keys.windows(2).all(|p|p[0]<p[1])
+                || claims.get(&pair)!=Some(&keys.iter().cloned().collect()) {
+                return Err("scope activation set conflicts with F6B1".into());
+            }
+        } else if r.activation.is_some() || claims.contains_key(&pair) {
+            return Err("F6B1 concrete edge not classified as its activation boundary".into());
+        }
+    }
+    if seen!=*pairs {return Err("incomplete unwind edge scope coverage".into());}
+    Ok(())
+}
 
 /// Versioned, read-only boundary from CREMA to the standalone CQPL checker.
 ///
@@ -51,6 +388,12 @@ struct AnnotatedIcfg {
     external_return_relations: Option<Vec<ExternalReturnRelationRecord>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     external_return_call_bindings: Option<Vec<ExternalReturnCallBinding>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rust_call_return_relations: Option<Vec<RustCallReturnRelationV1>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rust_call_unwind_relations: Option<Vec<RustCallUnwindRelationV1>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rust_unwind_edge_scopes: Option<Vec<RustUnwindEdgeScopeV1>>,
     schema_version: u32,
     entry: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -60,6 +403,11 @@ struct AnnotatedIcfg {
     /// `nodes[*].successors` until a later capability explicitly consumes flow.
     #[serde(skip_serializing_if = "Option::is_none")]
     typed_edges: Option<Vec<TypedEdgeRecord>>,
+    /// OME1: nodes whose memory effect is intentionally opaque.  CQPL taints
+    /// the event node and all reachable successors so memory predicates become
+    /// UNKNOWN rather than inheriting optimistic state across the boundary.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    opaque_memory_effects: Option<Vec<OpaqueMemoryEffectRecord>>,
     variables: Vec<ProgramVariable>,
     #[serde(skip_serializing_if = "Option::is_none")]
     allocations: Option<Vec<AbstractAllocationRecord>>,
@@ -224,6 +572,13 @@ struct TypedEdgeRecord {
     label: Option<String>,
     source_label: Option<String>,
     destination_label: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+struct OpaqueMemoryEffectRecord {
+    node: String,
+    effect: &'static str,
+    basis: &'static str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -597,7 +952,7 @@ pub fn export_cqpl_annotated_icfg(
     entry: &str,
     output_path: &Path,
 ) -> Result<(), Box<dyn Error>> {
-    export_cqpl_annotated_icfg_versioned(icfg, abs_state, None, None, entry, 1, output_path)
+    export_cqpl_annotated_icfg_versioned(icfg, abs_state, None, None, None, None, entry, 1, output_path)
 }
 
 #[cfg(test)]
@@ -609,11 +964,15 @@ pub fn export_cqpl_annotated_icfg_with_identity(
     schema_version: u32,
     output_path: &Path,
 ) -> Result<(), Box<dyn Error>> {
+    let fixture_metadata = RustActivationUnwindMetadataV1::new(icfg.rust_calls.iter().map(|call|
+        crate::structs::RustActivationUnwindMetadata::callback(call, None)))?;
     export_cqpl_annotated_icfg_versioned(
         icfg,
         abs_state,
         Some(identity_state),
         Some(identity_state),
+        Some(&fixture_metadata),
+        None,
         entry,
         schema_version,
         output_path,
@@ -625,6 +984,8 @@ pub fn export_cqpl_annotated_icfg_with_identity_and_disposition(
     abs_state: &AbstractState,
     identity_state: &AllocationIdentityState,
     disposition_identity_state: &AllocationIdentityState,
+    activation_unwind_metadata: Option<&RustActivationUnwindMetadataV1>,
+    unwind_scope_evidence: Option<&RustUnwindScopeEvidenceV1>,
     entry: &str,
     schema_version: u32,
     output_path: &Path,
@@ -634,6 +995,8 @@ pub fn export_cqpl_annotated_icfg_with_identity_and_disposition(
         abs_state,
         Some(identity_state),
         Some(disposition_identity_state),
+        activation_unwind_metadata,
+        unwind_scope_evidence,
         entry,
         schema_version,
         output_path,
@@ -645,6 +1008,8 @@ fn export_cqpl_annotated_icfg_versioned(
     abs_state: &AbstractState,
     identity_state: Option<&AllocationIdentityState>,
     disposition_identity_state: Option<&AllocationIdentityState>,
+    activation_unwind_metadata: Option<&RustActivationUnwindMetadataV1>,
+    unwind_scope_evidence: Option<&RustUnwindScopeEvidenceV1>,
     entry: &str,
     schema_version: u32,
     output_path: &Path,
@@ -684,7 +1049,12 @@ fn export_cqpl_annotated_icfg_versioned(
     // edge relation.  Internal Rust call/return edges must already be explicit
     // in `icfg_edges`; the exporter is no longer allowed to synthesize a second
     // relation.  Validate the metadata/edge agreement instead.
-    validate_canonical_internal_rust_edges(icfg, &successors)?;
+    let rust_call_return_relations = if schema_version == 2 {
+        Some(rust_call_return_relation_records(icfg, &successors, &node_ids)?)
+    } else {
+        validate_canonical_internal_rust_edges(icfg, &successors)?;
+        None
+    };
 
     let typed_edges = if schema_version == 2 {
         let records = typed_edge_records(icfg);
@@ -693,6 +1063,23 @@ fn export_cqpl_annotated_icfg_versioned(
     } else {
         None
     };
+
+    let rust_call_unwind_relations = if schema_version == 2 {
+        let empty = RustActivationUnwindMetadataV1::new(Vec::new())?;
+        let metadata = match activation_unwind_metadata {
+            Some(metadata) => metadata,
+            None if icfg.rust_calls.is_empty() => &empty,
+            None => return Err("missing F6B0 activation unwind metadata at exporter boundary".into()),
+        };
+        Some(rust_call_unwind_relation_records(icfg, metadata,
+            rust_call_return_relations.as_ref().expect("v2 returns"),
+            typed_edges.as_ref().expect("v2 typed edges"), &node_ids)?)
+    } else { None };
+
+    let rust_unwind_edge_scopes = if schema_version == 2 {
+        Some(rust_unwind_edge_scope_records(icfg, typed_edges.as_ref().expect("v2 edges"),
+            rust_call_unwind_relations.as_ref().expect("v2 unwind relations"), unwind_scope_evidence)?)
+    } else { None };
 
     let reachable = reachable_from(entry, &successors);
     if schema_version == 2 {
@@ -784,7 +1171,13 @@ fn export_cqpl_annotated_icfg_versioned(
             None
         };
         let source_provenance = if schema_version == 2 {
-            Some(node_source_provenance(node_id, node, &event_sources, &event_mem))
+            Some(node_source_provenance(
+                node_id,
+                node,
+                &event_sources,
+                &event_mem,
+                allocation_labels.as_deref().unwrap_or(&[]),
+            ))
         } else {
             None
         };
@@ -1019,11 +1412,27 @@ fn export_cqpl_annotated_icfg_versioned(
         })
         .collect();
 
-    let allocations = if schema_version == 2 {
+    let opaque_memory_effects = if schema_version == 2 {
+        let records = opaque_memory_effect_records(icfg, &reachable);
+        if records.is_empty() { None } else { Some(records) }
+    } else {
+        None
+    };
+
+    let mut allocations = if schema_version == 2 {
         Some(allocation_catalog(identity_state.expect("checked schema-v2 identity state"), schema_version))
     } else {
         None
     };
+    // An opaque Rust boundary can allocate storage whose concrete site is not
+    // present in an exact imported MIR body. Introduce one finite MAY
+    // allocation-site identity per opaque boundary so
+    // allocation-quantified CQPL formulas cannot refute hidden allocations by
+    // ranging only over the pre-summary catalog.  Event/state truth for this
+    // site is intentionally UNKNOWN through opaque_memory_effect_v1.
+    if let (Some(opaque), Some(catalog)) = (opaque_memory_effects.as_ref(), allocations.as_mut()) {
+        append_opaque_summary_allocations(catalog, opaque);
+    }
     let external_deallocation_effects = if schema_version == 2 {
         Some(external_deallocation_effect_records(icfg))
     } else {
@@ -1074,6 +1483,9 @@ fn export_cqpl_annotated_icfg_versioned(
         external_negative_evidence,
         external_return_relations,
         external_return_call_bindings,
+        rust_call_return_relations,
+        rust_call_unwind_relations,
+        rust_unwind_edge_scopes,
         schema_version,
         entry: entry.to_string(),
         capabilities: if schema_version == 2 {
@@ -1088,6 +1500,11 @@ fn export_cqpl_annotated_icfg_versioned(
                 // core::mem::drop(Box<T, Global>) calls.  v2 remains frozen;
                 // v3 explicitly gates the new call-site basis.
                 "allocation_contracts_v3",
+                // HT2-R2.4: String owner-boundary deallocation is an explicit
+                // additive contract.  v4 is required whenever the producer
+                // emits rust_string_global_drop; nested Vec implementation
+                // drops for String-origin resources are coalesced below.
+                "allocation_contracts_v4",
                 "allocation_state_v1",
                 "allocation_disposition_v1",
                 // B1.1: CString ownership handoff/reclaim extends the frozen
@@ -1095,6 +1512,16 @@ fn export_cqpl_annotated_icfg_versioned(
                 // backward-compatible base semantics and advertise the
                 // additive closed refinement explicitly as v2.
                 "allocation_disposition_v2",
+                // Additive MAY identity evidence through return-rooted fields.
+                "return_projection_escape_v1",
+                "rust_call_return_relation_v1",
+                "rust_call_unwind_relation_v1",
+                "rust_unwind_edge_scope_v1",
+                // AP1: producer-certified, target-independent identity transport
+                // through core::sync::atomic::AtomicPtr storage.  This capability
+                // changes identity precision only; it adds no allocation, drop,
+                // or CellValue semantics.
+                "atomic_ptr_identity_summary_v1",
                 // Bcontract-ND1 + EFX1: explicit external-call deallocation
                 // evidence. Frozen leaf/structural behavior is preserved; a
                 // bodyless external boundary may additionally close from a
@@ -1107,10 +1534,45 @@ fn export_cqpl_annotated_icfg_versioned(
             if has_ene1 { caps.push("external_negative_evidence_v1"); }
             if has_dcp1 { caps.push("external_deallocation_call_provenance_v1"); }
             if has_ele1 { caps.push("external_library_effects_v1"); }
-            if icfg.dependency_body_ingestion_v1.as_ref()
-                .and_then(|dep| dep.context_execution_graph_v1.as_ref()).is_some()
+            if let Some(context_graph)=icfg.dependency_body_ingestion_v1.as_ref()
+                .and_then(|dep| dep.context_execution_graph_v1.as_ref())
             {
                 caps.push("context_explicit_icfg_v1");
+                match context_graph.get("capability").and_then(serde_json::Value::as_str) {
+                    Some("context_explicit_icfg_v3") => {
+                        caps.push("context_explicit_icfg_v3");
+                        caps.push("recursive_scc_local_k1_v1");
+                    }
+                    Some("context_explicit_icfg_v4") => {
+                        caps.push("context_explicit_icfg_v4");
+                        caps.push("dependency_region_local_k1_v1");
+                        if context_graph.get("recursive_context_policy").and_then(serde_json::Value::as_str)
+                            == Some("scc_local_call_string_k1")
+                        {
+                            caps.push("recursive_scc_local_k1_v1");
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if icfg.dependency_body_ingestion_v1.as_ref().is_some_and(|dep|
+                dep.exact_call_bindings.iter().any(|call|
+                    call.get("body_status").and_then(serde_json::Value::as_str)==Some("dynamic_drop_summary")
+                        && call.get("dynamic_drop_summary_v1").and_then(|v|v.get("semantics"))
+                            .and_then(serde_json::Value::as_str)==Some("opaque_dynamic_destructor_may_effect_v1")))
+            {
+                caps.push("dynamic_trait_drop_summary_v1");
+            }
+            if icfg.dependency_body_ingestion_v1.as_ref()
+                .and_then(|dep|dep.context_execution_graph_v1.as_ref())
+                .and_then(|ctx|ctx.get("opaque_higher_order_summaries"))
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|records|!records.is_empty())
+            {
+                caps.push("opaque_higher_order_callback_summary_v1");
+            }
+            if opaque_memory_effects.is_some() {
+                caps.push("opaque_memory_effect_v1");
             }
             if has_external_return_relations {
                 caps.push("external_return_relations_v1");
@@ -1157,6 +1619,7 @@ fn export_cqpl_annotated_icfg_versioned(
             None
         },
         typed_edges,
+        opaque_memory_effects,
         variables,
         allocations,
         external_deallocation_effects,
@@ -2180,6 +2643,91 @@ fn typed_edge_records(icfg: &GlobalICFGOrdered) -> Vec<TypedEdgeRecord> {
     records
 }
 
+fn append_opaque_summary_allocations(
+    catalog: &mut Vec<AbstractAllocationRecord>,
+    opaque: &[OpaqueMemoryEffectRecord],
+) {
+    for record in opaque {
+        let label = match record.basis {
+            "rust_dyn_trait_drop_vtable_summary_v1" => "opaque_dynamic_trait_drop_allocation_v1",
+            "rust_higher_order_callback_opaque_summary_v1" => "opaque_higher_order_callback_allocation_v1",
+            _ => continue,
+        };
+        let allocation = AbstractAllocId::new(
+            AllocationSiteId::Synthetic {
+                scope: record.node.clone(),
+                label: label.into(),
+            },
+            vec![],
+        );
+        let id = stable_allocation_id(&allocation);
+        if catalog.iter().any(|existing| existing.id == id) { continue; }
+        catalog.push(AbstractAllocationRecord {
+            id,
+            display: allocation.canonical_string(),
+            site: allocation.site.clone(),
+            context: allocation.context.clone(),
+            allocator_contract: Some(allocation_contract(&allocation)),
+        });
+    }
+    catalog.sort_by(|left, right| left.id.cmp(&right.id));
+}
+
+fn opaque_memory_effect_records(
+    icfg: &GlobalICFGOrdered,
+    reachable: &BTreeSet<String>,
+) -> Vec<OpaqueMemoryEffectRecord> {
+    let dep = icfg.dependency_body_ingestion_v1.as_ref();
+    let has_certified_dynamic_drop = dep.is_some_and(|dep| {
+        dep.exact_call_bindings.iter().any(|call| {
+            call.get("body_status").and_then(serde_json::Value::as_str)
+                == Some("dynamic_drop_summary")
+                && call
+                    .get("dynamic_drop_summary_v1")
+                    .and_then(|value| value.get("semantics"))
+                    .and_then(serde_json::Value::as_str)
+                    == Some("opaque_dynamic_destructor_may_effect_v1")
+        })
+    });
+    let certified_higher_order_nodes: BTreeSet<String> = dep
+        .and_then(|dep| dep.context_execution_graph_v1.as_ref())
+        .and_then(|ctx| ctx.get("opaque_higher_order_summaries"))
+        .and_then(serde_json::Value::as_array)
+        .into_iter().flatten()
+        .filter(|record| {
+            record.get("semantics").and_then(serde_json::Value::as_str)
+                == Some("opaque_higher_order_callback_zero_or_more_v1")
+                && record.get("provider_effect").and_then(serde_json::Value::as_str)
+                    == Some("opaque_at_least_once_per_call")
+                && record.get("callback_multiplicity").and_then(serde_json::Value::as_str)
+                    == Some("zero_or_more")
+                && record.get("memory_effect").and_then(serde_json::Value::as_str)
+                    == Some("widen_all_tracked_to_top")
+        })
+        .filter_map(|record| record.get("execution_state").and_then(serde_json::Value::as_str).map(str::to_owned))
+        .collect();
+
+    let mut records = BTreeMap::<String, &'static str>::new();
+    for edge in &icfg.icfg_edges {
+        if !reachable.contains(&edge.source) { continue; }
+        match edge.label.as_deref() {
+            Some("DYNAMIC_TRAIT_DROP_SUMMARY_V1")
+            | Some("DYNAMIC_TRAIT_DROP_SUMMARY_UNWIND_V1") if has_certified_dynamic_drop => {
+                records.insert(edge.source.clone(), "rust_dyn_trait_drop_vtable_summary_v1");
+            }
+            Some("OPAQUE_HIGHER_ORDER_CALLBACK_SUMMARY_V1")
+            | Some("OPAQUE_HIGHER_ORDER_CALLBACK_SUMMARY_UNWIND_V1")
+                if certified_higher_order_nodes.contains(&edge.source) => {
+                records.insert(edge.source.clone(), "rust_higher_order_callback_opaque_summary_v1");
+            }
+            _ => {}
+        }
+    }
+    records.into_iter().map(|(node,basis)| OpaqueMemoryEffectRecord {
+        node, effect:"may_read_write_allocate_deallocate", basis,
+    }).collect()
+}
+
 fn validate_typed_edge_projection(
     typed_edges: &[TypedEdgeRecord],
     successors: &BTreeMap<String, BTreeSet<String>>,
@@ -2237,6 +2785,24 @@ fn allocation_catalog(state: &AllocationIdentityState, schema_version: u32) -> V
                     .or_insert_with(|| allocation.clone());
             }
         }
+
+        // HT2 heap summaries are part of the authoritative MAY identity store.
+        // Include both the addressed allocation and every canonical allocation
+        // identity stored in its summarized value.
+        for (base, value) in &mem.heap_values {
+            ids.entry(stable_allocation_id(base))
+                .or_insert_with(|| base.clone());
+            for allocation in &value.root_access_bases {
+                ids.entry(stable_allocation_id(allocation))
+                    .or_insert_with(|| allocation.clone());
+            }
+            for allocations in value.points_to.values().chain(value.resources.values()) {
+                for allocation in allocations {
+                    ids.entry(stable_allocation_id(allocation))
+                        .or_insert_with(|| allocation.clone());
+                }
+            }
+        }
     }
     ids.into_iter()
         .map(|(id, allocation)| AbstractAllocationRecord {
@@ -2276,6 +2842,13 @@ fn collect_identity_program_variables(mem: &AllocationIdentityMemory) -> BTreeSe
     for places in mem.stack_refs.values() {
         for place in places {
             collect_place(place, &mut out);
+        }
+    }
+    for value in mem.heap_values.values() {
+        for targets in value.stack_refs.values() {
+            for place in targets {
+                collect_place(place, &mut out);
+            }
         }
     }
 
@@ -2368,6 +2941,21 @@ fn allocation_labels_for_node(
 ) -> Vec<AllocationEventLabel> {
     let mut out = BTreeSet::new();
     for label in labels {
+        // HT2-R2.4: allocation-level Drop is admitted only when rustc
+        // producer evidence certifies an owning deallocation boundary.  String
+        // is such a boundary for a String-origin allocation identity; its
+        // nested Vec<u8> drop is an implementation detail and is coalesced per
+        // allocation below rather than counted as a second free.
+        if label.predicate == "drop" {
+            if let GlobalICFGNode::Mir(bb) = node {
+                if let Some(MirTerminator::Drop { deallocator_evidence, .. }) = &bb.terminator {
+                    if deallocator_evidence.is_none() {
+                        continue;
+                    }
+                }
+            }
+        }
+
         let Some(variable) = identity_var_for_event(node_id, node, &label.variable) else {
             continue;
         };
@@ -2385,6 +2973,25 @@ fn allocation_labels_for_node(
             } else {
                 None
             };
+
+            // HT2-R2.4 destructor coalescing.  The AbstractAllocId created by
+            // String::from(&str) denotes the String-owned buffer resource.  A
+            // Drop(String) is therefore the semantic owner-boundary free.  The
+            // subsequent Drop(Vec<u8, Global>) inside String drop glue releases
+            // the same concrete storage and must not become a second abstract
+            // drop event.  This rule is keyed by the allocator-origin contract,
+            // not by rendered paths or source locations, so a genuine Vec
+            // allocation keeps its ordinary rust_vec_global_drop semantics.
+            if label.predicate == "drop"
+                && deallocator_contract
+                    .as_ref()
+                    .and_then(|contract| contract.basis)
+                    == Some("rust_vec_global_drop")
+                && allocation_contract(&allocation).operation == "string_allocation"
+            {
+                continue;
+            }
+
             out.insert(AllocationEventLabel {
                 predicate: label.predicate,
                 allocation: stable_allocation_id(&allocation),
@@ -2394,6 +3001,33 @@ fn allocation_labels_for_node(
         }
     }
     out.into_iter().collect()
+}
+
+/// Preserve direct return evidence and add only known, return-rooted field
+/// places. Resolution follows certified identity relations; it neither creates
+/// aliases nor establishes ownership transfer or MUST escape.
+fn return_escape_allocations(
+    post_identity: &AllocationIdentityMemory,
+    return_var: &ProgramVarId,
+) -> BTreeSet<AbstractAllocId> {
+    let mut allocations = post_identity.event_allocations(return_var);
+    let places: BTreeSet<_> = post_identity
+        .place_points_to
+        .keys()
+        .chain(post_identity.place_stack_refs.keys())
+        .filter(|place| {
+            place.base == *return_var
+                && !place.projection.is_empty()
+                && place
+                    .projection
+                    .iter()
+                    .all(|projection| matches!(projection, PlaceProjection::Field { .. }))
+        })
+        .collect();
+    for place in places {
+        allocations.extend(post_identity.allocations_for_place(place.clone()));
+    }
+    allocations
 }
 
 fn allocation_disposition_for_node(
@@ -2481,7 +3115,7 @@ fn allocation_disposition_for_node(
             // caller.  This is escape provenance, not proof that ownership was
             // safely discharged.
             if let Some(ret_var) = identity_var_for_event(node_id, node, "Local(_0)") {
-                for allocation in post_identity.event_allocations(&ret_var) {
+                for allocation in return_escape_allocations(post_identity, &ret_var) {
                     out.insert(AllocationDispositionRecord {
                         allocation: stable_allocation_id(&allocation),
                         kind: "return_escape",
@@ -2536,6 +3170,8 @@ fn allocation_contract(allocation: &AbstractAllocId) -> AllocationContract {
                 "alloc"
             } else if callee.contains("CString") {
                 "cstring_allocation"
+            } else if callee.contains("string::String") && callee.contains("From<&str>") {
+                "string_allocation"
             } else {
                 "rust_allocation"
             };
@@ -2583,6 +3219,7 @@ fn deallocator_contract(
                     RustDropAllocatorEvidenceKind::BoxGlobal => "rust_box_global_drop",
                     RustDropAllocatorEvidenceKind::VecGlobal => "rust_vec_global_drop",
                     RustDropAllocatorEvidenceKind::CStringGlobal => "rust_cstring_global_drop",
+                    RustDropAllocatorEvidenceKind::StringGlobal => "rust_string_global_drop",
                 };
                 let mut contract = AllocationContract::v2_deallocator(
                     "rust_global", "drop", "rust", basis,
@@ -3259,6 +3896,57 @@ fn reachable_from(
         }
     }
     reachable
+}
+
+/// Certify the existing canonical topology, then serialize one record per call.
+/// No node-id parsing or callgraph reconstruction participates in this boundary.
+fn rust_call_return_relation_records(
+    icfg: &GlobalICFGOrdered,
+    successors: &BTreeMap<String, BTreeSet<String>>,
+    node_ids: &BTreeSet<String>,
+) -> Result<Vec<RustCallReturnRelationV1>, Box<dyn Error>> {
+    validate_canonical_internal_rust_edges(icfg, successors)?;
+    let mut dummy_calls = BTreeSet::new();
+    let mut dummy_returns = BTreeSet::new();
+    let mut records = Vec::with_capacity(icfg.rust_calls.len());
+    for call in &icfg.rust_calls {
+        // The canonical validator above certifies callee membership and edges.
+        let function = &icfg.rust_functions[&call.callee_function];
+        for node in [
+            &call.call_node, &call.dummy_call_node, &function.entry_node,
+            &call.dummy_ret_node, &call.return_node,
+        ].into_iter().chain(function.return_nodes.iter()) {
+            if !node_ids.contains(node) {
+                return Err(format!("Rust call/return relation references missing canonical node '{node}'").into());
+            }
+        }
+        if !dummy_calls.insert(&call.dummy_call_node) {
+            return Err(format!("ambiguous Rust call/return relation: duplicate dummy call '{}'", call.dummy_call_node).into());
+        }
+        if !dummy_returns.insert(&call.dummy_ret_node) {
+            return Err(format!("ambiguous Rust call/return relation: duplicate dummy return '{}'", call.dummy_ret_node).into());
+        }
+        let callee_return_nodes = function.return_nodes.iter().cloned()
+            .collect::<BTreeSet<_>>().into_iter().collect();
+        records.push(RustCallReturnRelationV1 {
+            caller_function: call.caller_function.clone(),
+            call_node: call.call_node.clone(),
+            dummy_call_node: call.dummy_call_node.clone(),
+            callee_function: call.callee_function.clone(),
+            callee_entry_node: function.entry_node.clone(),
+            callee_return_nodes,
+            dummy_ret_node: call.dummy_ret_node.clone(),
+            continuation_node: call.return_node.clone(),
+            basis: "rust_call_metadata_v1",
+        });
+    }
+    records.sort_by(|a, b| {
+        (&a.caller_function, &a.call_node, &a.dummy_call_node, &a.callee_function,
+         &a.dummy_ret_node, &a.continuation_node).cmp(
+        &(&b.caller_function, &b.call_node, &b.dummy_call_node, &b.callee_function,
+          &b.dummy_ret_node, &b.continuation_node))
+    });
+    Ok(records)
 }
 
 /// Check that Rust call metadata and the serialized ICFG relation describe the
@@ -4255,9 +4943,26 @@ fn dep1_call_semantic_coverage(
             .or_else(|| call.get("resolved_definition_id").and_then(serde_json::Value::as_str))
             .or_else(|| call.get("operand_definition_id").and_then(serde_json::Value::as_str))
             .unwrap_or("unresolved");
-        let expected_key = if call["activation_kind"] == "mir_drop" {
-            format!("dep1-drop-v1:{caller_instance}:bb{bb}:mir_drop:{callee_identity}")
-        } else { format!("dep1-call-v1:{caller_instance}:bb{bb}:{callee_identity}") };
+        let expected_key = match call.get("activation_kind").and_then(serde_json::Value::as_str) {
+            Some("mir_drop") => {
+                format!("dep1-drop-v1:{caller_instance}:bb{bb}:mir_drop:{callee_identity}")
+            }
+            Some("higher_order_callback") => {
+                let ordinal = call.get("callback_ordinal").and_then(serde_json::Value::as_u64).unwrap_or(u64::MAX);
+                if ordinal == u64::MAX
+                    || call.get("callback_semantics").and_then(serde_json::Value::as_str) != Some("spawn_may_once")
+                {
+                    complete = false;
+                    ledger.push(serde_json::json!({
+                        "call_key":call_key,"semantic_coverage_path":"uncovered",
+                        "coverage_reference":[],"coverage_status":"invalid_callback_certificate"
+                    }));
+                    continue;
+                }
+                format!("dep1-callback-v1:{caller_instance}:bb{bb}:callback{ordinal}:{callee_identity}")
+            }
+            _ => format!("dep1-call-v1:{caller_instance}:bb{bb}:{callee_identity}"),
+        };
         if caller_instance.is_empty() || bb == u64::MAX || call_key != expected_key {
             complete = false;
             ledger.push(serde_json::json!({
@@ -4306,6 +5011,22 @@ fn dep1_call_semantic_coverage(
             let body_is_present = body_matches == 1;
             if body_is_present {
                 paths.push(("dep1_rust_mir", format!("dep1-exact-call-binding:{call_key};dep1-body-instance:{}", resolved.unwrap())));
+            }
+        } else if status == "dynamic_drop_summary" {
+            let summary=call.get("dynamic_drop_summary_v1");
+            let certified=call.get("activation_kind").and_then(serde_json::Value::as_str)==Some("mir_drop")
+                && call.get("scope_reason").and_then(serde_json::Value::as_str)==Some("dynamic_trait_drop_summary")
+                && summary.and_then(|v|v.get("semantics")).and_then(serde_json::Value::as_str)
+                    == Some("opaque_dynamic_destructor_may_effect_v1")
+                && summary.and_then(|v|v.get("normal_memory_effect")).and_then(serde_json::Value::as_str)
+                    == Some("widen_all_tracked_to_top")
+                && summary.and_then(|v|v.get("unwind_memory_effect")).and_then(serde_json::Value::as_str)
+                    == Some("widen_all_tracked_to_top");
+            if certified {
+                paths.push(("dep1_dynamic_trait_drop_summary",
+                    format!("dep1-dynamic-drop-summary:{call_key}")));
+            } else {
+                complete=false;
             }
         }
         // Inspect existing CREMA/CQPL relations for every linked call so an
@@ -4703,15 +5424,42 @@ fn allocation_event_source_records_for_node(
     node: &GlobalICFGNode,
     event_sources: &EventSourceMap,
     identity: &AllocationIdentityMemory,
+    allocation_labels: &[AllocationEventLabel],
 ) -> Vec<AllocationEventSourceRecord> {
+    // W1/HT2-R2.3: source provenance is an additive proof overlay for
+    // allocation-level events that have already passed the semantic admission
+    // gate.  It must never independently reinterpret a raw MIR event as an
+    // allocation event.  In particular, a delegating/uncertified MIR `Drop`
+    // remains a source anchor at node level but is not an allocation Drop(R).
+    //
+    // Keeping the admitted (predicate, allocation) set explicit makes the
+    // producer satisfy the checker invariant by construction rather than by a
+    // second, potentially divergent classification.
+    let admitted: BTreeSet<(&'static str, String)> = allocation_labels
+        .iter()
+        .map(|label| (label.predicate, label.allocation.clone()))
+        .collect();
+
     let mut grouped: BTreeMap<(&'static str, String), BTreeSet<SourceAnchor>> = BTreeMap::new();
     for (label, anchors) in event_sources {
         let Some(variable) = identity_var_for_event(node_id, node, &label.variable) else {
             continue;
         };
-        for allocation in identity.event_allocations(&variable) {
+        // Resolve exactly the same abstract allocation relation used by
+        // allocation_labels_for_node.  Drop uses the narrower deallocation
+        // relation; read/write/use/alloc use ordinary event identity.
+        let allocations = if label.predicate == "drop" {
+            identity.deallocation_allocations(&variable)
+        } else {
+            identity.event_allocations(&variable)
+        };
+        for allocation in allocations {
+            let stable = stable_allocation_id(&allocation);
+            if !admitted.contains(&(label.predicate, stable.clone())) {
+                continue;
+            }
             grouped
-                .entry((label.predicate, stable_allocation_id(&allocation)))
+                .entry((label.predicate, stable))
                 .or_default()
                 .extend(anchors.iter().cloned());
         }
@@ -4732,6 +5480,7 @@ fn node_source_provenance(
     node: &GlobalICFGNode,
     event_sources: &EventSourceMap,
     identity: &AllocationIdentityMemory,
+    allocation_labels: &[AllocationEventLabel],
 ) -> NodeSourceProvenance {
     let mut anchors = BTreeSet::new();
     let language = match node {
@@ -4767,6 +5516,7 @@ fn node_source_provenance(
             node,
             event_sources,
             identity,
+            allocation_labels,
         ),
     }
 }
@@ -5010,7 +5760,8 @@ mod tests {
     use super::*;
     use crate::abstract_domain::{Allocation, CellValue};
     use crate::structs::{
-        DummyNode, IcfgEdge, MirBasicBlock, MirCallArgument, SourceInfoData, MirStatement,
+        DependencyBodyIngestionExport, DummyNode, IcfgEdge, MirBasicBlock, MirCallArgument,
+        SourceInfoData, MirStatement,
         RustAllocationDispositionEvidence, RustAllocationDispositionEvidenceKind,
         RustCallDeallocatorEvidence, RustCallMetadata, RustDropAllocatorEvidence,
         RustFunctionMetadata, TerminalNode,
@@ -5024,6 +5775,668 @@ mod tests {
             source_label: None,
             destination_label: None,
         }
+    }
+
+    fn return_projection_fixture() -> (ProgramVarId, AbstractAllocId, AllocationIdentityMemory) {
+        (
+            ProgramVarId::rust("producer", "Local(_0)").unwrap(),
+            AbstractAllocId::new(
+                AllocationSiteId::Synthetic {
+                    scope: "return_projection_test".into(),
+                    label: "A".into(),
+                },
+                vec![],
+            ),
+            AllocationIdentityMemory::default(),
+        )
+    }
+
+    fn return_projection_place(base: &ProgramVarId, indices: &[u32]) -> PlaceId {
+        PlaceId {
+            base: base.clone(),
+            projection: indices
+                .iter()
+                .map(|index| PlaceProjection::Field { index: *index })
+                .collect(),
+        }
+    }
+
+    fn return_projection_node() -> GlobalICFGNode {
+        GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 0,
+            statements: vec![],
+            terminator: Some(MirTerminator::Return {
+                details: "return".into(),
+                source_info: "".into(),
+            }),
+        })
+    }
+
+    #[test]
+    fn rust_unwind_edge_scope_native_context_ownership() {
+        let (mut g,t,_)=rust_unwind_edge_scope_fixture();
+        g.dependency_body_ingestion_v1=Some(serde_json::from_value(serde_json::json!({
+            "capability":"dependency_body_ingestion_v1","target_triple":"","crate_correlations":[],
+            "package_scope":[],"body_statuses":[],"exact_call_bindings":[],"icfg_callsite_links":[],
+            "context_execution_graph_v1":{"p2_control_flow_complete":true,
+                "states":[{"execution_node":"n0","concrete_instance_id":"instance-0","context":["context-0"]},
+                          {"execution_node":"n1","concrete_instance_id":"instance-0","context":["context-0"]}],
+                "represented_call_activations":[]}})).unwrap());
+        let r=rust_unwind_edge_scope_records(&g,&t,&[],None).unwrap();
+        assert_eq!(r[0].scope,RustUnwindEdgeScopeKindV1::IntraActivation);
+        assert_eq!(r[0].basis,RustUnwindEdgeScopeBasisV1::ExecutionContextMembershipV1);
+        g.dependency_body_ingestion_v1.as_mut().unwrap().context_execution_graph_v1.as_mut().unwrap()
+            ["represented_call_activations"]=serde_json::json!([{"unwind_return_relations":[{
+                "callee_unwind_state":"n0","caller_unwind_state":"n1"}]}]);
+        assert_eq!(rust_unwind_edge_scope_records(&g,&t,&[],None).unwrap()[0].scope,RustUnwindEdgeScopeKindV1::Unresolved);
+    }
+
+    fn rust_unwind_edge_scope_fixture() -> (GlobalICFGOrdered,Vec<TypedEdgeRecord>,RustUnwindScopeEvidenceV1) {
+        let g=GlobalICFGOrdered {ordered_nodes:vec![("n0".into(),return_projection_node()),("n1".into(),return_projection_node()),("n2".into(),return_projection_node())],
+            icfg_edges:vec![],llvm_memory_effects:None,svf_solved_points_to:None,rust_functions:BTreeMap::new(),rust_calls:vec![],dependency_body_ingestion_v1:None};
+        let typed=vec![TypedEdgeRecord {source:"n0".into(),destination:"n1".into(),flow:"unwind",label:None,source_label:None,destination_label:None}];
+        let e=RustUnwindScopeEvidenceV1 {schema_version:1,node_owners:BTreeMap::from([("n0".into(),"owner-0".into()),("n1".into(),"owner-0".into()),("n2".into(),"owner-0".into())]),boundary_edges:vec![]};
+        (g,typed,e)
+    }
+    fn rust_unwind_edge_scope_claims(r:&[RustCallUnwindRelationV1]) -> BTreeMap<(String,String),BTreeSet<RustActivationIdentity>> {
+        let mut out:BTreeMap<_,BTreeSet<_>>=BTreeMap::new();
+        for v in r {for e in &v.unwind_edges {out.entry((e.source_node.clone(),e.destination_node.clone())).or_default().insert(RustActivationIdentity {
+            caller_function:v.caller_function.clone(),call_node:v.call_node.clone(),dummy_call_node:v.dummy_call_node.clone(),callee_function:v.callee_function.clone()});}}
+        out
+    }
+    #[test]
+    fn rust_unwind_edge_scope_intra_activation() {
+        let (g,t,e)=rust_unwind_edge_scope_fixture();let r=rust_unwind_edge_scope_records(&g,&t,&[],Some(&e)).unwrap();
+        assert_eq!(r[0].scope,RustUnwindEdgeScopeKindV1::IntraActivation);assert!(r[0].activation.is_none());
+    }
+    #[test]
+    fn rust_unwind_edge_scope_rust_boundary() {
+        let (g,m)=rust_call_unwind_relation_fixture(1);let u=rust_call_unwind_relation_payload(&g,&m).unwrap();
+        let r=rust_unwind_edge_scope_records(&g,&typed_edge_records(&g),&u,None).unwrap();
+        assert_eq!(r[0].scope,RustUnwindEdgeScopeKindV1::RustActivationBoundary);assert_eq!(r[0].activation.as_ref().unwrap()[0].call_node,"call0");
+    }
+    #[test]
+    fn rust_unwind_edge_scope_shared_callee() {
+        let (g,m)=rust_call_unwind_relation_fixture(2);let u=rust_call_unwind_relation_payload(&g,&m).unwrap();
+        let r=rust_unwind_edge_scope_records(&g,&typed_edge_records(&g),&u,None).unwrap();
+        assert_eq!(r.len(),2);for (i,r) in r.iter().enumerate(){assert_eq!(r.activation.as_ref().unwrap()[0].call_node,format!("call{i}"));}
+    }
+    #[test]
+    fn rust_unwind_edge_scope_foreign_fanout_never_defaults_intra() {
+        let (g,t,mut e)=rust_unwind_edge_scope_fixture();e.boundary_edges=vec![RustActivationUnwindEdge {source_node:"n0".into(),destination_node:"n1".into()}];
+        let r=rust_unwind_edge_scope_records(&g,&t,&[],Some(&e)).unwrap();assert_eq!(r[0].scope,RustUnwindEdgeScopeKindV1::Unresolved);
+    }
+    #[test]
+    fn rust_unwind_edge_scope_internal_cleanup_chain() {
+        let (g,mut t,e)=rust_unwind_edge_scope_fixture();let mut second=t[0].clone();second.source="n1".into();second.destination="n2".into();t.push(second);
+        assert!(rust_unwind_edge_scope_records(&g,&t,&[],Some(&e)).unwrap().iter().all(|r|r.scope==RustUnwindEdgeScopeKindV1::IntraActivation));
+    }
+    #[test]
+    fn rust_unwind_edge_scope_terminal_no_invented_activation() {
+        for action in ["terminate","unreachable"] {
+            let (g,mut m)=rust_call_unwind_relation_fixture(1);m.activations[0]=crate::structs::RustActivationUnwindMetadata::direct(&g.rust_calls[0],action,false);
+            let u=rust_call_unwind_relation_payload(&g,&m).unwrap();let r=rust_unwind_edge_scope_records(&g,&typed_edge_records(&g),&u,None).unwrap();
+            assert!(r.iter().all(|r|r.scope==RustUnwindEdgeScopeKindV1::Unresolved && r.activation.is_none()));
+        }
+    }
+    #[test]
+    fn rust_unwind_edge_scope_detached_no_provider_boundary() {
+        let (g,m)=rust_call_unwind_relation_callback(false,true);let u=rust_call_unwind_relation_payload(&g,&m).unwrap();
+        assert!(rust_unwind_edge_scope_records(&g,&typed_edge_records(&g),&u,None).unwrap().iter().all(|r|r.scope==RustUnwindEdgeScopeKindV1::Unresolved));
+    }
+    #[test]
+    fn rust_unwind_edge_scope_synchronous_unresolved() {
+        let (g,m)=rust_call_unwind_relation_callback(false,false);let u=rust_call_unwind_relation_payload(&g,&m).unwrap();
+        assert!(rust_unwind_edge_scope_records(&g,&typed_edge_records(&g),&u,None).unwrap().iter().all(|r|r.scope==RustUnwindEdgeScopeKindV1::Unresolved));
+    }
+    #[test]
+    fn rust_unwind_edge_scope_non_rust() {
+        let (mut g,t,_)=rust_unwind_edge_scope_fixture();
+        for (_,n) in &mut g.ordered_nodes { *n=serde_json::from_value(serde_json::json!({"node_type":"Llvm","node_data":{
+            "node_id":0,"node_type":true,"info":"","node_kind_string":"","node_kind":0,"node_source_loc":"",
+            "svf_statements":[],"incoming_edges":[],"outgoing_edges":[]}})).unwrap(); }
+        assert_eq!(rust_unwind_edge_scope_records(&g,&t,&[],None).unwrap()[0].scope,RustUnwindEdgeScopeKindV1::NonRust);
+    }
+    #[test]
+    fn rust_unwind_edge_scope_complete_unique_pairs() {
+        let (g,mut t,e)=rust_unwind_edge_scope_fixture();t.push(t[0].clone());
+        assert_eq!(rust_unwind_edge_scope_records(&g,&t,&[],Some(&e)).unwrap().len(),1);
+    }
+    #[test]
+    fn rust_unwind_edge_scope_duplicate_rejected() {
+        let (g,t,e)=rust_unwind_edge_scope_fixture();let mut r=rust_unwind_edge_scope_records(&g,&t,&[],Some(&e)).unwrap();r.push(r[0].clone());
+        let pairs=BTreeSet::from([("n0".into(),"n1".into())]);assert!(validate_rust_unwind_edge_scopes(&r,&pairs,&BTreeMap::new()).is_err());
+    }
+    #[test]
+    fn rust_unwind_edge_scope_f6b1_consistency() {
+        let (g,m)=rust_call_unwind_relation_fixture(2);let u=rust_call_unwind_relation_payload(&g,&m).unwrap();let t=typed_edge_records(&g);
+        let r=rust_unwind_edge_scope_records(&g,&t,&u,None).unwrap();let pairs=t.iter().filter(|t|t.flow=="unwind").map(|t|(t.source.clone(),t.destination.clone())).collect();
+        validate_rust_unwind_edge_scopes(&r,&pairs,&rust_unwind_edge_scope_claims(&u)).unwrap();
+    }
+    #[test]
+    fn rust_unwind_edge_scope_wrong_activation_rejected() {
+        let (g,m)=rust_call_unwind_relation_fixture(2);let u=rust_call_unwind_relation_payload(&g,&m).unwrap();let t=typed_edge_records(&g);
+        let mut r=rust_unwind_edge_scope_records(&g,&t,&u,None).unwrap();r[0].activation=r[1].activation.clone();
+        let pairs=t.iter().filter(|t|t.flow=="unwind").map(|t|(t.source.clone(),t.destination.clone())).collect();
+        assert!(validate_rust_unwind_edge_scopes(&r,&pairs,&rust_unwind_edge_scope_claims(&u)).is_err());
+    }
+    #[test]
+    fn rust_unwind_edge_scope_deterministic_ordering() {
+        let (g,m)=rust_call_unwind_relation_fixture(2);let mut u=rust_call_unwind_relation_payload(&g,&m).unwrap();let mut t=typed_edge_records(&g);
+        let a=rust_unwind_edge_scope_records(&g,&t,&u,None).unwrap();u.reverse();t.reverse();let b=rust_unwind_edge_scope_records(&g,&t,&u,None).unwrap();
+        assert_eq!(serde_json::to_value(a).unwrap(),serde_json::to_value(b).unwrap());
+    }
+    #[test]
+    fn rust_unwind_edge_scope_schema_v1() {
+        let r=rust_call_return_relation_export(1,0);assert!(r.get("rust_unwind_edge_scopes").is_none());assert!(r.get("capabilities").is_none());
+    }
+    #[test]
+    fn rust_unwind_edge_scope_schema_v2_empty() {
+        let r=rust_call_return_relation_export(2,0);assert_eq!(r["rust_unwind_edge_scopes"],serde_json::json!([]));
+        assert!(r["capabilities"].as_array().unwrap().iter().any(|c|c=="rust_unwind_edge_scope_v1"));
+    }
+    #[test]
+    fn rust_unwind_edge_scope_f6b1_non_interference() {
+        let (g,m)=rust_call_unwind_relation_fixture(2);let u=rust_call_unwind_relation_payload(&g,&m).unwrap();let before=serde_json::to_value(&u).unwrap();
+        rust_unwind_edge_scope_records(&g,&typed_edge_records(&g),&u,None).unwrap();assert_eq!(before,serde_json::to_value(u).unwrap());
+    }
+    #[test]
+    fn rust_unwind_edge_scope_f2_non_interference() {
+        let (g,m)=rust_call_unwind_relation_fixture(2);let before=rust_call_return_relation_payload(&g).unwrap();let u=rust_call_unwind_relation_payload(&g,&m).unwrap();
+        rust_unwind_edge_scope_records(&g,&typed_edge_records(&g),&u,None).unwrap();assert_eq!(before,rust_call_return_relation_payload(&g).unwrap());
+    }
+    #[test]
+    fn rust_unwind_edge_scope_allocation_non_interference() {
+        let (g,t,e)=rust_unwind_edge_scope_fixture();let before=serde_json::to_value(&g).unwrap();rust_unwind_edge_scope_records(&g,&t,&[],Some(&e)).unwrap();
+        assert_eq!(before,serde_json::to_value(g).unwrap());return_projection_escape_artifact_disposition();
+    }
+    #[test]
+    fn rust_unwind_edge_scope_shared_cleanup_activation_set() {
+        let (mut g,mut m)=rust_call_unwind_relation_fixture(2);
+        g.icfg_edges.last_mut().unwrap().destination="rust::caller::bb7".into();
+        m.activations[1]=crate::structs::RustActivationUnwindMetadata::direct(&g.rust_calls[1],"cleanup(bb7)",false);
+        let u=rust_call_unwind_relation_payload(&g,&m).unwrap();let r=rust_unwind_edge_scope_records(&g,&typed_edge_records(&g),&u,None).unwrap();
+        assert_eq!(r.len(),1);assert_eq!(r[0].activation.as_ref().unwrap().len(),2);
+    }
+
+    fn rust_call_unwind_relation_fixture(count: usize) -> (GlobalICFGOrdered, RustActivationUnwindMetadataV1) {
+        let mut graph = rust_call_return_relation_fixture(count, &["ret"]);
+        graph.ordered_nodes.push(("rust::callee::bb2".into(), GlobalICFGNode::Mir(MirBasicBlock {
+            block_id:2,statements:vec![],terminator:Some(MirTerminator::UnwindResume {details:String::new(),source_info:String::new()}) })));
+        let mut records=Vec::new();
+        for i in 0..count {
+            let target=format!("bb{}",7+i);let destination=format!("rust::caller::{target}");
+            graph.ordered_nodes.push((destination.clone(), GlobalICFGNode::Mir(MirBasicBlock {
+                block_id:7+i,statements:vec![],terminator:None })));
+            let mut unwind=edge("rust::callee::bb2",&destination);unwind.label=Some("Rust unwind propagate".into());graph.icfg_edges.push(unwind);
+            let caller_node = graph.ordered_nodes.iter_mut().find(|(id,_)| id == &graph.rust_calls[i].call_node).unwrap();
+            caller_node.1 = serde_json::from_value(serde_json::json!({"node_type":"Mir","node_data":{
+                "block_id":i,"statements":[],"terminator":{"kind":"Call","details":"","source_info":"",
+                "function_called":"opaque","arguments":[],"return_place":"_0","return_target":"bb1",
+                "unwind_target":format!("cleanup({target})")}}})).unwrap();
+            records.push(crate::structs::RustActivationUnwindMetadata::direct(&graph.rust_calls[i],&format!("cleanup({target})"),false));
+        }
+        (graph,RustActivationUnwindMetadataV1::new(records).unwrap())
+    }
+    fn rust_call_unwind_relation_payload(g:&GlobalICFGOrdered,m:&RustActivationUnwindMetadataV1) -> Result<Vec<RustCallUnwindRelationV1>,Box<dyn Error>> {
+        let returns=rust_call_return_relation_payload(g)?;let ids=g.ordered_nodes.iter().map(|(id,_)|id.clone()).collect();
+        rust_call_unwind_relation_records(g,m,&returns,&typed_edge_records(g),&ids)
+    }
+    fn rust_call_unwind_relation_semantics(action: &str) -> RustCallUnwindRelationV1 {
+        let (g,mut m)=rust_call_unwind_relation_fixture(1);
+        m.activations[0]=crate::structs::RustActivationUnwindMetadata::direct(&g.rust_calls[0],action,false);
+        rust_call_unwind_relation_payload(&g,&m).unwrap().remove(0)
+    }
+    #[test]
+    fn rust_call_unwind_relation_direct_cleanup() {
+        let (g,m)=rust_call_unwind_relation_fixture(1);let r=rust_call_unwind_relation_payload(&g,&m).unwrap();
+        assert_eq!(r.len(),1);assert_eq!(r[0].unwind_semantics,RustCallUnwindSemanticsV1::Cleanup);
+        assert_eq!(r[0].unwind_edges,vec![RustActivationUnwindEdge {source_node:"rust::callee::bb2".into(),destination_node:"rust::caller::bb7".into()}]);
+    }
+    #[test]
+    fn rust_call_unwind_relation_shared_callee_cleanup_distinct() {
+        let (g,m)=rust_call_unwind_relation_fixture(2);let r=rust_call_unwind_relation_payload(&g,&m).unwrap();
+        assert_eq!(r.len(),2);assert_eq!(r[0].unwind_edges[0].destination_node,"rust::caller::bb7");
+        assert_eq!(r[1].unwind_edges[0].destination_node,"rust::caller::bb8");
+    }
+    #[test]
+    fn rust_call_unwind_relation_direct_continue() {
+        let r=rust_call_unwind_relation_semantics("continue");assert_eq!(r.unwind_semantics,RustCallUnwindSemanticsV1::Continue);assert!(r.unwind_edges.is_empty());
+    }
+    #[test]
+    fn rust_call_unwind_relation_terminate() {
+        let r=rust_call_unwind_relation_semantics("terminate");assert_eq!(r.unwind_semantics,RustCallUnwindSemanticsV1::Terminate);assert!(r.unwind_edges.is_empty());
+    }
+    #[test]
+    fn rust_call_unwind_relation_unreachable() {
+        let r=rust_call_unwind_relation_semantics("unreachable");assert_eq!(r.unwind_semantics,RustCallUnwindSemanticsV1::Unreachable);assert!(r.unwind_edges.is_empty());
+    }
+    fn rust_call_unwind_relation_callback(certified:bool,detached:bool) -> (GlobalICFGOrdered,RustActivationUnwindMetadataV1) {
+        let (mut g,mut m)=rust_call_unwind_relation_fixture(1);
+        if let GlobalICFGNode::Mir(block) = &mut g.ordered_nodes.iter_mut().find(|(id,_)| id == &g.rust_calls[0].call_node).unwrap().1 {
+            if let Some(MirTerminator::Call { unwind_target, .. }) = &mut block.terminator { *unwind_target = "continue".into(); }
+        }
+        let policy=if detached {crate::structs::HigherOrderCallSemantics::SpawnMayOnce} else {crate::structs::HigherOrderCallSemantics::RepeatedCallbacks};
+        m.activations[0]=crate::structs::RustActivationUnwindMetadata::callback(&g.rust_calls[0],Some(policy));
+        if certified {
+            g.dependency_body_ingestion_v1=Some(serde_json::from_value(serde_json::json!({
+                "capability":"dependency_body_ingestion_v1","target_triple":"","crate_correlations":[],
+                "package_scope":[],"body_statuses":[],"exact_call_bindings":[],"icfg_callsite_links":[],
+                "context_execution_graph_v1":{"represented_call_activations":[{
+                    "call_key":"certified-key","activation_kind":"higher_order_callback","callback_semantics":"repeated_callbacks",
+                    "caller_call_state":"call0","dummy_call_state":"activation0","callee_entry_state":"entry",
+                    "unwind_return_relations":[{"callee_unwind_state":"rust::callee::bb2", "caller_unwind_state":"rust::caller::bb7", "unwind_action":"cleanup(bb7)"}]
+                }]}})).unwrap());
+            m=crate::execution_graph::rust_activation_unwind_metadata_from_execution_graph(&g).unwrap().unwrap();
+        }
+        (g,m)
+    }
+    #[test]
+    fn rust_call_unwind_relation_synchronous_callback_concrete() {
+        let (g,m)=rust_call_unwind_relation_callback(true,false);let r=rust_call_unwind_relation_payload(&g,&m).unwrap();
+        assert_eq!(r[0].activation_kind,RustActivationKind::SynchronousCallback);
+        assert_eq!(r[0].unwind_semantics,RustCallUnwindSemanticsV1::CertifiedCallback);assert_eq!(r[0].unwind_edges.len(),1);
+    }
+    #[test]
+    fn rust_call_unwind_relation_synchronous_callback_unresolved() {
+        let (g,m)=rust_call_unwind_relation_callback(false,false);let r=rust_call_unwind_relation_payload(&g,&m).unwrap();
+        assert_eq!(r[0].activation_kind,RustActivationKind::SynchronousCallback);assert_eq!(r[0].unwind_semantics,RustCallUnwindSemanticsV1::Unresolved);
+        assert_eq!(r[0].unresolved_reason,Some(RustCallUnwindReasonV1::MissingCallbackUnwindEvidence));assert!(r[0].unwind_edges.is_empty());
+    }
+    #[test]
+    fn rust_call_unwind_relation_detached_callback() {
+        let (g,m)=rust_call_unwind_relation_callback(false,true);let r=rust_call_unwind_relation_payload(&g,&m).unwrap();
+        assert_eq!(r[0].activation_kind,RustActivationKind::DetachedCallback);assert_eq!(r[0].unwind_semantics,RustCallUnwindSemanticsV1::DetachedNoCallerUnwind);assert!(r[0].unwind_edges.is_empty());
+    }
+    #[test]
+    fn rust_call_unwind_relation_provider_collision() {
+        let (a,ma)=rust_call_unwind_relation_callback(false,false);let (b,mb)=rust_call_unwind_relation_callback(false,true);
+        assert_eq!(serde_json::to_value(&a).unwrap(),serde_json::to_value(&b).unwrap());
+        assert_ne!(serde_json::to_value(rust_call_unwind_relation_payload(&a,&ma).unwrap()).unwrap(),
+            serde_json::to_value(rust_call_unwind_relation_payload(&b,&mb).unwrap()).unwrap());
+    }
+    #[test]
+    fn rust_call_unwind_relation_shared_callback_separate() {
+        let (g,_)=rust_call_unwind_relation_fixture(2);
+        let m=RustActivationUnwindMetadataV1::new(g.rust_calls.iter().map(|c|
+            crate::structs::RustActivationUnwindMetadata::callback(c,Some(crate::structs::HigherOrderCallSemantics::RepeatedCallbacks)))).unwrap();
+        let r=rust_call_unwind_relation_payload(&g,&m).unwrap();assert_eq!(r.len(),2);assert_ne!(r[0].dummy_call_node,r[1].dummy_call_node);
+    }
+    #[test]
+    fn rust_call_unwind_relation_missing_metadata() {
+        let (g,mut m)=rust_call_unwind_relation_fixture(1);m.activations.clear();assert!(rust_call_unwind_relation_payload(&g,&m).is_err());
+    }
+    #[test]
+    fn rust_call_unwind_relation_duplicate_metadata() {
+        let (g,mut m)=rust_call_unwind_relation_fixture(1);m.activations.push(m.activations[0].clone());
+        assert!(rust_call_unwind_relation_payload(&g,&m).unwrap_err().to_string().contains("duplicate"));
+    }
+    #[test]
+    fn rust_call_unwind_relation_f2_mismatch() {
+        let (g,m)=rust_call_unwind_relation_fixture(1);let mut r=rust_call_return_relation_payload(&g).unwrap();r[0].callee_entry_node="wrong".into();
+        let ids=g.ordered_nodes.iter().map(|(id,_)|id.clone()).collect();
+        assert!(rust_call_unwind_relation_records(&g,&m,&r,&typed_edge_records(&g),&ids).is_err());
+    }
+    #[test]
+    fn rust_call_unwind_relation_wrong_flow() {
+        let (mut g,m)=rust_call_unwind_relation_fixture(1);g.icfg_edges.last_mut().unwrap().label=Some("Normal".into());
+        assert!(rust_call_unwind_relation_payload(&g,&m).unwrap_err().to_string().contains("Unwind flow"));
+    }
+    #[test]
+    fn rust_call_unwind_relation_foreign_fanout_rejection() {
+        let (g,m)=rust_call_unwind_relation_fixture(2);let r=rust_call_unwind_relation_payload(&g,&m).unwrap();
+        assert!(r[0].unwind_edges.iter().all(|e|e.destination_node=="rust::caller::bb7"));
+        assert!(r[1].unwind_edges.iter().all(|e|e.destination_node=="rust::caller::bb8"));
+    }
+    #[test]
+    fn rust_call_unwind_relation_deterministic_ordering() {
+        let (a,ma)=rust_call_unwind_relation_fixture(2);let mut b=a.clone();let mut mb=ma.clone();
+        b.rust_calls.reverse();b.ordered_nodes.reverse();b.icfg_edges.reverse();mb.activations.reverse();
+        assert_eq!(serde_json::to_value(rust_call_unwind_relation_payload(&a,&ma).unwrap()).unwrap(),
+            serde_json::to_value(rust_call_unwind_relation_payload(&b,&mb).unwrap()).unwrap());
+    }
+    #[test]
+    fn rust_call_unwind_relation_schema_v1() {
+        let r=rust_call_return_relation_export(1,0);assert!(r.get("rust_call_unwind_relations").is_none());
+        assert!(r.get("capabilities").is_none());
+    }
+    #[test]
+    fn rust_call_unwind_relation_schema_v2_empty() {
+        let r=rust_call_return_relation_export(2,0);assert_eq!(r["rust_call_unwind_relations"],serde_json::json!([]));
+        assert!(r["capabilities"].as_array().unwrap().iter().any(|c|c=="rust_call_unwind_relation_v1"));
+    }
+    #[test]
+    fn rust_call_unwind_relation_f2_non_interference() {
+        let (g,m)=rust_call_unwind_relation_fixture(2);let before=rust_call_return_relation_payload(&g).unwrap();
+        rust_call_unwind_relation_payload(&g,&m).unwrap();assert_eq!(before,rust_call_return_relation_payload(&g).unwrap());
+    }
+    #[test]
+    fn rust_call_unwind_relation_disposition_non_interference() {
+        return_projection_escape_artifact_disposition();return_projection_escape_field_return();return_projection_escape_nested_field();
+    }
+
+    fn rust_call_return_relation_fixture(count: usize, returns: &[&str]) -> GlobalICFGOrdered {
+        let mut graph = GlobalICFGOrdered {
+            ordered_nodes: vec![], icfg_edges: vec![], llvm_memory_effects: None,
+            svf_solved_points_to: None, rust_functions: BTreeMap::new(),
+            rust_calls: vec![], dependency_body_ingestion_v1: None,
+        };
+        graph.rust_functions.insert("callee".into(), RustFunctionMetadata {
+            name: "callee".into(), arg_count: 0, entry_node: "entry".into(),
+            return_nodes: returns.iter().map(|s| s.to_string()).collect(),
+        });
+        let mut ids = BTreeSet::from(["entry".to_string()]);
+        ids.extend(returns.iter().map(|s| s.to_string()));
+        for i in 0..count {
+            let call = RustCallMetadata {
+                caller_function: "caller".into(), call_node: format!("call{i}"),
+                dummy_call_node: format!("activation{i}"), callee_function: "callee".into(),
+                dummy_ret_node: format!("matched{i}"), return_node: format!("continuation{i}"),
+                arguments: vec![], return_place: "_0".into(), is_closure: false,
+            };
+            ids.extend([call.call_node.clone(), call.dummy_call_node.clone(),
+                call.dummy_ret_node.clone(), call.return_node.clone()]);
+            graph.icfg_edges.extend([
+                edge(&call.call_node, &call.dummy_call_node),
+                edge(&call.dummy_call_node, "entry"),
+                edge(&call.dummy_ret_node, &call.return_node),
+            ]);
+            for ret in returns { graph.icfg_edges.push(edge(ret, &call.dummy_ret_node)); }
+            graph.rust_calls.push(call);
+        }
+        graph.ordered_nodes = ids.into_iter().map(|id| (id, GlobalICFGNode::Mir(
+            MirBasicBlock { block_id: 0, statements: vec![], terminator: None }
+        ))).collect();
+        graph
+    }
+
+    fn rust_call_return_relation_payload(graph: &GlobalICFGOrdered) -> Result<Vec<RustCallReturnRelationV1>, Box<dyn Error>> {
+        let mut successors: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        for edge in &graph.icfg_edges {
+            successors.entry(edge.source.clone()).or_default().insert(edge.destination.clone());
+        }
+        let ids = graph.ordered_nodes.iter().map(|(id, _)| id.clone()).collect();
+        rust_call_return_relation_records(graph, &successors, &ids)
+    }
+
+    fn rust_call_return_relation_export(schema: u32, count: usize) -> serde_json::Value {
+        let graph = rust_call_return_relation_fixture(count, &[]);
+        let path = std::env::temp_dir().join(format!("crema-relation-{schema}-{}-{:?}.json",
+            std::process::id(), std::thread::current().id()));
+        let mut state = AbstractState::default();
+        let mut memory = AbstractMemory::default();
+        memory.set_cell_value(&"Local(_0)".to_string(), CellValue::TOP);
+        state.insert("entry".into(), memory);
+        export_cqpl_annotated_icfg_with_identity(&graph, &state,
+            &AllocationIdentityState::default(), "entry", schema, &path).unwrap();
+        let value = serde_json::from_reader(File::open(&path).unwrap()).unwrap();
+        std::fs::remove_file(path).unwrap();
+        value
+    }
+
+    #[test]
+    fn rust_call_return_relation_single_call() {
+        let records = rust_call_return_relation_payload(&rust_call_return_relation_fixture(1, &["ret"])).unwrap();
+        assert_eq!(records, vec![RustCallReturnRelationV1 {
+            caller_function: "caller".into(), call_node: "call0".into(),
+            dummy_call_node: "activation0".into(), callee_function: "callee".into(),
+            callee_entry_node: "entry".into(), callee_return_nodes: vec!["ret".into()],
+            dummy_ret_node: "matched0".into(), continuation_node: "continuation0".into(),
+            basis: "rust_call_metadata_v1",
+        }]);
+    }
+
+    #[test]
+    fn rust_call_return_relation_shared_callee_two_callsites() {
+        let records = rust_call_return_relation_payload(&rust_call_return_relation_fixture(2, &["ret"])).unwrap();
+        assert_eq!(records.len(), 2);
+        let (a, b) = (&records[0], &records[1]);
+        assert_eq!(a.callee_function, b.callee_function);
+        assert_eq!(a.callee_entry_node, b.callee_entry_node);
+        assert_eq!(a.callee_return_nodes, b.callee_return_nodes);
+        assert_ne!(a.call_node, b.call_node);
+        assert_ne!(a.dummy_call_node, b.dummy_call_node);
+        assert_ne!(a.dummy_ret_node, b.dummy_ret_node);
+        assert_ne!(a.continuation_node, b.continuation_node);
+    }
+
+    #[test]
+    fn rust_call_return_relation_multiple_return_blocks() {
+        let records = rust_call_return_relation_payload(&rust_call_return_relation_fixture(1, &["ret_b", "ret_a", "ret_b"])).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].callee_return_nodes, vec!["ret_a", "ret_b"]);
+    }
+
+    #[test]
+    fn rust_call_return_relation_no_normal_return() {
+        let graph = rust_call_return_relation_fixture(1, &[]);
+        let before = graph.icfg_edges.clone();
+        let records = rust_call_return_relation_payload(&graph).unwrap();
+        assert_eq!(records.len(), 1);
+        assert!(records[0].callee_return_nodes.is_empty());
+        assert_eq!(serde_json::to_value(&graph.icfg_edges).unwrap(), serde_json::to_value(&before).unwrap());
+    }
+
+    fn rust_call_return_relation_missing_edge(source: &str, destination: &str, message: &str) {
+        let mut graph = rust_call_return_relation_fixture(1, &["ret"]);
+        graph.icfg_edges.retain(|e| e.source != source || e.destination != destination);
+        let error = rust_call_return_relation_payload(&graph).unwrap_err().to_string();
+        assert!(error.contains(message), "{error}");
+    }
+
+    #[test]
+    fn rust_call_return_relation_missing_call_edge() {
+        rust_call_return_relation_missing_edge("call0", "activation0", "missing call edge");
+    }
+    #[test]
+    fn rust_call_return_relation_missing_activation_edge() {
+        rust_call_return_relation_missing_edge("activation0", "entry", "missing activation edge");
+    }
+    #[test]
+    fn rust_call_return_relation_missing_callee_return_edge() {
+        rust_call_return_relation_missing_edge("ret", "matched0", "missing return edge");
+    }
+    #[test]
+    fn rust_call_return_relation_missing_continuation_edge() {
+        rust_call_return_relation_missing_edge("matched0", "continuation0", "missing continuation edge");
+    }
+
+    #[test]
+    fn rust_call_return_relation_duplicate_dummy_call_ambiguity() {
+        let mut graph = rust_call_return_relation_fixture(2, &["ret"]);
+        graph.rust_calls[1].dummy_call_node = "activation0".into();
+        graph.icfg_edges.push(edge("call1", "activation0"));
+        assert!(rust_call_return_relation_payload(&graph).unwrap_err().to_string().contains("duplicate dummy call"));
+    }
+
+    #[test]
+    fn rust_call_return_relation_duplicate_dummy_return_ambiguity() {
+        let mut graph = rust_call_return_relation_fixture(2, &["ret"]);
+        graph.rust_calls[1].dummy_ret_node = "matched0".into();
+        graph.icfg_edges.push(edge("matched0", "continuation1"));
+        assert!(rust_call_return_relation_payload(&graph).unwrap_err().to_string().contains("duplicate dummy return"));
+    }
+
+    #[test]
+    fn rust_call_return_relation_deterministic_ordering() {
+        let a = rust_call_return_relation_fixture(2, &["ret_b", "ret_a"]);
+        let mut b = a.clone();
+        b.rust_calls.reverse();
+        b.rust_functions.get_mut("callee").unwrap().return_nodes.reverse();
+        b.icfg_edges.reverse();
+        assert_eq!(serde_json::to_string(&rust_call_return_relation_payload(&a).unwrap()).unwrap(),
+            serde_json::to_string(&rust_call_return_relation_payload(&b).unwrap()).unwrap());
+    }
+
+    #[test]
+    fn rust_call_return_relation_schema_v1() {
+        let value = rust_call_return_relation_export(1, 0);
+        assert!(value.get("rust_call_return_relations").is_none());
+        assert!(value.get("capabilities").is_none());
+    }
+
+    #[test]
+    fn rust_call_return_relation_schema_v2_empty() {
+        let value = rust_call_return_relation_export(2, 0);
+        assert_eq!(value["rust_call_return_relations"], serde_json::json!([]));
+        assert!(value["capabilities"].as_array().unwrap().iter().any(|c| c == "rust_call_return_relation_v1"));
+    }
+
+    #[test]
+    fn rust_call_return_relation_capability_coexistence() {
+        let value = rust_call_return_relation_export(2, 0);
+        let caps = value["capabilities"].as_array().unwrap();
+        assert!(caps.iter().any(|c| c == "return_projection_escape_v1"));
+        assert!(caps.iter().any(|c| c == "rust_call_return_relation_v1"));
+    }
+
+    #[test]
+    fn rust_call_return_relation_schema_v2_nonempty() {
+        let value = rust_call_return_relation_export(2, 1);
+        let records = value["rust_call_return_relations"].as_array().unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0]["call_node"], "call0");
+        assert_eq!(records[0]["continuation_node"], "continuation0");
+        assert_eq!(records[0]["basis"], "rust_call_metadata_v1");
+        assert_eq!(records[0]["callee_return_nodes"], serde_json::json!([]));
+        assert_eq!(records[0].as_object().unwrap().len(), 9);
+    }
+
+    #[test]
+    fn rust_call_return_relation_missing_callee() {
+        let mut graph = rust_call_return_relation_fixture(1, &["ret"]);
+        graph.rust_functions.clear();
+        assert!(rust_call_return_relation_payload(&graph).unwrap_err().to_string().contains("missing local callee"));
+    }
+
+    #[test]
+    fn rust_call_return_relation_missing_canonical_node() {
+        let mut graph = rust_call_return_relation_fixture(1, &["ret"]);
+        graph.ordered_nodes.retain(|(id, _)| id != "ret");
+        assert!(rust_call_return_relation_payload(&graph).unwrap_err().to_string().contains("missing canonical node"));
+    }
+
+    #[test]
+    fn return_projection_escape_direct_return() {
+        let (root, allocation, mut memory) = return_projection_fixture();
+        memory.assign_points_to(root.clone(), BTreeSet::from([allocation.clone()]));
+        assert_eq!(return_escape_allocations(&memory, &root), BTreeSet::from([allocation]));
+        assert_eq!(return_escape_allocations(&memory, &root), memory.event_allocations(&root));
+    }
+
+    #[test]
+    fn return_projection_escape_field_return() {
+        let (root, allocation, mut memory) = return_projection_fixture();
+        memory.assign_place_points_to(return_projection_place(&root, &[0]), BTreeSet::from([allocation.clone()]));
+        assert_eq!(return_escape_allocations(&memory, &root), BTreeSet::from([allocation]));
+    }
+
+    #[test]
+    fn return_projection_escape_nested_field() {
+        let (root, allocation, mut memory) = return_projection_fixture();
+        memory.assign_place_points_to(return_projection_place(&root, &[0, 2]), BTreeSet::from([allocation.clone()]));
+        assert_eq!(return_escape_allocations(&memory, &root), BTreeSet::from([allocation]));
+    }
+
+    #[test]
+    fn return_projection_escape_non_return_root() {
+        let (root, allocation, mut memory) = return_projection_fixture();
+        let other = ProgramVarId::rust("producer", "Local(_1)").unwrap();
+        memory.assign_place_points_to(return_projection_place(&other, &[0]), BTreeSet::from([allocation]));
+        assert!(return_escape_allocations(&memory, &root).is_empty());
+    }
+
+    #[test]
+    fn return_projection_escape_foreign_function() {
+        let (root, allocation, mut memory) = return_projection_fixture();
+        let other = ProgramVarId::rust("foreign", "Local(_0)").unwrap();
+        memory.assign_place_points_to(return_projection_place(&other, &[0]), BTreeSet::from([allocation]));
+        assert!(return_escape_allocations(&memory, &root).is_empty());
+    }
+
+    #[test]
+    fn return_projection_escape_unsupported_projections() {
+        let (root, allocation, _) = return_projection_fixture();
+        for unsupported in [
+            PlaceProjection::Deref,
+            PlaceProjection::Index { local: root.clone() },
+            PlaceProjection::Opaque { text: "unknown".into() },
+        ] {
+            for projection in [vec![unsupported.clone()], vec![PlaceProjection::Field { index: 0 }, unsupported]] {
+                let mut memory = AllocationIdentityMemory::default();
+                let place = PlaceId { base: root.clone(), projection };
+                memory.assign_place_points_to(place.clone(), BTreeSet::from([allocation.clone()]));
+                memory.assign_place_stack_refs(place, BTreeSet::from([return_projection_place(&root, &[])]));
+                assert!(return_escape_allocations(&memory, &root).is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn return_projection_escape_deduplication() {
+        let (root, allocation, mut memory) = return_projection_fixture();
+        memory.assign_points_to(root.clone(), BTreeSet::from([allocation.clone()]));
+        memory.assign_place_points_to(return_projection_place(&root, &[0]), BTreeSet::from([allocation.clone()]));
+        assert_eq!(return_escape_allocations(&memory, &root), BTreeSet::from([allocation]));
+        assert_eq!(allocation_disposition_for_node("rust::producer::bb0", &return_projection_node(), &memory, &memory, &[]).len(), 1);
+    }
+
+    #[test]
+    fn return_projection_escape_artifact_disposition() {
+        let (root, allocation, mut memory) = return_projection_fixture();
+        memory.assign_place_points_to(return_projection_place(&root, &[0]), BTreeSet::from([allocation.clone()]));
+        let records = allocation_disposition_for_node("rust::producer::bb0", &return_projection_node(), &AllocationIdentityMemory::default(), &memory, &[]);
+        assert_eq!(records.len(), 1);
+        let value = serde_json::to_value(&records[0]).unwrap();
+        assert_eq!(value, serde_json::json!({
+            "allocation": stable_allocation_id(&allocation),
+            "kind": "return_escape",
+            "certainty": "may_abstract",
+            "obligation_effect": "may_escape_to_caller",
+            "basis": "rust_return_identity_v1",
+            "source_variable": "rust::producer::Local(_0)"
+        }));
+        assert!(records[0].callee_def_path.is_none());
+        assert!(records[0].target_variable.is_none());
+    }
+
+    #[test]
+    fn return_projection_escape_stack_reference_evidence() {
+        let (root, allocation, mut memory) = return_projection_fixture();
+        let referent = ProgramVarId::rust("producer", "Local(_2)").unwrap();
+        memory.assign_points_to(referent.clone(), BTreeSet::from([allocation.clone()]));
+        memory.assign_place_stack_refs(return_projection_place(&root, &[0, 2]), BTreeSet::from([return_projection_place(&referent, &[])]));
+        assert_eq!(return_escape_allocations(&memory, &root), BTreeSet::from([allocation]));
+    }
+
+    #[test]
+    fn return_projection_escape_resource_only_is_not_evidence() {
+        let (root, allocation, mut memory) = return_projection_fixture();
+        memory.place_resources.insert(return_projection_place(&root, &[0]), BTreeSet::from([allocation]));
+        assert!(return_escape_allocations(&memory, &root).is_empty());
+    }
+
+    #[test]
+    fn return_projection_escape_schema_v2_capability() {
+        let graph = GlobalICFGOrdered {
+            ordered_nodes: vec![("rust::producer::bb0".into(), return_projection_node())],
+            icfg_edges: vec![],
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            rust_functions: Default::default(),
+            rust_calls: vec![],
+            dependency_body_ingestion_v1: None,
+        };
+        let mut state = AbstractState::default();
+        let mut memory = AbstractMemory::default();
+        memory.set_cell_value(&"Local(_0)".to_string(), CellValue::TOP);
+        state.insert("rust::producer::bb0".into(), memory);
+        let path = std::env::temp_dir().join(format!("crema-return-projection-capability-{}.json", std::process::id()));
+        export_cqpl_annotated_icfg_with_identity(&graph, &state, &AllocationIdentityState::default(), "rust::producer::bb0", 2, &path).unwrap();
+        let value: serde_json::Value = serde_json::from_reader(File::open(&path).unwrap()).unwrap();
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(value["schema_version"], 2);
+        assert!(value["capabilities"].as_array().unwrap().iter().any(|cap| cap == "return_projection_escape_v1"));
     }
 
     #[test]
@@ -5043,6 +6456,7 @@ mod tests {
                 callee_def_path: Some(function_called.into()),
                 deallocator_evidence: None,
                 allocation_disposition_evidence: None,
+                atomic_ptr_evidence: None,
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -5773,11 +7187,82 @@ mod tests {
             &HashSet::new(),
             &HashSet::new(),
         );
+        let raw: Vec<EventLabel> = event_sources.keys().cloned().collect();
+        let admitted = allocation_labels_for_node(
+            node_id,
+            &node,
+            &raw,
+            &identity,
+            &HashSet::new(),
+            2,
+        );
+        assert!(admitted.is_empty(), "uncertified MIR Drop is not an allocation-level deallocation");
         let records = allocation_event_source_records_for_node(
             node_id,
             &node,
             &event_sources,
             &identity,
+            &admitted,
+        );
+        assert!(
+            records.is_empty(),
+            "source provenance must not resurrect an allocation event rejected by semantic admission",
+        );
+    }
+
+    #[test]
+    fn ht2_r2p3_source_provenance_is_exact_projection_of_admitted_vec_drop() {
+        let drop_span = "/tmp/project/src/main.rs:31:5: 31:14 (#3)";
+        let node_id = "rust::main::bb6";
+        let node = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 6,
+            statements: vec![],
+            terminator: Some(MirTerminator::Drop {
+                details: "drop(_2)".into(),
+                source_info: drop_span.into(),
+                return_target: "bb7".into(),
+                unwind_target: "continue".into(),
+                dropped_value: "_2".into(),
+                is_mutable: false,
+                deallocator_evidence: Some(RustDropAllocatorEvidence {
+                    kind: RustDropAllocatorEvidenceKind::VecGlobal,
+                    owner_def_path: "alloc::vec::Vec".into(),
+                    allocator_def_path: "alloc::alloc::Global".into(),
+                }),
+            }),
+        });
+        let allocation = AbstractAllocId::new(
+            AllocationSiteId::Synthetic { scope: "test".into(), label: "vec-buffer".into() },
+            Vec::new(),
+        );
+        let mut identity = AllocationIdentityMemory::default();
+        identity.assign_fresh(
+            ProgramVarId::rust("main", "_2").expect("MIR local"),
+            allocation.clone(),
+        );
+        let event_sources = event_sources_for_node(
+            node_id,
+            &node,
+            &LlvmNameResolver::default(),
+            &HashSet::new(),
+            &HashSet::new(),
+        );
+        let raw: Vec<EventLabel> = event_sources.keys().cloned().collect();
+        let admitted = allocation_labels_for_node(
+            node_id,
+            &node,
+            &raw,
+            &identity,
+            &HashSet::new(),
+            2,
+        );
+        assert_eq!(admitted.len(), 1);
+        let records = allocation_event_source_records_for_node(
+            node_id,
+            &node,
+            &event_sources,
+            &identity,
+            &admitted,
         );
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].predicate, "drop");
@@ -5785,6 +7270,67 @@ mod tests {
         assert_eq!(records[0].certainty, "may_abstract");
         assert_eq!(records[0].anchors.len(), 1);
         assert_eq!(records[0].anchors[0].raw_span, drop_span);
+    }
+
+    #[test]
+    fn ht2_r2p3_source_provenance_never_exceeds_allocation_labels() {
+        let node_id = "rust::main::bb0";
+        let node = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 0,
+            statements: vec![],
+            terminator: Some(MirTerminator::Drop {
+                details: "drop(_3)".into(),
+                source_info: "/tmp/project/src/main.rs:41:5: 41:14 (#4)".into(),
+                return_target: "bb1".into(),
+                unwind_target: "continue".into(),
+                dropped_value: "_3".into(),
+                is_mutable: false,
+                deallocator_evidence: None,
+            }),
+        });
+        let allocation = AbstractAllocId::new(
+            AllocationSiteId::Synthetic { scope: "test".into(), label: "owned".into() },
+            Vec::new(),
+        );
+        let mut identity = AllocationIdentityMemory::default();
+        identity.assign_fresh(
+            ProgramVarId::rust("main", "_3").expect("MIR local"),
+            allocation,
+        );
+        let event_sources = event_sources_for_node(
+            node_id,
+            &node,
+            &LlvmNameResolver::default(),
+            &HashSet::new(),
+            &HashSet::new(),
+        );
+        let raw: Vec<EventLabel> = event_sources.keys().cloned().collect();
+        let admitted = allocation_labels_for_node(
+            node_id,
+            &node,
+            &raw,
+            &identity,
+            &HashSet::new(),
+            2,
+        );
+        let provenance = node_source_provenance(
+            node_id,
+            &node,
+            &event_sources,
+            &identity,
+            &admitted,
+        );
+        let admitted_keys: BTreeSet<(&'static str, String)> = admitted
+            .iter()
+            .map(|label| (label.predicate, label.allocation.clone()))
+            .collect();
+        for record in provenance.allocation_events {
+            assert!(
+                admitted_keys.contains(&(record.predicate, record.allocation)),
+                "source provenance must be a subset of semantically admitted allocation labels",
+            );
+        }
+        assert!(admitted.is_empty());
     }
 
     #[test]
@@ -5864,6 +7410,50 @@ mod tests {
     }
 
     #[test]
+    fn schema_v2_exports_hybrid_dependency_context_capability_without_claiming_v3() {
+        let n0=GlobalICFGNode::Mir(MirBasicBlock {block_id:0,statements:vec![],terminator:None});
+        let g=GlobalICFGOrdered {
+            llvm_memory_effects:None,svf_solved_points_to:None,
+            ordered_nodes:vec![("rust::main::bb0".into(),n0)],icfg_edges:vec![],
+            rust_functions:Default::default(),rust_calls:vec![],
+            dependency_body_ingestion_v1:Some(DependencyBodyIngestionExport {
+                capability:"dependency_body_ingestion_v1".into(),target_triple:"test".into(),
+                crate_correlations:vec![],package_scope:vec![],body_statuses:vec![],exact_call_bindings:vec![],
+                icfg_callsite_links:vec![],icfg_stitching_v1:None,
+                context_execution_graph_v1:Some(serde_json::json!({
+                    "capability":"context_explicit_icfg_v4",
+                    "p2_control_flow_complete":true,
+                    "dependency_context_policy":"entry_exact_then_dependency_internal_call_string_k1",
+                    "dependency_context_k":1,
+                    "recursive_context_policy":"scc_local_call_string_k1",
+                    "recursive_context_k":1,
+                    "states":[],"represented_call_activations":[],"opaque_higher_order_summaries":[]
+                })),
+            }),
+        };
+        // The schema-v2 exporter deliberately rejects artifacts whose
+        // quantifier/program-variable domain is empty.  This test exercises
+        // the context capability projection, so construct the smallest valid
+        // abstract state instead of bypassing that exporter invariant.
+        let mut state=AbstractState::default();
+        let mut memory=AbstractMemory::default();
+        memory.set_cell_value(&"Local(_1)".to_string(), CellValue::TOP);
+        state.insert("rust::main::bb0".into(), memory);
+        let identity=AllocationIdentityState::default();
+        let path=std::env::temp_dir().join(format!("crema-cqpl-context-v4-{}.json",std::process::id()));
+        export_cqpl_annotated_icfg_with_identity(&g,&state,&identity,"rust::main::bb0",2,&path).unwrap();
+        let value:serde_json::Value=serde_json::from_reader(File::open(&path).unwrap()).unwrap();
+        let _=std::fs::remove_file(path);
+        let caps=value["capabilities"].as_array().unwrap();
+        let has=|name:&str|caps.iter().any(|c|c.as_str()==Some(name));
+        assert!(has("context_explicit_icfg_v1"));
+        assert!(has("context_explicit_icfg_v4"));
+        assert!(has("dependency_region_local_k1_v1"));
+        assert!(has("recursive_scc_local_k1_v1"));
+        assert!(!has("context_explicit_icfg_v3"),"v4 must not masquerade as exact-outer-context v3");
+    }
+
+    #[test]
     fn exporter_rejects_dangling_canonical_edge() {
         let n0 = GlobalICFGNode::Mir(MirBasicBlock { block_id: 0, statements: vec![], terminator: None });
         let g = GlobalICFGOrdered {
@@ -5936,6 +7526,7 @@ mod tests {
                 callee_def_path: Some("callee".into()),
                 deallocator_evidence: None,
                 allocation_disposition_evidence: None,
+                atomic_ptr_evidence: None,
                 higher_order_evidence: None,
                 callee_is_local: true,
                 callback_def_paths: Vec::new(),
@@ -6258,6 +7849,7 @@ mod tests {
                     callee_def_path: "core::mem::drop".into(),
                     owner_def_path: None,
                 }),
+                atomic_ptr_evidence: None,
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -6296,6 +7888,7 @@ mod tests {
                 callee_def_path: None,
                 deallocator_evidence: None,
                 allocation_disposition_evidence: None,
+                atomic_ptr_evidence: None,
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -6338,6 +7931,7 @@ mod tests {
                 callee_def_path: None,
                 deallocator_evidence: None,
                 allocation_disposition_evidence: None,
+                atomic_ptr_evidence: None,
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -6613,7 +8207,7 @@ mod tests {
     }
 
     #[test]
-    fn schema_v2_allocation_labels_preserve_may_certainty_without_closure_label_expansion() {
+    fn ht2_r2p2_uncertified_mir_drop_is_not_an_allocation_deallocation_event() {
         let scope = "main::{closure#0}";
         let node_id = format!("rust::{scope}::bb3");
         let node = GlobalICFGNode::Mir(MirBasicBlock {
@@ -6642,10 +8236,10 @@ mod tests {
 
         let raw = vec![EventLabel { predicate: "drop", variable: "Local(_6)".into() }];
         let labels = allocation_labels_for_node(&node_id, &node, &raw, &identity, &HashSet::new(), 2);
-        assert_eq!(labels.len(), 1);
-        assert_eq!(labels[0].predicate, "drop");
-        assert_eq!(labels[0].allocation, stable_allocation_id(&a));
-        assert_eq!(labels[0].certainty, "may_abstract");
+        assert!(
+            labels.is_empty(),
+            "language-level wrapper Drop without producer-certified deallocation must not fabricate drop_l(A)"
+        );
     }
 
 
@@ -6805,6 +8399,149 @@ mod tests {
     }
 
     #[test]
+    fn ht2_r2_string_from_str_allocation_contract_is_rust_global_may_site() {
+        let allocation = AbstractAllocId::new(
+            AllocationSiteId::RustCall {
+                node_id: "rust::main::bb1".into(),
+                callee: "<std::string::String as std::convert::From<&str>>::from".into(),
+            },
+            vec![],
+        );
+        let contract = allocation_contract(&allocation);
+        assert_eq!(contract.family, "rust_global");
+        assert_eq!(contract.operation, "string_allocation");
+        assert_eq!(contract.language, "rust");
+    }
+
+    #[test]
+    fn ht2_r2p4_string_owner_drop_is_semantic_deallocation_boundary() {
+        let scope = "main";
+        let node_id = "rust::main::bb4";
+        let node = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 4,
+            statements: vec![],
+            terminator: Some(MirTerminator::Drop {
+                details: "drop(_1)".into(),
+                source_info: "<cqpl-test>".into(),
+                return_target: "bb5".into(),
+                unwind_target: "continue".into(),
+                dropped_value: "_1".into(),
+                is_mutable: false,
+                deallocator_evidence: Some(RustDropAllocatorEvidence {
+                    kind: RustDropAllocatorEvidenceKind::StringGlobal,
+                    owner_def_path: "alloc::string::String".into(),
+                    allocator_def_path: "alloc::alloc::Global".into(),
+                }),
+            }),
+        });
+        let a = AbstractAllocId::new(
+            AllocationSiteId::RustCall {
+                node_id: "rust::main::bb1".into(),
+                callee: "<std::string::String as std::convert::From<&str>>::from".into(),
+            },
+            Vec::new(),
+        );
+        let mut identity = AllocationIdentityMemory::default();
+        identity.assign_fresh(
+            ProgramVarId::rust(scope, "_1").expect("MIR local"),
+            a.clone(),
+        );
+        let raw = vec![EventLabel { predicate: "drop", variable: "Local(_1)".into() }];
+        let labels = allocation_labels_for_node(
+            node_id, &node, &raw, &identity, &HashSet::new(), 2,
+        );
+        assert_eq!(labels.len(), 1);
+        assert_eq!(labels[0].allocation, stable_allocation_id(&a));
+        assert_eq!(
+            labels[0].deallocator_contract.as_ref().and_then(|c| c.basis),
+            Some("rust_string_global_drop"),
+        );
+    }
+
+    #[test]
+    fn ht2_r2p4_nested_vec_drop_is_coalesced_for_string_origin_resource() {
+        let scope = "main";
+        let node_id = "rust::main::bb6";
+        let node = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 6,
+            statements: vec![],
+            terminator: Some(MirTerminator::Drop {
+                details: "drop(_2)".into(),
+                source_info: "<cqpl-test>".into(),
+                return_target: "bb7".into(),
+                unwind_target: "continue".into(),
+                dropped_value: "_2".into(),
+                is_mutable: false,
+                deallocator_evidence: Some(RustDropAllocatorEvidence {
+                    kind: RustDropAllocatorEvidenceKind::VecGlobal,
+                    owner_def_path: "alloc::vec::Vec".into(),
+                    allocator_def_path: "alloc::alloc::Global".into(),
+                }),
+            }),
+        });
+        let a = AbstractAllocId::new(
+            AllocationSiteId::RustCall {
+                node_id: "rust::main::bb1".into(),
+                callee: "<std::string::String as std::convert::From<&str>>::from".into(),
+            },
+            Vec::new(),
+        );
+        let mut identity = AllocationIdentityMemory::default();
+        identity.assign_fresh(
+            ProgramVarId::rust(scope, "_2").expect("MIR local"),
+            a,
+        );
+        let raw = vec![EventLabel { predicate: "drop", variable: "Local(_2)".into() }];
+        let labels = allocation_labels_for_node(
+            node_id, &node, &raw, &identity, &HashSet::new(), 2,
+        );
+        assert!(labels.is_empty(), "Vec implementation drop must not double-count a String owner-boundary free");
+    }
+
+    #[test]
+    fn ht2_r2p2_certified_vec_drop_remains_allocation_deallocation_event() {
+        let scope = "main";
+        let node_id = "rust::main::bb6";
+        let node = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 6,
+            statements: vec![],
+            terminator: Some(MirTerminator::Drop {
+                details: "drop(_2)".into(),
+                source_info: "<cqpl-test>".into(),
+                return_target: "bb7".into(),
+                unwind_target: "continue".into(),
+                dropped_value: "_2".into(),
+                is_mutable: false,
+                deallocator_evidence: Some(RustDropAllocatorEvidence {
+                    kind: RustDropAllocatorEvidenceKind::VecGlobal,
+                    owner_def_path: "alloc::vec::Vec".into(),
+                    allocator_def_path: "alloc::alloc::Global".into(),
+                }),
+            }),
+        });
+        let a = AbstractAllocId::new(
+            AllocationSiteId::Synthetic { scope: "test".into(), label: "vec-buffer".into() },
+            Vec::new(),
+        );
+        let mut identity = AllocationIdentityMemory::default();
+        identity.assign_fresh(
+            ProgramVarId::rust(scope, "_2").expect("MIR local"),
+            a.clone(),
+        );
+        let raw = vec![EventLabel { predicate: "drop", variable: "Local(_2)".into() }];
+        let labels = allocation_labels_for_node(
+            node_id, &node, &raw, &identity, &HashSet::new(), 2,
+        );
+        assert_eq!(labels.len(), 1);
+        assert_eq!(labels[0].predicate, "drop");
+        assert_eq!(labels[0].allocation, stable_allocation_id(&a));
+        assert_eq!(
+            labels[0].deallocator_contract.as_ref().and_then(|c| c.basis.as_deref()),
+            Some("rust_vec_global_drop")
+        );
+    }
+
+    #[test]
     fn v6n_typed_vec_global_drop_contract_is_proof_carrying() {
         let node = GlobalICFGNode::Mir(MirBasicBlock {
             block_id: 4,
@@ -6850,6 +8587,7 @@ mod tests {
                         allocator_def_path: None,
                     }),
                     allocation_disposition_evidence: None,
+                    atomic_ptr_evidence: None,
                     higher_order_evidence: None,
                     callee_is_local: false,
                     callback_def_paths: Vec::new(),
@@ -6893,6 +8631,7 @@ mod tests {
                         allocator_def_path: Some("alloc::alloc::Global".into()),
                     }),
                     allocation_disposition_evidence: None,
+                    atomic_ptr_evidence: None,
                     higher_order_evidence: None,
                     callee_is_local: false,
                     callback_def_paths: Vec::new(),
@@ -7508,6 +9247,7 @@ mod tests {
                     callee_def_path: Some("free".into()),
                     deallocator_evidence: None,
                     allocation_disposition_evidence: None,
+                    atomic_ptr_evidence: None,
                     higher_order_evidence: None,
                     callee_is_local: false,
                     callback_def_paths: Vec::new(),
@@ -7782,6 +9522,138 @@ mod tests {
         let (ledger, complete) = dep1_call_semantic_coverage(&conflict, &[binding], &effects, &reach).unwrap();
         assert!(!complete);
         assert_eq!(ledger[0]["coverage_status"], "conflicting_coverage");
+    }
+
+    #[test]
+    fn cov1_ledger_accepts_certified_dynamic_trait_drop_summary() {
+        let reach=BTreeSet::from(["rust::main::bb0".to_string()]);
+        let key="dep1-drop-v1:instance-hash-v1:c:bb0:mir_drop:instance-hash-v1:d";
+        let mut call=cov1_call("dynamic_drop_summary",None);
+        call["activation_kind"]=serde_json::json!("mir_drop");
+        call["scope_reason"]=serde_json::json!("dynamic_trait_drop_summary");
+        call["call_key"]=serde_json::json!(key);
+        call["dynamic_drop_summary_v1"]=serde_json::json!({
+            "semantics":"opaque_dynamic_destructor_may_effect_v1",
+            "normal_memory_effect":"widen_all_tracked_to_top",
+            "unwind_memory_effect":"widen_all_tracked_to_top"
+        });
+        let mut link=cov1_link();
+        link["call_key"]=serde_json::json!(key);
+        let (ledger,complete)=dep1_call_semantic_coverage(
+            &cov1_icfg(call,vec![link],false),&[],&[],&reach
+        ).unwrap();
+        assert!(complete,"{ledger:?}");
+        assert_eq!(ledger[0]["semantic_coverage_path"],"dep1_dynamic_trait_drop_summary");
+        assert_eq!(ledger[0]["coverage_status"],"covered");
+    }
+
+    #[test]
+    fn dynamic_trait_drop_summary_exports_opaque_memory_effect_at_reachable_event_node() {
+        let mut call = cov1_call("dynamic_drop_summary", None);
+        call["activation_kind"] = serde_json::json!("mir_drop");
+        call["scope_reason"] = serde_json::json!("dynamic_trait_drop_summary");
+        call["dynamic_drop_summary_v1"] = serde_json::json!({
+            "semantics":"opaque_dynamic_destructor_may_effect_v1",
+            "normal_memory_effect":"widen_all_tracked_to_top",
+            "unwind_memory_effect":"widen_all_tracked_to_top"
+        });
+        let mut icfg = cov1_icfg(call, vec![], false);
+        icfg.icfg_edges.push(crate::structs::IcfgEdge {
+            source:"rust::main::bb0".into(),
+            destination:"rust::main::bb1".into(),
+            label:Some("DYNAMIC_TRAIT_DROP_SUMMARY_V1".into()),
+            source_label:None,
+            destination_label:None,
+        });
+        let reach = BTreeSet::from(["rust::main::bb0".to_string()]);
+        let records = opaque_memory_effect_records(&icfg, &reach);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].node, "rust::main::bb0");
+        assert_eq!(records[0].effect, "may_read_write_allocate_deallocate");
+        assert_eq!(records[0].basis, "rust_dyn_trait_drop_vtable_summary_v1");
+    }
+
+    #[test]
+    fn opaque_dynamic_drop_adds_finite_synthetic_allocation_site() {
+        let mut catalog = Vec::new();
+        let opaque = vec![OpaqueMemoryEffectRecord {
+            node: "rust::exec::bb7".into(),
+            effect: "may_read_write_allocate_deallocate",
+            basis: "rust_dyn_trait_drop_vtable_summary_v1",
+        }];
+        append_opaque_summary_allocations(&mut catalog, &opaque);
+        assert_eq!(catalog.len(), 1);
+        assert!(matches!(
+            &catalog[0].site,
+            AllocationSiteId::Synthetic { scope, label }
+                if scope == "rust::exec::bb7"
+                    && label == "opaque_dynamic_trait_drop_allocation_v1"
+        ));
+        assert_eq!(
+            catalog[0].allocator_contract.as_ref().map(|contract| contract.family),
+            Some("unknown")
+        );
+        append_opaque_summary_allocations(&mut catalog, &opaque);
+        assert_eq!(catalog.len(), 1, "summary allocation identity must be idempotent");
+    }
+
+    #[test]
+    fn opaque_higher_order_summary_exports_effect_and_synthetic_allocation() {
+        let mut icfg=cov1_icfg(cov1_call("out_of_scope",None),vec![],false);
+        let node="rust::main::bb0".to_string();
+        icfg.icfg_edges.push(IcfgEdge {source:node.clone(),destination:node.clone(),
+            label:Some("OPAQUE_HIGHER_ORDER_CALLBACK_SUMMARY_V1".into()),source_label:None,destination_label:None});
+        icfg.icfg_edges.push(IcfgEdge {source:node.clone(),destination:node.clone(),
+            label:Some("OPAQUE_HIGHER_ORDER_CALLBACK_SUMMARY_UNWIND_V1".into()),source_label:None,destination_label:None});
+        icfg.dependency_body_ingestion_v1=Some(DependencyBodyIngestionExport {
+            capability:"dependency_body_ingestion_v1".into(),target_triple:"test".into(),
+            crate_correlations:vec![],package_scope:vec![],body_statuses:vec![],exact_call_bindings:vec![],
+            icfg_callsite_links:vec![],icfg_stitching_v1:None,
+            context_execution_graph_v1:Some(serde_json::json!({
+                "opaque_higher_order_summaries":[{
+                    "semantics":"opaque_higher_order_callback_zero_or_more_v1",
+                    "provider_effect":"opaque_at_least_once_per_call",
+                    "callback_multiplicity":"zero_or_more",
+                    "memory_effect":"widen_all_tracked_to_top",
+                    "execution_state":node
+                }]
+            })),
+        });
+        let reach=BTreeSet::from([node.clone()]);
+        let opaque=opaque_memory_effect_records(&icfg,&reach);
+        assert_eq!(opaque.len(),1);
+        assert_eq!(opaque[0].node,node);
+        assert_eq!(opaque[0].basis,"rust_higher_order_callback_opaque_summary_v1");
+        let mut catalog=vec![];
+        append_opaque_summary_allocations(&mut catalog,&opaque);
+        assert_eq!(catalog.len(),1);
+        assert!(catalog[0].display.contains("opaque_higher_order_callback_allocation_v1"));
+    }
+
+    #[test]
+    fn cov1_ledger_accepts_only_structurally_certified_callback_keys() {
+        let reach=BTreeSet::from(["rust::main::bb0".to_string()]);
+        let key="dep1-callback-v1:instance-hash-v1:c:bb0:callback0:instance-hash-v1:d";
+        let mut call=cov1_call("represented_body",None);
+        call["activation_kind"]=serde_json::json!("higher_order_callback");
+        call["callback_semantics"]=serde_json::json!("spawn_may_once");
+        call["callback_ordinal"]=serde_json::json!(0);
+        call["call_key"]=serde_json::json!(key);
+        let mut link=cov1_link();
+        link["call_key"]=serde_json::json!(key);
+        let (ledger,complete)=dep1_call_semantic_coverage(
+            &cov1_icfg(call.clone(),vec![link],false),&[],&[],&reach
+        ).unwrap();
+        assert!(complete,"{ledger:?}");
+        assert_eq!(ledger[0]["semantic_coverage_path"],"dep1_rust_mir");
+        assert_eq!(ledger[0]["call_key"],key);
+
+        call["callback_semantics"]=serde_json::json!("unknown");
+        let (ledger,complete)=dep1_call_semantic_coverage(
+            &cov1_icfg(call,vec![],false),&[],&[],&reach
+        ).unwrap();
+        assert!(!complete);
+        assert_eq!(ledger[0]["coverage_status"],"invalid_callback_certificate");
     }
 
     #[test]

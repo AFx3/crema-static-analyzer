@@ -70,3 +70,20 @@ pub fn projection_for_producer_evidence(
         },
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProducerIdentityRelation { PreserveArg0ToReturn, None }
+
+pub fn producer_identity_relation_for_evidence(
+    evidence: &RustAllocationDispositionEvidenceKind,
+) -> ProducerIdentityRelation {
+    match evidence {
+        RustAllocationDispositionEvidenceKind::BoxFromRaw => ProducerIdentityRelation::PreserveArg0ToReturn,
+        RustAllocationDispositionEvidenceKind::BoxIntoRaw => ProducerIdentityRelation::PreserveArg0ToReturn,
+        RustAllocationDispositionEvidenceKind::BoxLeak => ProducerIdentityRelation::PreserveArg0ToReturn,
+        RustAllocationDispositionEvidenceKind::CStringFromRaw => ProducerIdentityRelation::PreserveArg0ToReturn,
+        RustAllocationDispositionEvidenceKind::CStringIntoRaw => ProducerIdentityRelation::PreserveArg0ToReturn,
+        RustAllocationDispositionEvidenceKind::MemDropRawPointer => ProducerIdentityRelation::None,
+        RustAllocationDispositionEvidenceKind::MemForgetOwnedBox => ProducerIdentityRelation::None,
+    }
+}

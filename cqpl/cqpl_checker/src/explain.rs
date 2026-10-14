@@ -9,6 +9,14 @@ use crate::truth::Truth;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+/// Finite diagnostic state, never serialized or used by the truth model.
+#[allow(dead_code)] // Infrastructure only; production findings opt in in a later feature.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct MatchedDiagnosticState {
+    node: String,
+    call_stack: Vec<usize>,
+}
+
 pub const EXPLAINABILITY_TAXONOMY_VERSION: &str = "cqpl_uncertainty_reasons_v1";
 pub const ALLOCATION_OBLIGATION_DIAGNOSTICS_VERSION: &str = "allocation_obligation_diagnostics_v1";
 pub const MEMORY_ERROR_DIAGNOSTICS_VERSION: &str = "memory_error_diagnostics_v1";
@@ -75,16 +83,17 @@ impl QueryResultStrength {
 }
 
 
-/// Read-only bug-supporting evidence that is intentionally separate from CQPL truth.
+/// Read-only query-supporting evidence that is intentionally separate from CQPL truth.
 ///
 /// `reason_frontier` answers why a three-valued query is unknown. These findings
 /// answer the complementary diagnostic question: whether the already-annotated
-/// abstract model contains an ordered witness supporting the queried memory-error
-/// class despite that uncertainty. They never change `tt`/`ff`/`unk`.
+/// abstract model contains an ordered witness supporting the queried allocation-
+/// lifecycle property despite that uncertainty. They never change `tt`/`ff`/`unk`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AllocationObligationFindingKind {
     NormalReturnOpenManualObligation,
+    PersistentAllocationOnNormalCompletion,
     NormalReturnUnreleasedExternalAllocation,
     AllCandidateSuffixesCrossModeledDrop,
     AllCandidateDropSuffixesExcludeRepeatedDrop,
@@ -93,6 +102,7 @@ pub enum AllocationObligationFindingKind {
     SuccessfulReallocationThenOldDrop,
     DropThenUseWithoutReallocation,
     RepeatedDropWithoutReallocation,
+    RepeatedDropInstanceContinuityUnresolved,
     AllocatorFamilyMismatch,
     AllocatorFamilyConsumerMismatch,
     UnresolvedAllocatorContractCandidate,
@@ -109,9 +119,12 @@ pub enum AllocationObligationFindingStrength {
 #[serde(rename_all = "snake_case")]
 pub enum AllocationObligationEvidence {
     ProducerCertifiedBoxIntoRaw,
+    ProducerCertifiedBoxLeak,
     ProducerCertifiedCStringIntoRaw,
     ProducerCertifiedCStringFromRaw,
+    ProducerCertifiedLocalReturnContinuity,
     NormalReturnReachable,
+    AnalysisRootNormalReturnReachable,
     NoModeledDischargeOnWitnessPath,
     NoInterveningCallAfterHandoff,
     NoInterveningCallAfterAllocation,
@@ -123,6 +136,8 @@ pub enum AllocationObligationEvidence {
     OrderedDropBeforeUse,
     TwoOrderedDropsObserved,
     NoReallocationBetweenEvents,
+    AllocationSiteActivationReentryObserved,
+    AllocationInstanceContinuityUnresolved,
     KnownAllocatorFamily,
     KnownDeallocatorFamily,
     KnownRequiredAllocatorFamily,
@@ -153,6 +168,7 @@ impl AllocationObligationFindingKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::NormalReturnOpenManualObligation => "normal_return_open_manual_obligation",
+            Self::PersistentAllocationOnNormalCompletion => "persistent_allocation_on_normal_completion",
             Self::NormalReturnUnreleasedExternalAllocation => "normal_return_unreleased_external_allocation",
             Self::AllCandidateSuffixesCrossModeledDrop => "all_candidate_suffixes_cross_modeled_drop",
             Self::AllCandidateDropSuffixesExcludeRepeatedDrop => "all_candidate_drop_suffixes_exclude_repeated_drop",
@@ -161,6 +177,7 @@ impl AllocationObligationFindingKind {
             Self::SuccessfulReallocationThenOldDrop => "successful_reallocation_then_old_drop",
             Self::DropThenUseWithoutReallocation => "drop_then_use_without_reallocation",
             Self::RepeatedDropWithoutReallocation => "repeated_drop_without_reallocation",
+            Self::RepeatedDropInstanceContinuityUnresolved => "repeated_drop_instance_continuity_unresolved",
             Self::AllocatorFamilyMismatch => "allocator_family_mismatch",
             Self::AllocatorFamilyConsumerMismatch => "allocator_family_consumer_mismatch",
             Self::UnresolvedAllocatorContractCandidate => "unresolved_allocator_contract_candidate",
@@ -177,7 +194,8 @@ impl AllocationObligationFindingKind {
             Self::AllCandidateSuffixesCrossModeledDrop
             | Self::AllCandidateDropSuffixesExcludeRepeatedDrop
             | Self::ConditionalReallocationObligationsClosed => QueryEvidenceDirection::False,
-            Self::UnresolvedAllocatorContractCandidate => QueryEvidenceDirection::None,
+            Self::RepeatedDropInstanceContinuityUnresolved
+            | Self::UnresolvedAllocatorContractCandidate => QueryEvidenceDirection::None,
             _ => QueryEvidenceDirection::True,
         }
     }
@@ -299,9 +317,12 @@ impl AllocationObligationEvidence {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ProducerCertifiedBoxIntoRaw => "producer_certified_box_into_raw",
+            Self::ProducerCertifiedBoxLeak => "producer_certified_box_leak",
             Self::ProducerCertifiedCStringIntoRaw => "producer_certified_c_string_into_raw",
             Self::ProducerCertifiedCStringFromRaw => "producer_certified_c_string_from_raw",
+            Self::ProducerCertifiedLocalReturnContinuity => "producer_certified_local_return_continuity",
             Self::NormalReturnReachable => "normal_return_reachable",
+            Self::AnalysisRootNormalReturnReachable => "analysis_root_normal_return_reachable",
             Self::NoModeledDischargeOnWitnessPath => "no_modeled_discharge_on_witness_path",
             Self::NoInterveningCallAfterHandoff => "no_intervening_call_after_handoff",
             Self::NoInterveningCallAfterAllocation => "no_intervening_call_after_allocation",
@@ -313,6 +334,8 @@ impl AllocationObligationEvidence {
             Self::OrderedDropBeforeUse => "ordered_drop_before_use",
             Self::TwoOrderedDropsObserved => "two_ordered_drops_observed",
             Self::NoReallocationBetweenEvents => "no_reallocation_between_events",
+            Self::AllocationSiteActivationReentryObserved => "allocation_site_activation_reentry_observed",
+            Self::AllocationInstanceContinuityUnresolved => "allocation_instance_continuity_unresolved",
             Self::KnownAllocatorFamily => "known_allocator_family",
             Self::KnownDeallocatorFamily => "known_deallocator_family",
             Self::KnownRequiredAllocatorFamily => "known_required_allocator_family",
@@ -635,7 +658,7 @@ pub struct ExplanationReport {
     pub scope_note: &'static str,
     pub reason_frontier: Vec<UncertaintyReason>,
     pub reason_counts: BTreeMap<String, usize>,
-    /// Positive bug-supporting evidence is deliberately separate from the
+    /// Positive query-supporting evidence is deliberately separate from the
     /// uncertainty frontier.  An `unk` query may therefore still have a strong
     /// ownership-obligation witness without being silently promoted to `tt`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -696,7 +719,7 @@ impl ExplanationReport {
             let _ = writeln!(out, "  <none>");
             let _ = writeln!(out);
             let _ = writeln!(out, "  interpretation:");
-            let _ = writeln!(out, "    No bug-specific supporting witness was certified beyond the uncertainty frontier. UNKNOWN therefore means insufficient abstract evidence for a definite verdict, not a positive finding by itself.");
+            let _ = writeln!(out, "    No query-specific supporting witness was certified beyond the uncertainty frontier. UNKNOWN therefore means insufficient abstract evidence for a definite verdict, not a positive finding by itself.");
         }
         for finding in &self.supporting_findings {
             let _ = writeln!(out);
@@ -1708,6 +1731,18 @@ impl<'a> ModelChecker<'a> {
                         ],
                     }
                 } else if !positive_findings.is_empty() && negative_findings.is_empty() {
+                    let mut caveats = vec![
+                        "positive supporting evidence does not promote UNKNOWN to true",
+                        "MAY evidence is never promoted to MUST",
+                    ];
+                    if positive_findings.iter().any(|finding| {
+                        finding.kind
+                            == AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion
+                    }) {
+                        caveats.push(
+                            "Box::leak persistence is intentional by API semantics and is evidence of retained allocation lifetime, not by itself evidence of an unintended defect",
+                        );
+                    }
                     QueryResultAssessment {
                         schema: QUERY_RESULT_ASSESSMENT_VERSION,
                         result: result.as_str(),
@@ -1715,10 +1750,7 @@ impl<'a> ModelChecker<'a> {
                         direction: QueryEvidenceDirection::True,
                         strength,
                         basis: basis.into_iter().collect(),
-                        caveats: vec![
-                            "positive supporting evidence does not promote UNKNOWN to true",
-                            "MAY evidence is never promoted to MUST",
-                        ],
+                        caveats,
                     }
                 } else if positive_findings.is_empty() && !negative_findings.is_empty() {
                     QueryResultAssessment {
@@ -2395,31 +2427,90 @@ impl<'a> ModelChecker<'a> {
                 continue;
             }
             for record in &node.allocation_disposition {
-                let (handoff_evidence, handoff_name) = match record.kind {
+                let (finding_kind, handoff_evidence, handoff_name) = match record.kind {
                     AllocationDispositionKind::BoxIntoRaw
                         if record.obligation_effect
                             == AllocationObligationEffect::PreserveManualObligation =>
                     {
-                        (AllocationObligationEvidence::ProducerCertifiedBoxIntoRaw, "Box::into_raw")
+                        (
+                            AllocationObligationFindingKind::NormalReturnOpenManualObligation,
+                            AllocationObligationEvidence::ProducerCertifiedBoxIntoRaw,
+                            "Box::into_raw",
+                        )
                     }
                     AllocationDispositionKind::CStringIntoRaw
                         if record.obligation_effect
                             == AllocationObligationEffect::PreserveManualObligation =>
                     {
                         (
+                            AllocationObligationFindingKind::NormalReturnOpenManualObligation,
                             AllocationObligationEvidence::ProducerCertifiedCStringIntoRaw,
                             "CString::into_raw",
+                        )
+                    }
+                    AllocationDispositionKind::BoxLeak
+                        if record.obligation_effect
+                            == AllocationObligationEffect::PreservePersistentObligation =>
+                    {
+                        (
+                            AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion,
+                            AllocationObligationEvidence::ProducerCertifiedBoxLeak,
+                            "Box::leak",
                         )
                     }
                     _ => continue,
                 };
 
                 let allocation = record.allocation.clone();
-                let path = self.bfs_to_in_scope(scope,
-                    handoff_node,
-                    |candidate| self.is_normal_return_node(candidate),
-                    |candidate| !self.blocks_open_manual_obligation(candidate, &allocation),
-                );
+                let path = match finding_kind {
+                    AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion => {
+                        // The finding name has application-level semantics: the
+                        // persistent obligation must survive to normal completion
+                        // of the analyzed root activation.  Do not accept an
+                        // arbitrary nested Rust return as completion.
+                        if scope != AssessmentScope::NormalExecution
+                            || Self::rust_activation_scope(&self.k.entry).is_none()
+                        {
+                            continue;
+                        }
+                        self.bfs_to_in_scope(
+                            scope,
+                            handoff_node,
+                            |candidate| self.is_analysis_root_normal_return_node(candidate),
+                            |candidate| {
+                                !self.blocks_open_obligation_following_local_returns(
+                                    candidate,
+                                    &allocation,
+                                )
+                            },
+                        )
+                    }
+                    AllocationObligationFindingKind::NormalReturnOpenManualObligation
+                        if self.k.capabilities.contains("rust_call_return_relation_v1") =>
+                    {
+                        self.matched_obligation_bfs_to_in_scope(
+                            scope, handoff_node, &allocation,
+                            |candidate| self.is_terminal_normal_return_for_matched_obligation(candidate, &allocation),
+                            |candidate| !self.blocks_matched_open_obligation(candidate, &allocation),
+                        )
+                    }
+                    _ => self.bfs_to_in_scope(
+                        scope,
+                        handoff_node,
+                        |candidate| {
+                            self.is_terminal_normal_return_for_open_obligation(
+                                candidate,
+                                &allocation,
+                            )
+                        },
+                        |candidate| {
+                            !self.blocks_open_obligation_following_local_returns(
+                                candidate,
+                                &allocation,
+                            )
+                        },
+                    ),
+                };
                 let Some(witness_path) = path else { continue; };
                 let Some(return_node) = witness_path.last().cloned() else { continue; };
 
@@ -2450,9 +2541,15 @@ impl<'a> ModelChecker<'a> {
                         }) || candidate.allocation_labels.iter().any(|label| {
                             label.allocation == allocation && label.predicate == EventKind::Drop
                         });
+                        let can_reach_relevant_completion = match finding_kind {
+                            AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion => {
+                                self.can_reach_analysis_root_normal_return_in_scope(scope, node_id)
+                            }
+                            _ => self.can_reach_normal_return_in_scope(scope, node_id),
+                        };
                         if has_discharge
                             && !witness_path.contains(node_id)
-                            && !self.can_reach_normal_return_in_scope(scope, node_id)
+                            && !can_reach_relevant_completion
                         {
                             Some(node_id.clone())
                         } else {
@@ -2468,11 +2565,29 @@ impl<'a> ModelChecker<'a> {
                 } else {
                     AllocationObligationFindingStrength::StrongAbstractEvidence
                 };
+                let crosses_local_return = witness_path.iter().any(|node_id| {
+                    if finding_kind == AllocationObligationFindingKind::NormalReturnOpenManualObligation
+                        && self.k.capabilities.contains("rust_call_return_relation_v1")
+                    {
+                        self.certified_local_return_obligation_relation(node_id, &allocation).is_some()
+                    } else {
+                        self.is_certified_local_return_obligation_transfer(node_id, &allocation)
+                    }
+                });
+                let completion_evidence = match finding_kind {
+                    AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion => {
+                        AllocationObligationEvidence::AnalysisRootNormalReturnReachable
+                    }
+                    _ => AllocationObligationEvidence::NormalReturnReachable,
+                };
                 let mut evidence = vec![
                     handoff_evidence,
-                    AllocationObligationEvidence::NormalReturnReachable,
+                    completion_evidence,
                     AllocationObligationEvidence::NoModeledDischargeOnWitnessPath,
                 ];
+                if crosses_local_return {
+                    evidence.push(AllocationObligationEvidence::ProducerCertifiedLocalReturnContinuity);
+                }
                 if !has_intervening_call {
                     evidence.push(AllocationObligationEvidence::NoInterveningCallAfterHandoff);
                 }
@@ -2480,12 +2595,26 @@ impl<'a> ModelChecker<'a> {
                     evidence.push(AllocationObligationEvidence::NonReturningDischargeObservedOffWitness);
                 }
 
-                let summary = match strength {
-                    AllocationObligationFindingStrength::StrongAbstractEvidence => format!(
-                        "The abstract model contains a normal-return path after producer-certified {handoff_name} on which the manual deallocation obligation remains open and no modeled discharge or escape occurs. This is strong abstract evidence of a leak on normal completion; CQPL truth remains {} because this diagnostic does not alter three-valued query semantics.",
+                let summary = match (finding_kind, strength) {
+                    (
+                        AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion,
+                        AllocationObligationFindingStrength::StrongAbstractEvidence,
+                    ) => format!(
+                        "The abstract model contains a normal-execution path after producer-certified {handoff_name} to the normal return of the analyzed root activation, on which the persistent allocation obligation remains open and no modeled reclaim, compatible discharge, or escape from the analyzed application occurs. This is strong abstract evidence that the allocation remains intentionally persistent at analysis-root normal completion; CQPL truth remains {} because this diagnostic does not alter three-valued query semantics.",
                         result.as_str(),
                     ),
-                    AllocationObligationFindingStrength::ObservationalCandidate => format!(
+                    (
+                        AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion,
+                        AllocationObligationFindingStrength::ObservationalCandidate,
+                    ) => format!(
+                        "The abstract model contains a normal-execution path after {handoff_name} to the normal return of the analyzed root activation, on which the persistent allocation obligation remains open, but the path contains an intervening call whose effects may be outside the current disposition vocabulary. This supports persistent-allocation evidence at analysis-root normal completion but is not strong enough to promote CQPL truth from {}. Box::leak persistence may be intentional by program design.",
+                        result.as_str(),
+                    ),
+                    (_, AllocationObligationFindingStrength::StrongAbstractEvidence) => format!(
+                        "The abstract model contains a normal-return path after producer-certified {handoff_name} on which the manual deallocation obligation remains open and no modeled discharge or escape from the analyzed application occurs. This is strong abstract evidence of a leak on normal completion; CQPL truth remains {} because this diagnostic does not alter three-valued query semantics.",
+                        result.as_str(),
+                    ),
+                    (_, AllocationObligationFindingStrength::ObservationalCandidate) => format!(
                         "The abstract model contains a normal-return path after {handoff_name} with no modeled discharge, but the path contains an intervening call whose effects may be outside the current disposition vocabulary. This supports a leak candidate but is not strong enough to promote CQPL truth from {}.",
                         result.as_str(),
                     ),
@@ -2503,7 +2632,7 @@ impl<'a> ModelChecker<'a> {
 
                 findings.push(AllocationObligationFinding {
                     taxonomy: ALLOCATION_OBLIGATION_DIAGNOSTICS_VERSION,
-                    kind: AllocationObligationFindingKind::NormalReturnOpenManualObligation,
+                    kind: finding_kind,
                     strength,
                     allocation,
                     query_result: result.as_str(),
@@ -2623,7 +2752,7 @@ impl<'a> ModelChecker<'a> {
                     origin,
                     |candidate| {
                         candidate != origin
-                            && self.blocks_open_manual_obligation(candidate, allocation)
+                            && self.blocks_open_obligation(candidate, allocation)
                     },
                     |_| true,
                 )
@@ -2636,7 +2765,7 @@ impl<'a> ModelChecker<'a> {
                 scope,
                 origin,
                 |candidate| self.is_normal_return_node(candidate),
-                |candidate| !self.blocks_open_manual_obligation(candidate, allocation),
+                |candidate| !self.blocks_open_obligation(candidate, allocation),
             );
             let Some(witness_path) = path else { continue; };
             let Some(return_node) = witness_path.last().cloned() else { continue; };
@@ -3576,9 +3705,19 @@ impl<'a> ModelChecker<'a> {
                     continue;
                 };
 
-                let Some(suffix) =
+                let suffix = if self.k.capabilities.contains("rust_call_return_relation_v1") {
+                    self.matched_drop_bfs_to_in_scope(
+                        scope, first_drop, allocation,
+                        |candidate| self.node_has_allocation_event(candidate, allocation, EventKind::Drop),
+                        |candidate| {
+                            self.node_has_allocation_event(candidate, allocation, EventKind::Drop)
+                                || !self.node_has_allocation_event(candidate, allocation, EventKind::Alloc)
+                        },
+                    ).map(|path| path.into_iter().skip(1).collect::<Vec<_>>())
+                } else {
                     self.repeated_drop_suffix_in_scope(scope, first_drop, allocation)
-                else {
+                };
+                let Some(suffix) = suffix else {
                     continue;
                 };
                 let Some(second_drop) = suffix.last().cloned() else {
@@ -3586,7 +3725,57 @@ impl<'a> ModelChecker<'a> {
                 };
 
                 let mut witness_path = origin_path.clone();
-                witness_path.extend(suffix);
+                witness_path.extend(suffix.clone());
+
+                // DF-Lite R1: AbstractAllocId is a finite site+context abstraction,
+                // not a dynamic object identity.  If the post-drop suffix enters a
+                // fresh activation of the Rust function that contains the allocation
+                // site, the same AbstractAllocId may denote a different concrete
+                // instance.  Keep the abstract candidate for auditability, but do not
+                // use it as directional double-free evidence without an independent
+                // instance-continuity certificate.  This does not change CQPL truth.
+                if self.double_free_suffix_reenters_allocation_site_activation(
+                    allocation,
+                    first_drop,
+                    &suffix,
+                ) {
+                    findings.push(AllocationObligationFinding {
+                        taxonomy: MEMORY_ERROR_DIAGNOSTICS_VERSION,
+                        kind: AllocationObligationFindingKind::RepeatedDropInstanceContinuityUnresolved,
+                        strength: AllocationObligationFindingStrength::ObservationalCandidate,
+                        allocation: allocation.clone(),
+                        query_result: result.as_str(),
+                        witness_path,
+                        evidence: vec![
+                            origin_evidence,
+                            AllocationObligationEvidence::MayDeallocationObserved,
+                            AllocationObligationEvidence::TwoOrderedDropsObserved,
+                            AllocationObligationEvidence::NoReallocationBetweenEvents,
+                            AllocationObligationEvidence::AllocationSiteActivationReentryObserved,
+                            AllocationObligationEvidence::AllocationInstanceContinuityUnresolved,
+                        ],
+                        origin_node: origin_path.first().cloned(),
+                        handoff_node: None,
+                        return_node: None,
+                        first_drop_node: Some(first_drop.clone()),
+                        second_drop_node: Some(second_drop),
+                        use_node: None,
+                        mismatch_node: None,
+                        allocator_family: None,
+                        deallocator_family: None,
+                        contracts: Vec::new(),
+                        dispositions: Vec::new(),
+                        ffi_argument_identity: Vec::new(),
+                        external_effects: Vec::new(),
+                        non_returning_discharge_nodes: Vec::new(),
+                        summary: format!(
+                            "The abstract model contains two ordered drop events for allocation {allocation} without an intervening allocation event, but the post-drop witness enters a fresh activation of the Rust function containing the allocation site. AbstractAllocId is a finite site+context abstraction rather than a dynamic object identity, so the two drops are not certified to target the same concrete allocation instance. The candidate is retained as non-directional evidence; CQPL truth remains {}.",
+                            result.as_str(),
+                        ),
+                    });
+                    continue;
+                }
+
                 let strength = if origin_evidence
                     == AllocationObligationEvidence::MayAllocationEventObserved
                 {
@@ -4299,6 +4488,69 @@ impl<'a> ModelChecker<'a> {
         candidates.into_iter().next()
     }
 
+    fn rust_basic_block_scope(node_id: &str) -> Option<&str> {
+        let (scope, bb) = node_id.rsplit_once("::bb")?;
+        if scope.starts_with("rust::")
+            && !bb.is_empty()
+            && bb.chars().all(|c| c.is_ascii_digit())
+        {
+            Some(scope)
+        } else {
+            None
+        }
+    }
+
+    /// Diagnostic-only DF-Lite continuity guard.
+    ///
+    /// A fresh `dummyCall -> Rust Entry` into the function containing the
+    /// allocation site, after the first drop and before the candidate second
+    /// drop, creates a new dynamic activation that may execute the same static
+    /// allocation site again.  Because AbstractAllocId intentionally remains a
+    /// finite site+bounded-context abstraction, equality of that ID across the
+    /// re-entry is insufficient to certify equality of concrete instances.
+    ///
+    /// This helper is capability-gated, consumes only producer typed-edge
+    /// evidence, and never changes CQPL truth or traversal.
+    fn double_free_suffix_reenters_allocation_site_activation(
+        &self,
+        allocation: &str,
+        first_drop: &str,
+        suffix: &[String],
+    ) -> bool {
+        if !self.k.capabilities.contains("typed_edge_flow_v1") {
+            return false;
+        }
+        let Some(site_node) = self
+            .k
+            .allocations
+            .get(allocation)
+            .and_then(|record| record.site.as_ref())
+            .and_then(|site| site.get("node_id"))
+            .and_then(|node| node.as_str())
+        else {
+            return false;
+        };
+        let Some(site_scope) = Self::rust_basic_block_scope(site_node) else {
+            return false;
+        };
+
+        let path = std::iter::once(first_drop)
+            .chain(suffix.iter().map(String::as_str))
+            .collect::<Vec<_>>();
+
+        let site_entry = format!("{site_scope}::bb0");
+        path.windows(2).any(|pair| {
+            self.k.typed_edges.iter().any(|edge| {
+                edge.source == pair[0]
+                    && edge.destination == pair[1]
+                    && edge.flow == TypedEdgeFlow::Normal
+                    && edge.label.as_deref() == Some("dummyCall -> Rust Entry")
+                    && edge.source.starts_with("dummyCall::")
+                    && edge.destination == site_entry
+            })
+        })
+    }
+
     fn repeated_drop_suffix_in_scope(
         &self,
         scope: AssessmentScope,
@@ -4488,12 +4740,220 @@ impl<'a> ModelChecker<'a> {
         })
     }
 
+    /// Canonical Rust activation owning a concrete MIR basic-block node.
+    ///
+    /// Diagnostic-only helper: it does not participate in CQPL truth.  The
+    /// parser is intentionally fail-closed and accepts only canonical Rust
+    /// node IDs ending in `::bb<N>`.  Synthetic `dummyCall`/`dummyRet` nodes
+    /// therefore never masquerade as activation completions.
+    fn rust_activation_scope(node_id: &str) -> Option<&str> {
+        let (activation, bb) = node_id.rsplit_once("::bb")?;
+        if !activation.starts_with("rust::")
+            || bb.is_empty()
+            || !bb.chars().all(|ch| ch.is_ascii_digit())
+        {
+            return None;
+        }
+        Some(activation)
+    }
+
+    /// A persistent-allocation finding is about normal completion of the
+    /// analyzed root activation, not merely the first represented Rust return
+    /// encountered on an interprocedural/callback path.  This prevents a
+    /// spawned closure or nested callee return from prematurely terminating a
+    /// `Box::leak` witness.
+    fn is_analysis_root_normal_return_node(&self, node_id: &str) -> bool {
+        let Some(root_activation) = Self::rust_activation_scope(&self.k.entry) else {
+            return false;
+        };
+        self.is_normal_return_node(node_id)
+            && Self::rust_activation_scope(node_id) == Some(root_activation)
+    }
+
+    fn can_reach_analysis_root_normal_return_in_scope(
+        &self,
+        scope: AssessmentScope,
+        start: &str,
+    ) -> bool {
+        self.bfs_to_in_scope(
+            scope,
+            start,
+            |node| self.is_analysis_root_normal_return_node(node),
+            |_| true,
+        )
+        .is_some()
+    }
+
     fn can_reach_normal_return_in_scope(&self, scope: AssessmentScope, start: &str) -> bool {
         self.bfs_to_in_scope(scope, start, |node| self.is_normal_return_node(node), |_| true)
             .is_some()
     }
 
-    fn blocks_open_manual_obligation(&self, node_id: &str, allocation: &str) -> bool {
+    /// Diagnostic-only continuity certificate for an open allocation
+    /// obligation returned from a represented Rust callee into a represented
+    /// Rust caller. This applies to both manual deallocation obligations and
+    /// persistent obligations produced by APIs such as `Box::leak`.
+    ///
+    /// `return_escape` is correct producer provenance: ownership leaves the
+    /// callee.  It is not, however, an escape from the analyzed application
+    /// when the canonical typed edge is `Rust Return -> dummyRet`, the dummy
+    /// return has a unique represented Rust continuation, and the same
+    /// AbstractAllocId is present in a caller local at that continuation.
+    ///
+    /// This helper never changes CQPL truth.  It only prevents the diagnostic
+    /// leak orientation from terminating at an intra-application return.
+    fn is_certified_local_return_obligation_transfer(&self, node_id: &str, allocation: &str) -> bool {
+        let Some(node) = self.k.nodes.get(node_id) else { return false; };
+        let has_return_escape = node.allocation_disposition.iter().any(|record| {
+            record.allocation == allocation
+                && record.kind == AllocationDispositionKind::ReturnEscape
+                && record.obligation_effect == AllocationObligationEffect::MayEscapeToCaller
+        });
+        if !has_return_escape || !self.is_normal_return_node(node_id) {
+            return false;
+        }
+
+        let mut return_edges = self.k.typed_edges.iter().filter(|edge| {
+            edge.source == node_id
+                && edge.flow == crate::kripke::TypedEdgeFlow::Normal
+                && edge.label.as_deref() == Some("Rust Return -> dummyRet")
+        });
+        let Some(return_edge) = return_edges.next() else { return false; };
+        if return_edges.next().is_some() {
+            return false;
+        }
+
+        let mut continuation_edges = self.k.typed_edges.iter().filter(|edge| {
+            edge.source == return_edge.destination
+                && edge.flow == crate::kripke::TypedEdgeFlow::Normal
+                && edge.label.as_deref() == Some("dummyRet -> Rust Continuation")
+        });
+        let Some(continuation_edge) = continuation_edges.next() else { return false; };
+        if continuation_edges.next().is_some() {
+            return false;
+        }
+
+        self.caller_continuation_preserves_obligation_identity(&continuation_edge.destination, allocation)
+    }
+
+    fn caller_continuation_preserves_obligation_identity(
+        &self,
+        continuation_node: &str,
+        allocation: &str,
+    ) -> bool {
+        let Some((caller_scope, bb)) = continuation_node.rsplit_once("::bb") else {
+            return false;
+        };
+        if !caller_scope.starts_with("rust::")
+            || bb.is_empty()
+            || !bb.chars().all(|c| c.is_ascii_digit())
+        {
+            return false;
+        }
+        let caller_local_prefix = format!("{caller_scope}::Local(");
+        let Some(continuation) = self.k.nodes.get(continuation_node) else {
+            return false;
+        };
+        [continuation.event_identity.as_ref(), continuation.identity.as_ref()]
+            .into_iter()
+            .flatten()
+            .any(|identity| {
+                identity.points_to.iter().any(|record| {
+                    record.variable.starts_with(&caller_local_prefix)
+                        && record.allocations.iter().any(|candidate| candidate == allocation)
+                })
+            })
+    }
+
+    fn has_return_escape_for_obligation(&self, node_id: &str, allocation: &str) -> bool {
+        self.k.nodes.get(node_id).is_some_and(|node| {
+            node.allocation_disposition.iter().any(|record| {
+                record.allocation == allocation
+                    && record.kind == AllocationDispositionKind::ReturnEscape
+                    && record.obligation_effect == AllocationObligationEffect::MayEscapeToCaller
+            })
+        })
+    }
+
+    /// The validated sidecar is authoritative. Uniqueness is checked after
+    /// the unchanged caller-local AbstractAllocId continuity certificate.
+    fn certified_local_return_obligation_relation(
+        &self,
+        return_node: &str,
+        allocation: &str,
+    ) -> Option<usize> {
+        if !self.k.capabilities.contains("rust_call_return_relation_v1")
+            || !self.is_normal_return_node(return_node)
+            || !self.has_return_escape_for_obligation(return_node, allocation)
+        {
+            return None;
+        }
+        let candidates = self.allocation_continuity_relations_at_return(return_node, allocation);
+        if candidates.len() == 1 { Some(candidates[0]) } else { None }
+    }
+
+    /// Identity-only portion of the F4 certificate. Relation membership and
+    /// caller-local AbstractAllocId continuity are unchanged; no ReturnEscape
+    /// is required here because a drop witness has a different entry premise.
+    fn allocation_continuity_relations_at_return(
+        &self,
+        return_node: &str,
+        allocation: &str,
+    ) -> Vec<usize> {
+        self.k.rust_call_return_relations.iter().enumerate()
+            .filter(|(_, relation)| {
+                relation.callee_return_nodes.iter().any(|node| node == return_node)
+                    && self.caller_continuation_preserves_obligation_identity(
+                        &relation.continuation_node, allocation)
+            })
+            .map(|(id, _)| id)
+            .collect()
+    }
+
+    fn certified_drop_return_relation(&self, return_node: &str, allocation: &str) -> Option<usize> {
+        let candidates = self.allocation_continuity_relations_at_return(return_node, allocation);
+        if candidates.len() == 1 { Some(candidates[0]) } else { None }
+    }
+
+    fn is_terminal_normal_return_for_matched_obligation(&self, node: &str, allocation: &str) -> bool {
+        // MAY escape prevents a local positive finding even when no caller
+        // is certifiable. It does not discharge or refute the obligation.
+        self.is_normal_return_node(node)
+            && !self.has_return_escape_for_obligation(node, allocation)
+    }
+
+    fn blocks_matched_open_obligation(&self, node: &str, allocation: &str) -> bool {
+        if self.certified_local_return_obligation_relation(node, allocation).is_some() {
+            // Ignore only the certified return escape, never other discharge
+            // evidence co-located at the return.
+            let candidate = &self.k.nodes[node];
+            return candidate.allocation_disposition.iter().any(|record| {
+                record.allocation == allocation
+                    && matches!(record.obligation_effect,
+                        AllocationObligationEffect::RestoreRaiiObligation
+                            | AllocationObligationEffect::MayDischarge)
+            }) || candidate.allocation_labels.iter().any(|label| {
+                label.allocation == allocation && label.predicate == EventKind::Drop
+            }) || candidate.allocation_post.as_ref().is_some_and(|post| {
+                post.value_of(allocation) == CellValue::Freed
+            });
+        }
+        self.blocks_open_obligation(node, allocation)
+    }
+
+    fn is_terminal_normal_return_for_open_obligation(&self, node_id: &str, allocation: &str) -> bool {
+        self.is_normal_return_node(node_id)
+            && !self.is_certified_local_return_obligation_transfer(node_id, allocation)
+    }
+
+    fn blocks_open_obligation_following_local_returns(&self, node_id: &str, allocation: &str) -> bool {
+        if self.is_certified_local_return_obligation_transfer(node_id, allocation) {
+            return false;
+        }
+        self.blocks_open_obligation(node_id, allocation)
+    }
+
+    fn blocks_open_obligation(&self, node_id: &str, allocation: &str) -> bool {
         let Some(node) = self.k.nodes.get(node_id) else { return true; };
 
         if node.allocation_disposition.iter().any(|record| {
@@ -4539,6 +4999,295 @@ impl<'a> ModelChecker<'a> {
                 .map(|edge| edge.destination.clone())
                 .collect(),
         }
+    }
+
+    /// Matched producer call/return traversal, separate from all legacy BFS.
+    /// Recursive re-entry of the same producer relation is diagnostic-unresolved,
+    /// never positive evidence. Stack depth is at most the overlay cardinality,
+    /// and a relation id cannot occur twice concurrently: the state domain is finite.
+    #[allow(dead_code)]
+    /// Only producer scope classifies an unwind edge; node IDs remain opaque.
+    fn matched_unwind_stack(&self, source:&str, destination:&str, stack:&[usize]) -> Option<Vec<usize>> {
+        use crate::kripke::RustUnwindEdgeScope;
+        if !self.k.capabilities.contains("rust_unwind_edge_scope_v1") {return Some(stack.to_vec())}
+        let id=self.k.rust_unwind_scope_index.get(&(source.into(),destination.into()))?;
+        let edge=&self.k.rust_unwind_edge_scopes[*id];
+        match edge.scope {
+            RustUnwindEdgeScope::IntraActivation|RustUnwindEdgeScope::NonRust=>Some(stack.to_vec()),
+            RustUnwindEdgeScope::Unresolved=>None,
+            RustUnwindEdgeScope::RustActivationBoundary=>{
+                let rid=*stack.last()?;
+                let uid=*self.k.rust_return_to_unwind.get(&rid)?;
+                let relation=&self.k.rust_call_unwind_relations[uid];
+                if !edge.activation.as_ref()?.contains(&relation.activation()) || !relation.unwind_edges.iter().any(|e|
+                    e.source_node==source && e.destination_node==destination) {return None}
+                let mut result=stack.to_vec();result.pop();Some(result)
+            }
+        }
+    }
+
+    fn certified_drop_unwind_relation(&self, source:&str,destination:&str,allocation:&str) -> Option<usize> {
+        use crate::kripke::RustUnwindEdgeScope;
+        let scope_id=self.k.rust_unwind_scope_index.get(&(source.into(),destination.into()))?;
+        let scope=&self.k.rust_unwind_edge_scopes[*scope_id];
+        if scope.scope!=RustUnwindEdgeScope::RustActivationBoundary {return None}
+        let candidates:Vec<_>=self.k.rust_return_to_unwind.iter().filter_map(|(rid,uid)|{
+            let u=&self.k.rust_call_unwind_relations[*uid];
+            if scope.activation.as_ref().is_some_and(|keys|keys.contains(&u.activation()))
+                && u.unwind_edges.iter().any(|e|e.source_node==source && e.destination_node==destination)
+                && self.caller_boundary_preserves_identity(destination,&u.caller_function,allocation) {Some(*rid)} else {None}
+        }).collect();
+        if candidates.len()==1 {Some(candidates[0])} else {None}
+    }
+
+    /// Same caller-local AbstractAllocId test as F5, with the caller identity
+    /// supplied by the validated activation instead of parsing a boundary ID.
+    fn caller_boundary_preserves_identity(&self,node:&str,caller:&str,allocation:&str) -> bool {
+        let prefix=format!("rust::{caller}::Local(");
+        self.k.nodes.get(node).is_some_and(|n|[n.event_identity.as_ref(),n.identity.as_ref()].into_iter().flatten().any(|identity|
+            identity.points_to.iter().any(|r|r.variable.starts_with(&prefix) && r.allocations.iter().any(|a|a==allocation))))
+    }
+
+    fn matched_successor_states_in_scope(
+        &self,
+        scope: AssessmentScope,
+        state: &MatchedDiagnosticState,
+    ) -> Vec<MatchedDiagnosticState> {
+        let relations = &self.k.rust_call_return_relations;
+        if state.call_stack.len() > relations.len()
+            || state.call_stack.iter().any(|id| *id >= relations.len())
+            || state.call_stack.iter().collect::<BTreeSet<_>>().len() != state.call_stack.len() {
+            return Vec::new();
+        }
+        let activations: BTreeMap<_, _> = relations.iter().enumerate()
+            .map(|(id, r)| ((r.dummy_call_node.as_str(), r.callee_entry_node.as_str()), id)).collect();
+        let returns: BTreeMap<_, _> = relations.iter().enumerate()
+            .flat_map(|(id, r)| r.callee_return_nodes.iter()
+                .map(move |ret| ((ret.as_str(), r.dummy_ret_node.as_str()), id))).collect();
+        let mut successors = BTreeSet::new();
+        for node in self.successors_in_scope(scope, &state.node) {
+            let edge = (state.node.as_str(), node.as_str());
+            // A pair may carry both typed flows. Keep each diagnostic choice
+            // separate, then deduplicate states; Normal never inherits Unwind.
+            let unwind_enabled=scope==AssessmentScope::AllExecution && self.k.capabilities.contains("rust_unwind_edge_scope_v1");
+            let flows:Vec<_>=if unwind_enabled {
+                self.k.typed_edges.iter().filter(|e|e.source==state.node && e.destination==node).map(|e|e.flow).collect()
+            } else {vec![TypedEdgeFlow::Normal]};
+            for flow in flows {
+            let mut stack = if flow==TypedEdgeFlow::Unwind {
+                let Some(stack)=self.matched_unwind_stack(&state.node,&node,&state.call_stack) else {continue};stack
+            } else {state.call_stack.clone()};
+            // Apply both constraints if an edge happens to occupy both roles.
+            if flow==TypedEdgeFlow::Normal {
+            if let Some(id) = returns.get(&edge) {
+                if stack.last() != Some(id) { continue; }
+                stack.pop();
+            }
+            if let Some(id) = activations.get(&edge) {
+                if stack.len() >= relations.len() || stack.contains(id) { continue; }
+                stack.push(*id);
+            }
+            }
+            successors.insert(MatchedDiagnosticState { node:node.clone(), call_stack: stack });
+            }
+        }
+        successors.into_iter().collect()
+    }
+
+    /// Allocation-sensitive bootstrap for a witness beginning inside a callee.
+    /// An unobserved activation prefix adds no stack entry. Ordinary edges at
+    /// a certified Rust return cannot bypass an unresolved producer return.
+    fn obligation_successor_states_in_scope(
+        &self,
+        scope: AssessmentScope,
+        state: &MatchedDiagnosticState,
+        allocation: &str,
+    ) -> Vec<MatchedDiagnosticState> {
+        if !state.call_stack.is_empty()
+            || !self.k.rust_call_return_relations.iter().any(|relation| {
+                relation.callee_return_nodes.contains(&state.node)
+            })
+        {
+            return self.matched_successor_states_in_scope(scope, state);
+        }
+        let Some(id) = self.certified_local_return_obligation_relation(&state.node, allocation) else {
+            return Vec::new();
+        };
+        let destination = &self.k.rust_call_return_relations[id].dummy_ret_node;
+        if self.successors_in_scope(scope, &state.node).contains(destination) {
+            vec![MatchedDiagnosticState { node: destination.clone(), call_stack: Vec::new() }]
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Starts with an empty diagnostic stack. Visited keys include the full
+    /// bounded stack, so distinct active callsites never merge at a shared callee.
+    #[allow(dead_code)]
+    fn matched_bfs_to_in_scope<Goal, Allowed>(
+        &self,
+        scope: AssessmentScope,
+        start: &str,
+        goal: Goal,
+        allowed: Allowed,
+    ) -> Option<Vec<String>>
+    where
+        Goal: Fn(&str) -> bool,
+        Allowed: Fn(&str) -> bool,
+    {
+        if !self.k.nodes.contains_key(start) || !allowed(start) { return None; }
+        let initial = MatchedDiagnosticState { node: start.into(), call_stack: Vec::new() };
+        let mut queue = VecDeque::from([initial.clone()]);
+        let mut parent = BTreeMap::from([(initial, None::<MatchedDiagnosticState>)]);
+        while let Some(state) = queue.pop_front() {
+            if goal(&state.node) {
+                let mut path = vec![state.node.clone()];
+                let mut current = state;
+                while let Some(Some(previous)) = parent.get(&current) {
+                    path.push(previous.node.clone());
+                    current = previous.clone();
+                }
+                path.reverse();
+                return Some(path);
+            }
+            for successor in self.matched_successor_states_in_scope(scope, &state) {
+                if allowed(&successor.node) && !parent.contains_key(&successor) {
+                    parent.insert(successor.clone(), Some(state.clone()));
+                    queue.push_back(successor);
+                }
+            }
+        }
+        None
+    }
+
+    fn matched_obligation_bfs_to_in_scope<Goal, Allowed>(
+        &self,
+        scope: AssessmentScope,
+        start: &str,
+        allocation: &str,
+        goal: Goal,
+        allowed: Allowed,
+    ) -> Option<Vec<String>>
+    where
+        Goal: Fn(&str) -> bool,
+        Allowed: Fn(&str) -> bool,
+    {
+        if !self.k.nodes.contains_key(start) || !allowed(start) { return None; }
+        let initial = MatchedDiagnosticState { node: start.into(), call_stack: Vec::new() };
+        let mut queue = VecDeque::from([initial.clone()]);
+        let mut parent = BTreeMap::from([(initial, None::<MatchedDiagnosticState>)]);
+        while let Some(state) = queue.pop_front() {
+            if goal(&state.node) {
+                let mut path = vec![state.node.clone()];
+                let mut current = state;
+                while let Some(Some(previous)) = parent.get(&current) {
+                    path.push(previous.node.clone());
+                    current = previous.clone();
+                }
+                path.reverse();
+                return Some(path);
+            }
+            for successor in self.obligation_successor_states_in_scope(scope, &state, allocation) {
+                if allowed(&successor.node) && !parent.contains_key(&successor) {
+                    parent.insert(successor.clone(), Some(state.clone()));
+                    queue.push_back(successor);
+                }
+            }
+        }
+        None
+    }
+
+    /// Drop-only bootstrap for an activation prefix preceding witness entry.
+    /// Observed activations use the F3 automaton unchanged. A certified return
+    /// cannot be bypassed by ordinary edges when caller continuity is unresolved.
+    fn drop_successor_states_in_scope(&self,scope:AssessmentScope,state:&MatchedDiagnosticState,allocation:&str) -> Vec<MatchedDiagnosticState> {
+        let mut result=self.drop_normal_successor_states_in_scope(scope,state,allocation);
+        if state.call_stack.is_empty() && scope==AssessmentScope::AllExecution
+            && self.k.capabilities.contains("rust_unwind_edge_scope_v1") {
+            for e in self.k.typed_edges.iter().filter(|e|e.source==state.node && e.flow==TypedEdgeFlow::Unwind) {
+                if self.certified_drop_unwind_relation(&e.source,&e.destination,allocation).is_some() {
+                    result.push(MatchedDiagnosticState {node:e.destination.clone(),call_stack:vec![]});
+                }
+            }
+        }
+        // Preserve F3/F5 canonical successor ordering across both ordinary
+        // matched transitions and the allocation-sensitive bootstrap.
+        result.into_iter().collect::<BTreeSet<_>>().into_iter().collect()
+    }
+
+    fn drop_normal_successor_states_in_scope(
+        &self,
+        scope: AssessmentScope,
+        state: &MatchedDiagnosticState,
+        allocation: &str,
+    ) -> Vec<MatchedDiagnosticState> {
+        if !state.call_stack.is_empty()
+            || !self.k.rust_call_return_relations.iter().any(|relation| {
+                relation.callee_return_nodes.contains(&state.node)
+            })
+        {
+            return self.matched_successor_states_in_scope(scope, state);
+        }
+        let Some(id) = self.certified_drop_return_relation(&state.node, allocation) else {
+            return Vec::new();
+        };
+        let destination = &self.k.rust_call_return_relations[id].dummy_ret_node;
+        if self.successors_in_scope(scope, &state.node).contains(destination) {
+            vec![MatchedDiagnosticState { node: destination.clone(), call_stack: Vec::new() }]
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Positive-length search: the first drop itself is not a second event
+    /// until revisited after a transition. Preserve the legacy first-successor
+    /// priority and edge-order BFS tie-breaking, but search only matched states.
+    /// Every seed includes the stack effect of the first observed edge.
+    fn matched_drop_bfs_to_in_scope<Goal, Allowed>(
+        &self,
+        scope: AssessmentScope,
+        start: &str,
+        allocation: &str,
+        goal: Goal,
+        allowed: Allowed,
+    ) -> Option<Vec<String>>
+    where
+        Goal: Fn(&str) -> bool,
+        Allowed: Fn(&str) -> bool,
+    {
+        if !self.k.nodes.contains_key(start) { return None; }
+        let initial = MatchedDiagnosticState { node: start.into(), call_stack: Vec::new() };
+        let seeds = self.drop_successor_states_in_scope(scope, &initial, allocation);
+        for destination in self.successors_in_scope(scope, start) {
+            for seed in seeds.iter().filter(|state| state.node == destination) {
+                if !allowed(&seed.node) { continue; }
+                let mut queue = VecDeque::from([seed.clone()]);
+                let mut parent = BTreeMap::from([(seed.clone(), None::<MatchedDiagnosticState>)]);
+                while let Some(state) = queue.pop_front() {
+                    if goal(&state.node) {
+                        let mut path = vec![state.node.clone()];
+                        let mut current = state;
+                        while let Some(Some(previous)) = parent.get(&current) {
+                            path.push(previous.node.clone());
+                            current = previous.clone();
+                        }
+                        path.push(start.into());
+                        path.reverse();
+                        return Some(path);
+                    }
+                    let successors = self.drop_successor_states_in_scope(scope, &state, allocation);
+                    for destination in self.successors_in_scope(scope, &state.node) {
+                        for successor in successors.iter().filter(|next| next.node == destination) {
+                            if allowed(&successor.node) && !parent.contains_key(successor) {
+                                parent.insert(successor.clone(), Some(state.clone()));
+                                queue.push_back(successor.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
 
     fn bfs_to_in_scope<Goal, Allowed>(
@@ -4997,6 +5746,851 @@ mod tests {
     use crate::parser::parse_query_document;
     use std::collections::BTreeSet;
 
+    fn unwind_test_graph(shared:bool)->Kripke {
+        use crate::kripke::rust_unwind_overlay_tests::{raw,install,shared as share};
+        install(&if shared {share(raw())} else {raw()}).unwrap()
+    }
+    fn unwind_test_next(k:&Kripke,source:&str,stack:Vec<usize>,scope:AssessmentScope)->Vec<MatchedDiagnosticState> {
+        ModelChecker::new(k).matched_successor_states_in_scope(scope,&MatchedDiagnosticState {node:source.into(),call_stack:stack})
+    }
+    fn unwind_test_has(v:&[MatchedDiagnosticState],node:&str,stack:&[usize])->bool {v.iter().any(|s|s.node==node && s.call_stack==stack)}
+    #[test] fn matched_unwind_diagnostic_v1_own_boundary(){let k=unwind_test_graph(false);assert!(unwind_test_has(&unwind_test_next(&k,"entry_f",vec![0],AssessmentScope::AllExecution),"continue_a",&[]));}
+    #[test] fn matched_unwind_diagnostic_v1_cross_boundary(){let k=unwind_test_graph(false);assert!(!unwind_test_has(&unwind_test_next(&k,"entry_f",vec![0],AssessmentScope::AllExecution),"continue_b",&[]));}
+    #[test] fn matched_unwind_diagnostic_v1_shared_callee(){let k=unwind_test_graph(false);for (id,dest,wrong) in [(0,"continue_a","continue_b"),(1,"continue_b","continue_a")]{let next=unwind_test_next(&k,"entry_f",vec![id],AssessmentScope::AllExecution);assert!(unwind_test_has(&next,dest,&[]));assert!(!unwind_test_has(&next,wrong,&[]));}}
+    #[test] fn matched_unwind_diagnostic_v1_shared_physical_edge(){let k=unwind_test_graph(true);for id in [0,1]{assert!(unwind_test_has(&unwind_test_next(&k,"entry_f",vec![id],AssessmentScope::AllExecution),"continue_a",&[]));}let mut k=k;let mut r=k.rust_call_return_relations[0].clone();r.caller_function="third_caller".into();k.rust_call_return_relations.push(r);let mut u=k.rust_call_unwind_relations[0].clone();u.caller_function="third_caller".into();k.rust_call_unwind_relations.push(u);k.rust_return_to_unwind.insert(2,2);assert!(!unwind_test_has(&unwind_test_next(&k,"entry_f",vec![2],AssessmentScope::AllExecution),"continue_a",&[]));}
+    #[test] fn matched_unwind_diagnostic_v1_intra_activation(){let mut k=unwind_test_graph(false);k.rust_unwind_edge_scopes[0].scope=crate::kripke::RustUnwindEdgeScope::IntraActivation;assert!(unwind_test_has(&unwind_test_next(&k,"entry_f",vec![0],AssessmentScope::AllExecution),"continue_a",&[0]));}
+    #[test] fn matched_unwind_diagnostic_v1_non_rust(){let mut k=unwind_test_graph(false);k.rust_unwind_edge_scopes[0].scope=crate::kripke::RustUnwindEdgeScope::NonRust;assert!(unwind_test_has(&unwind_test_next(&k,"entry_f",vec![0],AssessmentScope::AllExecution),"continue_a",&[0]));}
+    #[test] fn matched_unwind_diagnostic_v1_nested_unwind(){let mut k=unwind_test_graph(false);matched_return_diagnostic_edge(&mut k,"continue_b","continue_a",TypedEdgeFlow::Unwind);let mut edge=k.rust_unwind_edge_scopes[0].clone();edge.source_node="continue_b".into();k.rust_unwind_scope_index.insert(("continue_b".into(),"continue_a".into()),2);k.rust_unwind_edge_scopes.push(edge);k.rust_call_unwind_relations[0].unwind_edges.push(crate::kripke::RustUnwindEdge{source_node:"continue_b".into(),destination_node:"continue_a".into()});let next=unwind_test_next(&k,"entry_f",vec![0,1],AssessmentScope::AllExecution);assert!(unwind_test_has(&next,"continue_b",&[0]));assert!(unwind_test_has(&unwind_test_next(&k,"continue_b",vec![0],AssessmentScope::AllExecution),"continue_a",&[]));}
+    #[test] fn matched_unwind_diagnostic_v1_nested_wrong_unwind(){let k=unwind_test_graph(false);assert!(!unwind_test_has(&unwind_test_next(&k,"entry_f",vec![0,1],AssessmentScope::AllExecution),"continue_a",&[0]));}
+    fn unwind_test_terminal(semantics:crate::kripke::RustUnwindSemantics){let mut k=unwind_test_graph(false);k.rust_call_unwind_relations[0].unwind_semantics=semantics;k.rust_call_unwind_relations[0].unwind_edges.clear();assert!(!unwind_test_has(&unwind_test_next(&k,"entry_f",vec![0],AssessmentScope::AllExecution),"continue_a",&[]));}
+    #[test] fn matched_unwind_diagnostic_v1_terminate(){unwind_test_terminal(crate::kripke::RustUnwindSemantics::Terminate);}
+    #[test] fn matched_unwind_diagnostic_v1_unreachable(){unwind_test_terminal(crate::kripke::RustUnwindSemantics::Unreachable);}
+    #[test] fn matched_unwind_diagnostic_v1_detached(){unwind_test_terminal(crate::kripke::RustUnwindSemantics::DetachedNoCallerUnwind);}
+    #[test] fn matched_unwind_diagnostic_v1_unresolved(){let mut k=unwind_test_graph(false);k.rust_unwind_edge_scopes[0].scope=crate::kripke::RustUnwindEdgeScope::Unresolved;assert!(!unwind_test_has(&unwind_test_next(&k,"entry_f",vec![0],AssessmentScope::AllExecution),"continue_a",&[]));}
+    #[test] fn matched_unwind_diagnostic_v1_continue_without_relation(){unwind_test_terminal(crate::kripke::RustUnwindSemantics::Continue);}
+    #[test] fn matched_unwind_diagnostic_v1_certified_callback(){let mut k=unwind_test_graph(false);k.rust_call_unwind_relations[0].unwind_semantics=crate::kripke::RustUnwindSemantics::CertifiedCallback;let next=unwind_test_next(&k,"entry_f",vec![0],AssessmentScope::AllExecution);assert!(unwind_test_has(&next,"continue_a",&[]));assert!(!unwind_test_has(&next,"continue_b",&[]));}
+    #[test] fn matched_unwind_diagnostic_v1_normal_execution(){let k=unwind_test_graph(false);let next=unwind_test_next(&k,"entry_f",vec![0],AssessmentScope::NormalExecution);assert!(!next.iter().any(|s|s.node=="continue_a" || s.node=="continue_b"));}
+    #[test] fn matched_unwind_diagnostic_v1_empty_stack_generic(){let k=unwind_test_graph(false);let next=unwind_test_next(&k,"entry_f",vec![],AssessmentScope::AllExecution);assert!(!next.iter().any(|s|s.node=="continue_a" || s.node=="continue_b"));}
+    #[test] fn matched_unwind_diagnostic_v1_recursion_finite(){let k=unwind_test_graph(false);assert!(unwind_test_next(&k,"activation_a",vec![0],AssessmentScope::AllExecution).is_empty());assert!(unwind_test_next(&k,"entry_f",vec![0,0],AssessmentScope::AllExecution).is_empty());}
+    #[test] fn matched_unwind_diagnostic_v1_unresolved_is_not_false(){let mut k=unwind_drop_graph();k.capabilities.insert("allocation_state_v1".into());let mut legacy=k.clone();legacy.rust_call_unwind_relations.clear();legacy.rust_unwind_edge_scopes.clear();legacy.rust_return_to_unwind.clear();legacy.rust_unwind_scope_index.clear();legacy.capabilities.remove("rust_unwind_edge_scope_v1");k.rust_unwind_edge_scopes[0].scope=crate::kripke::RustUnwindEdgeScope::Unresolved;let doc=parse_query_document("requires allocation_state_v1; assessment_scope all_execution; exists_alloc a. EF (alloc(a) && EX EF (drop_l(a) && EX E[(!alloc_l(a)) U drop_l(a)]))").unwrap();assert_eq!(ModelChecker::new(&k).evaluate_document(&doc,&Env::new()).unwrap(),ModelChecker::new(&legacy).evaluate_document(&doc,&Env::new()).unwrap());let truth=format!("{:?}",k.totalized_for_cqpl_truth());assert!(!truth.contains("rust_unwind_edge_scopes") && !truth.contains("rust_call_unwind_relations"));assert_eq!(serde_json::to_value(ModelChecker::new(&k).explain_document(&doc,&Env::new(),8).unwrap().refuting_findings).unwrap(),serde_json::to_value(ModelChecker::new(&legacy).explain_document(&doc,&Env::new(),8).unwrap().refuting_findings).unwrap());}
+    fn unwind_identity(k:&mut Kripke,node:&str,callers:&[&str]) {k.nodes.get_mut(node).unwrap().identity=Some(NodeIdentityAnnotation{points_to:callers.iter().map(|c|crate::kripke::IdentityPointsToRecord{variable:format!("rust::{c}::Local(_1)"),allocations:vec!["A".into()]}).collect(),..Default::default()});}
+    #[test] fn matched_unwind_drop_witness_v1_unique_bootstrap(){let mut k=unwind_test_graph(false);unwind_identity(&mut k,"continue_a",&["caller"]);assert_eq!(ModelChecker::new(&k).certified_drop_unwind_relation("entry_f","continue_a","A"),Some(0));assert!(unwind_test_has(&ModelChecker::new(&k).drop_successor_states_in_scope(AssessmentScope::AllExecution,&MatchedDiagnosticState{node:"entry_f".into(),call_stack:vec![]},"A"),"continue_a",&[]));}
+    #[test] fn matched_unwind_drop_witness_v1_zero_continuity(){let k=unwind_test_graph(false);assert_eq!(ModelChecker::new(&k).certified_drop_unwind_relation("entry_f","continue_a","A"),None);}
+    #[test] fn matched_unwind_drop_witness_v1_ambiguous_continuity(){let mut k=unwind_test_graph(true);unwind_identity(&mut k,"continue_a",&["caller","caller_b"]);assert_eq!(ModelChecker::new(&k).certified_drop_unwind_relation("entry_f","continue_a","A"),None);}
+    #[test] fn matched_unwind_drop_witness_v1_foreign_cleanup(){let mut k=unwind_test_graph(false);unwind_identity(&mut k,"continue_b",&["caller"]);assert_eq!(ModelChecker::new(&k).certified_drop_unwind_relation("entry_f","continue_b","A"),None);}
+    #[test] fn matched_unwind_drop_witness_v1_shared_selects_one(){let mut k=unwind_test_graph(true);unwind_identity(&mut k,"continue_a",&["caller"]);assert_eq!(ModelChecker::new(&k).certified_drop_unwind_relation("entry_f","continue_a","A"),Some(0));}
+    #[test] fn matched_unwind_drop_witness_v1_shared_selects_both(){matched_unwind_drop_witness_v1_ambiguous_continuity();}
+    fn unwind_drop_graph()->Kripke {let mut k=unwind_test_graph(false);k.allocations.insert("A".into(),serde_json::from_value(serde_json::json!({"id":"A"})).unwrap());k.entry="origin".into();matched_drop_witness_v1_node(&mut k,"origin",Some(EventKind::Alloc));matched_drop_witness_v1_node(&mut k,"drop1",Some(EventKind::Drop));matched_drop_witness_v1_node(&mut k,"valid_second",Some(EventKind::Drop));matched_drop_witness_v1_node(&mut k,"invalid_second",Some(EventKind::Drop));matched_return_diagnostic_edge(&mut k,"origin","drop1",TypedEdgeFlow::Normal);matched_return_diagnostic_edge(&mut k,"drop1","call_a",TypedEdgeFlow::Normal);matched_return_diagnostic_edge(&mut k,"continue_a","valid_second",TypedEdgeFlow::Normal);matched_return_diagnostic_edge(&mut k,"continue_b","invalid_second",TypedEdgeFlow::Normal);k.nodes.get_mut("entry_f").unwrap().successors.retain(|s|s!="return_f");k.typed_edges.retain(|e|!(e.source=="entry_f" && e.destination=="return_f"));k}
+    #[test] fn matched_unwind_drop_witness_v1_real_cleanup_preserved(){let k=unwind_drop_graph();let findings=matched_drop_witness_v1_findings(&k,AssessmentScope::AllExecution);assert_eq!(findings.len(),1);assert_eq!(findings[0].second_drop_node.as_deref(),Some("valid_second"));}
+    #[test] fn matched_unwind_drop_witness_v1_valid_second_fallback(){let mut k=unwind_drop_graph();
+        k.nodes.get_mut("drop1").unwrap().successors=vec!["call_b".into()];
+        for e in &mut k.typed_edges {if e.source=="drop1" {e.destination="call_b".into()}}
+        k.nodes.get_mut("continue_a").unwrap().successors=vec!["invalid_second".into()];
+        k.nodes.get_mut("continue_b").unwrap().successors=vec!["valid_second".into()];
+        for e in &mut k.typed_edges {if e.source=="continue_a" && e.destination=="valid_second" {e.destination="invalid_second".into()}else if e.source=="continue_b" && e.destination=="invalid_second" {e.destination="valid_second".into()}}
+        let flat=ModelChecker::new(&k).repeated_drop_suffix_in_scope(AssessmentScope::AllExecution,"drop1","A").unwrap();assert_eq!(flat.last().map(String::as_str),Some("invalid_second"));let f=matched_drop_witness_v1_findings(&k,AssessmentScope::AllExecution);assert_eq!(f.len(),1);assert_eq!(f[0].second_drop_node.as_deref(),Some("valid_second"));assert!(!f[0].witness_path.contains(&"continue_a".into()));}
+
+    fn matched_drop_witness_v1_node(k: &mut Kripke, id: &str, event: Option<EventKind>) {
+        let mut node = k.nodes.values().next().unwrap().clone();
+        node.id = id.into(); node.successors.clear(); node.labels.clear();
+        node.semantic_labels.clear(); node.allocation_labels.clear();
+        node.allocation_disposition.clear(); node.identity = None; node.event_identity = None;
+        node.allocation_post = None;
+        if let Some(predicate) = event {
+            node.allocation_labels.push(AllocationEventLabel { predicate, allocation: "A".into(),
+                certainty: AllocationEventCertainty::MayAbstract, deallocator_contract: None });
+            node.allocation_post = Some(AbstractAllocationMemoryAnnotation {
+                cells: vec![AbstractAllocationCell { allocation: "A".into(), value: CellValue::Alloc }],
+            });
+        }
+        k.nodes.insert(id.into(), node);
+    }
+
+    fn matched_drop_witness_v1_graph(own: bool, other: bool) -> Kripke {
+        let mut k = return_obligation_transfer_v2_graph(&[&["A"], &[]]);
+        for node in k.nodes.values_mut() {
+            node.allocation_labels.clear(); node.allocation_disposition.clear();
+        }
+        k.entry = "origin".into();
+        matched_drop_witness_v1_node(&mut k, "origin", Some(EventKind::Alloc));
+        matched_drop_witness_v1_node(&mut k, "drop1", Some(EventKind::Drop));
+        matched_drop_witness_v1_node(&mut k, "drop2", Some(EventKind::Drop));
+        matched_return_diagnostic_edge(&mut k, "origin", "drop1", TypedEdgeFlow::Normal);
+        matched_return_diagnostic_edge(&mut k, "drop1", "call_a", TypedEdgeFlow::Normal);
+        if own { matched_return_diagnostic_edge(&mut k, "rust::caller_a::bb1", "drop2", TypedEdgeFlow::Normal); }
+        if other { matched_return_diagnostic_edge(&mut k, "rust::caller_b::bb1", "drop2", TypedEdgeFlow::Normal); }
+        k
+    }
+
+    fn matched_drop_witness_v1_findings(k: &Kripke, scope: AssessmentScope) -> Vec<AllocationObligationFinding> {
+        ModelChecker::new(k).double_free_findings(Truth::Unknown, scope)
+    }
+
+    fn matched_drop_witness_v1_path(k: &Kripke, start: &str, target: &str) -> Option<Vec<String>> {
+        ModelChecker::new(k).matched_drop_bfs_to_in_scope(AssessmentScope::NormalExecution,
+            start, "A", |node| node == target, |_| true)
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_legacy_artifact_unchanged() {
+        let mut k = matched_drop_witness_v1_graph(false, true);
+        k.capabilities.remove("rust_call_return_relation_v1");
+        k.rust_call_return_relations.clear();
+        let checker = ModelChecker::new(&k);
+        let legacy = checker.repeated_drop_suffix_in_scope(AssessmentScope::NormalExecution, "drop1", "A").unwrap();
+        let findings = matched_drop_witness_v1_findings(&k, AssessmentScope::NormalExecution);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].first_drop_node.as_deref(), Some("drop1"));
+        assert_eq!(findings[0].second_drop_node.as_deref(), Some("drop2"));
+        assert_eq!(findings[0].witness_path[1..], legacy);
+        assert!(legacy.contains(&"matched_b".into()));
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_shared_callee_cross_return_only() {
+        let k = matched_drop_witness_v1_graph(false, true);
+        assert!(ModelChecker::new(&k).repeated_drop_suffix_in_scope(
+            AssessmentScope::NormalExecution, "drop1", "A").is_some());
+        for scope in [AssessmentScope::NormalExecution, AssessmentScope::AllExecution] {
+            assert!(matched_drop_witness_v1_findings(&k, scope).is_empty());
+        }
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_matched_own_return() {
+        let k = matched_drop_witness_v1_graph(true, false);
+        let findings = matched_drop_witness_v1_findings(&k, AssessmentScope::NormalExecution);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].witness_path, vec!["drop1", "call_a", "activation_a",
+            "entry_f", "return_f", "matched_a", "rust::caller_a::bb1", "drop2"]);
+        assert_eq!(findings[0].kind, AllocationObligationFindingKind::RepeatedDropWithoutReallocation);
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_shared_callee_both_continuations() {
+        let k = matched_drop_witness_v1_graph(true, true);
+        let findings = matched_drop_witness_v1_findings(&k, AssessmentScope::NormalExecution);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].witness_path.contains(&"matched_a".into()));
+        assert!(!findings[0].witness_path.contains(&"matched_b".into()));
+    }
+
+    fn matched_drop_witness_v1_nested_graph() -> Kripke {
+        let mut k = matched_drop_witness_v1_graph(true, false);
+        let mut c = return_obligation_transfer_v2_record("c");
+        c.callee_function = "nested".into(); c.callee_entry_node = "entry_g".into();
+        c.callee_return_nodes = vec!["return_g".into()];
+        let mut d = c.clone(); d.call_node = "call_d".into(); d.dummy_call_node = "activation_d".into();
+        d.dummy_ret_node = "matched_d".into(); d.continuation_node = "rust::caller_d::bb1".into();
+        let extra = matched_return_diagnostic_graph(vec![c.clone(), d.clone()]);
+        k.nodes.extend(extra.nodes); k.typed_edges.extend(extra.typed_edges);
+        let mut relations = k.rust_call_return_relations.clone(); relations.extend([c.clone(), d]);
+        k = k.with_rust_call_return_relations(Some(relations)).unwrap();
+        k.nodes.get_mut("entry_f").unwrap().successors.clear();
+        k.typed_edges.retain(|edge| edge.source != "entry_f");
+        matched_return_diagnostic_edge(&mut k, "entry_f", "call_c", TypedEdgeFlow::Normal);
+        matched_return_diagnostic_edge(&mut k, "rust::caller_c::bb1", "return_f", TypedEdgeFlow::Normal);
+        matched_return_diagnostic_edge(&mut k, "rust::caller_d::bb1", "drop2", TypedEdgeFlow::Normal);
+        k
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_nested_calls() {
+        let k = matched_drop_witness_v1_nested_graph();
+        let checker = ModelChecker::new(&k);
+        let path = matched_drop_witness_v1_path(&k, "drop1", "drop2").unwrap();
+        let mut state = MatchedDiagnosticState { node: "drop1".into(), call_stack: vec![] };
+        let mut stacks = vec![state.call_stack.clone()];
+        for destination in path.iter().skip(1) {
+            state = checker.drop_successor_states_in_scope(AssessmentScope::NormalExecution, &state, "A")
+                .into_iter().find(|state| &state.node == destination).unwrap();
+            if stacks.last() != Some(&state.call_stack) { stacks.push(state.call_stack.clone()); }
+        }
+        assert_eq!(stacks, vec![vec![], vec![0], vec![0, 2], vec![0], vec![]]);
+        assert_eq!(matched_drop_witness_v1_findings(&k, AssessmentScope::NormalExecution).len(), 1);
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_nested_cross_return_ignored() {
+        let k = matched_drop_witness_v1_nested_graph();
+        let path = matched_drop_witness_v1_path(&k, "drop1", "drop2").unwrap();
+        assert!(path.contains(&"matched_c".into()));
+        assert!(!path.contains(&"matched_d".into()));
+        let next = ModelChecker::new(&k).drop_successor_states_in_scope(AssessmentScope::NormalExecution,
+            &MatchedDiagnosticState { node: "return_g".into(), call_stack: vec![0, 2] }, "A");
+        assert_eq!(next, vec![MatchedDiagnosticState { node: "matched_c".into(), call_stack: vec![0] }]);
+    }
+
+    fn matched_drop_witness_v1_bootstrap_graph(continuity: &[&[&str]]) -> Kripke {
+        let mut k = return_obligation_transfer_v2_graph(continuity);
+        for node in k.nodes.values_mut() { node.allocation_labels.clear(); node.allocation_disposition.clear(); }
+        k.entry = "origin".into();
+        matched_drop_witness_v1_node(&mut k, "origin", Some(EventKind::Alloc));
+        matched_drop_witness_v1_node(&mut k, "drop1", Some(EventKind::Drop));
+        matched_drop_witness_v1_node(&mut k, "drop2", Some(EventKind::Drop));
+        matched_return_diagnostic_edge(&mut k, "origin", "drop1", TypedEdgeFlow::Normal);
+        matched_return_diagnostic_edge(&mut k, "drop1", "return_f", TypedEdgeFlow::Normal);
+        matched_return_diagnostic_edge(&mut k, "rust::caller_a::bb1", "drop2", TypedEdgeFlow::Normal);
+        k
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_first_drop_in_callee_unique_bootstrap() {
+        let k = matched_drop_witness_v1_bootstrap_graph(&[&["A"], &[]]);
+        let checker = ModelChecker::new(&k);
+        assert_eq!(checker.certified_drop_return_relation("return_f", "A"), Some(0));
+        assert_eq!(checker.certified_local_return_obligation_relation("return_f", "A"), None);
+        let findings = matched_drop_witness_v1_findings(&k, AssessmentScope::NormalExecution);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].witness_path,
+            vec!["drop1", "return_f", "matched_a", "rust::caller_a::bb1", "drop2"]);
+        let next = checker.drop_successor_states_in_scope(AssessmentScope::NormalExecution,
+            &MatchedDiagnosticState { node: "return_f".into(), call_stack: vec![] }, "A");
+        assert!(next[0].call_stack.is_empty());
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_first_drop_in_callee_ambiguous_bootstrap() {
+        let mut k = matched_drop_witness_v1_bootstrap_graph(&[&["A"], &["A"]]);
+        matched_return_diagnostic_edge(&mut k, "return_f", "drop2", TypedEdgeFlow::Normal);
+        let checker = ModelChecker::new(&k);
+        assert_eq!(checker.allocation_continuity_relations_at_return("return_f", "A"), vec![0, 1]);
+        assert_eq!(checker.certified_drop_return_relation("return_f", "A"), None);
+        assert!(matched_drop_witness_v1_findings(&k, AssessmentScope::NormalExecution).is_empty());
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_first_drop_in_callee_no_continuity() {
+        let k = matched_drop_witness_v1_bootstrap_graph(&[&[], &[]]);
+        assert_eq!(ModelChecker::new(&k).certified_drop_return_relation("return_f", "A"), None);
+        assert!(matched_drop_witness_v1_findings(&k, AssessmentScope::NormalExecution).is_empty());
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_same_activation_remains_directional() {
+        df_lite_same_activation_repeated_drop_remains_directional();
+        let mut k = df_lite_reentry_graph(false);
+        k.capabilities.extend(["rust_call_return_relation_v1".into(), "mir_semantics_v2".into()]);
+        k = k.with_rust_call_return_relations(Some(vec![])).unwrap();
+        let checker = ModelChecker::new(&k); let doc = normal_scoped_double_free_state_document();
+        let report = checker.explain_document(&doc, &Env::new(), 8).unwrap();
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkTrue);
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_cross_activation_reentry_non_directional() {
+        df_lite_reentry_of_allocation_site_activation_is_non_directional();
+        let mut k = df_lite_reentry_graph(true);
+        k.capabilities.extend(["rust_call_return_relation_v1".into(), "mir_semantics_v2".into()]);
+        k = k.with_rust_call_return_relations(Some(vec![])).unwrap();
+        let checker = ModelChecker::new(&k); let doc = normal_scoped_double_free_state_document();
+        let report = checker.explain_document(&doc, &Env::new(), 8).unwrap();
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkUnoriented);
+        assert!(report.supporting_findings.iter().any(|f|
+            f.kind == AllocationObligationFindingKind::RepeatedDropInstanceContinuityUnresolved));
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_normal_execution_excludes_unwind() {
+        let mut k = double_free_unwind_only_graph();
+        k.capabilities.extend(["rust_call_return_relation_v1".into(), "mir_semantics_v2".into()]);
+        k = k.with_rust_call_return_relations(Some(vec![])).unwrap();
+        assert!(matched_drop_witness_v1_findings(&k, AssessmentScope::NormalExecution).is_empty());
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_all_execution_preserves_unwind() {
+        let mut k = double_free_unwind_only_graph();
+        k.capabilities.extend(["rust_call_return_relation_v1".into(), "mir_semantics_v2".into()]);
+        k = k.with_rust_call_return_relations(Some(vec![])).unwrap();
+        assert_eq!(matched_drop_witness_v1_findings(&k, AssessmentScope::AllExecution).len(), 1);
+        let k = matched_drop_witness_v1_graph(false, false);
+        let mut with_unwind = k.clone();
+        matched_return_diagnostic_edge(&mut with_unwind, "entry_f", "drop2", TypedEdgeFlow::Unwind);
+        assert_eq!(matched_drop_witness_v1_findings(&with_unwind, AssessmentScope::AllExecution).len(), 1);
+        assert!(matched_drop_witness_v1_findings(&with_unwind, AssessmentScope::NormalExecution).is_empty());
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_recursive_same_relation_fail_closed() {
+        let mut k = matched_drop_witness_v1_graph(false, false);
+        matched_return_diagnostic_edge(&mut k, "entry_f", "call_a", TypedEdgeFlow::Normal);
+        let checker = ModelChecker::new(&k);
+        assert!(checker.drop_successor_states_in_scope(AssessmentScope::NormalExecution,
+            &MatchedDiagnosticState { node: "activation_a".into(), call_stack: vec![0] }, "A").is_empty());
+        assert!(matched_drop_witness_v1_path(&k, "drop1", "drop2").is_none());
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_one_finding_finds_valid_second_drop() {
+        let mut k = matched_drop_witness_v1_graph(false, false);
+        matched_drop_witness_v1_node(&mut k, "invalid_second", Some(EventKind::Drop));
+        matched_drop_witness_v1_node(&mut k, "valid_second", Some(EventKind::Drop));
+        matched_return_diagnostic_edge(&mut k, "rust::caller_b::bb1", "invalid_second", TypedEdgeFlow::Normal);
+        matched_return_diagnostic_edge(&mut k, "rust::caller_a::bb1", "valid_second", TypedEdgeFlow::Normal);
+        // Make the flat BFS prefer B. The matched search must keep exploring A.
+        k.nodes.get_mut("return_f").unwrap().successors.reverse();
+        let mut returns: Vec<_> = k.typed_edges.iter().filter(|e| e.source == "return_f").cloned().collect();
+        returns.reverse(); k.typed_edges.retain(|e| e.source != "return_f"); k.typed_edges.extend(returns);
+        let checker = ModelChecker::new(&k);
+        let legacy = checker.repeated_drop_suffix_in_scope(AssessmentScope::NormalExecution, "drop1", "A").unwrap();
+        assert_eq!(legacy.last().map(String::as_str), Some("invalid_second"));
+        let findings = matched_drop_witness_v1_findings(&k, AssessmentScope::NormalExecution);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].second_drop_node.as_deref(), Some("valid_second"));
+        assert!(!findings[0].witness_path.contains(&"matched_b".into()));
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_raw_truth_non_interference() {
+        let mut k = matched_drop_witness_v1_graph(false, true);
+        for node in k.nodes.values_mut() { node.allocation_post = Some(AbstractAllocationMemoryAnnotation {
+            cells: vec![AbstractAllocationCell { allocation: "A".into(), value: CellValue::Top }],
+        }); }
+        k.nodes.get_mut("origin").unwrap().allocation_post.as_mut().unwrap().cells[0].value = CellValue::Alloc;
+        let mut legacy = k.clone(); legacy.capabilities.remove("rust_call_return_relation_v1");
+        legacy.rust_call_return_relations.clear();
+        let doc = normal_scoped_double_free_state_document();
+        let before = ModelChecker::new(&legacy).evaluate_document(&doc, &Env::new()).unwrap();
+        let after = ModelChecker::new(&k).evaluate_document(&doc, &Env::new()).unwrap();
+        assert_eq!(before, after); assert_eq!(after, Truth::Unknown);
+        let legacy_report = ModelChecker::new(&legacy).explain_document(&doc, &Env::new(), 8).unwrap();
+        let report = ModelChecker::new(&k).explain_document(&doc, &Env::new(), 8).unwrap();
+        assert_eq!(legacy_report.assessment.subresult, QuerySubresult::UnkTrue);
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkUnoriented);
+        assert!(report.supporting_findings.is_empty());
+        // Negative evidence continues using the legacy conservative checks.
+        assert!(report.refuting_findings.is_empty());
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_feature_four_regression() {
+        return_obligation_transfer_v2_single_caller_leaks();
+        return_obligation_transfer_v2_single_caller_discharges();
+        return_obligation_transfer_v2_shared_callee_only_one_caller();
+        return_obligation_transfer_v2_ambiguous_continuity();
+        return_obligation_transfer_v2_nested_call_after_bootstrap();
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_leak_non_interference() {
+        return_obligation_transfer_v2_box_leak_unaffected();
+        return_obligation_transfer_v2_direct_root_unaffected();
+        let k = return_obligation_transfer_v2_graph(&[&["A"]]);
+        let checker = ModelChecker::new(&k);
+        let findings = checker.allocation_obligation_findings(Truth::Unknown, AssessmentScope::NormalExecution);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].return_node.as_deref(), Some("rust::caller_a::bb2"));
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_first_edge_stack_effect_and_self_loop() {
+        let mut k = matched_drop_witness_v1_graph(true, false);
+        k.nodes.get_mut("activation_a").unwrap().allocation_labels.push(AllocationEventLabel {
+            predicate: EventKind::Drop, allocation: "A".into(), certainty: AllocationEventCertainty::MayAbstract,
+            deallocator_contract: None });
+        let path = matched_drop_witness_v1_path(&k, "activation_a", "drop2").unwrap();
+        assert!(path.contains(&"matched_a".into()));
+        assert!(!path.contains(&"matched_b".into()));
+        matched_return_diagnostic_edge(&mut k, "drop2", "drop2", TypedEdgeFlow::Normal);
+        let checker = ModelChecker::new(&k);
+        assert_eq!(checker.matched_drop_bfs_to_in_scope(AssessmentScope::NormalExecution, "drop2", "A",
+            |node| node == "drop2", |_| true).unwrap(), vec!["drop2", "drop2"]);
+    }
+
+    #[test]
+    fn matched_drop_witness_v1_preserves_first_successor_priority() {
+        let mut k = matched_drop_witness_v1_graph(false, false);
+        k.nodes.get_mut("drop1").unwrap().successors.clear();
+        k.typed_edges.retain(|edge| edge.source != "drop1");
+        for id in ["preferred_branch", "longer_branch"] {
+            matched_drop_witness_v1_node(&mut k, id, None);
+        }
+        for id in ["preferred_drop", "shorter_drop"] {
+            matched_drop_witness_v1_node(&mut k, id, Some(EventKind::Drop));
+        }
+        matched_return_diagnostic_edge(&mut k, "drop1", "preferred_branch", TypedEdgeFlow::Normal);
+        matched_return_diagnostic_edge(&mut k, "drop1", "shorter_drop", TypedEdgeFlow::Normal);
+        matched_return_diagnostic_edge(&mut k, "preferred_branch", "longer_branch", TypedEdgeFlow::Normal);
+        matched_return_diagnostic_edge(&mut k, "longer_branch", "preferred_drop", TypedEdgeFlow::Normal);
+        let checker = ModelChecker::new(&k);
+        let legacy = checker.repeated_drop_suffix_in_scope(AssessmentScope::NormalExecution, "drop1", "A").unwrap();
+        let matched = checker.matched_drop_bfs_to_in_scope(AssessmentScope::NormalExecution, "drop1", "A",
+            |node| checker.node_has_allocation_event(node, "A", EventKind::Drop), |_| true).unwrap();
+        assert_eq!(legacy.last().map(String::as_str), Some("preferred_drop"));
+        assert_eq!(matched[1..], legacy);
+    }
+
+    fn return_obligation_transfer_v2_record(suffix: &str) -> crate::kripke::RustCallReturnRelationRecord {
+        let mut r = crate::kripke::rust_call_return_relation_tests::record(suffix);
+        r.continuation_node = format!("rust::caller_{suffix}::bb1");
+        r
+    }
+
+    fn return_obligation_transfer_v2_disposition(allocation: &str, kind: AllocationDispositionKind,
+        effect: AllocationObligationEffect) -> AllocationDispositionRecord {
+        AllocationDispositionRecord { allocation: allocation.into(), kind,
+            certainty: AllocationEventCertainty::MayAbstract, obligation_effect: effect,
+            basis: "rust_return_identity_v1".into(), source_variable: None,
+            target_variable: None, callee_def_path: None }
+    }
+
+    fn return_obligation_transfer_v2_graph(continuity: &[&[&str]]) -> Kripke {
+        let relations: Vec<_> = continuity.iter().enumerate()
+            .map(|(i, _)| return_obligation_transfer_v2_record(if i == 0 { "a" } else { "b" })).collect();
+        let mut k = matched_return_diagnostic_graph(relations);
+        k.capabilities.extend(["allocation_state_v1".into(), "allocation_disposition_v1".into()]);
+        for allocation in ["A", "B"] {
+            k.allocations.insert(allocation.into(), AbstractAllocation { id: allocation.into(),
+                display: None, site: None, context: vec![], allocator_contract: None });
+        }
+        let entry = k.nodes.get_mut("entry_f").unwrap();
+        entry.allocation_disposition.push(return_obligation_transfer_v2_disposition("A",
+            AllocationDispositionKind::BoxIntoRaw, AllocationObligationEffect::PreserveManualObligation));
+        entry.allocation_labels.push(AllocationEventLabel { predicate: EventKind::Alloc, allocation: "A".into(),
+            certainty: AllocationEventCertainty::MayAbstract, deallocator_contract: None });
+        let ret = k.nodes.get_mut("return_f").unwrap();
+        ret.semantic_labels.push("term:return".into());
+        ret.allocation_disposition.push(return_obligation_transfer_v2_disposition("A",
+            AllocationDispositionKind::ReturnEscape, AllocationObligationEffect::MayEscapeToCaller));
+        for (i, allocations) in continuity.iter().enumerate() {
+            let suffix = if i == 0 { "a" } else { "b" };
+            let continuation = format!("rust::caller_{suffix}::bb1");
+            let root_return = format!("rust::caller_{suffix}::bb2");
+            let node = k.nodes.get_mut(&continuation).unwrap();
+            node.identity = Some(NodeIdentityAnnotation { points_to: vec![crate::kripke::IdentityPointsToRecord {
+                variable: format!("rust::caller_{suffix}::Local(_1)"),
+                allocations: allocations.iter().map(|s| s.to_string()).collect(),
+            }], ..NodeIdentityAnnotation::default() });
+            let mut terminal = node.clone();
+            terminal.id = root_return.clone();
+            terminal.successors.clear();
+            terminal.semantic_labels = vec!["term:return".into()];
+            terminal.identity = None;
+            k.nodes.insert(root_return.clone(), terminal);
+            matched_return_diagnostic_edge(&mut k, &continuation, &root_return, TypedEdgeFlow::Normal);
+        }
+        // Legacy labels are intentionally present; the relation path must not
+        // rely on their cardinality when the sidecar capability is declared.
+        for edge in &mut k.typed_edges {
+            if edge.source == "return_f" { edge.label = Some("Rust Return -> dummyRet".into()); }
+            if edge.source.starts_with("matched_") { edge.label = Some("dummyRet -> Rust Continuation".into()); }
+        }
+        k
+    }
+
+    fn return_obligation_transfer_v2_findings(k: &Kripke) -> Vec<AllocationObligationFinding> {
+        ModelChecker::new(k).allocation_obligation_findings(Truth::Unknown, AssessmentScope::NormalExecution)
+    }
+
+    #[test]
+    fn return_obligation_transfer_v2_legacy_no_sidecar_unchanged() {
+        local_return_continuity_keeps_manual_obligation_open_until_caller_return();
+        local_return_continuity_still_stops_at_caller_discharge();
+        let mut k = return_obligation_transfer_v2_graph(&[&["A"], &[]]);
+        k.capabilities.remove("rust_call_return_relation_v1");
+        k.rust_call_return_relations.clear();
+        assert!(return_obligation_transfer_v2_findings(&k).is_empty());
+    }
+
+    #[test]
+    fn return_obligation_transfer_v2_single_caller_leaks() {
+        let k = return_obligation_transfer_v2_graph(&[&["A"]]);
+        let findings = return_obligation_transfer_v2_findings(&k);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].return_node.as_deref(), Some("rust::caller_a::bb2"));
+        assert_eq!(findings[0].witness_path,
+            vec!["entry_f", "return_f", "matched_a", "rust::caller_a::bb1", "rust::caller_a::bb2"]);
+        assert!(findings[0].evidence.contains(&AllocationObligationEvidence::ProducerCertifiedLocalReturnContinuity));
+    }
+
+    #[test]
+    fn return_obligation_transfer_v2_single_caller_discharges() {
+        for effect in [AllocationObligationEffect::RestoreRaiiObligation, AllocationObligationEffect::MayDischarge] {
+            let mut k = return_obligation_transfer_v2_graph(&[&["A"]]);
+            k.nodes.get_mut("rust::caller_a::bb1").unwrap().allocation_disposition.push(
+                return_obligation_transfer_v2_disposition("A", AllocationDispositionKind::BoxFromRaw, effect));
+            assert!(return_obligation_transfer_v2_findings(&k).is_empty());
+        }
+    }
+
+    #[test]
+    fn return_obligation_transfer_v2_shared_callee_only_one_caller() {
+        let k = return_obligation_transfer_v2_graph(&[&["A"], &[]]);
+        let checker = ModelChecker::new(&k);
+        assert_eq!(checker.certified_local_return_obligation_relation("return_f", "A"), Some(0));
+        assert!(!checker.caller_continuation_preserves_obligation_identity("rust::caller_b::bb1", "A"));
+        let findings = return_obligation_transfer_v2_findings(&k);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].witness_path.contains(&"matched_a".into()));
+        assert!(!findings[0].witness_path.contains(&"matched_b".into()));
+    }
+
+    #[test]
+    fn return_obligation_transfer_v2_distinct_allocations() {
+        let mut k = return_obligation_transfer_v2_graph(&[&["A"], &["B"]]);
+        k.nodes.get_mut("entry_f").unwrap().allocation_disposition.push(return_obligation_transfer_v2_disposition(
+            "B", AllocationDispositionKind::CStringIntoRaw, AllocationObligationEffect::PreserveManualObligation));
+        k.nodes.get_mut("return_f").unwrap().allocation_disposition.push(return_obligation_transfer_v2_disposition(
+            "B", AllocationDispositionKind::ReturnEscape, AllocationObligationEffect::MayEscapeToCaller));
+        let checker = ModelChecker::new(&k);
+        assert_eq!(checker.certified_local_return_obligation_relation("return_f", "A"), Some(0));
+        assert_eq!(checker.certified_local_return_obligation_relation("return_f", "B"), Some(1));
+        let findings = return_obligation_transfer_v2_findings(&k);
+        assert_eq!(findings.len(), 2);
+        for finding in findings {
+            let suffix = if finding.allocation == "A" { "a" } else { "b" };
+            assert_eq!(finding.return_node, Some(format!("rust::caller_{suffix}::bb2")));
+            assert_eq!(finding.witness_path[2], format!("matched_{suffix}"));
+        }
+    }
+
+    #[test]
+    fn return_obligation_transfer_v2_ambiguous_continuity() {
+        let mut k = return_obligation_transfer_v2_graph(&[&["A"], &["A"]]);
+        // An ordinary edge from the certified Rust return must not bypass ambiguity.
+        matched_return_diagnostic_edge(&mut k, "return_f", "rust::caller_a::bb2", TypedEdgeFlow::Normal);
+        let checker = ModelChecker::new(&k);
+        assert_eq!(checker.certified_local_return_obligation_relation("return_f", "A"), None);
+        assert!(return_obligation_transfer_v2_findings(&k).is_empty());
+        assert!(checker.obligation_successor_states_in_scope(AssessmentScope::NormalExecution,
+            &MatchedDiagnosticState { node: "return_f".into(), call_stack: vec![] }, "A").is_empty());
+    }
+
+    #[test]
+    fn return_obligation_transfer_v2_no_continuity() {
+        let k = return_obligation_transfer_v2_graph(&[&[]]);
+        assert_eq!(ModelChecker::new(&k).certified_local_return_obligation_relation("return_f", "A"), None);
+        assert!(return_obligation_transfer_v2_findings(&k).is_empty());
+    }
+
+    #[test]
+    fn return_obligation_transfer_v2_nested_call_after_bootstrap() {
+        let mut k = return_obligation_transfer_v2_graph(&[&["A"]]);
+        let mut nested = return_obligation_transfer_v2_record("nested");
+        nested.callee_entry_node = "entry_g".into();
+        nested.callee_return_nodes = vec!["return_g".into()];
+        let other = { let mut r = nested.clone(); r.call_node = "other_call".into();
+            r.dummy_call_node = "other_activation".into(); r.dummy_ret_node = "other_return".into();
+            r.continuation_node = "other_continuation".into(); r };
+        let extra = matched_return_diagnostic_graph(vec![nested.clone(), other.clone()]);
+        k.nodes.extend(extra.nodes);
+        k.typed_edges.extend(extra.typed_edges);
+        let mut relations = k.rust_call_return_relations.clone();
+        relations.extend([nested.clone(), other]);
+        // Revalidate the full relation overlay before exercising it.
+        k = k.with_rust_call_return_relations(Some(relations)).unwrap();
+        k.nodes.get_mut("rust::caller_a::bb1").unwrap().successors.clear();
+        k.typed_edges.retain(|e| e.source != "rust::caller_a::bb1");
+        matched_return_diagnostic_edge(&mut k, "rust::caller_a::bb1", &nested.call_node, TypedEdgeFlow::Normal);
+        matched_return_diagnostic_edge(&mut k, &nested.continuation_node, "rust::caller_a::bb2", TypedEdgeFlow::Normal);
+        let checker = ModelChecker::new(&k);
+        let boot = checker.obligation_successor_states_in_scope(AssessmentScope::NormalExecution,
+            &MatchedDiagnosticState { node: "return_f".into(), call_stack: vec![] }, "A");
+        assert!(boot[0].call_stack.is_empty());
+        let pushed = checker.obligation_successor_states_in_scope(AssessmentScope::NormalExecution,
+            &MatchedDiagnosticState { node: nested.dummy_call_node.clone(), call_stack: vec![] }, "A");
+        assert_eq!(pushed[0].call_stack, vec![1]);
+        let popped = checker.obligation_successor_states_in_scope(AssessmentScope::NormalExecution,
+            &MatchedDiagnosticState { node: "return_g".into(), call_stack: vec![1] }, "A");
+        assert_eq!(popped, vec![MatchedDiagnosticState { node: nested.dummy_ret_node.clone(), call_stack: vec![] }]);
+        let findings = return_obligation_transfer_v2_findings(&k);
+        assert_eq!(findings.len(), 1);
+        assert!(findings[0].witness_path.contains(&nested.dummy_ret_node));
+        assert!(!findings[0].witness_path.contains(&"other_return".into()));
+    }
+
+    #[test]
+    fn return_obligation_transfer_v2_recursive_relation_fail_closed() {
+        let k = return_obligation_transfer_v2_graph(&[&["A"]]);
+        assert!(ModelChecker::new(&k).obligation_successor_states_in_scope(AssessmentScope::NormalExecution,
+            &MatchedDiagnosticState { node: "activation_a".into(), call_stack: vec![0] }, "A").is_empty());
+    }
+
+    #[test]
+    fn return_obligation_transfer_v2_direct_root_unaffected() {
+        let mut k = return_obligation_transfer_v2_graph(&[&["A"]]);
+        k.entry = "rust::caller_a::bb1".into();
+        let handoff = k.nodes.get_mut("entry_f").unwrap().allocation_disposition.remove(0);
+        k.nodes.get_mut("rust::caller_a::bb1").unwrap().allocation_disposition.push(handoff);
+        let pre = { let mut pre = k.clone(); pre.capabilities.remove("rust_call_return_relation_v1");
+            pre.rust_call_return_relations.clear(); pre };
+        let findings = return_obligation_transfer_v2_findings(&k);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(serde_json::to_value(&findings).unwrap(), serde_json::to_value(return_obligation_transfer_v2_findings(&pre)).unwrap());
+    }
+
+    #[test]
+    fn return_obligation_transfer_v2_box_leak_unaffected() {
+        let mut k = return_obligation_transfer_v2_graph(&[&["A"]]);
+        k.entry = "rust::caller_a::bb0".into();
+        let mut root = k.nodes["entry_f"].clone(); root.id = k.entry.clone();
+        root.successors = vec!["call_a".into()]; root.allocation_disposition.clear();
+        k.nodes.insert(k.entry.clone(), root);
+        matched_return_diagnostic_edge(&mut k, "rust::caller_a::bb0", "call_a", TypedEdgeFlow::Normal);
+        let handoff = &mut k.nodes.get_mut("entry_f").unwrap().allocation_disposition[0];
+        handoff.kind = AllocationDispositionKind::BoxLeak;
+        handoff.obligation_effect = AllocationObligationEffect::PreservePersistentObligation;
+        let mut pre = k.clone(); pre.capabilities.remove("rust_call_return_relation_v1"); pre.rust_call_return_relations.clear();
+        let findings = return_obligation_transfer_v2_findings(&k);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].kind, AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion);
+        assert_eq!(serde_json::to_value(&findings).unwrap(), serde_json::to_value(return_obligation_transfer_v2_findings(&pre)).unwrap());
+    }
+
+    #[test]
+    fn return_obligation_transfer_v2_raw_truth_and_may_not_must() {
+        let mut k = return_obligation_transfer_v2_graph(&[&["A"], &["A"]]);
+        for node in k.nodes.values_mut() {
+            node.allocation_post = Some(AbstractAllocationMemoryAnnotation {
+                cells: vec![AbstractAllocationCell { allocation: "A".into(), value: CellValue::Top }],
+            });
+        }
+        k.nodes.get_mut("entry_f").unwrap().allocation_post.as_mut().unwrap().cells[0].value = CellValue::Alloc;
+        let mut pre = k.clone(); pre.capabilities.remove("rust_call_return_relation_v1"); pre.rust_call_return_relations.clear();
+        let document = parse_query_document("requires allocation_state_v1; exists_alloc a. EF (alloc(a) && EX EG !drop(a))").unwrap();
+        let before = ModelChecker::new(&pre).evaluate_document(&document, &Env::new()).unwrap();
+        let after = ModelChecker::new(&k).evaluate_document(&document, &Env::new()).unwrap();
+        assert_eq!(before, after);
+        assert_eq!(after, Truth::Unknown);
+        let ret = &k.nodes["return_f"];
+        assert!(ret.allocation_labels.is_empty());
+        assert_eq!(ret.allocation_post.as_ref().unwrap().value_of("A"), CellValue::Top);
+        assert_eq!(ret.allocation_disposition[0].certainty, AllocationEventCertainty::MayAbstract);
+        assert_eq!(ret.allocation_disposition[0].obligation_effect, AllocationObligationEffect::MayEscapeToCaller);
+        let checker = ModelChecker::new(&k);
+        assert!(checker.leak_state_refuting_findings(Truth::Unknown, AssessmentScope::NormalExecution).is_empty());
+        assert!(checker.allocation_obligation_findings(Truth::Unknown, AssessmentScope::NormalExecution).is_empty());
+        let report = checker.explain_document(&document, &Env::new(), 4).unwrap();
+        assert_eq!(report.assessment.subresult.as_str(), "unk_unoriented");
+    }
+
+    #[test]
+    fn return_obligation_transfer_v2_df_flat_unmatched_unchanged() {
+        let mut k = return_obligation_transfer_v2_graph(&[&["A"], &[]]);
+        for node in ["return_f", "rust::caller_b::bb1"] {
+            k.nodes.get_mut(node).unwrap().allocation_labels.push(AllocationEventLabel {
+                predicate: EventKind::Drop, allocation: "A".into(), certainty: AllocationEventCertainty::MayAbstract,
+                deallocator_contract: None });
+        }
+        let mut pre = k.clone(); pre.capabilities.remove("rust_call_return_relation_v1"); pre.rust_call_return_relations.clear();
+        for scope in [AssessmentScope::NormalExecution, AssessmentScope::AllExecution] {
+            let before = ModelChecker::new(&pre).double_free_findings(Truth::Unknown, scope);
+            let after = ModelChecker::new(&k).double_free_findings(Truth::Unknown, scope);
+            // F5 now rejects this unmatched flat-return witness. The legacy
+            // artifact still retains its F4 finding; manual-obligation semantics
+            // above remain unchanged.
+            assert!(!before.is_empty());
+            assert!(after.is_empty());
+        }
+    }
+
+    fn matched_return_diagnostic_graph(relations: Vec<crate::kripke::RustCallReturnRelationRecord>) -> Kripke {
+        use crate::kripke::rust_call_return_relation_tests::{base, raw_graph};
+        let raw=raw_graph(&relations);
+        base(&raw).with_rust_call_return_relations(Some(relations)).unwrap()
+    }
+
+    fn matched_return_diagnostic_edge(k: &mut Kripke, source: &str, destination: &str, flow: TypedEdgeFlow) {
+        k.nodes.get_mut(source).unwrap().successors.push(destination.into());
+        k.typed_edges.push(TypedEdgeRecord {
+            source:source.into(), destination:destination.into(), flow,
+            label:None, source_label:None, destination_label:None,
+        });
+    }
+
+    fn matched_return_diagnostic_path(k: &Kripke, start: &str, target: &str) -> Option<Vec<String>> {
+        ModelChecker::new(k).matched_bfs_to_in_scope(AssessmentScope::NormalExecution, start,
+            |node| node==target, |_|true)
+    }
+
+    #[test]
+    fn matched_return_diagnostic_single_call() {
+        use crate::kripke::rust_call_return_relation_tests::record;
+        let k=matched_return_diagnostic_graph(vec![record("a")]);
+        assert_eq!(matched_return_diagnostic_path(&k,"call_a","continue_a").unwrap(),
+            vec!["call_a","activation_a","entry_f","return_f","matched_a","continue_a"]);
+        assert!(ModelChecker::new(&k).matched_bfs_to_in_scope(AssessmentScope::NormalExecution,
+            "call_a", |n| n=="continue_a", |n| n!="return_f").is_none());
+    }
+
+    #[test]
+    fn matched_return_diagnostic_shared_callee_rejects_cross_returns() {
+        use crate::kripke::rust_call_return_relation_tests::record;
+        let k=matched_return_diagnostic_graph(vec![record("a"),record("b")]);
+        let checker=ModelChecker::new(&k);
+        for (start,own,other,id) in [("call_a","continue_a","continue_b",0),("call_b","continue_b","continue_a",1)] {
+            assert!(matched_return_diagnostic_path(&k,start,own).is_some());
+            assert!(matched_return_diagnostic_path(&k,start,other).is_none());
+            assert!(checker.bfs_to_in_scope(AssessmentScope::NormalExecution,start,|n|n==other,|_|true).is_some());
+            let next=checker.matched_successor_states_in_scope(AssessmentScope::NormalExecution,
+                &MatchedDiagnosticState {node:"return_f".into(),call_stack:vec![id]});
+            assert_eq!(next.len(),1);assert!(next[0].call_stack.is_empty());
+            assert_eq!(next[0].node,if id==0 {"matched_a"} else {"matched_b"});
+        }
+    }
+
+    fn matched_return_diagnostic_nested_graph() -> Kripke {
+        use crate::kripke::rust_call_return_relation_tests::{record,base,raw_graph};
+        let mut outer=record("a");
+        // Both edges from return_g are certified; only the inner is active on top.
+        outer.callee_return_nodes=vec!["return_f".into(),"return_g".into()];
+        let mut inner=record("b");inner.caller_function="f".into();inner.callee_function="g".into();
+        inner.callee_entry_node="entry_g".into();inner.callee_return_nodes=vec!["return_g".into()];
+        let relations=vec![outer,inner];let raw=raw_graph(&relations);let mut k=base(&raw);
+        k.nodes.get_mut("entry_f").unwrap().successors.clear();
+        k.typed_edges.retain(|e|e.source!="entry_f");
+        matched_return_diagnostic_edge(&mut k,"entry_f","call_b",TypedEdgeFlow::Normal);
+        matched_return_diagnostic_edge(&mut k,"continue_b","return_f",TypedEdgeFlow::Normal);
+        k.with_rust_call_return_relations(Some(relations)).unwrap()
+    }
+
+    #[test]
+    fn matched_return_diagnostic_nested_calls() {
+        let k=matched_return_diagnostic_nested_graph();let checker=ModelChecker::new(&k);
+        let path=matched_return_diagnostic_path(&k,"call_a","continue_a").unwrap();
+        assert_eq!(path,vec!["call_a","activation_a","entry_f","call_b","activation_b","entry_g",
+            "return_g","matched_b","continue_b","return_f","matched_a","continue_a"]);
+        let mut state=MatchedDiagnosticState {node:path[0].clone(),call_stack:vec![]};
+        let expected=[vec![],vec![],vec![0],vec![0],vec![0],vec![0,1],vec![0,1],
+            vec![0],vec![0],vec![0],vec![],vec![]];
+        assert_eq!(state.call_stack,expected[0]);
+        for (i,node) in path.iter().enumerate().skip(1) {
+            state=checker.matched_successor_states_in_scope(AssessmentScope::NormalExecution,&state)
+                .into_iter().find(|s|&s.node==node).unwrap();
+            assert_eq!(state.call_stack,expected[i]);
+        }
+    }
+
+    #[test]
+    fn matched_return_diagnostic_nested_cross_return() {
+        let k=matched_return_diagnostic_nested_graph();let checker=ModelChecker::new(&k);
+        let next=checker.matched_successor_states_in_scope(AssessmentScope::NormalExecution,
+            &MatchedDiagnosticState {node:"return_g".into(),call_stack:vec![0,1]});
+        assert_eq!(next,vec![MatchedDiagnosticState {node:"matched_b".into(),call_stack:vec![0]}]);
+        assert!(checker.matched_bfs_to_in_scope(AssessmentScope::NormalExecution,"call_a",
+            |n|n=="continue_a",|n|n!="matched_b").is_none());
+    }
+
+    #[test]
+    fn matched_return_diagnostic_recursive_same_relation_fail_closed() {
+        use crate::kripke::rust_call_return_relation_tests::record;
+        let mut k=matched_return_diagnostic_graph(vec![record("a")]);
+        matched_return_diagnostic_edge(&mut k,"entry_f","activation_a",TypedEdgeFlow::Normal);
+        let checker=ModelChecker::new(&k);
+        assert!(checker.matched_successor_states_in_scope(AssessmentScope::NormalExecution,
+            &MatchedDiagnosticState {node:"activation_a".into(),call_stack:vec![0]}).is_empty());
+        assert!(matched_return_diagnostic_path(&k,"call_a","continue_a").is_some());
+        assert!(matched_return_diagnostic_path(&k,"call_a","absent").is_none());
+        for stack in [vec![0,0],vec![1]] {
+            assert!(checker.matched_successor_states_in_scope(AssessmentScope::NormalExecution,
+                &MatchedDiagnosticState {node:"entry_f".into(),call_stack:stack}).is_empty());
+        }
+    }
+
+    #[test]
+    fn matched_return_diagnostic_finite_cyclic_states() {
+        use crate::kripke::rust_call_return_relation_tests::record;
+        let mut k=matched_return_diagnostic_graph(vec![record("a"),record("b")]);
+        matched_return_diagnostic_edge(&mut k,"entry_f","call_b",TypedEdgeFlow::Normal);
+        matched_return_diagnostic_edge(&mut k,"continue_a","call_a",TypedEdgeFlow::Normal);
+        matched_return_diagnostic_edge(&mut k,"continue_b","entry_f",TypedEdgeFlow::Normal);
+        let checker=ModelChecker::new(&k);
+        let initial=MatchedDiagnosticState {node:"call_a".into(),call_stack:vec![]};
+        let mut visited=BTreeSet::from([initial.clone()]);let mut queue=VecDeque::from([initial]);
+        // With two distinct relation ids the possible stacks are [], [0], [1], [0,1], [1,0].
+        let bound=k.nodes.len()*5;
+        while let Some(state)=queue.pop_front() {
+            for next in checker.matched_successor_states_in_scope(AssessmentScope::NormalExecution,&state) {
+                assert!(next.call_stack.len()<=2);
+                assert_eq!(next.call_stack.iter().collect::<BTreeSet<_>>().len(),next.call_stack.len());
+                if visited.insert(next.clone()) {queue.push_back(next);}
+                assert!(visited.len()<=bound);
+            }
+        }
+        assert!(visited.iter().any(|s|s.call_stack==vec![0,1]));
+        assert!(visited.iter().filter(|s|s.node=="entry_f").count()>1);
+        let allowed_calls=std::cell::Cell::new(0);
+        assert!(checker.matched_bfs_to_in_scope(AssessmentScope::NormalExecution,"call_a",|_|false,
+            |_| {allowed_calls.set(allowed_calls.get()+1);true}).is_none());
+        let maximum_degree=k.nodes.values().map(|n|n.successors.len()).max().unwrap();
+        assert!(allowed_calls.get()<=1+bound*maximum_degree);
+    }
+
+    #[test]
+    fn matched_return_diagnostic_normal_execution_excludes_unwind() {
+        use crate::kripke::rust_call_return_relation_tests::record;
+        let mut k=matched_return_diagnostic_graph(vec![record("a")]);
+        matched_return_diagnostic_edge(&mut k,"call_a","continue_a",TypedEdgeFlow::Unwind);
+        let next=ModelChecker::new(&k).matched_successor_states_in_scope(AssessmentScope::NormalExecution,
+            &MatchedDiagnosticState {node:"call_a".into(),call_stack:vec![]});
+        assert_eq!(next.iter().map(|s|s.node.as_str()).collect::<Vec<_>>(),vec!["activation_a"]);
+    }
+
+    #[test]
+    fn matched_return_diagnostic_all_execution_matches_returns() {
+        use crate::kripke::rust_call_return_relation_tests::record;
+        let mut k=matched_return_diagnostic_graph(vec![record("a"),record("b")]);
+        matched_return_diagnostic_edge(&mut k,"call_a","continue_a",TypedEdgeFlow::Unwind);
+        let checker=ModelChecker::new(&k);
+        let next=checker.matched_successor_states_in_scope(AssessmentScope::AllExecution,
+            &MatchedDiagnosticState {node:"call_a".into(),call_stack:vec![]});
+        assert!(next.iter().any(|s|s.node=="continue_a" && s.call_stack.is_empty()));
+        assert!(checker.matched_bfs_to_in_scope(AssessmentScope::AllExecution,"call_a",|n|n=="continue_b",|_|true).is_none());
+        let returns=checker.matched_successor_states_in_scope(AssessmentScope::AllExecution,
+            &MatchedDiagnosticState {node:"return_f".into(),call_stack:vec![0]});
+        assert_eq!(returns,vec![MatchedDiagnosticState {node:"matched_a".into(),call_stack:vec![]}]);
+    }
+
+    #[test]
+    fn matched_return_diagnostic_empty_stack_return() {
+        use crate::kripke::rust_call_return_relation_tests::record;
+        let k=matched_return_diagnostic_graph(vec![record("a")]);let checker=ModelChecker::new(&k);
+        for scope in [AssessmentScope::NormalExecution,AssessmentScope::AllExecution] {
+            assert!(checker.matched_successor_states_in_scope(scope,
+                &MatchedDiagnosticState {node:"return_f".into(),call_stack:vec![]}).is_empty());
+            assert!(checker.matched_bfs_to_in_scope(scope,"return_f",|n|n=="continue_a",|_|true).is_none());
+            assert!(checker.bfs_to_in_scope(scope,"return_f",|n|n=="continue_a",|_|true).is_some());
+        }
+    }
+
+    #[test]
+    fn matched_return_diagnostic_ordinary_edge_preserves_stack() {
+        use crate::kripke::rust_call_return_relation_tests::record;
+        let k=matched_return_diagnostic_graph(vec![record("a")]);let checker=ModelChecker::new(&k);
+        for stack in [vec![],vec![0]] {
+            let next=checker.matched_successor_states_in_scope(AssessmentScope::NormalExecution,
+                &MatchedDiagnosticState {node:"entry_f".into(),call_stack:stack.clone()});
+            assert_eq!(next,vec![MatchedDiagnosticState {node:"return_f".into(),call_stack:stack}]);
+        }
+    }
+
+    #[test]
+    fn matched_return_diagnostic_truth_non_interference() {
+        use crate::kripke::rust_call_return_relation_tests::record;
+        let mut a=double_free_unwind_only_graph();
+        a.capabilities.insert("mir_semantics_v2".into());
+        let mut r=record("a");r.call_node="b0".into();r.callee_entry_node="drop1".into();
+        r.callee_return_nodes=vec!["cleanup_drop2".into()];r.continuation_node="ret".into();
+        let mut template=a.nodes["ret"].clone();template.id=r.dummy_call_node.clone();template.successors.clear();
+        a.nodes.insert(template.id.clone(),template.clone());template.id=r.dummy_ret_node.clone();
+        a.nodes.insert(template.id.clone(),template);
+        for (s,d) in [(&r.call_node,&r.dummy_call_node),(&r.dummy_call_node,&r.callee_entry_node),
+            (&r.callee_return_nodes[0],&r.dummy_ret_node),(&r.dummy_ret_node,&r.continuation_node)] {
+            matched_return_diagnostic_edge(&mut a,s,d,TypedEdgeFlow::Normal);
+        }
+        let mut b=a.clone();b.capabilities.insert("rust_call_return_relation_v1".into());
+        let b=b.with_rust_call_return_relations(Some(vec![r])).unwrap();
+        assert!(a.rust_call_return_relations.is_empty());assert_eq!(b.rust_call_return_relations.len(),1);
+        for query in ["exists_alloc a. EF drop_l(a)","requires allocation_state_v1; exists_alloc a. EF alloc(a)",
+            "requires allocation_state_v1; exists_alloc a. EF (alloc(a) && EX EF (drop_l(a) && EX E[(!alloc_l(a)) U drop_l(a)]))"] {
+            let doc=parse_query_document(query).unwrap();
+            let before=ModelChecker::new(&a).evaluate_document(&doc,&Env::new()).unwrap();
+            let after=ModelChecker::new(&b).evaluate_document(&doc,&Env::new()).unwrap();
+            assert_eq!(before,after,"{query}");
+        }
+    }
+
     fn one_allocation_graph() -> Kripke {
         Kripke::from_annotated_icfg(AnnotatedIcfg {
             external_negative_evidence: vec![],
@@ -5042,6 +6636,16 @@ mod tests {
                 post: AbstractMemoryAnnotation::default(),
             }],
         }).unwrap()
+    }
+
+
+    fn one_rust_root_allocation_graph() -> Kripke {
+        let mut k = one_allocation_graph();
+        let mut entry = k.nodes.remove("b0").expect("single fixture entry");
+        entry.id = "rust::main::bb0".into();
+        k.entry = entry.id.clone();
+        k.nodes.insert(entry.id.clone(), entry);
+        k
     }
 
 
@@ -6192,6 +7796,219 @@ mod tests {
         assert!(normal_assessment.caveats.iter().any(|c| c.contains("complete transition relation")));
     }
 
+    fn df_lite_reentry_graph(reenter_allocation_site_scope: bool) -> Kripke {
+        // Start from the already-valid explain-layer fixture instead of
+        // rebuilding AnnotatedIcfg ingestion here.  Schema/capability/typed-edge
+        // overlay validation is owned by kripke.rs tests; this unit test isolates
+        // only the diagnostic continuity rule over an already-constructed model.
+        let mut k = one_allocation_graph();
+        k.schema_version = 2;
+        k.entry = "rust::worker::bb0".into();
+        k.capabilities.insert("allocation_state_v1".into());
+        k.capabilities.insert("typed_edge_flow_v1".into());
+
+        {
+            let allocation = k.allocations.get_mut("A").expect("base allocation A");
+            allocation.site = Some(serde_json::json!({
+                "kind": "rust_call",
+                "node_id": "rust::worker::bb1",
+                "callee": "crate::alloc"
+            }));
+            allocation.context = vec!["rust::driver::bb1".into()];
+        }
+
+        let alloc_label = AllocationEventLabel {
+            predicate: EventKind::Alloc,
+            allocation: "A".into(),
+            certainty: AllocationEventCertainty::MayAbstract,
+            deallocator_contract: None,
+        };
+        let drop_label = AllocationEventLabel {
+            predicate: EventKind::Drop,
+            allocation: "A".into(),
+            certainty: AllocationEventCertainty::MayAbstract,
+            deallocator_contract: None,
+        };
+        let allocation_post = |value| Some(AbstractAllocationMemoryAnnotation {
+            cells: vec![AbstractAllocationCell {
+                allocation: "A".into(),
+                value,
+            }],
+        });
+        let node = |id: &str,
+                    successors: Vec<&str>,
+                    labels: Vec<AllocationEventLabel>,
+                    semantic: Vec<&str>,
+                    post: Option<AbstractAllocationMemoryAnnotation>| AnnotatedNode {
+            id: id.into(),
+            successors: successors.into_iter().map(str::to_string).collect(),
+            labels: vec![],
+            semantic_labels: semantic.into_iter().map(str::to_string).collect(),
+            allocation_labels: labels,
+            allocation_disposition: vec![],
+            identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()),
+            allocation_post: post,
+            pre: AbstractMemoryAnnotation::default(),
+            post: AbstractMemoryAnnotation::default(),
+        };
+
+        // Replace only the transition-system portion of one_allocation_graph.
+        // The program-variable domain and all other validated model metadata are
+        // retained from the base fixture.
+        k.nodes.clear();
+        k.nodes.insert(
+            "rust::worker::bb0".into(),
+            node(
+                "rust::worker::bb0",
+                vec!["rust::worker::bb1", "rust::worker::bb4"],
+                vec![],
+                vec![],
+                None,
+            ),
+        );
+        k.nodes.insert(
+            "rust::worker::bb1".into(),
+            node(
+                "rust::worker::bb1",
+                vec!["rust::worker::bb2"],
+                vec![alloc_label],
+                vec!["term:call"],
+                allocation_post(CellValue::Alloc),
+            ),
+        );
+        k.nodes.insert(
+            "rust::worker::bb2".into(),
+            node(
+                "rust::worker::bb2",
+                if reenter_allocation_site_scope {
+                    vec!["rust::worker::bb3"]
+                } else {
+                    vec!["rust::worker::bb4"]
+                },
+                vec![drop_label.clone()],
+                vec!["term:drop"],
+                allocation_post(CellValue::Freed),
+            ),
+        );
+        k.nodes.insert(
+            "rust::worker::bb4".into(),
+            node(
+                "rust::worker::bb4",
+                vec!["rust::worker::bb2"],
+                vec![],
+                vec![],
+                allocation_post(CellValue::Freed),
+            ),
+        );
+
+        k.typed_edges = vec![
+            TypedEdgeRecord { source: "rust::worker::bb0".into(), destination: "rust::worker::bb1".into(), flow: TypedEdgeFlow::Normal, label: Some("Switch branch alloc".into()), source_label: None, destination_label: None },
+            TypedEdgeRecord { source: "rust::worker::bb0".into(), destination: "rust::worker::bb4".into(), flow: TypedEdgeFlow::Normal, label: Some("Switch branch skip".into()), source_label: None, destination_label: None },
+            TypedEdgeRecord { source: "rust::worker::bb1".into(), destination: "rust::worker::bb2".into(), flow: TypedEdgeFlow::Normal, label: Some("External/summary call return".into()), source_label: None, destination_label: None },
+        ];
+
+        if reenter_allocation_site_scope {
+            k.nodes.insert(
+                "rust::worker::bb3".into(),
+                node(
+                    "rust::worker::bb3",
+                    vec!["dummyRet::rust::driver::0"],
+                    vec![],
+                    vec!["term:return"],
+                    allocation_post(CellValue::Freed),
+                ),
+            );
+            k.nodes.insert(
+                "dummyRet::rust::driver::0".into(),
+                node(
+                    "dummyRet::rust::driver::0",
+                    vec!["rust::driver::bb1"],
+                    vec![],
+                    vec![],
+                    allocation_post(CellValue::Freed),
+                ),
+            );
+            k.nodes.insert(
+                "rust::driver::bb1".into(),
+                node(
+                    "rust::driver::bb1",
+                    vec!["dummyCall::rust::driver::bb1::worker"],
+                    vec![],
+                    vec!["term:call"],
+                    allocation_post(CellValue::Freed),
+                ),
+            );
+            k.nodes.insert(
+                "dummyCall::rust::driver::bb1::worker".into(),
+                node(
+                    "dummyCall::rust::driver::bb1::worker",
+                    vec!["rust::worker::bb0"],
+                    vec![],
+                    vec![],
+                    allocation_post(CellValue::Freed),
+                ),
+            );
+            k.typed_edges.extend([
+                TypedEdgeRecord { source: "rust::worker::bb2".into(), destination: "rust::worker::bb3".into(), flow: TypedEdgeFlow::Normal, label: Some("Drop return".into()), source_label: None, destination_label: None },
+                TypedEdgeRecord { source: "rust::worker::bb3".into(), destination: "dummyRet::rust::driver::0".into(), flow: TypedEdgeFlow::Normal, label: Some("Rust Return -> dummyRet".into()), source_label: None, destination_label: None },
+                TypedEdgeRecord { source: "dummyRet::rust::driver::0".into(), destination: "rust::driver::bb1".into(), flow: TypedEdgeFlow::Normal, label: Some("dummyRet -> Rust Continuation".into()), source_label: None, destination_label: None },
+                TypedEdgeRecord { source: "rust::driver::bb1".into(), destination: "dummyCall::rust::driver::bb1::worker".into(), flow: TypedEdgeFlow::Normal, label: Some("Rust Call -> dummyCall".into()), source_label: None, destination_label: None },
+                TypedEdgeRecord { source: "dummyCall::rust::driver::bb1::worker".into(), destination: "rust::worker::bb0".into(), flow: TypedEdgeFlow::Normal, label: Some("dummyCall -> Rust Entry".into()), source_label: None, destination_label: None },
+                TypedEdgeRecord { source: "rust::worker::bb4".into(), destination: "rust::worker::bb2".into(), flow: TypedEdgeFlow::Normal, label: Some("Switch branch skip".into()), source_label: None, destination_label: None },
+            ]);
+        } else {
+            k.typed_edges.extend([
+                TypedEdgeRecord { source: "rust::worker::bb2".into(), destination: "rust::worker::bb4".into(), flow: TypedEdgeFlow::Normal, label: Some("Drop return".into()), source_label: None, destination_label: None },
+                TypedEdgeRecord { source: "rust::worker::bb4".into(), destination: "rust::worker::bb2".into(), flow: TypedEdgeFlow::Normal, label: Some("Loop back".into()), source_label: None, destination_label: None },
+            ]);
+        }
+
+        k
+    }
+
+    #[test]
+    fn df_lite_reentry_of_allocation_site_activation_is_non_directional() {
+        let k = df_lite_reentry_graph(true);
+        let checker = ModelChecker::new(&k);
+        let doc = normal_scoped_double_free_state_document();
+        let truth = checker.evaluate_document(&doc, &Env::new()).unwrap();
+        assert_eq!(truth, Truth::Unknown, "DF-Lite must not change CQPL truth");
+
+        let report = checker.explain_document(&doc, &Env::new(), 8).unwrap();
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkUnoriented);
+        assert_eq!(report.assessment.direction, QueryEvidenceDirection::None);
+        assert!(!report.supporting_findings.iter().any(|finding| {
+            finding.kind == AllocationObligationFindingKind::RepeatedDropWithoutReallocation
+        }));
+        let finding = report.supporting_findings.iter()
+            .find(|finding| finding.kind == AllocationObligationFindingKind::RepeatedDropInstanceContinuityUnresolved)
+            .expect("non-directional re-entry candidate must remain auditable");
+        assert_eq!(finding.first_drop_node.as_deref(), Some("rust::worker::bb2"));
+        assert_eq!(finding.second_drop_node.as_deref(), Some("rust::worker::bb2"));
+        assert!(finding.evidence.contains(&AllocationObligationEvidence::AllocationSiteActivationReentryObserved));
+        assert!(finding.evidence.contains(&AllocationObligationEvidence::AllocationInstanceContinuityUnresolved));
+    }
+
+    #[test]
+    fn df_lite_same_activation_repeated_drop_remains_directional() {
+        let k = df_lite_reentry_graph(false);
+        let checker = ModelChecker::new(&k);
+        let doc = normal_scoped_double_free_state_document();
+        let truth = checker.evaluate_document(&doc, &Env::new()).unwrap();
+        assert_eq!(truth, Truth::Unknown);
+
+        let report = checker.explain_document(&doc, &Env::new(), 8).unwrap();
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkTrue);
+        assert_eq!(report.assessment.direction, QueryEvidenceDirection::True);
+        assert!(report.supporting_findings.iter().any(|finding| {
+            finding.kind == AllocationObligationFindingKind::RepeatedDropWithoutReallocation
+        }));
+        assert!(!report.supporting_findings.iter().any(|finding| {
+            finding.kind == AllocationObligationFindingKind::RepeatedDropInstanceContinuityUnresolved
+        }));
+    }
+
     #[test]
     fn df_negative_orientation_is_restricted_to_exact_allocation_state_shape() {
         let doc = parse_query_document(
@@ -6600,6 +8417,702 @@ mod tests {
     }
 
     #[test]
+    fn rust_activation_scope_is_canonical_and_fail_closed() {
+        assert_eq!(
+            ModelChecker::rust_activation_scope("rust::main::bb21"),
+            Some("rust::main")
+        );
+        assert_eq!(
+            ModelChecker::rust_activation_scope("rust::main::{closure#0}::bb1"),
+            Some("rust::main::{closure#0}")
+        );
+        assert_eq!(ModelChecker::rust_activation_scope("dummyRet::rust::main::bb1"), None);
+        assert_eq!(ModelChecker::rust_activation_scope("b0"), None);
+        assert_eq!(ModelChecker::rust_activation_scope("rust::main::bbx"), None);
+    }
+
+    #[test]
+    fn box_leak_unknown_leak_reports_persistent_allocation_on_normal_completion() {
+        let mut k = one_rust_root_allocation_graph();
+        k.capabilities.insert("allocation_state_v1".into());
+        k.capabilities.insert("allocation_disposition_v1".into());
+        k.capabilities.insert("mir_semantic_labels_v1".into());
+        k.capabilities.insert("typed_edge_flow_v1".into());
+        {
+            let b0 = k.nodes.get_mut("rust::main::bb0").unwrap();
+            b0.successors = vec!["rust::main::bb1".into()];
+            b0.allocation_post = Some(AbstractAllocationMemoryAnnotation {
+                cells: vec![AbstractAllocationCell {
+                    allocation: "A".into(),
+                    value: CellValue::Mv,
+                }],
+            });
+            b0.allocation_disposition = vec![AllocationDispositionRecord {
+                allocation: "A".into(),
+                kind: AllocationDispositionKind::BoxLeak,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::PreservePersistentObligation,
+                basis: "rustc_box_leak_v1".into(),
+                source_variable: Some("rust::main::_1".into()),
+                target_variable: Some("rust::main::_2".into()),
+                callee_def_path: Some("std::boxed::Box::leak".into()),
+            }];
+        }
+        k.nodes.insert(
+            "rust::main::bb1".into(),
+            AnnotatedNode {
+                id: "rust::main::bb1".into(),
+                successors: vec![],
+                labels: vec![],
+                semantic_labels: vec!["term:return".into()],
+                allocation_labels: vec![],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: Some(AbstractAllocationMemoryAnnotation {
+                    cells: vec![AbstractAllocationCell {
+                        allocation: "A".into(),
+                        value: CellValue::Mv,
+                    }],
+                }),
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        k.typed_edges = vec![TypedEdgeRecord {
+            source: "rust::main::bb0".into(),
+            destination: "rust::main::bb1".into(),
+            flow: TypedEdgeFlow::Normal,
+            label: Some("Goto".into()),
+            source_label: None,
+            destination_label: None,
+        }];
+
+        let checker = ModelChecker::new(&k);
+        let formula = StateFormula::ExistsAlloc {
+            logic_var: "a".into(),
+            body: Box::new(StateFormula::And(
+                Box::new(StateFormula::May {
+                    predicate: MayPredicate::Alloc,
+                    logic_var: "a".into(),
+                }),
+                Box::new(StateFormula::Not(Box::new(StateFormula::May {
+                    predicate: MayPredicate::Drop,
+                    logic_var: "a".into(),
+                }))),
+            )),
+        };
+        let report = checker
+            .explain_document(
+                &QueryDocument::new(BTreeSet::from(["allocation_state_v1".into()]), formula)
+                    .with_assessment_scope(AssessmentScope::NormalExecution),
+                &Env::new(),
+                4,
+            )
+            .unwrap();
+
+        assert_eq!(report.result, "unk");
+        assert_eq!(report.assessment.subresult, QuerySubresult::UnkTrue);
+        assert_eq!(report.assessment.direction, QueryEvidenceDirection::True);
+        assert_eq!(
+            report.assessment.strength,
+            QueryResultStrength::StrongAbstractEvidence
+        );
+        assert!(report.assessment.basis.iter().any(|basis| {
+            basis == "finding:persistent_allocation_on_normal_completion"
+        }));
+        assert!(report.assessment.caveats.iter().any(|caveat| {
+            caveat.contains("Box::leak persistence is intentional")
+        }));
+
+        assert_eq!(report.supporting_findings.len(), 1);
+        let finding = &report.supporting_findings[0];
+        assert_eq!(
+            finding.kind,
+            AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion
+        );
+        assert_eq!(
+            finding.strength,
+            AllocationObligationFindingStrength::StrongAbstractEvidence
+        );
+        assert_eq!(
+            finding.witness_path,
+            vec!["rust::main::bb0", "rust::main::bb1"]
+        );
+        assert_eq!(finding.handoff_node.as_deref(), Some("rust::main::bb0"));
+        assert_eq!(finding.return_node.as_deref(), Some("rust::main::bb1"));
+        assert!(finding
+            .evidence
+            .contains(&AllocationObligationEvidence::ProducerCertifiedBoxLeak));
+        assert!(finding.evidence.contains(
+            &AllocationObligationEvidence::AnalysisRootNormalReturnReachable
+        ));
+        assert!(!finding
+            .evidence
+            .contains(&AllocationObligationEvidence::NormalReturnReachable));
+        assert!(finding
+            .evidence
+            .contains(&AllocationObligationEvidence::NoInterveningCallAfterHandoff));
+        assert_eq!(finding.dispositions.len(), 1);
+        assert_eq!(
+            finding.dispositions[0].kind,
+            AllocationDispositionKind::BoxLeak
+        );
+        assert_eq!(
+            finding.dispositions[0].obligation_effect,
+            AllocationObligationEffect::PreservePersistentObligation
+        );
+        assert_eq!(finding.dispositions[0].basis, "rustc_box_leak_v1");
+        assert!(finding
+            .summary
+            .contains("analysis-root normal completion"));
+
+        let rendered = report.render_unknown_verbose("leak_alloc_state");
+        assert!(rendered.contains("kind       : persistent_allocation_on_normal_completion"));
+        assert!(rendered.contains("producer_certified_box_leak"));
+        assert!(rendered.contains("analysis_root_normal_return_reachable"));
+        assert!(rendered.contains("kind      : box_leak"));
+        assert!(rendered.contains("effect    : preserve_persistent_obligation"));
+    }
+
+    #[test]
+    fn box_leak_nested_activation_return_does_not_terminate_persistent_witness() {
+        let mut k = one_rust_root_allocation_graph();
+        k.capabilities.insert("allocation_disposition_v1".into());
+        k.capabilities.insert("mir_semantic_labels_v1".into());
+        k.capabilities.insert("typed_edge_flow_v1".into());
+        {
+            let root = k.nodes.get_mut("rust::main::bb0").unwrap();
+            root.successors = vec!["rust::main::{closure#0}::bb0".into()];
+            root.allocation_disposition = vec![AllocationDispositionRecord {
+                allocation: "A".into(),
+                kind: AllocationDispositionKind::BoxLeak,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::PreservePersistentObligation,
+                basis: "rustc_box_leak_v1".into(),
+                source_variable: Some("rust::main::_1".into()),
+                target_variable: Some("rust::main::_2".into()),
+                callee_def_path: Some("std::boxed::Box::leak".into()),
+            }];
+        }
+        k.nodes.insert(
+            "rust::main::{closure#0}::bb0".into(),
+            AnnotatedNode {
+                id: "rust::main::{closure#0}::bb0".into(),
+                successors: vec!["rust::main::{closure#0}::bb1".into()],
+                labels: vec![],
+                semantic_labels: vec![],
+                allocation_labels: vec![],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: None,
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        k.nodes.insert(
+            "rust::main::{closure#0}::bb1".into(),
+            AnnotatedNode {
+                id: "rust::main::{closure#0}::bb1".into(),
+                successors: vec!["dummyRet::root_callback".into()],
+                labels: vec![],
+                semantic_labels: vec!["term:return".into()],
+                allocation_labels: vec![],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: None,
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        k.nodes.insert(
+            "dummyRet::root_callback".into(),
+            AnnotatedNode {
+                id: "dummyRet::root_callback".into(),
+                successors: vec!["rust::main::bb1".into()],
+                labels: vec![],
+                semantic_labels: vec![],
+                allocation_labels: vec![],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: None,
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        k.nodes.insert(
+            "rust::main::bb1".into(),
+            AnnotatedNode {
+                id: "rust::main::bb1".into(),
+                successors: vec![],
+                labels: vec![],
+                semantic_labels: vec!["term:return".into()],
+                allocation_labels: vec![],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: None,
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        k.typed_edges = vec![
+            TypedEdgeRecord {
+                source: "rust::main::bb0".into(),
+                destination: "rust::main::{closure#0}::bb0".into(),
+                flow: TypedEdgeFlow::Normal,
+                label: Some("Higher-order callback -> dummyCall".into()),
+                source_label: None,
+                destination_label: None,
+            },
+            TypedEdgeRecord {
+                source: "rust::main::{closure#0}::bb0".into(),
+                destination: "rust::main::{closure#0}::bb1".into(),
+                flow: TypedEdgeFlow::Normal,
+                label: Some("Spawn caller continuation".into()),
+                source_label: None,
+                destination_label: None,
+            },
+            TypedEdgeRecord {
+                source: "rust::main::{closure#0}::bb1".into(),
+                destination: "dummyRet::root_callback".into(),
+                flow: TypedEdgeFlow::Normal,
+                label: Some("Rust Return -> dummyRet".into()),
+                source_label: None,
+                destination_label: None,
+            },
+            TypedEdgeRecord {
+                source: "dummyRet::root_callback".into(),
+                destination: "rust::main::bb1".into(),
+                flow: TypedEdgeFlow::Normal,
+                label: Some("Higher-order callback loop exit".into()),
+                source_label: None,
+                destination_label: None,
+            },
+        ];
+
+        let findings = ModelChecker::new(&k)
+            .allocation_obligation_findings(Truth::Unknown, AssessmentScope::NormalExecution);
+        let finding = findings
+            .iter()
+            .find(|finding| {
+                finding.kind
+                    == AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion
+            })
+            .expect("persistent finding reaches root completion");
+        assert_eq!(finding.return_node.as_deref(), Some("rust::main::bb1"));
+        assert!(finding
+            .witness_path
+            .contains(&"rust::main::{closure#0}::bb1".to_string()));
+        assert_ne!(
+            finding.return_node.as_deref(),
+            Some("rust::main::{closure#0}::bb1")
+        );
+    }
+
+    #[test]
+    fn box_leak_reclaim_before_normal_return_blocks_persistent_finding() {
+        let mut k = one_rust_root_allocation_graph();
+        k.capabilities.insert("allocation_disposition_v1".into());
+        k.capabilities.insert("mir_semantic_labels_v1".into());
+        k.capabilities.insert("typed_edge_flow_v1".into());
+        {
+            let b0 = k.nodes.get_mut("rust::main::bb0").unwrap();
+            b0.successors = vec!["rust::main::bb1".into()];
+            b0.allocation_disposition = vec![AllocationDispositionRecord {
+                allocation: "A".into(),
+                kind: AllocationDispositionKind::BoxLeak,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::PreservePersistentObligation,
+                basis: "rustc_box_leak_v1".into(),
+                source_variable: Some("rust::main::_1".into()),
+                target_variable: Some("rust::main::_2".into()),
+                callee_def_path: Some("std::boxed::Box::leak".into()),
+            }];
+        }
+        k.nodes.insert(
+            "rust::main::bb1".into(),
+            AnnotatedNode {
+                id: "rust::main::bb1".into(),
+                successors: vec!["rust::main::bb2".into()],
+                labels: vec![],
+                semantic_labels: vec!["term:call".into()],
+                allocation_labels: vec![],
+                allocation_disposition: vec![AllocationDispositionRecord {
+                    allocation: "A".into(),
+                    kind: AllocationDispositionKind::BoxFromRaw,
+                    certainty: AllocationEventCertainty::MayAbstract,
+                    obligation_effect: AllocationObligationEffect::RestoreRaiiObligation,
+                    basis: "rustc_box_from_raw_v1".into(),
+                    source_variable: Some("rust::main::_2".into()),
+                    target_variable: Some("rust::main::_3".into()),
+                    callee_def_path: Some("std::boxed::Box::from_raw".into()),
+                }],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: None,
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        k.nodes.insert(
+            "rust::main::bb2".into(),
+            AnnotatedNode {
+                id: "rust::main::bb2".into(),
+                successors: vec![],
+                labels: vec![],
+                semantic_labels: vec!["term:return".into()],
+                allocation_labels: vec![],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: None,
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        k.typed_edges = vec![
+            TypedEdgeRecord {
+                source: "rust::main::bb0".into(),
+                destination: "rust::main::bb1".into(),
+                flow: TypedEdgeFlow::Normal,
+                label: Some("Call return".into()),
+                source_label: None,
+                destination_label: None,
+            },
+            TypedEdgeRecord {
+                source: "rust::main::bb1".into(),
+                destination: "rust::main::bb2".into(),
+                flow: TypedEdgeFlow::Normal,
+                label: Some("Call return".into()),
+                source_label: None,
+                destination_label: None,
+            },
+        ];
+
+        let findings = ModelChecker::new(&k)
+            .allocation_obligation_findings(Truth::Unknown, AssessmentScope::NormalExecution);
+        assert!(!findings.iter().any(|finding| {
+            finding.kind
+                == AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion
+        }));
+    }
+
+    #[test]
+    fn box_leak_intervening_call_is_observational_candidate() {
+        let mut k = one_rust_root_allocation_graph();
+        k.capabilities.insert("allocation_disposition_v1".into());
+        k.capabilities.insert("mir_semantic_labels_v1".into());
+        k.capabilities.insert("typed_edge_flow_v1".into());
+        {
+            let b0 = k.nodes.get_mut("rust::main::bb0").unwrap();
+            b0.successors = vec!["rust::main::bb1".into()];
+            b0.allocation_disposition = vec![AllocationDispositionRecord {
+                allocation: "A".into(),
+                kind: AllocationDispositionKind::BoxLeak,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::PreservePersistentObligation,
+                basis: "rustc_box_leak_v1".into(),
+                source_variable: Some("rust::main::_1".into()),
+                target_variable: Some("rust::main::_2".into()),
+                callee_def_path: Some("std::boxed::Box::leak".into()),
+            }];
+        }
+        k.nodes.insert(
+            "rust::main::bb1".into(),
+            AnnotatedNode {
+                id: "rust::main::bb1".into(),
+                successors: vec!["rust::main::bb2".into()],
+                labels: vec![],
+                semantic_labels: vec!["term:call".into()],
+                allocation_labels: vec![],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: None,
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        k.nodes.insert(
+            "rust::main::bb2".into(),
+            AnnotatedNode {
+                id: "rust::main::bb2".into(),
+                successors: vec![],
+                labels: vec![],
+                semantic_labels: vec!["term:return".into()],
+                allocation_labels: vec![],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: None,
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        k.typed_edges = vec![
+            TypedEdgeRecord {
+                source: "rust::main::bb0".into(),
+                destination: "rust::main::bb1".into(),
+                flow: TypedEdgeFlow::Normal,
+                label: Some("Call return".into()),
+                source_label: None,
+                destination_label: None,
+            },
+            TypedEdgeRecord {
+                source: "rust::main::bb1".into(),
+                destination: "rust::main::bb2".into(),
+                flow: TypedEdgeFlow::Normal,
+                label: Some("Call return".into()),
+                source_label: None,
+                destination_label: None,
+            },
+        ];
+
+        let findings = ModelChecker::new(&k)
+            .allocation_obligation_findings(Truth::Unknown, AssessmentScope::NormalExecution);
+        let finding = findings
+            .iter()
+            .find(|finding| {
+                finding.kind
+                    == AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion
+            })
+            .expect("Box::leak persistent finding");
+        assert_eq!(finding.return_node.as_deref(), Some("rust::main::bb2"));
+        assert_eq!(
+            finding.strength,
+            AllocationObligationFindingStrength::ObservationalCandidate
+        );
+        assert!(!finding
+            .evidence
+            .contains(&AllocationObligationEvidence::NoInterveningCallAfterHandoff));
+        assert!(finding.summary.contains("Box::leak persistence may be intentional"));
+    }
+
+    #[test]
+    fn box_leak_requires_persistent_obligation_effect() {
+        let mut k = one_rust_root_allocation_graph();
+        k.capabilities.insert("allocation_disposition_v1".into());
+        k.capabilities.insert("mir_semantic_labels_v1".into());
+        k.capabilities.insert("typed_edge_flow_v1".into());
+        {
+            let b0 = k.nodes.get_mut("rust::main::bb0").unwrap();
+            b0.successors = vec!["rust::main::bb1".into()];
+            b0.allocation_disposition = vec![AllocationDispositionRecord {
+                allocation: "A".into(),
+                kind: AllocationDispositionKind::BoxLeak,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::PreserveManualObligation,
+                basis: "malformed_box_leak_contract".into(),
+                source_variable: None,
+                target_variable: None,
+                callee_def_path: Some("std::boxed::Box::leak".into()),
+            }];
+        }
+        k.nodes.insert(
+            "rust::main::bb1".into(),
+            AnnotatedNode {
+                id: "rust::main::bb1".into(),
+                successors: vec![],
+                labels: vec![],
+                semantic_labels: vec!["term:return".into()],
+                allocation_labels: vec![],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: None,
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        k.typed_edges = vec![TypedEdgeRecord {
+            source: "rust::main::bb0".into(),
+            destination: "rust::main::bb1".into(),
+            flow: TypedEdgeFlow::Normal,
+            label: Some("Call return".into()),
+            source_label: None,
+            destination_label: None,
+        }];
+
+        let findings = ModelChecker::new(&k)
+            .allocation_obligation_findings(Truth::Unknown, AssessmentScope::NormalExecution);
+        assert!(!findings.iter().any(|finding| {
+            finding.kind
+                == AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion
+        }));
+    }
+
+    #[test]
+    fn box_leak_persistent_finding_is_normal_execution_only() {
+        let mut k = one_rust_root_allocation_graph();
+        k.capabilities.insert("allocation_disposition_v1".into());
+        k.capabilities.insert("mir_semantic_labels_v1".into());
+        {
+            let b0 = k.nodes.get_mut("rust::main::bb0").unwrap();
+            b0.successors = vec!["rust::main::bb1".into()];
+            b0.allocation_disposition = vec![AllocationDispositionRecord {
+                allocation: "A".into(),
+                kind: AllocationDispositionKind::BoxLeak,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::PreservePersistentObligation,
+                basis: "rustc_box_leak_v1".into(),
+                source_variable: None,
+                target_variable: None,
+                callee_def_path: Some("std::boxed::Box::leak".into()),
+            }];
+        }
+        k.nodes.insert(
+            "rust::main::bb1".into(),
+            AnnotatedNode {
+                id: "rust::main::bb1".into(),
+                successors: vec![],
+                labels: vec![],
+                semantic_labels: vec!["term:return".into()],
+                allocation_labels: vec![],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: None,
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+
+        let findings = ModelChecker::new(&k)
+            .allocation_obligation_findings(Truth::Unknown, AssessmentScope::AllExecution);
+        assert!(!findings.iter().any(|finding| {
+            finding.kind
+                == AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion
+        }));
+    }
+
+    #[test]
+    fn local_return_continuity_keeps_manual_obligation_open_until_caller_return() {
+        let mut k = one_allocation_graph();
+        k.entry = "rust::callee::bb0".into();
+        k.capabilities.insert("allocation_state_v1".into());
+        k.capabilities.insert("allocation_disposition_v1".into());
+        k.capabilities.insert("mir_semantic_labels_v1".into());
+        k.capabilities.insert("typed_edge_flow_v1".into());
+        k.nodes.clear();
+
+        let identity_with = |variable: &str| NodeIdentityAnnotation {
+            points_to: vec![crate::kripke::IdentityPointsToRecord {
+                variable: variable.into(),
+                allocations: vec!["A".into()],
+            }],
+            ..NodeIdentityAnnotation::default()
+        };
+        k.nodes.insert("rust::callee::bb0".into(), AnnotatedNode {
+            id: "rust::callee::bb0".into(), successors: vec!["rust::callee::bb1".into()], labels: vec![],
+            semantic_labels: vec!["term:call".into()], allocation_labels: vec![],
+            allocation_disposition: vec![AllocationDispositionRecord {
+                allocation: "A".into(), kind: AllocationDispositionKind::CStringIntoRaw,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::PreserveManualObligation,
+                basis: "rustc_cstring_into_raw_v1".into(), source_variable: None,
+                target_variable: Some("rust::callee::Local(_0)".into()),
+                callee_def_path: Some("std::ffi::CString::into_raw".into()),
+            }],
+            identity: Some(identity_with("rust::callee::Local(_0)")),
+            event_identity: Some(identity_with("rust::callee::Local(_0)")),
+            allocation_post: None, pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        k.nodes.insert("rust::callee::bb1".into(), AnnotatedNode {
+            id: "rust::callee::bb1".into(), successors: vec!["dummyRet::rust::main::0".into()], labels: vec![],
+            semantic_labels: vec!["term:return".into()], allocation_labels: vec![],
+            allocation_disposition: vec![AllocationDispositionRecord {
+                allocation: "A".into(), kind: AllocationDispositionKind::ReturnEscape,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::MayEscapeToCaller,
+                basis: "rust_return_identity_v1".into(), source_variable: Some("rust::callee::Local(_0)".into()),
+                target_variable: None, callee_def_path: None,
+            }],
+            identity: Some(identity_with("rust::callee::Local(_0)")),
+            event_identity: Some(identity_with("rust::callee::Local(_0)")),
+            allocation_post: None, pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        k.nodes.insert("dummyRet::rust::main::0".into(), AnnotatedNode {
+            id: "dummyRet::rust::main::0".into(), successors: vec!["rust::main::bb1".into()], labels: vec![],
+            semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![],
+            identity: Some(identity_with("rust::main::Local(_2)")),
+            event_identity: Some(identity_with("rust::main::Local(_2)")),
+            allocation_post: None, pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        k.nodes.insert("rust::main::bb1".into(), AnnotatedNode {
+            id: "rust::main::bb1".into(), successors: vec![], labels: vec![],
+            semantic_labels: vec!["term:return".into()], allocation_labels: vec![], allocation_disposition: vec![],
+            identity: Some(identity_with("rust::main::Local(_2)")),
+            event_identity: Some(identity_with("rust::main::Local(_2)")),
+            allocation_post: None, pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        k.typed_edges = vec![
+            TypedEdgeRecord { source: "rust::callee::bb0".into(), destination: "rust::callee::bb1".into(), flow: TypedEdgeFlow::Normal, label: None, source_label: None, destination_label: None },
+            TypedEdgeRecord { source: "rust::callee::bb1".into(), destination: "dummyRet::rust::main::0".into(), flow: TypedEdgeFlow::Normal, label: Some("Rust Return -> dummyRet".into()), source_label: None, destination_label: None },
+            TypedEdgeRecord { source: "dummyRet::rust::main::0".into(), destination: "rust::main::bb1".into(), flow: TypedEdgeFlow::Normal, label: Some("dummyRet -> Rust Continuation".into()), source_label: None, destination_label: None },
+        ];
+
+        let checker = ModelChecker::new(&k);
+        let findings = checker.allocation_obligation_findings(Truth::Unknown, AssessmentScope::NormalExecution);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].return_node.as_deref(), Some("rust::main::bb1"));
+        assert!(findings[0].evidence.contains(&AllocationObligationEvidence::ProducerCertifiedLocalReturnContinuity));
+        assert_eq!(findings[0].witness_path, vec!["rust::callee::bb0", "rust::callee::bb1", "dummyRet::rust::main::0", "rust::main::bb1"]);
+    }
+
+    #[test]
+    fn local_return_continuity_still_stops_at_caller_discharge() {
+        let mut k = one_allocation_graph();
+        k.entry = "rust::callee::bb0".into();
+        k.capabilities.insert("allocation_disposition_v1".into());
+        k.capabilities.insert("mir_semantic_labels_v1".into());
+        k.capabilities.insert("typed_edge_flow_v1".into());
+        k.nodes.clear();
+
+        let identity_with = |variable: &str| NodeIdentityAnnotation {
+            points_to: vec![crate::kripke::IdentityPointsToRecord { variable: variable.into(), allocations: vec!["A".into()] }],
+            ..NodeIdentityAnnotation::default()
+        };
+        k.nodes.insert("rust::callee::bb0".into(), AnnotatedNode {
+            id: "rust::callee::bb0".into(), successors: vec!["rust::callee::bb1".into()], labels: vec![], semantic_labels: vec![], allocation_labels: vec![],
+            allocation_disposition: vec![AllocationDispositionRecord { allocation: "A".into(), kind: AllocationDispositionKind::CStringIntoRaw, certainty: AllocationEventCertainty::MayAbstract, obligation_effect: AllocationObligationEffect::PreserveManualObligation, basis: "rustc_cstring_into_raw_v1".into(), source_variable: None, target_variable: None, callee_def_path: Some("std::ffi::CString::into_raw".into()) }],
+            identity: Some(identity_with("rust::callee::Local(_0)")), event_identity: Some(identity_with("rust::callee::Local(_0)")), allocation_post: None, pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        k.nodes.insert("rust::callee::bb1".into(), AnnotatedNode {
+            id: "rust::callee::bb1".into(), successors: vec!["dummyRet::rust::main::0".into()], labels: vec![], semantic_labels: vec!["term:return".into()], allocation_labels: vec![],
+            allocation_disposition: vec![AllocationDispositionRecord { allocation: "A".into(), kind: AllocationDispositionKind::ReturnEscape, certainty: AllocationEventCertainty::MayAbstract, obligation_effect: AllocationObligationEffect::MayEscapeToCaller, basis: "rust_return_identity_v1".into(), source_variable: Some("rust::callee::Local(_0)".into()), target_variable: None, callee_def_path: None }],
+            identity: Some(identity_with("rust::callee::Local(_0)")), event_identity: Some(identity_with("rust::callee::Local(_0)")), allocation_post: None, pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        k.nodes.insert("dummyRet::rust::main::0".into(), AnnotatedNode {
+            id: "dummyRet::rust::main::0".into(), successors: vec!["rust::main::bb1".into()], labels: vec![], semantic_labels: vec![], allocation_labels: vec![], allocation_disposition: vec![],
+            identity: Some(identity_with("rust::main::Local(_2)")), event_identity: Some(identity_with("rust::main::Local(_2)")), allocation_post: None, pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        k.nodes.insert("rust::main::bb1".into(), AnnotatedNode {
+            id: "rust::main::bb1".into(), successors: vec!["rust::main::bb2".into()], labels: vec![], semantic_labels: vec!["term:call".into()],
+            allocation_labels: vec![AllocationEventLabel { predicate: EventKind::Drop, allocation: "A".into(), certainty: AllocationEventCertainty::MayAbstract, deallocator_contract: None }],
+            allocation_disposition: vec![AllocationDispositionRecord { allocation: "A".into(), kind: AllocationDispositionKind::CStringFromRaw, certainty: AllocationEventCertainty::MayAbstract, obligation_effect: AllocationObligationEffect::RestoreRaiiObligation, basis: "rustc_cstring_from_raw_v1".into(), source_variable: None, target_variable: None, callee_def_path: Some("std::ffi::CString::from_raw".into()) }],
+            identity: Some(identity_with("rust::main::Local(_2)")), event_identity: Some(identity_with("rust::main::Local(_2)")), allocation_post: None, pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        k.nodes.insert("rust::main::bb2".into(), AnnotatedNode {
+            id: "rust::main::bb2".into(), successors: vec![], labels: vec![], semantic_labels: vec!["term:return".into()], allocation_labels: vec![], allocation_disposition: vec![],
+            identity: Some(NodeIdentityAnnotation::default()), event_identity: Some(NodeIdentityAnnotation::default()), allocation_post: None, pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        k.typed_edges = vec![
+            TypedEdgeRecord { source: "rust::callee::bb0".into(), destination: "rust::callee::bb1".into(), flow: TypedEdgeFlow::Normal, label: None, source_label: None, destination_label: None },
+            TypedEdgeRecord { source: "rust::callee::bb1".into(), destination: "dummyRet::rust::main::0".into(), flow: TypedEdgeFlow::Normal, label: Some("Rust Return -> dummyRet".into()), source_label: None, destination_label: None },
+            TypedEdgeRecord { source: "dummyRet::rust::main::0".into(), destination: "rust::main::bb1".into(), flow: TypedEdgeFlow::Normal, label: Some("dummyRet -> Rust Continuation".into()), source_label: None, destination_label: None },
+            TypedEdgeRecord { source: "rust::main::bb1".into(), destination: "rust::main::bb2".into(), flow: TypedEdgeFlow::Normal, label: None, source_label: None, destination_label: None },
+        ];
+
+        let checker = ModelChecker::new(&k);
+        let findings = checker.allocation_obligation_findings(Truth::Unknown, AssessmentScope::NormalExecution);
+        assert!(findings.is_empty());
+    }
+
+    #[test]
     fn b1_1_cstring_into_raw_unknown_leak_reports_producer_contract() {
         let mut k = one_allocation_graph();
         k.capabilities.insert("allocation_state_v1".into());
@@ -6863,6 +9376,129 @@ mod tests {
             &env, 4,
         ).unwrap();
         assert!(report.supporting_findings.is_empty());
+    }
+
+    #[test]
+    fn restoration_for_different_allocation_does_not_suppress_open_manual_obligation() {
+        let mut k = one_allocation_graph();
+        k.capabilities.insert("allocation_state_v1".into());
+        k.capabilities.insert("allocation_disposition_v1".into());
+        k.capabilities.insert("mir_semantic_labels_v1".into());
+        k.allocations.insert("B".into(), AbstractAllocation {
+            id: "B".into(),
+            display: None,
+            site: None,
+            context: vec![],
+            allocator_contract: None,
+        });
+        {
+            let b0 = k.nodes.get_mut("b0").unwrap();
+            b0.successors = vec!["b1".into()];
+            b0.allocation_post = Some(AbstractAllocationMemoryAnnotation {
+                cells: vec![AbstractAllocationCell { allocation: "A".into(), value: CellValue::Alloc }],
+            });
+            b0.allocation_disposition = vec![AllocationDispositionRecord {
+                allocation: "A".into(), kind: AllocationDispositionKind::BoxIntoRaw,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::PreserveManualObligation,
+                basis: "rustc_box_into_raw_v1".into(), source_variable: None,
+                target_variable: None, callee_def_path: Some("std::boxed::Box::into_raw".into()),
+            }];
+        }
+        k.nodes.insert("b1".into(), AnnotatedNode {
+            id: "b1".into(), successors: vec!["b2".into()], labels: vec![],
+            semantic_labels: vec!["term:call".into()], allocation_labels: vec![],
+            allocation_disposition: vec![AllocationDispositionRecord {
+                allocation: "B".into(), kind: AllocationDispositionKind::BoxFromRaw,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::RestoreRaiiObligation,
+                basis: "rustc_box_from_raw_v1".into(), source_variable: None,
+                target_variable: None, callee_def_path: Some("std::boxed::Box::from_raw".into()),
+            }],
+            identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()), allocation_post: None,
+            pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        k.nodes.insert("b2".into(), AnnotatedNode {
+            id: "b2".into(), successors: vec![], labels: vec![],
+            semantic_labels: vec!["term:return".into()], allocation_labels: vec![],
+            allocation_disposition: vec![], identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()), allocation_post: None,
+            pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+
+        let checker = ModelChecker::new(&k);
+        let formula = StateFormula::Not(Box::new(StateFormula::May {
+            predicate: MayPredicate::Drop, logic_var: "a".into(),
+        }));
+        let mut env = Env::new();
+        env.insert("a".into(), Binding::Allocation("A".into()));
+        let report = checker.explain_document(
+            &QueryDocument::new(BTreeSet::from(["allocation_state_v1".into()]), formula),
+            &env, 4,
+        ).unwrap();
+        assert!(report.supporting_findings.iter().any(|finding| {
+            finding.kind == AllocationObligationFindingKind::NormalReturnOpenManualObligation
+                && finding.allocation == "A"
+        }));
+    }
+
+    #[test]
+    fn raw_pointer_drop_does_not_discharge_manual_allocation_obligation() {
+        let mut k = one_allocation_graph();
+        k.capabilities.insert("allocation_state_v1".into());
+        k.capabilities.insert("allocation_disposition_v1".into());
+        k.capabilities.insert("mir_semantic_labels_v1".into());
+        {
+            let b0 = k.nodes.get_mut("b0").unwrap();
+            b0.successors = vec!["drop_raw".into()];
+            b0.allocation_post = Some(AbstractAllocationMemoryAnnotation {
+                cells: vec![AbstractAllocationCell { allocation: "A".into(), value: CellValue::Alloc }],
+            });
+            b0.allocation_disposition = vec![AllocationDispositionRecord {
+                allocation: "A".into(), kind: AllocationDispositionKind::BoxIntoRaw,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::PreserveManualObligation,
+                basis: "rustc_box_into_raw_v1".into(), source_variable: None,
+                target_variable: None, callee_def_path: Some("std::boxed::Box::into_raw".into()),
+            }];
+        }
+        k.nodes.insert("drop_raw".into(), AnnotatedNode {
+            id: "drop_raw".into(), successors: vec!["ret".into()], labels: vec![],
+            semantic_labels: vec!["term:call".into()], allocation_labels: vec![],
+            allocation_disposition: vec![AllocationDispositionRecord {
+                allocation: "A".into(), kind: AllocationDispositionKind::RawPointerDropNoop,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::NoPointeeLifecycleEffect,
+                basis: "rustc_mem_drop_raw_pointer_v1".into(), source_variable: None,
+                target_variable: None, callee_def_path: Some("core::mem::drop".into()),
+            }],
+            identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()), allocation_post: None,
+            pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+        k.nodes.insert("ret".into(), AnnotatedNode {
+            id: "ret".into(), successors: vec![], labels: vec![],
+            semantic_labels: vec!["term:return".into()], allocation_labels: vec![],
+            allocation_disposition: vec![], identity: Some(NodeIdentityAnnotation::default()),
+            event_identity: Some(NodeIdentityAnnotation::default()), allocation_post: None,
+            pre: AbstractMemoryAnnotation::default(), post: AbstractMemoryAnnotation::default(),
+        });
+
+        let checker = ModelChecker::new(&k);
+        let formula = StateFormula::Not(Box::new(StateFormula::May {
+            predicate: MayPredicate::Drop, logic_var: "a".into(),
+        }));
+        let mut env = Env::new();
+        env.insert("a".into(), Binding::Allocation("A".into()));
+        let report = checker.explain_document(
+            &QueryDocument::new(BTreeSet::from(["allocation_state_v1".into()]), formula),
+            &env, 4,
+        ).unwrap();
+        assert!(report.supporting_findings.iter().any(|finding| {
+            finding.kind == AllocationObligationFindingKind::NormalReturnOpenManualObligation
+                && finding.allocation == "A"
+        }));
     }
 
     #[test]

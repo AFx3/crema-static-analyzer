@@ -1,6 +1,7 @@
 use cqpl_checker::{
     allocation_existence_guard_overlay_from_json, conditional_reallocation_overlay_from_json, reallocation_boundary_overlay_from_json,
-    panic_lifecycle_overlay_from_json, source_provenance_overlay_from_json, typed_edge_overlay_from_json,
+    opaque_memory_effect_overlay_from_json, panic_lifecycle_overlay_from_json, source_provenance_overlay_from_json, typed_edge_overlay_from_json,
+    rust_call_return_relation_overlay_from_json, rust_call_unwind_relation_overlay_from_json, rust_unwind_edge_scope_overlay_from_json,
     parse_query_document, AnnotatedIcfg, Binding, Env, Kripke, ModelChecker, QueryResultAssessment,
 };
 use serde::Serialize;
@@ -201,7 +202,12 @@ fn validate_contract_object(value: &Value, where_: &str) -> Result<(), String> {
 }
 
 
-fn validate_v2_deallocator_contract_object(value: &Value, where_: &str, allow_v3: bool) -> Result<(), String> {
+fn validate_v2_deallocator_contract_object(
+    value: &Value,
+    where_: &str,
+    allow_v3: bool,
+    allow_v4: bool,
+) -> Result<(), String> {
     validate_contract_object(value, where_)?;
     let object = value.as_object().unwrap();
     let basis = object
@@ -230,6 +236,28 @@ fn validate_v2_deallocator_contract_object(value: &Value, where_: &str, allow_v3
             }
             if callee.is_some() {
                 return Err(format!("{where_} basis '{basis}' does not accept callee_def_path"));
+            }
+        }
+        "rust_string_global_drop" => {
+            if !allow_v4 {
+                return Err(format!(
+                    "{where_} basis 'rust_string_global_drop' requires artifact capability allocation_contracts_v4"
+                ));
+            }
+            if (family, operation, language) != ("rust_global", "drop", "rust") {
+                return Err(format!(
+                    "{where_} basis 'rust_string_global_drop' requires family=rust_global operation=drop language=rust"
+                ));
+            }
+            if owner.map_or(true, str::is_empty) || allocator.map_or(true, str::is_empty) {
+                return Err(format!(
+                    "{where_} basis 'rust_string_global_drop' requires non-empty owner_def_path and allocator_def_path"
+                ));
+            }
+            if callee.is_some() {
+                return Err(format!(
+                    "{where_} basis 'rust_string_global_drop' does not accept callee_def_path"
+                ));
             }
         }
         "rust_global_dealloc_api" => {
@@ -359,6 +387,29 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     let Some(schema_version) = root.get("schema_version").and_then(Value::as_u64) else {
         return Err("annotated ICFG is missing integer schema_version".into());
     };
+    let has_relation = root.get("capabilities").and_then(Value::as_array)
+        .is_some_and(|caps| caps.iter().any(|cap| cap.as_str() == Some("rust_call_return_relation_v1")));
+    let relation_present = root.get("rust_call_return_relations").is_some();
+    if has_relation != relation_present {
+        return Err("rust_call_return_relation_v1 capability and rust_call_return_relations payload must appear together".into());
+    }
+    if has_relation {
+        let caps = root.get("capabilities").and_then(Value::as_array).unwrap();
+        if schema_version != 2 || !["typed_edge_flow_v1", "mir_semantics_v2"].iter()
+            .all(|required| caps.iter().any(|cap| cap.as_str() == Some(required))) {
+            return Err("rust_call_return_relation_v1 requires schema v2, typed_edge_flow_v1 and mir_semantics_v2".into());
+        }
+        rust_call_return_relation_overlay_from_json(root)?;
+    }
+    for (cap,payload) in [("rust_call_unwind_relation_v1","rust_call_unwind_relations"),("rust_unwind_edge_scope_v1","rust_unwind_edge_scopes")] {
+        let caps=root.get("capabilities").and_then(Value::as_array);
+        let has=caps.is_some_and(|c|c.iter().any(|v|v.as_str()==Some(cap)));
+        if has!=root.get(payload).is_some() {return Err(format!("{cap} capability and {payload} payload must appear together"))}
+        if has && (schema_version!=2 || !["typed_edge_flow_v1","rust_call_return_relation_v1"].iter().all(|r|
+            caps.unwrap().iter().any(|v|v.as_str()==Some(r)))) {return Err(format!("{cap} requires schema v2, typed edges and return relations"))}
+    }
+    rust_call_unwind_relation_overlay_from_json(root)?;
+    rust_unwind_edge_scope_overlay_from_json(root)?;
     if schema_version != 2 {
         return Ok(());
     }
@@ -380,6 +431,7 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     let has_allocation_contracts = capabilities.contains("allocation_contracts_v1");
     let has_allocation_contracts_v2 = capabilities.contains("allocation_contracts_v2");
     let has_allocation_contracts_v3 = capabilities.contains("allocation_contracts_v3");
+    let has_allocation_contracts_v4 = capabilities.contains("allocation_contracts_v4");
     let has_allocation_state = capabilities.contains("allocation_state_v1");
     let has_allocation_disposition = capabilities.contains("allocation_disposition_v1");
     let has_allocation_disposition_v2 = capabilities.contains("allocation_disposition_v2");
@@ -560,6 +612,9 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
     }
     if has_allocation_contracts_v3 && (!has_allocation_contracts || !has_allocation_contracts_v2) {
         return Err("allocation_contracts_v3 refines allocation_contracts_v2; the artifact must declare allocation_contracts_v1 + allocation_contracts_v2 + allocation_contracts_v3".into());
+    }
+    if has_allocation_contracts_v4 && (!has_allocation_contracts || !has_allocation_contracts_v2) {
+        return Err("allocation_contracts_v4 refines allocation_contracts_v2; the artifact must declare allocation_contracts_v1 + allocation_contracts_v2 + allocation_contracts_v4".into());
     }
     if has_mir_semantics_v2 && !has_mir_semantic_labels {
         return Err("mir_semantics_v2 requires mir_semantic_labels_v1 so the active transfer profile remains auditable".into());
@@ -796,7 +851,7 @@ fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
                 let where_ = format!("nodes[{index}].allocation_labels[{label_index}].deallocator_contract");
                 validate_contract_object(contract, &where_)?;
                 if has_allocation_contracts_v2 {
-                    validate_v2_deallocator_contract_object(contract, &where_, has_allocation_contracts_v3)?;
+                    validate_v2_deallocator_contract_object(contract, &where_, has_allocation_contracts_v3, has_allocation_contracts_v4)?;
                 }
             }
         }
@@ -865,13 +920,17 @@ fn run() -> Result<(), String> {
         .map_err(|e| format!("invalid annotated ICFG JSON: {e}"))?;
     validate_boundary_requirements(&raw_value)?;
     let ele1_legacy_adapter = validate_ele1(&raw_value)?;
+    let rust_call_return_relations = rust_call_return_relation_overlay_from_json(&raw_value)?;
     let panic_lifecycle = panic_lifecycle_overlay_from_json(&raw_value)?;
     let typed_edges = typed_edge_overlay_from_json(&raw_value)?;
     let source_provenance = source_provenance_overlay_from_json(&raw_value)?;
     let allocation_existence_guards = allocation_existence_guard_overlay_from_json(&raw_value)?;
     let reallocation_boundaries = reallocation_boundary_overlay_from_json(&raw_value)?;
     let conditional_reallocations = conditional_reallocation_overlay_from_json(&raw_value)?;
+    let opaque_memory_effects = opaque_memory_effect_overlay_from_json(&raw_value)?;
     let dcp1_payload = raw_value.get("external_deallocation_call_provenance").cloned();
+    let unwind_relations=rust_call_unwind_relation_overlay_from_json(&raw_value)?;
+    let unwind_scopes=rust_unwind_edge_scope_overlay_from_json(&raw_value)?;
     let mut parse_value = raw_value;
     if let Some(bindings) = ele1_legacy_adapter {
         if !bindings.is_empty() {
@@ -888,7 +947,9 @@ fn run() -> Result<(), String> {
         allocation_existence_guards,
         reallocation_boundaries,
         conditional_reallocations,
-    )?;
+    )?.with_opaque_memory_effects(opaque_memory_effects)?
+        .with_rust_call_return_relations(rust_call_return_relations)?
+        .with_rust_unwind_overlays(unwind_relations,unwind_scopes)?;
     base_k.validate_external_deallocation_call_provenance_json(dcp1_payload.as_ref())?;
     let requested_entry = entry_override.as_deref().unwrap_or(&base_k.entry);
     let k = base_k.project_from_entry(requested_entry, intra)?;
@@ -1010,6 +1071,46 @@ mod tests {
         let mut wrong = valid.clone();
         wrong["external_return_call_bindings"] = json!([{}]);
         assert!(validate_ele1(&wrong).is_err());
+    }
+
+    #[test]
+    fn rust_call_return_relation_boundary_contract() {
+        let mut valid = minimal_v2_node();
+        valid["capabilities"] = json!(["rust_call_return_relation_v1", "typed_edge_flow_v1",
+            "mir_semantics_v2", "mir_semantic_labels_v1"]);
+        valid["typed_edges"] = json!([]);
+        valid["nodes"][0]["semantic_labels"] = json!([]);
+        valid["rust_call_return_relations"] = json!([]);
+        validate_boundary_requirements(&valid).unwrap();
+        let mut bad = valid.clone();
+        bad.as_object_mut().unwrap().remove("rust_call_return_relations");
+        assert!(validate_boundary_requirements(&bad).unwrap_err().contains("must appear together"));
+        for capability in ["rust_call_return_relation_v1", "typed_edge_flow_v1", "mir_semantics_v2"] {
+            let mut bad = valid.clone();
+            bad["capabilities"].as_array_mut().unwrap().retain(|c| c != capability);
+            assert!(validate_boundary_requirements(&bad).is_err());
+        }
+        let mut bad = valid.clone(); bad["schema_version"] = json!(1);
+        assert!(validate_boundary_requirements(&bad).unwrap_err().contains("requires schema v2"));
+        for payload in [Value::Null, json!({}), json!([{"basis":"invalid"}])] {
+            let mut bad = valid.clone(); bad["rust_call_return_relations"] = payload;
+            assert!(validate_boundary_requirements(&bad).is_err());
+        }
+    }
+
+    #[test]
+    fn rust_call_unwind_relation_boundary_contract() {
+        let mut raw=minimal_v2_node();raw["typed_edges"]=json!([]);
+        raw["capabilities"]=json!(["typed_edge_flow_v1","mir_semantics_v2","mir_semantic_labels_v1","rust_call_return_relation_v1","rust_call_unwind_relation_v1","rust_unwind_edge_scope_v1"]);
+        raw["nodes"][0]["semantic_labels"]=json!([]);
+        raw["rust_call_return_relations"]=json!([]);raw["rust_call_unwind_relations"]=json!([]);raw["rust_unwind_edge_scopes"]=json!([]);
+        validate_boundary_requirements(&raw).unwrap();
+        for (cap,payload) in [("rust_call_unwind_relation_v1","rust_call_unwind_relations"),("rust_unwind_edge_scope_v1","rust_unwind_edge_scopes")] {
+            let mut bad=raw.clone();bad.as_object_mut().unwrap().remove(payload);assert!(validate_boundary_requirements(&bad).is_err());
+            let mut bad=raw.clone();bad["capabilities"].as_array_mut().unwrap().retain(|v|v!=cap);assert!(validate_boundary_requirements(&bad).is_err());
+        }
+        for required in ["typed_edge_flow_v1","rust_call_return_relation_v1"] {let mut bad=raw.clone();bad["capabilities"].as_array_mut().unwrap().retain(|v|v!=required);assert!(validate_boundary_requirements(&bad).is_err());}
+        raw["schema_version"]=json!(1);assert!(validate_boundary_requirements(&raw).is_err());
     }
 
     fn minimal_v2_node() -> Value {
@@ -1284,6 +1385,39 @@ mod tests {
         value["nodes"][0]["allocation_labels"][0]["deallocator_contract"]["family"] = json!("c_malloc");
         let err = validate_boundary_requirements(&value).unwrap_err();
         assert!(err.contains("requires family=rust_global"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn ht2_r2_string_v4_cli_guard_gates_string_basis() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["allocation_contracts_v1", "allocation_contracts_v2"]);
+        value["allocations"] = json!([{
+            "id":"S", "display":"S", "site":{"kind":"synthetic","scope":"t","label":"S"}, "context":[],
+            "allocator_contract":{"family":"rust_global","operation":"string_allocation","language":"rust"}
+        }]);
+        value["nodes"][0]["allocation_labels"] = json!([{
+            "predicate":"drop", "allocation":"S", "certainty":"may_abstract",
+            "deallocator_contract":{
+                "family":"rust_global", "operation":"drop", "language":"rust",
+                "basis":"rust_string_global_drop",
+                "owner_def_path":"alloc::string::String",
+                "allocator_def_path":"alloc::alloc::Global"
+            }
+        }]);
+
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("requires artifact capability allocation_contracts_v4"), "unexpected error: {err}");
+
+        value["capabilities"] = json!([
+            "allocation_contracts_v1",
+            "allocation_contracts_v2",
+            "allocation_contracts_v4"
+        ]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["capabilities"] = json!(["allocation_contracts_v1", "allocation_contracts_v4"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("allocation_contracts_v4 refines allocation_contracts_v2"), "unexpected error: {err}");
     }
 
     #[test]

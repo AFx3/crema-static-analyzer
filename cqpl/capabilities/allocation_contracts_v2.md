@@ -164,3 +164,10 @@ explicit `basis = "unresolved"` is labeled
 
 These labels are diagnostic provenance only. They do not alter allocator-family
 comparison or CQPL three-valued truth.
+
+
+## Later additive refinements
+
+The vocabulary above is frozen. `String` typed-drop evidence is **not** a v2
+basis; it is gated by `allocation_contracts_v4` as `rust_string_global_drop`.
+A consumer must reject that basis when v4 is absent.

@@ -12,6 +12,11 @@ pub enum RustAllocationSemantics {
     /// A fresh backing allocation exists on every normal return represented by
     /// the call summary.
     Fresh,
+    /// A fresh backing allocation may exist on normal return, but the result
+    /// never acquires ownership of an input allocation.  This is used for
+    /// constructors such as `String::from(&str)`: non-empty inputs allocate,
+    /// while the empty-string representation may require no heap allocation.
+    MayFresh,
     /// On a normal return the result may either own freshly allocated storage
     /// or reuse/consume storage supplied by an input value.  Identity therefore
     /// joins a fresh site with source identities; event semantics is MAY.
@@ -61,6 +66,12 @@ pub fn is_raw_realloc_call(s: &str) -> bool {
     s.contains("std::alloc::realloc") || s.contains("alloc::alloc::realloc")
 }
 
+fn is_string_from_str(s: &str) -> bool {
+    s.contains("<std::string::String as std::convert::From<&str>>::from")
+        || s.contains("<alloc::string::String as core::convert::From<&str>>::from")
+        || s.contains("<alloc::string::String as std::convert::From<&str>>::from")
+}
+
 fn is_cstring_new(s: &str) -> bool {
     s.contains("CString") && has_method(s, "new")
 }
@@ -88,6 +99,14 @@ pub fn rust_allocation_semantics(s: &str) -> RustAllocationSemantics {
         return RustAllocationSemantics::Fresh;
     }
 
+    if is_string_from_str(s) {
+        // `String::from(&str)` copies borrowed bytes into owned String storage.
+        // The empty string may use the non-allocating empty Vec representation,
+        // so this is MAY-fresh rather than MUST-fresh.  Crucially it is *not*
+        // a transfer of the borrowed source allocation.
+        return RustAllocationSemantics::MayFresh;
+    }
+
     if is_cstring_new(s) {
         // CString::new<&str> necessarily creates owned CString storage on its
         // Ok path.  For generic Into<Vec<u8>> inputs, existing storage may be
@@ -103,7 +122,7 @@ pub fn rust_allocation_semantics(s: &str) -> RustAllocationSemantics {
 }
 
 /// Whether a CQPL `alloc` MAY event is semantically justified at this call.
-/// Both `Fresh` and `MayFreshOrTransfer` qualify. `Transfer` and
+/// `Fresh`, `MayFresh`, and `MayFreshOrTransfer` qualify. `Transfer` and
 /// `ConditionalReallocation` deliberately do not: `realloc` may return null
 /// or reuse the existing allocation, so it is not a producer-certified fresh
 /// allocation event even though identity analysis must model a fresh-success
@@ -111,7 +130,9 @@ pub fn rust_allocation_semantics(s: &str) -> RustAllocationSemantics {
 pub fn is_modeled_fresh_allocation(s: &str) -> bool {
     matches!(
         rust_allocation_semantics(s),
-        RustAllocationSemantics::Fresh | RustAllocationSemantics::MayFreshOrTransfer
+        RustAllocationSemantics::Fresh
+            | RustAllocationSemantics::MayFresh
+            | RustAllocationSemantics::MayFreshOrTransfer
     )
 }
 
@@ -140,6 +161,16 @@ mod tests {
             rust_allocation_semantics("std::ffi::CString::new::<Vec<u8>>"),
             RustAllocationSemantics::MayFreshOrTransfer
         );
+    }
+
+    #[test]
+    fn string_from_str_is_may_fresh_without_source_transfer() {
+        let call = "<std::string::String as std::convert::From<&str>>::from";
+        assert_eq!(
+            rust_allocation_semantics(call),
+            RustAllocationSemantics::MayFresh
+        );
+        assert!(is_modeled_fresh_allocation(call));
     }
 
     #[test]

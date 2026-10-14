@@ -1031,6 +1031,28 @@ fn build_dep1_artifact_catalog(artifacts: &[Value]) -> Result<Value, String> {
     Ok(serde_json::json!({"schema":"dep1_p1_cargo_rustc_artifact_catalog_v1","artifact_records":artifacts,"exact_path_index":index}))
 }
 
+fn dep1_artifact_filenames(row: &Value) -> BTreeSet<String> {
+    row.get("filenames")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect()
+}
+
+fn dep1_phase_a_exact_filename_match_count(
+    phase_a_artifacts: &[Value],
+    unit_key: &str,
+    phase_b_row: &Value,
+) -> usize {
+    let wanted = dep1_artifact_filenames(phase_b_row);
+    phase_a_artifacts.iter()
+        .filter(|row| artifact_unit_key(row).ok().as_deref() == Some(unit_key))
+        .filter(|row| dep1_artifact_filenames(row) == wanted)
+        .count()
+}
+
 fn run_selected_target_with_dep1(
     plan: &CargoAnalysisPlan,
     cfg: &CargoCliConfig,
@@ -1108,11 +1130,19 @@ fn run_selected_target_with_dep1(
     let phase_b_artifacts = run_cargo_json_capture(phase_b, &phase_dir.join("phase-b-cargo.jsonl"), &phase_dir.join("phase-b-cargo.stderr"), "Phase B")?;
     for row in phase_b_artifacts.iter().filter(|r| r.get("package_id").and_then(Value::as_str) != Some(plan.package_id.as_str())) {
         let key = artifact_unit_key(row)?;
-        let phase_a_row = phase_a_artifacts.iter().find(|a| artifact_unit_key(a).ok().as_deref() == Some(key.as_str()))
-            .ok_or_else(|| format!("DEP1 Phase B dependency unit absent from Phase A catalog: {key}"))?;
-        let a: BTreeSet<_> = phase_a_row.get("filenames").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).collect();
-        let b: BTreeSet<_> = row.get("filenames").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).collect();
-        if a != b { return Err(format!("DEP1 Phase A/B dependency artifact path changed for unit {key}")); }
+        let phase_a_candidate_count = phase_a_artifacts.iter()
+            .filter(|a| artifact_unit_key(a).ok().as_deref() == Some(key.as_str()))
+            .count();
+        if phase_a_candidate_count == 0 {
+            return Err(format!("DEP1 Phase B dependency unit absent from Phase A catalog: {key}"));
+        }
+        // One Cargo logical unit may legitimately produce both host and target
+        // compiler-artifact rows. Message order is not identity: require at
+        // least one exact physical filename-set match among same-key rows.
+        let exact_matches = dep1_phase_a_exact_filename_match_count(&phase_a_artifacts, &key, row);
+        if exact_matches == 0 {
+            return Err(format!("DEP1 Phase A/B dependency artifact path changed for unit {key}: no exact Phase-A filename-set match among {phase_a_candidate_count} candidates"));
+        }
     }
     if !invocation.icfg_output_path.is_file() { return Err(format!("DEP1 Phase B succeeded without selected-target ICFG {}", invocation.icfg_output_path.display())); }
 
@@ -1155,6 +1185,17 @@ pub fn wrapper_selected_source_matches(args: &[String], selected_src: &Path) -> 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn dep1_phase_ab_matching_accepts_target_row_when_same_unit_has_host_and_target_rows() {
+        use serde_json::json;
+        let phase_a = vec![
+            json!({"package_id":"pkg","target":{"name":"libc","kind":["lib"]},"profile":{"test":false},"features":[],"filenames":["/target/debug/deps/liblibc-host.rlib"]}),
+            json!({"package_id":"pkg","target":{"name":"libc","kind":["lib"]},"profile":{"test":false},"features":[],"filenames":["/target/x86_64-unknown-linux-gnu/debug/deps/liblibc-target.rlib"]}),
+        ];
+        let phase_b = phase_a[1].clone();
+        let key = super::artifact_unit_key(&phase_b).expect("unit key");
+        assert_eq!(super::dep1_phase_a_exact_filename_match_count(&phase_a, &key, &phase_b), 1);
+    }
     use super::*;
 
     #[test]

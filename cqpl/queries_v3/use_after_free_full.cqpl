@@ -1,0 +1,16 @@
+# User-facing full-profile use-after-free query.
+# The formula is intentionally identical to queries_v2/use_after_free_alloc_state.cqpl.
+# v2+v3+v4 are all declared explicitly for auditability: v3/v4 are additive
+# deallocator-contract vocabularies and do not change CQPL truth rules.
+requires allocation_state_v1;
+requires allocation_contracts_v2;
+requires allocation_contracts_v3;
+requires allocation_contracts_v4;
+
+exists_alloc a. EF (
+  alloc(a) &&
+  EX EF (
+    drop_l(a) &&
+    EX E[(!alloc_l(a)) U use_l(a)]
+  )
+)

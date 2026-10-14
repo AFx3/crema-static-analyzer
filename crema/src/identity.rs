@@ -1,4 +1,8 @@
-use crate::structs::{AbstractAllocId, PlaceId, PlaceProjection, ProgramVarId, RustPlaceRelationEvidenceKind};
+use crate::structs::{
+    AbstractAllocId, PlaceId, PlaceProjection, ProgramVarId,
+    RustAllocationDispositionEvidence, RustAtomicPtrCallEvidence,
+    RustAtomicPtrCallEvidenceKind, RustPlaceRelationEvidenceKind,
+};
 use crate::memory_events::{self, RustAllocationSemantics};
 use crate::utils::load_ffi_functions;
 use serde::{Deserialize, Serialize};
@@ -126,6 +130,90 @@ mod err1_tests {
     }
 }
 
+
+/// MAY summary of one value stored somewhere inside an abstract heap
+/// allocation.
+///
+/// Projection paths are relative to the stored value. The empty path denotes
+/// the value itself; non-empty paths denote already-proved projected identity
+/// such as `Option<Box<T>>::Some.0`. This is intentionally an allocation-base
+/// summary rather than an offset-sensitive heap: pointer arithmetic currently
+/// proves only the abstract allocation base, not a unique concrete slot.
+///
+/// All updates are therefore weak joins. In particular, a singleton
+/// `AbstractAllocId` is not a must-alias certificate because one static
+/// allocation site/context can represent several concrete dynamic objects.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct HeapIdentityValue {
+    #[serde(default)]
+    pub points_to: BTreeMap<Vec<PlaceProjection>, BTreeSet<AbstractAllocId>>,
+    #[serde(default)]
+    pub stack_refs: BTreeMap<Vec<PlaceProjection>, BTreeSet<PlaceId>>,
+    #[serde(default)]
+    pub resources: BTreeMap<Vec<PlaceProjection>, BTreeSet<AbstractAllocId>>,
+    /// Access-only provenance exists only for direct local pointer values in
+    /// the current identity domain, hence it is represented at the root.
+    #[serde(default)]
+    pub root_access_bases: BTreeSet<AbstractAllocId>,
+}
+
+impl HeapIdentityValue {
+    fn is_empty(&self) -> bool {
+        self.points_to.is_empty()
+            && self.stack_refs.is_empty()
+            && self.resources.is_empty()
+            && self.root_access_bases.is_empty()
+    }
+
+    fn join_in_place(&mut self, other: &Self) {
+        for (projection, allocs) in &other.points_to {
+            self.points_to
+                .entry(projection.clone())
+                .or_default()
+                .extend(allocs.iter().cloned());
+        }
+        for (projection, refs) in &other.stack_refs {
+            self.stack_refs
+                .entry(projection.clone())
+                .or_default()
+                .extend(refs.iter().cloned());
+        }
+        for (projection, resources) in &other.resources {
+            self.resources
+                .entry(projection.clone())
+                .or_default()
+                .extend(resources.iter().cloned());
+        }
+        self.root_access_bases
+            .extend(other.root_access_bases.iter().cloned());
+    }
+
+    fn leq(&self, other: &Self) -> bool {
+        let points_to = self.points_to.iter().all(|(projection, allocs)| {
+            other
+                .points_to
+                .get(projection)
+                .is_some_and(|rhs| allocs.is_subset(rhs))
+        });
+        let stack_refs = self.stack_refs.iter().all(|(projection, refs)| {
+            other
+                .stack_refs
+                .get(projection)
+                .is_some_and(|rhs| refs.is_subset(rhs))
+        });
+        let resources = self.resources.iter().all(|(projection, values)| {
+            other
+                .resources
+                .get(projection)
+                .is_some_and(|rhs| values.is_subset(rhs))
+        });
+        points_to
+            && stack_refs
+            && resources
+            && self.root_access_bases.is_subset(&other.root_access_bases)
+    }
+}
+
 /// Additional implementation-level domain for canonical interprocedural
 /// allocation identity.
 ///
@@ -165,6 +253,14 @@ pub struct AllocationIdentityMemory {
     /// enclosing allocation.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub place_resources: BTreeMap<PlaceId, BTreeSet<AbstractAllocId>>,
+
+    /// HT2: allocation-base heap-content identity summary.
+    ///
+    /// A base allocation may stand for multiple dynamic objects and multiple
+    /// pointer offsets, so writes are MAY weak updates and reads join all
+    /// summaries for the pointer's possible access bases.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub heap_values: BTreeMap<AbstractAllocId, HeapIdentityValue>,
 }
 
 impl AllocationIdentityMemory {
@@ -337,7 +433,196 @@ impl AllocationIdentityMemory {
         self.place_resources.retain(|place, _| &place.base != var);
     }
 
+    /// Strong overwrite of one exact projected Place subtree.
+    ///
+    /// Writing `x.f` invalidates identity stored in `x.f` and descendants of
+    /// `x.f`, but must not invalidate sibling projections such as `x.g`.
+    /// The base-local identity is intentionally untouched.
+    pub fn forget_place_subtree(&mut self, root: &PlaceId) {
+        debug_assert!(!root.projection.is_empty());
+
+        let below_root = |place: &PlaceId| {
+            place.base == root.base
+                && place.projection.len() >= root.projection.len()
+                && place.projection[..root.projection.len()] == root.projection[..]
+        };
+
+        self.place_points_to.retain(|place, _| !below_root(place));
+        self.place_stack_refs.retain(|place, _| !below_root(place));
+        self.place_resources.retain(|place, _| !below_root(place));
+    }
+
     /// MAY alias is intersection of points-to sets, not equivalence closure.
+
+    /// Snapshot exactly the identity represented by one local value and its
+    /// already-proved projected descendants.
+    fn value_identity(&self, source: &ProgramVarId) -> HeapIdentityValue {
+        let mut value = HeapIdentityValue::default();
+
+        let root_allocs = self.points_to(source);
+        if !root_allocs.is_empty() {
+            value.points_to.insert(Vec::new(), root_allocs);
+        }
+
+        let root_refs = self.stack_refs(source);
+        if !root_refs.is_empty() {
+            value.stack_refs.insert(Vec::new(), root_refs);
+        }
+
+        value.root_access_bases = self
+            .access_bases
+            .get(source)
+            .cloned()
+            .unwrap_or_default();
+
+        for (place, allocs) in &self.place_points_to {
+            if &place.base == source
+                && !allocs.is_empty()
+                && place.projection.iter().all(|p| matches!(p, PlaceProjection::Field { .. }))
+            {
+                value
+                    .points_to
+                    .entry(place.projection.clone())
+                    .or_default()
+                    .extend(allocs.iter().cloned());
+            }
+        }
+        for (place, refs) in &self.place_stack_refs {
+            if &place.base == source
+                && !refs.is_empty()
+                && place.projection.iter().all(|p| matches!(p, PlaceProjection::Field { .. }))
+            {
+                value
+                    .stack_refs
+                    .entry(place.projection.clone())
+                    .or_default()
+                    .extend(refs.iter().cloned());
+            }
+        }
+        for (place, resources) in &self.place_resources {
+            if &place.base == source
+                && !resources.is_empty()
+                && place.projection.iter().all(|p| matches!(p, PlaceProjection::Field { .. }))
+            {
+                value
+                    .resources
+                    .entry(place.projection.clone())
+                    .or_default()
+                    .extend(resources.iter().cloned());
+            }
+        }
+
+        value
+    }
+
+    /// Weakly write one value summary to every possible abstract allocation
+    /// base of a pointer. This cannot be a strong update: neither a singleton
+    /// abstract allocation ID nor the absence of an explicit offset proves one
+    /// unique concrete heap slot.
+    fn weak_write_heap_value(
+        &mut self,
+        bases: &BTreeSet<AbstractAllocId>,
+        value: &HeapIdentityValue,
+    ) {
+        if value.is_empty() {
+            return;
+        }
+        for base in bases {
+            self.heap_values
+                .entry(base.clone())
+                .or_default()
+                .join_in_place(value);
+        }
+    }
+
+    /// MAY-join heap contents reachable through every possible pointer base.
+    fn read_heap_value(&self, bases: &BTreeSet<AbstractAllocId>) -> HeapIdentityValue {
+        let mut value = HeapIdentityValue::default();
+        for base in bases {
+            if let Some(stored) = self.heap_values.get(base) {
+                value.join_in_place(stored);
+            }
+        }
+        value
+    }
+
+    /// Rebase a stored heap value onto a direct MIR-local destination.
+    fn materialize_heap_value(
+        &mut self,
+        destination: &ProgramVarId,
+        value: &HeapIdentityValue,
+    ) {
+        self.forget_var(destination);
+
+        let root = Vec::<PlaceProjection>::new();
+        self.assign_points_to(
+            destination.clone(),
+            value.points_to.get(&root).cloned().unwrap_or_default(),
+        );
+        self.assign_stack_refs(
+            destination.clone(),
+            value.stack_refs.get(&root).cloned().unwrap_or_default(),
+        );
+        self.assign_access_bases(destination.clone(), value.root_access_bases.clone());
+
+        for (projection, allocs) in &value.points_to {
+            if projection.is_empty() {
+                continue;
+            }
+            self.assign_place_points_to(
+                PlaceId {
+                    base: destination.clone(),
+                    projection: projection.clone(),
+                },
+                allocs.clone(),
+            );
+        }
+        for (projection, refs) in &value.stack_refs {
+            if projection.is_empty() {
+                continue;
+            }
+            self.assign_place_stack_refs(
+                PlaceId {
+                    base: destination.clone(),
+                    projection: projection.clone(),
+                },
+                refs.clone(),
+            );
+        }
+        for (projection, resources) in &value.resources {
+            if projection.is_empty() {
+                continue;
+            }
+            self.assign_place_resources(
+                PlaceId {
+                    base: destination.clone(),
+                    projection: projection.clone(),
+                },
+                resources.clone(),
+            );
+        }
+    }
+
+    fn heap_stack_referent_seeds(&self) -> BTreeSet<PlaceId> {
+        self.heap_values
+            .values()
+            .flat_map(|value| value.stack_refs.values())
+            .flat_map(|targets| targets.iter().cloned())
+            .collect()
+    }
+
+    /// Join only the global heap component of another abstract state. This is
+    /// used at interprocedural boundaries so heap side effects survive without
+    /// importing unrelated callee locals into the caller.
+    fn join_heap_from(&mut self, other: &Self) {
+        for (base, value) in &other.heap_values {
+            self.heap_values
+                .entry(base.clone())
+                .or_default()
+                .join_in_place(value);
+        }
+    }
+
     #[cfg(test)]
     pub fn may_alias(&self, left: &ProgramVarId, right: &ProgramVarId) -> bool {
         let l = self.points_to(left);
@@ -399,6 +684,8 @@ impl AllocationIdentityMemory {
                 .extend(resources.iter().cloned());
         }
 
+        out.join_heap_from(other);
+
         out
     }
 
@@ -428,8 +715,16 @@ impl AllocationIdentityMemory {
         let access_leq = self.access_bases.iter().all(|(var, allocs)| {
             allocs.is_subset(&other.access_bases.get(var).cloned().unwrap_or_default())
         });
+
+        let heap_leq = self.heap_values.iter().all(|(base, value)| {
+            other
+                .heap_values
+                .get(base)
+                .is_some_and(|other_value| value.leq(other_value))
+        });
+
         points_to_leq && refs_leq && place_points_to_leq && place_refs_leq
-            && place_resources_leq && access_leq
+            && place_resources_leq && access_leq && heap_leq
     }
 }
 
@@ -713,6 +1008,9 @@ pub struct IdentityMemoryDump {
     /// P3-R1P authoritative resource relation for typed MIR Places.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub place_resources: Vec<PlaceResourcesDump>,
+    /// HT2 allocation-base heap-content summaries.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub heap_values: Vec<HeapValueDump>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -745,6 +1043,31 @@ pub struct PlaceStackRefsDump {
 pub struct PlaceResourcesDump {
     pub place: PlaceId,
     pub resources: Vec<AbstractAllocId>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct HeapProjectionAllocationsDump {
+    pub projection: Vec<PlaceProjection>,
+    pub allocations: Vec<AbstractAllocId>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct HeapProjectionStackRefsDump {
+    pub projection: Vec<PlaceProjection>,
+    pub targets: Vec<PlaceId>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct HeapValueDump {
+    pub allocation: AbstractAllocId,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub root_access_bases: Vec<AbstractAllocId>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub points_to: Vec<HeapProjectionAllocationsDump>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub stack_refs: Vec<HeapProjectionStackRefsDump>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub resources: Vec<HeapProjectionAllocationsDump>,
 }
 
 impl IdentityMemoryDump {
@@ -790,6 +1113,38 @@ impl IdentityMemoryDump {
                 .map(|(place, resources)| PlaceResourcesDump {
                     place: place.clone(),
                     resources: resources.iter().cloned().collect(),
+                })
+                .collect(),
+            heap_values: memory
+                .heap_values
+                .iter()
+                .map(|(allocation, value)| HeapValueDump {
+                    allocation: allocation.clone(),
+                    root_access_bases: value.root_access_bases.iter().cloned().collect(),
+                    points_to: value
+                        .points_to
+                        .iter()
+                        .map(|(projection, allocations)| HeapProjectionAllocationsDump {
+                            projection: projection.clone(),
+                            allocations: allocations.iter().cloned().collect(),
+                        })
+                        .collect(),
+                    stack_refs: value
+                        .stack_refs
+                        .iter()
+                        .map(|(projection, targets)| HeapProjectionStackRefsDump {
+                            projection: projection.clone(),
+                            targets: targets.iter().cloned().collect(),
+                        })
+                        .collect(),
+                    resources: value
+                        .resources
+                        .iter()
+                        .map(|(projection, allocations)| HeapProjectionAllocationsDump {
+                            projection: projection.clone(),
+                            allocations: allocations.iter().cloned().collect(),
+                        })
+                        .collect(),
                 })
                 .collect(),
         }
@@ -1140,6 +1495,35 @@ fn direct_assignment_local(function: &str, place: &str) -> Option<ProgramVarId> 
     local(function, place)
 }
 
+/// Parse only a direct-local field LHS emitted by `describe_place`, e.g.
+///
+///     Local(_2) [mutable] -> Field(3, Type: bool)
+///
+/// Dereferences, indices and opaque projections deliberately fail closed.
+/// They require separate memory/place semantics and must not be collapsed
+/// onto the carrier local.
+fn direct_field_assignment_place(function: &str, place: &str) -> Option<PlaceId> {
+    let mut parts = place.split(" -> ");
+
+    let base_text = parts.next()?.trim();
+    let base = first_local_operand(function, base_text)?;
+    let mut projection = Vec::new();
+
+    for component in parts {
+        let component = component.trim();
+        let rest = component.strip_prefix("Field(")?;
+        let index_text = rest
+            .split_once(',')
+            .map(|(index, _)| index)
+            .or_else(|| rest.split_once(')').map(|(index, _)| index))?
+            .trim();
+        let index = index_text.parse::<u32>().ok()?;
+        projection.push(PlaceProjection::Field { index });
+    }
+
+    (!projection.is_empty()).then_some(PlaceId { base, projection })
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum IdentityTransferProfile {
     LegacyFrozen,
@@ -1310,15 +1694,31 @@ fn closure_capture_operands(function: &str, rvalue: &str) -> Option<Vec<ProgramV
     Some(captures)
 }
 
-fn deref_copy_projection(function: &str, rvalue: &str) -> Option<(ProgramVarId, Vec<PlaceProjection>)> {
-    if !rvalue.trim_start().starts_with("deref_copy") {
+/// Parse a projected value read through an already-proved stack reference.
+///
+/// rustc pretty-MIR uses both `deref_copy ((*r).f)` and ordinary
+/// `copy ((*r).f)`/`move ((*r).f)` spellings.  These all denote the same
+/// structural operation for allocation identity: read the exact projected
+/// Place below one stack referent.  This parser is intentionally narrow:
+/// only field projections after a syntactic `(*_N)` are accepted.  Index,
+/// opaque, and arbitrary heap-dereference shape remain unresolved.
+fn projected_deref_value_use(
+    function: &str,
+    rvalue: &str,
+) -> Option<(ProgramVarId, Vec<PlaceProjection>)> {
+    let text = rvalue.trim_start();
+    if !(text.starts_with("deref_copy ")
+        || text.starts_with("copy ")
+        || text.starts_with("move "))
+    {
         return None;
     }
-    let reference = direct_deref_reference(function, rvalue)?;
+
+    let reference = direct_deref_reference(function, text)?;
     let marker = "(*_";
-    let start = rvalue.find(marker)?;
-    let close = rvalue[start..].find(')')? + start;
-    let suffix = &rvalue[close + 1..];
+    let start = text.find(marker)?;
+    let close = text[start..].find(')')? + start;
+    let suffix = &text[close + 1..];
     let suffix = suffix.split(':').next().unwrap_or(suffix);
 
     let mut projection = Vec::new();
@@ -1327,7 +1727,10 @@ fn deref_copy_projection(function: &str, rvalue: &str) -> Option<(ProgramVarId, 
         if component.is_empty() {
             continue;
         }
-        let digits: String = component.chars().take_while(|c| c.is_ascii_digit()).collect();
+        let digits: String = component
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .collect();
         if digits.is_empty() {
             break;
         }
@@ -1335,7 +1738,35 @@ fn deref_copy_projection(function: &str, rvalue: &str) -> Option<(ProgramVarId, 
             index: digits.parse().ok()?,
         });
     }
-    Some((reference, projection))
+
+    (!projection.is_empty()).then_some((reference, projection))
+}
+
+/// Parse only an unprojected dereference value read such as `copy (*_8)`.
+/// Any structural suffix after `(*_N)` is rejected here so unsupported
+/// projected reads cannot silently collapse to their referent base.
+fn direct_deref_value_use(function: &str, rvalue: &str) -> Option<ProgramVarId> {
+    let text = rvalue.trim_start();
+    if !(text.starts_with("deref_copy ")
+        || text.starts_with("copy ")
+        || text.starts_with("move "))
+    {
+        return None;
+    }
+
+    let reference = direct_deref_reference(function, text)?;
+    let marker = "(*_";
+    let start = text.find(marker)?;
+    let close = text[start..].find(')')? + start;
+    let structural_suffix = text[close + 1..]
+        .split(':')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .trim_matches(')')
+        .trim();
+
+    structural_suffix.is_empty().then_some(reference)
 }
 
 fn projected_places(
@@ -1393,18 +1824,125 @@ fn is_fresh_rust_allocator(callee: &str) -> bool {
     )
 }
 
+/// Apply producer-certified identity flow declared by the versioned Rust
+/// library-effect registry.
+///
+/// Scientific boundary: producer evidence is derived from rustc semantic
+/// identity (DefId/type metadata) while that information is available.  When
+/// the evidence declares `arg0 -> return` identity preservation, the identity
+/// domain consumes that relation directly instead of re-discovering the API
+/// from pretty-printed MIR text.  If the concrete MIR operand/destination is
+/// not a direct local, this helper deliberately declines the transfer so the
+/// existing conservative/legacy machinery remains in force.
+fn apply_producer_certified_identity_relation(
+    function: &str,
+    arguments: &[crate::structs::MirCallArgument],
+    return_place: &str,
+    evidence: &RustAllocationDispositionEvidence,
+    memory: &mut AllocationIdentityMemory,
+) -> bool {
+    use crate::library_effects_v1::ProducerIdentityRelation;
+
+    match crate::library_effects_v1::producer_identity_relation_for_evidence(&evidence.kind) {
+        ProducerIdentityRelation::PreserveArg0ToReturn => {
+            let Some(argument) = arguments.first() else {
+                return false;
+            };
+            let Some(dest) = direct_assignment_local(function, return_place) else {
+                return false;
+            };
+
+            // Preserve the exact historical direct-local transfer first.  This
+            // is intentionally kept byte-for-byte equivalent in meaning to R1.
+            if let Some(source) = direct_call_value_local(function, &argument.arg) {
+                let snapshot = memory.clone();
+                clear_destination(memory, &dest);
+                memory.assign_points_to(dest.clone(), snapshot.points_to(&source));
+                memory.assign_stack_refs(dest.clone(), snapshot.stack_refs(&source));
+                memory.assign_access_bases(
+                    dest,
+                    snapshot
+                        .access_bases
+                        .get(&source)
+                        .cloned()
+                        .unwrap_or_default(),
+                );
+                return true;
+            }
+
+            // R2: producer-certified summaries may consume an exact projected
+            // value such as `copy ((*_1).field)`.  Resolve that Place only via
+            // already-proved stack-reference/Place relations.  We do not fall
+            // back to the carrier local: unresolved/indexed/opaque heap shape
+            // fails closed and leaves the legacy transfer responsible.
+            let Some((reference, projection)) =
+                projected_deref_value_use(function, &argument.arg)
+            else {
+                return false;
+            };
+            let places = projected_places(memory, &reference, &projection);
+            if places.is_empty() {
+                return false;
+            }
+
+            let mut resources = BTreeSet::new();
+            for place in places {
+                resources.extend(canonical_resources_for_place(memory, place));
+            }
+            if resources.is_empty() {
+                return false;
+            }
+
+            clear_destination(memory, &dest);
+            memory.assign_points_to(dest, resources);
+            true
+        }
+        ProducerIdentityRelation::None => false,
+    }
+}
+
 /// Calls whose normal return preserves the represented concrete allocation.
 ///
-/// This is a direct source-to-destination MAY flow relation, not alias closure.
-/// Each listed operation either reconstructs/borrows the same allocation or
-/// performs address-preserving pointer arithmetic/casting.
+/// This is a legacy textual fallback for historical artifacts and operations
+/// not yet covered by producer-certified library-effect evidence. It is a
+/// direct source-to-destination MAY flow relation, not alias closure.
+fn is_std_nonnull_call(callee: &str) -> bool {
+    [
+        "std::ptr::NonNull::<",
+        "core::ptr::NonNull::<",
+        "std::ptr::non_null::NonNull::<",
+        "core::ptr::non_null::NonNull::<",
+    ]
+    .iter()
+    .any(|prefix| callee.contains(prefix))
+}
+
+fn is_std_nonnull_identity_call(callee: &str) -> bool {
+    is_std_nonnull_call(callee)
+        && ["new_unchecked", "as_ptr", "as_ref", "as_mut", "cast"]
+            .iter()
+            .any(|method| method_terminal(callee, method))
+}
+
+fn is_known_borrowed_pointer_view_call(callee: &str) -> bool {
+    let known_family = callee.contains("CString")
+        || callee.contains("CStr")
+        || callee.contains("Vec::<")
+        || callee.contains("String")
+        || is_std_nonnull_call(callee)
+        || callee.contains("str>::as_ptr")
+        || callee.contains("slice::<impl [");
+    known_family
+        && (method_terminal(callee, "as_ptr") || method_terminal(callee, "as_mut_ptr"))
+}
+
 fn is_identity_preserving_pointer_call(callee: &str) -> bool {
     let typed_terminal = |family: &str, method: &str| {
         callee.contains(family) && method_terminal(callee, method)
     };
     let pointer_family = callee.contains("std::ptr::")
         || callee.contains("core::ptr::")
-        || callee.contains("NonNull");
+        || is_std_nonnull_call(callee);
 
     typed_terminal("Box", "into_raw")
         || typed_terminal("Box", "from_raw")
@@ -1413,14 +1951,76 @@ fn is_identity_preserving_pointer_call(callee: &str) -> bool {
         || typed_terminal("CStr", "from_ptr")
         || typed_terminal("Vec", "from_raw_parts")
         || typed_terminal("String", "from_raw_parts")
-        || method_terminal(callee, "as_ptr")
-        || method_terminal(callee, "as_mut_ptr")
+        || is_std_nonnull_identity_call(callee)
+        || is_known_borrowed_pointer_view_call(callee)
         || (pointer_family && method_terminal(callee, "cast"))
         || (pointer_family && method_terminal(callee, "wrapping_offset"))
         || (pointer_family && method_terminal(callee, "offset"))
         || (pointer_family && method_terminal(callee, "add"))
         || (pointer_family && method_terminal(callee, "sub"))
         || memory_events::is_into_vec_transfer_call(callee)
+}
+
+
+/// HT2 pointer-memory operations whose Rust semantics copy a value between a
+/// raw pointer location and a MIR value without running ordinary assignment
+/// transfer on the pointee.
+///
+/// Keep this classifier exact: similarly named wrappers are not heap-transfer
+/// evidence.
+fn is_ptr_read_identity_call(callee: &str) -> bool {
+    callee.contains("std::ptr::read::<")
+        || callee.contains("core::ptr::read::<")
+        || callee.contains("std::ptr::read_unaligned::<")
+        || callee.contains("core::ptr::read_unaligned::<")
+        || callee.contains("std::ptr::read_volatile::<")
+        || callee.contains("core::ptr::read_volatile::<")
+        || callee == "std::ptr::read"
+        || callee == "core::ptr::read"
+}
+
+fn is_ptr_write_identity_call(callee: &str) -> bool {
+    callee.contains("std::ptr::write::<")
+        || callee.contains("core::ptr::write::<")
+        || callee.contains("std::ptr::write_unaligned::<")
+        || callee.contains("core::ptr::write_unaligned::<")
+        || callee.contains("std::ptr::write_volatile::<")
+        || callee.contains("core::ptr::write_volatile::<")
+        || callee == "std::ptr::write"
+        || callee == "core::ptr::write"
+}
+
+/// Call arguments accepted by HT2 must denote one direct MIR local.  Reject
+/// rendered dereferences/projections rather than collapsing them to the base
+/// carrier via `first_local_operand`.
+fn direct_call_value_local(function: &str, argument: &str) -> Option<ProgramVarId> {
+    let mut text = argument.trim();
+    if let Some(rest) = text.strip_prefix("move ") {
+        text = rest.trim();
+    } else if let Some(rest) = text.strip_prefix("copy ") {
+        text = rest.trim();
+    }
+
+    if let Some((head, _)) = text.split_once(" [") {
+        text = head.trim();
+    }
+
+    let direct = if let Some(inner) = text
+        .strip_prefix("Local(_")
+        .and_then(|tail| tail.strip_suffix(')'))
+    {
+        !inner.is_empty() && inner.bytes().all(|byte| byte.is_ascii_digit())
+    } else if let Some(inner) = text.strip_prefix('_') {
+        !inner.is_empty() && inner.bytes().all(|byte| byte.is_ascii_digit())
+    } else {
+        false
+    };
+
+    if direct {
+        local(function, text)
+    } else {
+        None
+    }
 }
 
 /// Normal-return extraction of the owned CString from exactly the
@@ -1709,6 +2309,26 @@ fn transfer_statement_with_profile(
     }
 
     let Some(place) = stmt.place.as_deref() else { return; };
+
+    // R2B: projection-sensitive strong update for direct aggregate fields.
+    //
+    // A non-resource write to `x.field` changes exactly that field subtree.
+    // It must not be collapsed to `x`, because doing so would erase identity
+    // already proved for sibling fields.  This path is deliberately restricted
+    // to direct Field projections and to RHSs with no local operand.
+    // Resource-carrying projected writes and writes through dereferences remain
+    // outside this rule until their value/storage semantics are represented.
+    if let Some(projected_dest) = direct_field_assignment_place(function, place) {
+        let local_source = stmt
+            .rvalue
+            .as_deref()
+            .and_then(|rvalue| first_local_operand(function, rvalue));
+        if local_source.is_none() {
+            memory.forget_place_subtree(&projected_dest);
+            return;
+        }
+    }
+
     let Some(dest) = assignment_destination(function, place, profile) else { return; };
     let Some(rvalue) = stmt.rvalue.as_deref() else {
         clear_destination(memory, &dest);
@@ -1736,7 +2356,7 @@ fn transfer_statement_with_profile(
         return;
     }
 
-    if let Some((reference, projection)) = deref_copy_projection(function, rvalue) {
+    if let Some((reference, projection)) = projected_deref_value_use(function, rvalue) {
         let mut allocs = BTreeSet::new();
         let mut refs = BTreeSet::new();
         for place in projected_places(memory, &reference, &projection) {
@@ -1755,7 +2375,7 @@ fn transfer_statement_with_profile(
         return;
     }
 
-    if let Some(reference) = direct_deref_reference(function, rvalue) {
+    if let Some(reference) = direct_deref_value_use(function, rvalue) {
         let mut allocs = BTreeSet::new();
         let mut refs = BTreeSet::new();
         for place in memory.stack_refs(&reference) {
@@ -1765,6 +2385,15 @@ fn transfer_statement_with_profile(
         clear_destination(memory, &dest);
         memory.assign_points_to(dest.clone(), allocs);
         memory.assign_stack_refs(dest, refs);
+        return;
+    }
+
+    // A rendered dereference that was not accepted by either exact parser
+    // above is unsupported identity shape.  Fail closed instead of falling
+    // through to `first_local_operand`, which would copy the reference/pointer
+    // carrier and fabricate value identity for the dereferenced result.
+    if rvalue.contains("(*_") {
+        clear_destination(memory, &dest);
         return;
     }
 
@@ -1823,6 +2452,59 @@ fn transfer_library_call_with_external_context(
     ffi_functions: &HashSet<String>,
     memory: &mut AllocationIdentityMemory,
 ) {
+    // HT2: `ptr::write` weakly joins the identity of the written value into
+    // every abstract allocation base reachable through the destination
+    // pointer.  The update is intentionally weak even for a singleton base:
+    // one AbstractAllocId may represent multiple dynamic objects and the
+    // current pointer abstraction does not prove one unique offset/slot.
+    if is_ptr_write_identity_call(callee) {
+        let pointer = arguments
+            .first()
+            .and_then(|arg| direct_call_value_local(function, &arg.arg));
+        let source = arguments
+            .get(1)
+            .and_then(|arg| direct_call_value_local(function, &arg.arg));
+
+        let bases = pointer
+            .as_ref()
+            .map(|pointer| memory.event_allocations(pointer))
+            .unwrap_or_default();
+        let value = source
+            .as_ref()
+            .map(|source| memory.value_identity(source))
+            .unwrap_or_default();
+
+        // Unit-return bookkeeping must never collapse a projected return Place
+        // onto its base local.  The heap side effect itself is independent of
+        // the unit destination.
+        if let Some(dest) = direct_assignment_local(function, return_place) {
+            clear_destination(memory, &dest);
+        }
+        memory.weak_write_heap_value(&bases, &value);
+        return;
+    }
+
+    // HT2: `ptr::read` is non-destructive.  Join all MAY heap summaries for
+    // the pointer's possible abstract bases and rebase the stored value onto
+    // one direct local destination.  A projected/opaque destination fails
+    // closed instead of overwriting its base local.
+    if is_ptr_read_identity_call(callee) {
+        let Some(dest) = direct_assignment_local(function, return_place) else {
+            return;
+        };
+        let pointer = arguments
+            .first()
+            .and_then(|arg| direct_call_value_local(function, &arg.arg));
+        let bases = pointer
+            .as_ref()
+            .map(|pointer| memory.event_allocations(pointer))
+            .unwrap_or_default();
+        let value = memory.read_heap_value(&bases);
+
+        memory.materialize_heap_value(&dest, &value);
+        return;
+    }
+
     let Some(dest) = local(function, return_place) else { return; };
 
     if let Some(contract) = external_return_contract(
@@ -1981,6 +2663,25 @@ fn transfer_library_call_with_external_context(
             );
             return;
         }
+        RustAllocationSemantics::MayFresh => {
+            // MAY-fresh constructors (notably String::from(&str)) may allocate
+            // owned storage but never take ownership of the input allocation.
+            // Materialize only the fresh call-site alternative: copying source
+            // identity here would conflate a borrowed input with the owned
+            // result and can fabricate allocator mismatches/double frees.
+            clear_destination(memory, &dest);
+            memory.assign_fresh(
+                dest,
+                AbstractAllocId::new(
+                    AllocationSiteId::RustCall {
+                        node_id: node_id.to_string(),
+                        callee: callee.to_string(),
+                    },
+                    context.to_vec(),
+                ),
+            );
+            return;
+        }
         RustAllocationSemantics::MayFreshOrTransfer => {
             // CString::new and similar summaries can either allocate new
             // storage or reuse/consume storage supplied by an Into<Vec<u8>>
@@ -2069,8 +2770,23 @@ fn transfer_library_call_with_external_context(
             .first()
             .and_then(|arg| first_local_operand(function, &arg.arg))
         {
-            let allocs = memory.points_to(&source);
-            let refs = memory.stack_refs(&source);
+            // NonNull is a transparent non-owning pointer wrapper.  Its
+            // constructors/views preserve the pointee resource even when the
+            // receiver is reached through an exact stack reference (for
+            // example `&mut self.ptr`).  Follow only canonical resource
+            // relations; do not turn ERR1 access provenance into pointee
+            // identity.
+            let nonnull = is_std_nonnull_identity_call(callee);
+            let allocs = if nonnull {
+                tracked_resources_of_value(memory, &source)
+            } else {
+                memory.points_to(&source)
+            };
+            let refs = if nonnull {
+                BTreeSet::new()
+            } else {
+                memory.stack_refs(&source)
+            };
             let mut access = memory.access_bases.get(&source).cloned().unwrap_or_default();
             // Existing offset summaries preserve allocation-base association,
             // but no offset operation is a base-pointer validity certificate.
@@ -2084,6 +2800,410 @@ fn transfer_library_call_with_external_context(
         }
     }
 
+}
+
+
+const AP1_ATOMIC_PTR_VALUE_SLOT: &str = "$crema::atomic_ptr_value_v1";
+
+fn ap1_atomic_ptr_value_slot(mut place: PlaceId) -> PlaceId {
+    place.projection.push(PlaceProjection::Opaque {
+        text: AP1_ATOMIC_PTR_VALUE_SLOT.to_string(),
+    });
+    place
+}
+
+/// Resolve the exact MIR Places that may denote one `AtomicPtr<T>` receiver.
+///
+/// Methods taking `&self` normally arrive through a local reference temporary;
+/// in that case only the already-proved stack-reference relation is followed.
+/// A direct-local fallback is retained for by-value receivers such as
+/// `AtomicPtr::into_inner` and for MIR shapes where the atomic value itself is
+/// passed directly.  Heap points-to facts are deliberately *not* followed:
+/// they describe the pointer value carried by a local, not the `AtomicPtr`
+/// container whose hidden stored pointer AP1 models.
+fn ap1_atomic_ptr_receiver_places(
+    memory: &AllocationIdentityMemory,
+    receiver: &ProgramVarId,
+) -> BTreeSet<PlaceId> {
+    let refs = memory.stack_refs(receiver);
+    if !refs.is_empty() {
+        return refs;
+    }
+    BTreeSet::from([PlaceId {
+        base: receiver.clone(),
+        projection: Vec::new(),
+    }])
+}
+
+fn ap1_atomic_ptr_read_stored(
+    memory: &AllocationIdentityMemory,
+    receiver_places: &BTreeSet<PlaceId>,
+) -> BTreeSet<AbstractAllocId> {
+    let mut stored = BTreeSet::new();
+    for place in receiver_places {
+        stored.extend(memory.points_to_place(&ap1_atomic_ptr_value_slot(place.clone())));
+    }
+    stored
+}
+
+/// MAY update of the hidden pointer stored in an `AtomicPtr<T>`.
+///
+/// Except for construction of a fresh destination, AP1 uses a weak update.
+/// This is required by the existing allocation-site/context abstraction:
+/// one represented Place may denote multiple dynamic atomic objects, and the
+/// analysis does not prove an exclusive concrete instance across threads.
+/// A weak update therefore preserves every previously possible stored pointer
+/// while adding the new pointer permitted by the atomic operation.
+fn ap1_atomic_ptr_weak_write_stored(
+    memory: &mut AllocationIdentityMemory,
+    receiver_places: &BTreeSet<PlaceId>,
+    new_values: &BTreeSet<AbstractAllocId>,
+) {
+    if new_values.is_empty() {
+        return;
+    }
+    for place in receiver_places {
+        let slot = ap1_atomic_ptr_value_slot(place.clone());
+        let mut joined = memory.points_to_place(&slot);
+        joined.extend(new_values.iter().cloned());
+        memory.assign_place_points_to(slot, joined);
+    }
+}
+
+fn ap1_direct_return_local(function: &str, return_place: &str) -> Option<ProgramVarId> {
+    direct_assignment_local(function, return_place)
+}
+
+/// AP1 target-independent `AtomicPtr<T>` identity summary.
+///
+/// The producer in `icfg.rs` classifies calls from rustc semantic identity
+/// (associated item + exact `core::sync::atomic::AtomicPtr` owner).  This
+/// consumer never reconstructs semantics from pretty-printed call text.
+///
+/// Official Rust contracts represented here:
+/// * `new(p)` initializes the atomic with `p`;
+/// * `load` returns the current pointer without modifying the atomic;
+/// * `store` replaces the current pointer;
+/// * `swap` stores a new pointer and returns the previous pointer;
+/// * `compare_exchange` and `_weak` return the previous pointer in either
+///   Result variant, and write `new` only on success;
+/// * deprecated `compare_and_swap` returns the previous pointer and writes
+///   `new` conditionally; and
+/// * `into_inner` consumes the atomic and returns its contained pointer.
+///
+/// The identity domain is MAY-only.  Conditional/concurrent mutations are
+/// therefore weak updates.  AP1 introduces no allocation identity and no
+/// deallocation fact; it only transports already-proved resource identities
+/// through the AtomicPtr storage boundary.
+fn apply_atomic_ptr_identity_summary(
+    function: &str,
+    arguments: &[crate::structs::MirCallArgument],
+    return_place: &str,
+    evidence: &RustAtomicPtrCallEvidence,
+    memory: &mut AllocationIdentityMemory,
+) -> bool {
+    if evidence.owner_def_path != "core::sync::atomic::AtomicPtr"
+        || evidence.callee_def_path.trim().is_empty()
+    {
+        return false;
+    }
+
+    let arg_local = |index: usize| {
+        arguments
+            .get(index)
+            .and_then(|arg| first_local_operand(function, &arg.arg))
+    };
+    let return_local = || ap1_direct_return_local(function, return_place);
+
+    match &evidence.kind {
+        RustAtomicPtrCallEvidenceKind::New => {
+            let Some(source) = arg_local(0) else { return false; };
+            let Some(destination) = return_local() else { return false; };
+            let stored = tracked_resources_of_value(memory, &source);
+
+            // `new` constructs a fresh AtomicPtr value.  The wrapper itself is
+            // not an alias of `p`; only its semantic hidden storage contains p.
+            clear_destination(memory, &destination);
+            memory.assign_place_points_to(
+                ap1_atomic_ptr_value_slot(PlaceId {
+                    base: destination,
+                    projection: Vec::new(),
+                }),
+                stored,
+            );
+            true
+        }
+
+        RustAtomicPtrCallEvidenceKind::Load => {
+            let Some(receiver) = arg_local(0) else { return false; };
+            let Some(destination) = return_local() else { return false; };
+            let places = ap1_atomic_ptr_receiver_places(memory, &receiver);
+            let stored = ap1_atomic_ptr_read_stored(memory, &places);
+            clear_destination(memory, &destination);
+            memory.assign_points_to(destination, stored);
+            true
+        }
+
+        RustAtomicPtrCallEvidenceKind::Store => {
+            let Some(receiver) = arg_local(0) else { return false; };
+            let Some(new_value) = arg_local(1) else { return false; };
+            let places = ap1_atomic_ptr_receiver_places(memory, &receiver);
+            let new_values = tracked_resources_of_value(memory, &new_value);
+            ap1_atomic_ptr_weak_write_stored(memory, &places, &new_values);
+            if let Some(destination) = return_local() {
+                clear_destination(memory, &destination);
+            }
+            true
+        }
+
+        RustAtomicPtrCallEvidenceKind::Swap => {
+            let Some(receiver) = arg_local(0) else { return false; };
+            let Some(new_value) = arg_local(1) else { return false; };
+            let Some(destination) = return_local() else { return false; };
+            let places = ap1_atomic_ptr_receiver_places(memory, &receiver);
+            let previous = ap1_atomic_ptr_read_stored(memory, &places);
+            let new_values = tracked_resources_of_value(memory, &new_value);
+            ap1_atomic_ptr_weak_write_stored(memory, &places, &new_values);
+            clear_destination(memory, &destination);
+            memory.assign_points_to(destination, previous);
+            true
+        }
+
+        RustAtomicPtrCallEvidenceKind::CompareExchange
+        | RustAtomicPtrCallEvidenceKind::CompareExchangeWeak => {
+            let Some(receiver) = arg_local(0) else { return false; };
+            let Some(expected) = arg_local(1) else { return false; };
+            let Some(new_value) = arg_local(2) else { return false; };
+            let Some(destination) = return_local() else { return false; };
+
+            let places = ap1_atomic_ptr_receiver_places(memory, &receiver);
+            let mut previous = ap1_atomic_ptr_read_stored(memory, &places);
+
+            // The public contract guarantees that a successful CAS returns the
+            // previous value and that on success it equals `current`.  Add the
+            // already-proved expected-pointer identity as a success candidate
+            // even when receiver storage could not be resolved through another
+            // wrapper (e.g. an opaque carrier).  This is a MAY fact, not proof
+            // that the CAS succeeds.
+            previous.extend(tracked_resources_of_value(memory, &expected));
+
+            let new_values = tracked_resources_of_value(memory, &new_value);
+            ap1_atomic_ptr_weak_write_stored(memory, &places, &new_values);
+
+            // Result<*mut T, *mut T> is represented coarsely at the wrapper
+            // root. Existing downcast handling preserves this MAY identity for
+            // either Ok(old) or Err(old) without inventing variant certainty.
+            clear_destination(memory, &destination);
+            memory.assign_points_to(destination, previous);
+            true
+        }
+
+        RustAtomicPtrCallEvidenceKind::CompareAndSwap => {
+            let Some(receiver) = arg_local(0) else { return false; };
+            let Some(expected) = arg_local(1) else { return false; };
+            let Some(new_value) = arg_local(2) else { return false; };
+            let Some(destination) = return_local() else { return false; };
+
+            let places = ap1_atomic_ptr_receiver_places(memory, &receiver);
+            let mut previous = ap1_atomic_ptr_read_stored(memory, &places);
+            previous.extend(tracked_resources_of_value(memory, &expected));
+            let new_values = tracked_resources_of_value(memory, &new_value);
+            ap1_atomic_ptr_weak_write_stored(memory, &places, &new_values);
+            clear_destination(memory, &destination);
+            memory.assign_points_to(destination, previous);
+            true
+        }
+
+        RustAtomicPtrCallEvidenceKind::IntoInner => {
+            let Some(receiver) = arg_local(0) else { return false; };
+            let Some(destination) = return_local() else { return false; };
+            let places = ap1_atomic_ptr_receiver_places(memory, &receiver);
+            let stored = ap1_atomic_ptr_read_stored(memory, &places);
+            clear_destination(memory, &destination);
+            memory.assign_points_to(destination, stored);
+            true
+        }
+    }
+}
+
+
+#[cfg(test)]
+mod ap1_atomic_ptr_tests {
+    use super::*;
+    use crate::structs::{AllocationSiteId, MirCallArgument};
+
+    fn alloc(node: &str) -> AbstractAllocId {
+        AbstractAllocId::new(
+            AllocationSiteId::RustCall {
+                node_id: node.to_string(),
+                callee: "std::boxed::Box::<u8>::new".to_string(),
+            },
+            vec![],
+        )
+    }
+
+    fn arg(local: u32) -> MirCallArgument {
+        MirCallArgument {
+            arg: format!("Local(_{local})"),
+            is_mutable: None,
+        }
+    }
+
+    fn evidence(kind: RustAtomicPtrCallEvidenceKind, method: &str) -> RustAtomicPtrCallEvidence {
+        RustAtomicPtrCallEvidence {
+            kind,
+            callee_def_path: format!("core::sync::atomic::AtomicPtr::{method}"),
+            owner_def_path: "core::sync::atomic::AtomicPtr".to_string(),
+        }
+    }
+
+    fn var(local_index: u32) -> ProgramVarId {
+        ProgramVarId::Rust {
+            function: "main".to_string(),
+            local: local_index,
+        }
+    }
+
+    fn direct_slot(local_index: u32) -> PlaceId {
+        ap1_atomic_ptr_value_slot(PlaceId {
+            base: var(local_index),
+            projection: Vec::new(),
+        })
+    }
+
+    #[test]
+    fn ap1_atomic_ptr_new_and_load_preserve_contained_pointer_without_wrapper_alias() {
+        let a = alloc("rust::main::bb0");
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_points_to(var(1), BTreeSet::from([a.clone()]));
+
+        assert!(apply_atomic_ptr_identity_summary(
+            "main",
+            &[arg(1)],
+            "Local(_2)",
+            &evidence(RustAtomicPtrCallEvidenceKind::New, "new"),
+            &mut memory,
+        ));
+        assert!(memory.points_to(&var(2)).is_empty(), "AtomicPtr wrapper must not alias its payload");
+        assert_eq!(memory.points_to_place(&direct_slot(2)), BTreeSet::from([a.clone()]));
+
+        memory.assign_stack_refs(
+            var(3),
+            BTreeSet::from([PlaceId { base: var(2), projection: Vec::new() }]),
+        );
+        assert!(apply_atomic_ptr_identity_summary(
+            "main",
+            &[arg(3), arg(9)],
+            "Local(_4)",
+            &evidence(RustAtomicPtrCallEvidenceKind::Load, "load"),
+            &mut memory,
+        ));
+        assert_eq!(memory.points_to(&var(4)), BTreeSet::from([a]));
+        assert_eq!(memory.points_to_place(&direct_slot(2)).len(), 1, "load must not mutate storage");
+    }
+
+    #[test]
+    fn ap1_atomic_ptr_store_is_weak_may_update() {
+        let a = alloc("rust::main::bb0");
+        let b = alloc("rust::main::bb1");
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_place_points_to(direct_slot(2), BTreeSet::from([a.clone()]));
+        memory.assign_stack_refs(
+            var(3),
+            BTreeSet::from([PlaceId { base: var(2), projection: Vec::new() }]),
+        );
+        memory.assign_points_to(var(5), BTreeSet::from([b.clone()]));
+
+        assert!(apply_atomic_ptr_identity_summary(
+            "main",
+            &[arg(3), arg(5), arg(9)],
+            "Local(_0)",
+            &evidence(RustAtomicPtrCallEvidenceKind::Store, "store"),
+            &mut memory,
+        ));
+        assert_eq!(memory.points_to_place(&direct_slot(2)), BTreeSet::from([a, b]));
+    }
+
+    #[test]
+    fn ap1_atomic_ptr_compare_exchange_returns_previous_candidate_and_may_store_new() {
+        let old = alloc("rust::main::bb0");
+        let new = alloc("rust::main::bb1");
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_place_points_to(direct_slot(2), BTreeSet::from([old.clone()]));
+        memory.assign_stack_refs(
+            var(3),
+            BTreeSet::from([PlaceId { base: var(2), projection: Vec::new() }]),
+        );
+        memory.assign_points_to(var(4), BTreeSet::from([old.clone()]));
+        memory.assign_points_to(var(5), BTreeSet::from([new.clone()]));
+
+        assert!(apply_atomic_ptr_identity_summary(
+            "main",
+            &[arg(3), arg(4), arg(5), arg(9), arg(10)],
+            "Local(_6)",
+            &evidence(RustAtomicPtrCallEvidenceKind::CompareExchange, "compare_exchange"),
+            &mut memory,
+        ));
+        assert_eq!(memory.points_to(&var(6)), BTreeSet::from([old.clone()]));
+        assert_eq!(memory.points_to_place(&direct_slot(2)), BTreeSet::from([old, new]));
+    }
+
+    #[test]
+    fn ap1_atomic_ptr_compare_exchange_unresolved_receiver_preserves_success_expected_candidate() {
+        let expected = alloc("rust::main::bb0");
+        let new = alloc("rust::main::bb1");
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_points_to(var(4), BTreeSet::from([expected.clone()]));
+        memory.assign_points_to(var(5), BTreeSet::from([new]));
+
+        // _3 has no proven referent/storage relation.  AP1 must not pretend to
+        // resolve the carrier, but the API contract still permits a successful
+        // CAS whose previous value equals the already-proved `current` value.
+        assert!(apply_atomic_ptr_identity_summary(
+            "main",
+            &[arg(3), arg(4), arg(5), arg(9), arg(10)],
+            "Local(_6)",
+            &evidence(RustAtomicPtrCallEvidenceKind::CompareExchange, "compare_exchange"),
+            &mut memory,
+        ));
+        assert!(memory.points_to(&var(6)).contains(&expected));
+    }
+
+    #[test]
+    fn ap1_atomic_ptr_semantic_slot_survives_exact_value_binding() {
+        let a = alloc("rust::main::bb0");
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_place_points_to(direct_slot(2), BTreeSet::from([a.clone()]));
+        copy_binding(&mut memory, &var(2), var(7));
+        assert_eq!(memory.points_to_place(&direct_slot(7)), BTreeSet::from([a]));
+    }
+
+    #[test]
+    fn ap1_rejects_malformed_or_lookalike_owner_evidence() {
+        let a = alloc("rust::main::bb0");
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_points_to(var(1), BTreeSet::from([a]));
+        let mut bad = evidence(RustAtomicPtrCallEvidenceKind::New, "new");
+        bad.owner_def_path = "user_crate::AtomicPtr".to_string();
+        assert!(!apply_atomic_ptr_identity_summary(
+            "main",
+            &[arg(1)],
+            "Local(_2)",
+            &bad,
+            &mut memory,
+        ));
+        assert!(memory.points_to_place(&direct_slot(2)).is_empty());
+
+        bad.owner_def_path = "core::sync::atomic::AtomicPtr".to_string();
+        bad.callee_def_path.clear();
+        assert!(!apply_atomic_ptr_identity_summary(
+            "main",
+            &[arg(1)],
+            "Local(_2)",
+            &bad,
+            &mut memory,
+        ));
+    }
 }
 
 fn transfer_mir_node(
@@ -2123,25 +3243,52 @@ fn transfer_mir_node(
             function_called,
             arguments,
             return_place,
+            allocation_disposition_evidence,
+            atomic_ptr_evidence,
             ..
         }) = &bb.terminator
         {
-            transfer_library_call_with_external_context(
-                node_id,
-                function,
-                context,
-                function_called,
-                details,
-                arguments,
-                return_place,
-                represented_external_body,
-                arguments
-                    .first()
-                    .and_then(|arg| first_local_operand(function, &arg.arg))
-                    .is_some_and(|source| definitely_null_at_terminator.contains(&source)),
-                ffi_functions,
-                &mut out,
-            );
+            let producer_identity_applied = allocation_disposition_evidence
+                .as_ref()
+                .is_some_and(|evidence| {
+                    apply_producer_certified_identity_relation(
+                        function,
+                        arguments,
+                        return_place,
+                        evidence,
+                        &mut out,
+                    )
+                });
+
+            let atomic_ptr_identity_applied = !producer_identity_applied
+                && atomic_ptr_evidence.as_ref().is_some_and(|evidence| {
+                    apply_atomic_ptr_identity_summary(
+                        function,
+                        arguments,
+                        return_place,
+                        evidence,
+                        &mut out,
+                    )
+                });
+
+            if !producer_identity_applied && !atomic_ptr_identity_applied {
+                transfer_library_call_with_external_context(
+                    node_id,
+                    function,
+                    context,
+                    function_called,
+                    details,
+                    arguments,
+                    return_place,
+                    represented_external_body,
+                    arguments
+                        .first()
+                        .and_then(|arg| first_local_operand(function, &arg.arg))
+                        .is_some_and(|source| definitely_null_at_terminator.contains(&source)),
+                    ffi_functions,
+                    &mut out,
+                );
+            }
             event_summary = event_summary.join(&out);
         }
     }
@@ -2325,18 +3472,121 @@ fn copy_value_into_field(
     );
 }
 
+fn copy_binding_across_memories(
+    source_memory: &AllocationIdentityMemory,
+    target_memory: &mut AllocationIdentityMemory,
+    source: &ProgramVarId,
+    destination: ProgramVarId,
+) {
+    let allocs = source_memory.points_to(source);
+    let refs = source_memory.stack_refs(source);
+    let access = source_memory
+        .access_bases
+        .get(source)
+        .cloned()
+        .unwrap_or_default();
+
+    target_memory.assign_points_to(destination.clone(), allocs);
+    target_memory.assign_stack_refs(destination.clone(), refs);
+    target_memory.assign_access_bases(destination.clone(), access);
+
+    let projected_points: Vec<_> = source_memory
+        .place_points_to
+        .iter()
+        .filter(|(place, _)| &place.base == source)
+        .map(|(place, allocs)| (place.projection.clone(), allocs.clone()))
+        .collect();
+    let projected_refs: Vec<_> = source_memory
+        .place_stack_refs
+        .iter()
+        .filter(|(place, _)| &place.base == source)
+        .map(|(place, refs)| (place.projection.clone(), refs.clone()))
+        .collect();
+    let projected_resources: Vec<_> = source_memory
+        .place_resources
+        .iter()
+        .filter(|(place, _)| &place.base == source)
+        .map(|(place, resources)| (place.projection.clone(), resources.clone()))
+        .collect();
+
+    for (projection, allocs) in projected_points {
+        target_memory.assign_place_points_to(
+            PlaceId {
+                base: destination.clone(),
+                projection,
+            },
+            allocs,
+        );
+    }
+    for (projection, refs) in projected_refs {
+        target_memory.assign_place_stack_refs(
+            PlaceId {
+                base: destination.clone(),
+                projection,
+            },
+            refs,
+        );
+    }
+    for (projection, resources) in projected_resources {
+        target_memory.assign_place_resources(
+            PlaceId {
+                base: destination.clone(),
+                projection,
+            },
+            resources,
+        );
+    }
+}
+
+fn binding_referent_seeds(
+    memory: &AllocationIdentityMemory,
+    source: &ProgramVarId,
+) -> BTreeSet<PlaceId> {
+    let mut seeds = memory.stack_refs(source);
+    for (place, refs) in &memory.place_stack_refs {
+        if &place.base == source {
+            seeds.extend(refs.iter().cloned());
+        }
+    }
+    seeds
+}
+
+/// Lightweight Rust-call frame transfer used by the standard (non-DEP1)
+/// analysis profile.
+///
+/// Ordinary MIR locals are activation-local.  The legacy implementation cloned
+/// the complete caller memory into the callee, which made locals from a prior
+/// invocation survive a return/call cycle when the same finite analysis point
+/// was revisited.  This transfer keeps the finite k=1 abstraction unchanged
+/// while importing only the global heap plus identities reachable from the
+/// explicit actual arguments.
 fn bind_actuals_to_formals(
     icfg: &GlobalICFGOrdered,
     call: &RustCallMetadata,
     caller_memory: &AllocationIdentityMemory,
 ) -> AllocationIdentityMemory {
-    let mut callee_memory = caller_memory.clone();
     let Some(function) = icfg.rust_functions.get(&call.callee_function) else {
-        return callee_memory;
+        // Canonical ICFG validation normally makes this unreachable.  Preserve
+        // the previous fail-open fallback rather than losing caller facts.
+        return caller_memory.clone();
     };
 
+    let mut callee_memory = AllocationIdentityMemory::default();
+    callee_memory.join_heap_from(caller_memory);
+
+    // Heap values can contain stack-place references (for example captured
+    // environments).  Preserve only those referents that are reachable from
+    // the global heap; do not import the caller's unrelated local environment.
+    import_referents(
+        caller_memory,
+        &mut callee_memory,
+        caller_memory.heap_stack_referent_seeds(),
+    );
+
     for formal_index in 0..function.arg_count {
-        let Some(argument) = call.arguments.get(formal_index) else { break; };
+        let Some(argument) = call.arguments.get(formal_index) else {
+            break;
+        };
         let Some(actual) = first_local_operand(&call.caller_function, &argument.arg) else {
             continue;
         };
@@ -2344,28 +3594,78 @@ fn bind_actuals_to_formals(
             function: call.callee_function.clone(),
             local: (formal_index + 1) as u32,
         };
-        copy_binding(&mut callee_memory, &actual, formal.clone());
-        if call.is_closure && formal_index == 0 {
-            copy_projected_fields(&mut callee_memory, &actual, &formal);
-        }
+
+        copy_binding_across_memories(
+            caller_memory,
+            &mut callee_memory,
+            &actual,
+            formal,
+        );
+
+        // A reference-valued actual names caller-visible stack places.  Import
+        // exactly that reachable referent slice so dereference effects in the
+        // callee remain represented without cloning unrelated caller locals.
+        import_referents(
+            caller_memory,
+            &mut callee_memory,
+            binding_referent_seeds(caller_memory, &actual),
+        );
     }
 
     callee_memory
 }
 
+/// Lightweight Rust-return frame transfer used by the standard (non-DEP1)
+/// analysis profile.
+///
+/// Restore the caller snapshot, retain global heap effects, and re-import only
+/// caller-visible stack places reachable from the call's actual arguments.
+/// Callee locals survive only when they are explicitly reachable from the
+/// returned value.  This prevents one invocation's ordinary locals from
+/// becoming input facts of a later invocation while preserving MAY effects
+/// observable by the caller.
 fn bind_return_to_caller(
     call: &RustCallMetadata,
     callee_memory: &AllocationIdentityMemory,
     caller_snapshot: &AllocationIdentityMemory,
 ) -> AllocationIdentityMemory {
-    let mut out = caller_snapshot.join(callee_memory);
+    let mut out = caller_snapshot.clone();
+    out.join_heap_from(callee_memory);
+
+    let mut caller_visible_referents = caller_snapshot.heap_stack_referent_seeds();
+    for argument in &call.arguments {
+        let Some(actual) = first_local_operand(&call.caller_function, &argument.arg) else {
+            continue;
+        };
+        caller_visible_referents.extend(binding_referent_seeds(caller_snapshot, &actual));
+    }
+    import_referents(
+        callee_memory,
+        &mut out,
+        caller_visible_referents,
+    );
+
     let callee_return = ProgramVarId::Rust {
         function: call.callee_function.clone(),
         local: 0,
     };
 
     if let Some(caller_return) = local(&call.caller_function, &call.return_place) {
-        copy_binding(&mut out, &callee_return, caller_return);
+        let escaped_referents = binding_referent_seeds(callee_memory, &callee_return);
+        copy_binding_across_memories(
+            callee_memory,
+            &mut out,
+            &callee_return,
+            caller_return,
+        );
+        // A returned reference/raw aggregate may intentionally keep a callee
+        // place reachable.  Preserve that escape rather than dropping it merely
+        // because the ordinary callee frame is not imported wholesale.
+        import_referents(
+            callee_memory,
+            &mut out,
+            escaped_referents,
+        );
     }
 
     out
@@ -2463,6 +3763,32 @@ fn join_input(
                 true
             } else {
                 false
+            }
+        }
+    }
+}
+
+/// Reconsider already-materialized normal returns when their caller snapshot
+/// dependency changes. The k=1 callee input may be unchanged even though a new
+/// caller-context continuation has subscribed to that shared callee result.
+/// All represented targets of the callsite share the continuation snapshot.
+fn notify_materialized_identity_returns(
+    icfg: &GlobalICFGOrdered,
+    callsite: &str,
+    post_states: &BTreeMap<IdentityAnalysisPoint, AllocationIdentityMemory>,
+    worklist: &mut BTreeSet<IdentityAnalysisPoint>,
+) {
+    for call in icfg.rust_calls.iter().filter(|call| call.call_node == callsite) {
+        if let Some(function) = icfg.rust_functions.get(&call.callee_function) {
+            for node in &function.return_nodes {
+                let returned = IdentityAnalysisPoint {
+                    node: node.clone(),
+                    context: bounded_context(callsite),
+                };
+                // Do not invent reachability or manufacture a callee summary.
+                if post_states.contains_key(&returned) {
+                    worklist.insert(returned);
+                }
             }
         }
     }
@@ -2596,6 +3922,190 @@ pub(crate) fn p3_drop_receiver_enabled() -> bool {
     std::env::var("CREMA_INTERNAL_DEP1_P3_R1D").as_deref() == Ok("1")
 }
 
+fn p2_activation_context_transition_valid(
+    activation: &serde_json::Value,
+) -> Result<(), String> {
+    let key=activation.get("call_key").and_then(serde_json::Value::as_str)
+        .ok_or("p2_control_flow_incomplete: call_key")?;
+    let parent=activation.get("parent_context").and_then(serde_json::Value::as_array)
+        .ok_or("p2_control_flow_incomplete: parent context")?;
+    let callee=activation.get("callee_context").and_then(serde_json::Value::as_array)
+        .ok_or("p2_control_flow_incomplete: callee context")?;
+    let kind=activation.get("context_transition").and_then(serde_json::Value::as_str)
+        .unwrap_or("exact_push");
+    match kind {
+        "exact_push" | "recursive_scc_entry_exact_push" | "dependency_region_entry_exact_push" => {
+            let mut expected=parent.clone();
+            expected.push(serde_json::Value::String(key.to_owned()));
+            if callee != &expected {
+                return Err(format!("p2_control_flow_incomplete: invalid {kind} context transition"));
+            }
+            if kind=="recursive_scc_entry_exact_push" {
+                if activation.get("recursive_context_k").and_then(serde_json::Value::as_u64)!=Some(1)
+                    || activation.get("recursive_scc_id").and_then(serde_json::Value::as_str).is_none()
+                    || activation.get("recursive_entry_context").and_then(serde_json::Value::as_array)!=Some(callee)
+                {
+                    return Err("p2_control_flow_incomplete: invalid recursive SCC entry certificate".into());
+                }
+            }
+            if kind=="dependency_region_entry_exact_push" {
+                if activation.get("dependency_context_k").and_then(serde_json::Value::as_u64)!=Some(1)
+                    || activation.get("dependency_entry_context").and_then(serde_json::Value::as_array)!=Some(callee)
+                {
+                    return Err("p2_control_flow_incomplete: invalid dependency-region entry certificate".into());
+                }
+            }
+        }
+        "recursive_scc_k1_replace" => {
+            if activation.get("recursive_context_k").and_then(serde_json::Value::as_u64)!=Some(1)
+                || activation.get("recursive_scc_id").and_then(serde_json::Value::as_str).is_none()
+            {
+                return Err("p2_control_flow_incomplete: recursive SCC k=1 certificate missing".into());
+            }
+            let entry=activation.get("recursive_entry_context").and_then(serde_json::Value::as_array)
+                .ok_or("p2_control_flow_incomplete: recursive SCC entry context")?;
+            if parent.len()<entry.len() || parent.len()>entry.len()+1 || parent[..entry.len()]!=entry[..] {
+                return Err("p2_control_flow_incomplete: recursive SCC parent escaped its exact entry prefix".into());
+            }
+            let mut expected=entry.clone();
+            expected.push(serde_json::Value::String(key.to_owned()));
+            if callee != &expected {
+                return Err("p2_control_flow_incomplete: invalid SCC-local k=1 replacement".into());
+            }
+        }
+        "dependency_region_k1_replace" => {
+            if activation.get("dependency_context_k").and_then(serde_json::Value::as_u64)!=Some(1) {
+                return Err("p2_control_flow_incomplete: dependency-region k=1 certificate missing".into());
+            }
+            let entry=activation.get("dependency_entry_context").and_then(serde_json::Value::as_array)
+                .ok_or("p2_control_flow_incomplete: dependency-region entry context")?;
+            if parent.len()<entry.len() || parent[..entry.len()]!=entry[..] {
+                return Err("p2_control_flow_incomplete: dependency parent escaped its exact entry prefix".into());
+            }
+            let mut expected=entry.clone();
+            expected.push(serde_json::Value::String(key.to_owned()));
+            if callee != &expected {
+                return Err("p2_control_flow_incomplete: invalid dependency-region k=1 replacement".into());
+            }
+        }
+        other => return Err(format!("p2_control_flow_incomplete: unknown context transition {other}")),
+    }
+
+    // Entering a recursive SCC through a dependency-region transition must
+    // certify the exact recursive entry as the resulting callee context.  Once
+    // inside, recursive_scc_k1_replace validates the bounded recursive suffix
+    // separately above.
+    if activation.get("recursive_scc_id").and_then(serde_json::Value::as_str).is_some()
+        && matches!(kind,"dependency_region_entry_exact_push"|"dependency_region_k1_replace")
+    {
+        if activation.get("recursive_context_k").and_then(serde_json::Value::as_u64)!=Some(1)
+            || activation.get("recursive_entry_context").and_then(serde_json::Value::as_array)!=Some(callee)
+        {
+            return Err("p2_control_flow_incomplete: dependency transition has invalid recursive SCC entry certificate".into());
+        }
+    }
+
+    // When a recursive SCC lives inside a dependency region, the recursive
+    // quotient may temporarily add its own suffix.  It must nevertheless stay
+    // under the producer-certified dependency entry prefix so exiting the SCC
+    // can soundly return to the dependency-region k=1 quotient.
+    if let Some(dep_k)=activation.get("dependency_context_k").and_then(serde_json::Value::as_u64) {
+        if dep_k!=1 { return Err("p2_control_flow_incomplete: unsupported dependency context k".into()); }
+        let entry=activation.get("dependency_entry_context").and_then(serde_json::Value::as_array)
+            .ok_or("p2_control_flow_incomplete: dependency entry context missing")?;
+        if kind=="dependency_region_entry_exact_push" {
+            if entry!=callee {
+                return Err("p2_control_flow_incomplete: dependency entry is not the exact callee context".into());
+            }
+        } else if parent.len()<entry.len() || callee.len()<entry.len()
+            || parent[..entry.len()]!=entry[..] || callee[..entry.len()]!=entry[..]
+        {
+            return Err("p2_control_flow_incomplete: bounded dependency context escaped its exact entry prefix".into());
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod r4_context_transition_tests {
+    use super::*;
+
+    #[test]
+    fn exact_context_transition_remains_exact_push() {
+        let a=serde_json::json!({
+            "call_key":"K","parent_context":["A"],"callee_context":["A","K"],
+            "context_transition":"exact_push"
+        });
+        assert!(p2_activation_context_transition_valid(&a).is_ok());
+    }
+
+    #[test]
+    fn recursive_context_transition_accepts_only_entry_prefix_plus_one_key() {
+        let a=serde_json::json!({
+            "call_key":"K2","parent_context":["OUT","ENTER","K1"],
+            "callee_context":["OUT","ENTER","K2"],
+            "context_transition":"recursive_scc_k1_replace",
+            "recursive_scc_id":"S","recursive_context_k":1,
+            "recursive_entry_context":["OUT","ENTER"]
+        });
+        assert!(p2_activation_context_transition_valid(&a).is_ok());
+        let mut bad=a.clone();
+        bad["callee_context"]=serde_json::json!(["OUT","ENTER","K1","K2"]);
+        assert!(p2_activation_context_transition_valid(&bad).is_err());
+    }
+
+    #[test]
+    fn dependency_context_transition_preserves_entry_and_replaces_only_internal_suffix() {
+        let entry=serde_json::json!({
+            "call_key":"ENTER","parent_context":["APP"],"callee_context":["APP","ENTER"],
+            "context_transition":"dependency_region_entry_exact_push",
+            "dependency_context_k":1,"dependency_entry_context":["APP","ENTER"]
+        });
+        assert!(p2_activation_context_transition_valid(&entry).is_ok());
+
+        let internal=serde_json::json!({
+            "call_key":"K2","parent_context":["APP","ENTER","K1"],
+            "callee_context":["APP","ENTER","K2"],
+            "context_transition":"dependency_region_k1_replace",
+            "dependency_context_k":1,"dependency_entry_context":["APP","ENTER"]
+        });
+        assert!(p2_activation_context_transition_valid(&internal).is_ok());
+        let mut bad=internal.clone();
+        bad["callee_context"]=serde_json::json!(["APP","ENTER","K1","K2"]);
+        assert!(p2_activation_context_transition_valid(&bad).is_err());
+
+        let recursive_entry=serde_json::json!({
+            "call_key":"TO-REC","parent_context":["APP","ENTER","K1"],
+            "callee_context":["APP","ENTER","TO-REC"],
+            "context_transition":"dependency_region_k1_replace",
+            "dependency_context_k":1,"dependency_entry_context":["APP","ENTER"],
+            "recursive_scc_id":"S","recursive_context_k":1,
+            "recursive_entry_context":["APP","ENTER","TO-REC"]
+        });
+        assert!(p2_activation_context_transition_valid(&recursive_entry).is_ok());
+        let mut bad_recursive_entry=recursive_entry.clone();
+        bad_recursive_entry["recursive_entry_context"]=serde_json::json!(["APP","ENTER","WRONG"]);
+        assert!(p2_activation_context_transition_valid(&bad_recursive_entry).is_err());
+    }
+
+    #[test]
+    fn recursive_context_inside_dependency_must_stay_under_dependency_entry_prefix() {
+        let a=serde_json::json!({
+            "call_key":"REC2","parent_context":["APP","ENTER","TO-REC","REC1"],
+            "callee_context":["APP","ENTER","TO-REC","REC2"],
+            "context_transition":"recursive_scc_k1_replace",
+            "recursive_scc_id":"S","recursive_context_k":1,
+            "recursive_entry_context":["APP","ENTER","TO-REC"],
+            "dependency_context_k":1,"dependency_entry_context":["APP","ENTER"]
+        });
+        assert!(p2_activation_context_transition_valid(&a).is_ok());
+        let mut escaped=a.clone();
+        escaped["callee_context"]=serde_json::json!(["OTHER","REC2"]);
+        assert!(p2_activation_context_transition_valid(&escaped).is_err());
+    }
+
+}
+
 #[derive(Clone)]
 struct DropReceiverPlan {
     activation: serde_json::Value,
@@ -2707,14 +4217,7 @@ fn drop_receiver_plans(
             .ok_or("unresolved_drop_identity: caller scope")?
             .to_string();
 
-        let mut pushed = activation["parent_context"]
-            .as_array()
-            .ok_or("p2_control_flow_incomplete: parent context")?
-            .clone();
-        pushed.push(serde_json::Value::String(call_key.to_string()));
-        if activation["callee_context"] != serde_json::Value::Array(pushed) {
-            return Err("p2_control_flow_incomplete: invalid Drop context push".into());
-        }
+        p2_activation_context_transition_valid(activation)?;
         let proxy = text("dummy_call_state")?;
         if !icfg
             .icfg_edges
@@ -2996,6 +4499,8 @@ fn transfer_drop_receiver(
 ) -> (AllocationIdentityMemory, serde_json::Value) {
     let resolution = resolve_drop_source(plan, caller);
     let mut callee = AllocationIdentityMemory::default();
+    callee.join_heap_from(caller);
+    import_referents(caller, &mut callee, caller.heap_stack_referent_seeds());
 
     if matches!(resolution.status, "resource_binding_available" | "no_tracked_resource") {
         for place in &resolution.places {
@@ -3076,9 +4581,7 @@ fn actual_formal_plans(icfg: &GlobalICFGOrdered) -> Result<BTreeMap<String, Actu
         let [binding] = static_matches.as_slice() else { return Err("unresolved_actual: nonunique P2 binding".into()); };
         let bodies: Vec<_> = dep.body_statuses.iter().filter(|b| b["instance_id"] == callee && b["body_status"] == "represented_body").collect();
         let [body] = bodies.as_slice() else { return Err("unresolved_formal: nonunique represented body".into()); };
-        let mut pushed = a["parent_context"].as_array().ok_or("unresolved_actual: parent context")?.clone();
-        pushed.push(serde_json::Value::String(key.into()));
-        if a["callee_context"] != serde_json::Value::Array(pushed) { return Err("p2_control_flow_incomplete: invalid push".into()); }
+        p2_activation_context_transition_valid(a)?;
         let entry = text("callee_entry_state")?;
         let scopes: Vec<_> = icfg.rust_functions.iter().filter(|(_,f)| f.entry_node == entry).collect();
         let [(callee_scope, metadata)] = scopes.as_slice() else { return Err("unresolved_formal: entry scope".into()); };
@@ -3086,6 +4589,18 @@ fn actual_formal_plans(icfg: &GlobalICFGOrdered) -> Result<BTreeMap<String, Actu
         let actuals = binding.get("actual_operands_v1").and_then(serde_json::Value::as_array).ok_or("unresolved_actual: compiler operand proof absent")?.clone();
         let formal_proof = &body["formal_arguments_v1"];
         let formals = formal_proof["arguments"].as_array().ok_or("unresolved_formal: compiler locals proof absent")?.clone();
+        let is_spawn_callback = a.get("activation_kind").and_then(serde_json::Value::as_str)
+            == Some("higher_order_callback");
+        if is_spawn_callback {
+            if a.get("callback_semantics").and_then(serde_json::Value::as_str) != Some("spawn_may_once")
+                || binding.get("callback_semantics").and_then(serde_json::Value::as_str) != Some("spawn_may_once")
+                || formal_proof["abi"] != "rustc_closure_body_v1"
+                || actuals.len() != 1
+                || actuals.first().and_then(|v|v.get("value_shape")).and_then(serde_json::Value::as_str) != Some("closure_environment")
+            {
+                return Err("unresolved_formal: uncertified higher-order closure environment boundary".into());
+            }
+        }
         if actuals.len() != formals.len() || formals.len() != metadata.arg_count
             || formal_proof["arg_count"].as_u64() != Some(formals.len() as u64) {
             return Err("unresolved_formal: ABI/argument cardinality".into());
@@ -3142,13 +4657,23 @@ fn import_referents(source: &AllocationIdentityMemory, target: &mut AllocationId
 fn transfer_actual_formal(plan: &ActualFormalPlan, caller: &AllocationIdentityMemory)
     -> (AllocationIdentityMemory, Vec<serde_json::Value>) {
     let mut callee = AllocationIdentityMemory::default();
+    // Heap contents are global abstract store, not caller-local environment.
+    // Preserve them across a represented Rust call while keeping ordinary
+    // local identity import restricted to the certified actual/formal slice.
+    callee.join_heap_from(caller);
+    import_referents(caller, &mut callee, caller.heap_stack_referent_seeds());
     let mut records = Vec::new();
     for (i,(actual,formal)) in plan.actuals.iter().zip(&plan.formals).enumerate() {
         let destination = ProgramVarId::Rust { function:plan.callee_scope.clone(),local:(i+1) as u32 };
         let source = actual["actual_local"].as_u64().map(|local| ProgramVarId::Rust {function:plan.caller_scope.clone(),local:local as u32});
         let shape = actual["value_shape"].as_str().unwrap_or("unsupported_value_shape");
-        let supported = matches!(shape,"raw_pointer"|"shared_reference"|"mutable_reference"|"owned_box"|"scalar");
-        let status = if plan.abi != "Rust" || !supported || shape != formal["value_shape"].as_str().unwrap_or("")
+        let supported = matches!(shape,"raw_pointer"|"shared_reference"|"mutable_reference"|"owned_box"|"scalar"|"aggregate"|"closure_environment");
+        let is_spawn_callback = plan.activation.get("activation_kind").and_then(serde_json::Value::as_str)
+            == Some("higher_order_callback")
+            && plan.activation.get("callback_semantics").and_then(serde_json::Value::as_str) == Some("spawn_may_once");
+        let boundary_supported = plan.abi == "Rust"
+            || (is_spawn_callback && plan.abi == "rustc_closure_body_v1" && shape == "closure_environment");
+        let status = if !boundary_supported || !supported || shape != formal["value_shape"].as_str().unwrap_or("")
             || (actual["operand"] != "constant" && actual["direct_local"] != true)
             || (actual["operand"] == "constant" && shape != "scalar") {
             "unsupported_value_shape"
@@ -3170,12 +4695,30 @@ fn transfer_actual_formal(plan: &ActualFormalPlan, caller: &AllocationIdentityMe
                 callee.assign_place_stack_refs(PlaceId{base:destination.clone(),projection:p.projection.clone()},refs.clone());
                 import_referents(caller,&mut callee,refs.clone());
             }}
-            if caller.event_allocations(source).is_empty() && caller.stack_refs(source).is_empty() {
+            for (p,resources) in &caller.place_resources { if &p.base == source {
+                callee.assign_place_resources(PlaceId{base:destination.clone(),projection:p.projection.clone()},resources.clone());
+            }}
+            let projected_identity = caller.place_points_to.iter().any(|(p,a)| &p.base == source && !a.is_empty())
+                || caller.place_stack_refs.iter().any(|(p,r)| &p.base == source && !r.is_empty())
+                || caller.place_resources.iter().any(|(p,r)| &p.base == source && !r.is_empty());
+            if caller.event_allocations(source).is_empty()
+                && caller.stack_refs(source).is_empty()
+                && !projected_identity
+            {
                 "unresolved_actual"
             } else { "resource_binding_available" }
         } else { "unresolved_actual" };
         let resources = source.as_ref().filter(|_| status=="resource_binding_available")
-            .map(|s|caller.event_allocations(s)).unwrap_or_default();
+            .map(|s| {
+                let mut resources = caller.event_allocations(s);
+                for (p, allocs) in &caller.place_points_to {
+                    if &p.base == s { resources.extend(allocs.iter().cloned()); }
+                }
+                for (p, allocs) in &caller.place_resources {
+                    if &p.base == s { resources.extend(allocs.iter().cloned()); }
+                }
+                resources
+            }).unwrap_or_default();
         records.push(serde_json::json!({
             "call_key":plan.activation["call_key"],"caller_instance_id":plan.activation["caller_instance_id"],
             "concrete_callee_instance":plan.activation["callee_instance_id"],
@@ -3203,8 +4746,60 @@ struct ReturnResourcePlan {
     return_shape: String,
 }
 
+type ReturnResourcePlans = BTreeMap<String, Vec<ReturnResourcePlan>>;
+
+fn insert_return_resource_plan(
+    plans: &mut ReturnResourcePlans,
+    source: &str,
+    plan: ReturnResourcePlan,
+) -> Result<(), String> {
+    let caller_call_state = plan.entry.activation["caller_call_state"]
+        .as_str()
+        .ok_or("p2_control_flow_incomplete: return plan caller state absent")?;
+    let dummy_ret_state = plan.relation["dummy_ret_state"]
+        .as_str()
+        .ok_or("p2_control_flow_incomplete: return plan proxy absent")?;
+    let bucket = plans.entry(source.to_string()).or_default();
+    if bucket.iter().any(|existing| {
+        existing.entry.activation["caller_call_state"].as_str() == Some(caller_call_state)
+            && existing.relation["dummy_ret_state"].as_str() == Some(dummy_ret_state)
+    }) {
+        return Err("p2_control_flow_incomplete: duplicate normal-return activation".into());
+    }
+    bucket.push(plan);
+    bucket.sort_by(|left, right| {
+        (
+            left.entry.activation["caller_call_state"].as_str().unwrap_or_default(),
+            left.relation["dummy_ret_state"].as_str().unwrap_or_default(),
+        )
+            .cmp(&(
+                right.entry.activation["caller_call_state"].as_str().unwrap_or_default(),
+                right.relation["dummy_ret_state"].as_str().unwrap_or_default(),
+            ))
+    });
+    Ok(())
+}
+
+fn matching_return_resource_plans<'a>(
+    plans: &'a ReturnResourcePlans,
+    source: &str,
+    context: &[String],
+) -> Vec<&'a ReturnResourcePlan> {
+    let Some(call_state) = context.last().map(String::as_str) else {
+        return Vec::new();
+    };
+    plans
+        .get(source)
+        .into_iter()
+        .flatten()
+        .filter(|plan| {
+            plan.entry.activation["caller_call_state"].as_str() == Some(call_state)
+        })
+        .collect()
+}
+
 fn return_resource_plans(icfg: &GlobalICFGOrdered, entries: &BTreeMap<String, ActualFormalPlan>)
-    -> Result<BTreeMap<String,ReturnResourcePlan>,String> {
+    -> Result<ReturnResourcePlans,String> {
     let dep = icfg.dependency_body_ingestion_v1.as_ref().ok_or("p2_control_flow_incomplete")?;
     let mut plans = BTreeMap::new();
     for entry in entries.values() {
@@ -3213,6 +4808,39 @@ fn return_resource_plans(icfg: &GlobalICFGOrdered, entries: &BTreeMap<String, Ac
             .ok_or("unresolved_destination: compiler call absent")?;
         let body = dep.body_statuses.iter().find(|b|b["instance_id"]==a["callee_instance_id"])
             .ok_or("unresolved_return: compiler body absent")?;
+        if a.get("activation_kind").and_then(serde_json::Value::as_str) == Some("higher_order_callback") {
+            if a.get("callback_semantics").and_then(serde_json::Value::as_str) != Some("spawn_may_once")
+                || call.get("callback_semantics").and_then(serde_json::Value::as_str) != Some("spawn_may_once")
+            {
+                return Err("p2_control_flow_incomplete: unsupported higher-order callback return semantics".into());
+            }
+            let relations = a["normal_return_relations"].as_array()
+                .ok_or("p2_control_flow_incomplete: callback normal relations absent")?;
+            if relations.is_empty() {
+                return Err("p2_control_flow_incomplete: represented callback has no normal-return relation".into());
+            }
+            for relation in relations {
+                let source = relation["callee_return_state"].as_str().ok_or("unresolved_return: callback exit absent")?;
+                let proxy = relation["dummy_ret_state"].as_str().ok_or("unresolved_destination: callback return proxy absent")?;
+                let next = relation["continuation_state"].as_str().ok_or("unresolved_destination: callback continuation absent")?;
+                if relation["dummy_ret_state"] != a["dummy_ret_state"]
+                    || relation["continuation_state"] != a["continuation_state"]
+                    || !icfg.icfg_edges.iter().any(|e|e.source==source && e.destination==proxy && e.label.as_deref()==Some("Rust Return -> dummyRet"))
+                    || !icfg.icfg_edges.iter().any(|e|e.source==proxy && e.destination==next && e.label.as_deref()==Some("dummyRet -> Rust Continuation"))
+                    || !icfg.ordered_nodes.iter().any(|(id,node)|id==source && matches!(node,GlobalICFGNode::Mir(MirBasicBlock{terminator:Some(MirTerminator::Return{..}),..})))
+                {
+                    return Err("p2_control_flow_incomplete: exact callback normal-return relation absent".into());
+                }
+                let plan = ReturnResourcePlan {
+                    entry:entry.clone(),
+                    relation:relation.clone(),
+                    destination:None,
+                    return_shape:"detached_callback_no_value_to_provider".into(),
+                };
+                insert_return_resource_plan(&mut plans, source, plan)?;
+            }
+            continue;
+        }
         let proof = &call["return_destination_v1"];
         if proof["has_normal_return"] != !a["return_target"].is_null()
             || proof["normal_target"].as_u64().map(|bb|format!("bb{bb}")) != a["return_target"].as_str().map(str::to_string) {
@@ -3244,9 +4872,7 @@ fn return_resource_plans(icfg: &GlobalICFGOrdered, entries: &BTreeMap<String, Ac
             }
             let plan = ReturnResourcePlan {entry:entry.clone(),relation:relation.clone(),destination:destination.clone(),
                 return_shape:body["return_place_v1"]["value_shape"].as_str().unwrap_or("unsupported_value_shape").into()};
-            if plans.insert(source.to_string(),plan).is_some() {
-                return Err("p2_control_flow_incomplete: shared or duplicate normal-return activation".into());
-            }
+            insert_return_resource_plan(&mut plans, source, plan)?;
         }
     }
     Ok(plans)
@@ -3261,10 +4887,45 @@ fn transfer_return_resource(plan: &ReturnResourcePlan, callee: &AllocationIdenti
     let refs = callee.stack_refs(&source);
     let access = callee.access_bases.get(&source).cloned().unwrap_or_default();
     let mut out = caller.clone();
+    // Return-value rebasing remains narrow, but heap effects are global store
+    // effects and must survive the call boundary.
+    out.join_heap_from(callee);
+    if plan.entry.activation.get("activation_kind").and_then(serde_json::Value::as_str)
+        == Some("higher_order_callback")
+    {
+        // A spawned callback does not return a value into the provider Call's
+        // MIR destination.  Restore the spawning caller's local environment
+        // and retain only global heap effects produced along this MAY callback
+        // branch.  This is the counterpart of the direct-continuation branch
+        // retained by P2 and prevents closure locals from leaking into caller
+        // scope while preserving callback frees/writes.
+        return (out, serde_json::json!({
+            "call_key":plan.entry.activation["call_key"],
+            "caller_instance_id":plan.entry.activation["caller_instance_id"],
+            "concrete_callee_instance":plan.entry.activation["callee_instance_id"],
+            "caller_call_state":plan.entry.activation["caller_call_state"],
+            "callee_return_state":plan.relation["callee_return_state"],
+            "dummy_ret_state":plan.relation["dummy_ret_state"],
+            "continuation_state":plan.relation["continuation_state"],
+            "relation_kind":"detached_callback_heap_effect_return",
+            "callback_semantics":"spawn_may_once",
+            "return_value_to_provider":false,
+            "status":"heap_effects_joined_into_caller_snapshot",
+            "certainty":"may",
+            "provenance":"P2_exact_callback_return_plus_global_heap_store_v1"
+        }));
+    }
+    let projected_identity = callee.place_points_to.iter().any(|(place, allocs)| {
+        place.base == source && !allocs.is_empty()
+    }) || callee.place_stack_refs.iter().any(|(place, targets)| {
+        place.base == source && !targets.is_empty()
+    });
     let mut status = if plan.destination.is_none() {"unsupported_destination_shape"}
-        else if !matches!(plan.return_shape.as_str(),"raw_pointer"|"shared_reference"|"mutable_reference"|"owned_box"|"scalar"|"unit") || plan.entry.abi!="Rust" {"unsupported_value_shape"}
+        else if !matches!(plan.return_shape.as_str(),"raw_pointer"|"shared_reference"|"mutable_reference"|"owned_box"|"scalar"|"unit"|"aggregate") || plan.entry.abi!="Rust" {"unsupported_value_shape"}
         else if resources.is_empty() && refs.is_empty() {
-            if matches!(plan.return_shape.as_str(),"scalar"|"unit") {"no_tracked_resource"} else {"unresolved_return"}
+            if matches!(plan.return_shape.as_str(),"scalar"|"unit") {"no_tracked_resource"}
+            else if plan.return_shape=="aggregate" && projected_identity {"resource_binding_available"}
+            else {"unresolved_return"}
         } else {"resource_binding_available"};
     // Returning a reference is not permission to import changes to preexisting
     // caller places. Such changes require the later side-effect gate.
@@ -3463,8 +5124,15 @@ fn fixed_point_identity_analysis_with_profile(
 
         if let Some(plan) = r1_plans.as_ref().ok().and_then(|plans|plans.get(&point.node)) {
             if let Some(call) = rust_call_for_dummy_call(icfg, &point.node) {
-                continuations.entry((call.call_node.clone(), point.context.clone())).or_default()
-                    .join_snapshot(&point.context,&post);
+                let continuation_changed = continuations
+                    .entry((call.call_node.clone(), point.context.clone()))
+                    .or_default()
+                    .join_snapshot(&point.context, &post);
+                if continuation_changed {
+                    notify_materialized_identity_returns(
+                        icfg, &call.call_node, &post_states, &mut worklist,
+                    );
+                }
             }
             let (callee_input,records) = transfer_actual_formal(plan,&post);
             r1_records.insert(point.node.clone(),records);
@@ -3479,10 +5147,15 @@ fn fixed_point_identity_analysis_with_profile(
 
         if let Some(call) = rust_call_for_dummy_call(icfg, &point.node) {
             let key = (call.call_node.clone(), point.context.clone());
-            continuations
+            let continuation_changed = continuations
                 .entry(key)
                 .or_default()
                 .join_snapshot(&point.context, &post);
+            if continuation_changed {
+                notify_materialized_identity_returns(
+                    icfg, &call.call_node, &post_states, &mut worklist,
+                );
+            }
 
             if let Some(function) = icfg.rust_functions.get(&call.callee_function) {
                 if !succs
@@ -3555,7 +5228,9 @@ fn fixed_point_identity_analysis_with_profile(
                                     .to_string(),
                                 context: caller_context.clone(),
                             };
-                            if join_input(&mut in_states, next.clone(), snapshot.clone()) {
+                            let mut returned = snapshot.clone();
+                            returned.join_heap_from(&post);
+                            if join_input(&mut in_states, next.clone(), returned) {
                                 worklist.insert(next);
                             }
                             r1d_matched_normal_return = true;
@@ -3575,7 +5250,9 @@ fn fixed_point_identity_analysis_with_profile(
                                 context: caller_context.clone(),
                             };
                             r1d_cross_body_unwind_successors.insert(next.node.clone());
-                            if join_input(&mut in_states, next.clone(), snapshot.clone()) {
+                            let mut returned = snapshot.clone();
+                            returned.join_heap_from(&post);
+                            if join_input(&mut in_states, next.clone(), returned) {
                                 worklist.insert(next);
                             }
                         }
@@ -3588,17 +5265,41 @@ fn fixed_point_identity_analysis_with_profile(
         }
 
         if is_return && r2_enabled {
-            if let Some(plan)=r2_plans.as_ref().ok().and_then(|plans|plans.get(&point.node)) {
-                let call_state=plan.entry.activation["caller_call_state"].as_str().expect("certified call");
-                if point.context.last().map(String::as_str)==Some(call_state) {
-                    for ((site,_),continuation) in &continuations {
-                        if site!=call_state || !continuation.initialized {continue;}
-                        let (returned,record)=transfer_return_resource(plan,&post,&continuation.caller_memory);
-                        r2_records.insert(point.node.clone(),record);
-                        r2_pre_states.insert(point.node.clone(),IdentityMemoryDump::from_memory(&continuation.caller_memory));
-                        let return_point=IdentityAnalysisPoint {node:plan.relation["dummy_ret_state"].as_str().expect("certified proxy").into(),context:continuation.caller_context.clone()};
+            if let Ok(plans) = &r2_plans {
+                for plan in matching_return_resource_plans(plans, &point.node, &point.context) {
+                    let call_state = plan.entry.activation["caller_call_state"]
+                        .as_str()
+                        .expect("certified call");
+                    for ((site, _), continuation) in &continuations {
+                        if site != call_state || !continuation.initialized {
+                            continue;
+                        }
+                        let (returned, record) =
+                            transfer_return_resource(plan, &post, &continuation.caller_memory);
+                        let record_key = format!(
+                            "{}|{}|{}",
+                            point.node,
+                            call_state,
+                            plan.relation["dummy_ret_state"]
+                                .as_str()
+                                .expect("certified return proxy")
+                        );
+                        r2_records.insert(record_key.clone(), record);
+                        r2_pre_states.insert(
+                            record_key,
+                            IdentityMemoryDump::from_memory(&continuation.caller_memory),
+                        );
+                        let return_point = IdentityAnalysisPoint {
+                            node: plan.relation["dummy_ret_state"]
+                                .as_str()
+                                .expect("certified proxy")
+                                .into(),
+                            context: continuation.caller_context.clone(),
+                        };
                         r2_post_points.insert(return_point.clone());
-                        if join_input(&mut in_states,return_point.clone(),returned) {worklist.insert(return_point);}
+                        if join_input(&mut in_states, return_point.clone(), returned) {
+                            worklist.insert(return_point);
+                        }
                     }
                 }
             }
@@ -3757,15 +5458,26 @@ fn fixed_point_identity_analysis_with_profile(
 
     let r2_report = r2_enabled.then(|| {
         let records:Vec<_>=r2_records.values().cloned().collect();
-        let required=r2_plans.as_ref().map(|p|p.keys().filter(|n|graph_reachable.contains(*n)).count()).unwrap_or(0);
+        let required = r2_plans
+            .as_ref()
+            .map(|plans| {
+                plans
+                    .iter()
+                    .filter(|(source, _)| graph_reachable.contains(*source))
+                    .map(|(_, bucket)| bucket.len())
+                    .sum::<usize>()
+            })
+            .unwrap_or(0);
         let complete=r2_plans.is_ok() && required==records.len() && r1_plans.is_ok()
             && r1_records.values().flatten().all(|r|matches!(r["status"].as_str(),Some("resource_binding_available"|"no_tracked_resource")))
-            && records.iter().all(|r|matches!(r["status"].as_str(),Some("resource_binding_available"|"no_tracked_resource")));
+            && records.iter().all(|r|matches!(r["status"].as_str(),Some(
+                "resource_binding_available"|"no_tracked_resource"|"heap_effects_joined_into_caller_snapshot"
+            )));
         let post:Vec<_>=r2_post_points.iter().filter_map(|p|in_states.get(p).map(|m|IdentityPointDump{node:p.node.clone(),context:p.context.clone(),memory:IdentityMemoryDump::from_memory(m)})).collect();
         serde_json::json!({"capability":"dependency_resource_identity_continuity_v1","gate":"P3-R2-RET1",
             "p3_return_continuity_complete":complete,"required_normal_returns":required,"observed_normal_returns":records.len(),"status":r2_plans.err(),"return_bindings":records,
             "caller_pre_return_states":r2_pre_states,"caller_post_return_states":post,
-            "semantics":"MAY_return_value_only_on_P2_normal_pop","side_effect_continuity":"not_evaluated_R2",
+            "semantics":"MAY_return_value_plus_global_heap_identity_store_on_P2_normal_pop; spawn_may_once callbacks restore caller locals and join callback heap effects without provider return rebasing","side_effect_continuity":"HT2_global_heap_identity_weak_join_only; spawn_may_once callback global heap effects joined; other_side_effects_not_evaluated",
             "unwind_return_continuity":"forbidden","general_unwind_resource_continuity":"deferred_to_P3_R3"})
     });
     let r1p_report = p3_place_relation_enabled().then(|| {
@@ -3804,8 +5516,8 @@ fn fixed_point_identity_analysis_with_profile(
         })).collect();
         serde_json::json!({"capability":"dependency_resource_identity_continuity_v1","gate":"P3-R1-AF1",
             "p3_actual_formal_complete":complete,"planned_activations":planned,"reached_activations":reached,"status":r1_plans.err(),"bindings":records,"callee_entry_states":entries,
-            "semantics":"MAY_points_to_at_represented_Rust_call_entry",
-            "return_continuity":"not_evaluated_R1","side_effect_continuity":"not_evaluated_R1",
+            "semantics":"MAY_points_to_plus_global_heap_identity_store_at_represented_Rust_call_entry",
+            "return_continuity":"not_evaluated_R1","side_effect_continuity":"HT2_global_heap_identity_store_propagated; other_side_effects_not_evaluated",
             "unwind_resource_continuity":"deferred_to_P3_R3"})
     });
     AllocationIdentityState {
@@ -3840,6 +5552,277 @@ mod tests {
             },
             Vec::new(),
         )
+    }
+
+    #[test]
+    fn string_from_str_may_fresh_does_not_transfer_borrowed_source_identity() {
+        let source = rust("main", 1);
+        let dest = rust("main", 2);
+        let borrowed = alloc("borrowed-input");
+        let mut mem = AllocationIdentityMemory::default();
+        mem.assign_fresh(source.clone(), borrowed.clone());
+        let args = [crate::structs::MirCallArgument {
+            arg: "Local(_1)".to_string(),
+            is_mutable: Some(false),
+        }];
+        transfer_library_call(
+            "rust::main::bb1",
+            "main",
+            &[],
+            "<std::string::String as std::convert::From<&str>>::from",
+            &args,
+            "Local(_2)",
+            &mut mem,
+        );
+        let result = mem.points_to(&dest);
+        assert_eq!(result.len(), 1);
+        assert!(!result.contains(&borrowed), "String::from(&str) copies; it must not take ownership of the borrowed source allocation");
+        let only = result.iter().next().unwrap();
+        assert!(matches!(&only.site, AllocationSiteId::RustCall { callee, .. }
+            if callee.contains("String as std::convert::From<&str>>::from")));
+    }
+
+    #[test]
+    fn producer_certified_library_summary_drives_identity_without_callee_text() {
+        let source = rust("main", 1);
+        let destination = rust("main", 2);
+        let allocation = alloc("producer-certified");
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_fresh(source.clone(), allocation.clone());
+
+        let evidence = RustAllocationDispositionEvidence {
+            kind: crate::structs::RustAllocationDispositionEvidenceKind::BoxFromRaw,
+            callee_def_path: "alloc::boxed::Box::from_raw".to_string(),
+            owner_def_path: Some("alloc::boxed::Box".to_string()),
+        };
+        let arguments = vec![crate::structs::MirCallArgument {
+            arg: "Local(_1) [mutable]".to_string(),
+            is_mutable: Some(true),
+        }];
+
+        assert!(apply_producer_certified_identity_relation(
+            "main",
+            &arguments,
+            "Local(_2)",
+            &evidence,
+            &mut memory,
+        ));
+        assert_eq!(memory.points_to(&destination), BTreeSet::from([allocation.clone()]));
+
+        let no_pointee_effect = RustAllocationDispositionEvidence {
+            kind: crate::structs::RustAllocationDispositionEvidenceKind::MemDropRawPointer,
+            callee_def_path: "core::mem::drop".to_string(),
+            owner_def_path: None,
+        };
+        assert!(!apply_producer_certified_identity_relation(
+            "main",
+            &arguments,
+            "Local(_3)",
+            &no_pointee_effect,
+            &mut memory,
+        ));
+        assert!(memory.points_to(&rust("main", 3)).is_empty());
+    }
+
+    #[test]
+    fn producer_certified_summary_resolves_exact_projected_argument_without_sibling_conflation() {
+        let receiver = rust("drop_impl", 1);
+        let owner = rust("drop_impl", 9);
+        let destination = rust("drop_impl", 2);
+        let wanted = alloc("field-0");
+        let sibling = alloc("field-1");
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_stack_refs(
+            receiver.clone(),
+            BTreeSet::from([PlaceId {
+                base: owner.clone(),
+                projection: Vec::new(),
+            }]),
+        );
+        memory.assign_place_points_to(
+            PlaceId {
+                base: owner.clone(),
+                projection: vec![PlaceProjection::Field { index: 0 }],
+            },
+            BTreeSet::from([wanted.clone()]),
+        );
+        memory.assign_place_points_to(
+            PlaceId {
+                base: owner,
+                projection: vec![PlaceProjection::Field { index: 1 }],
+            },
+            BTreeSet::from([sibling]),
+        );
+
+        let evidence = RustAllocationDispositionEvidence {
+            kind: crate::structs::RustAllocationDispositionEvidenceKind::BoxFromRaw,
+            callee_def_path: "alloc::boxed::Box::from_raw".to_string(),
+            owner_def_path: Some("alloc::boxed::Box".to_string()),
+        };
+        let arguments = vec![crate::structs::MirCallArgument {
+            arg: "copy ((*_1).0: *mut String)".to_string(),
+            is_mutable: Some(false),
+        }];
+
+        assert!(apply_producer_certified_identity_relation(
+            "drop_impl",
+            &arguments,
+            "Local(_2)",
+            &evidence,
+            &mut memory,
+        ));
+        assert_eq!(memory.points_to(&destination), BTreeSet::from([wanted]));
+    }
+
+    #[test]
+    fn producer_certified_summary_projected_argument_fails_closed_when_shape_is_unproved() {
+        let evidence = RustAllocationDispositionEvidence {
+            kind: crate::structs::RustAllocationDispositionEvidenceKind::CStringFromRaw,
+            callee_def_path: "alloc::ffi::c_str::CString::from_raw".to_string(),
+            owner_def_path: Some("alloc::ffi::c_str::CString".to_string()),
+        };
+        let indexed = vec![crate::structs::MirCallArgument {
+            arg: "copy ((*_1)[_3])".to_string(),
+            is_mutable: Some(false),
+        }];
+        let projected = vec![crate::structs::MirCallArgument {
+            arg: "copy ((*_1).0: *mut i8)".to_string(),
+            is_mutable: Some(false),
+        }];
+
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_fresh(rust("f", 1), alloc("carrier-not-pointee"));
+
+        assert!(!apply_producer_certified_identity_relation(
+            "f", &indexed, "Local(_2)", &evidence, &mut memory,
+        ));
+        assert!(memory.points_to(&rust("f", 2)).is_empty());
+
+        // A projected field without an exact stack referent must not collapse
+        // to the carrier identity merely because `_1` itself has an allocation.
+        assert!(!apply_producer_certified_identity_relation(
+            "f", &projected, "Local(_2)", &evidence, &mut memory,
+        ));
+        assert!(memory.points_to(&rust("f", 2)).is_empty());
+    }
+
+    #[test]
+    fn std_nonnull_new_unchecked_preserves_pointee_identity_but_new_is_not_flattened() {
+        let source = rust("main", 1);
+        let destination = rust("main", 2);
+        let option_destination = rust("main", 3);
+        let allocation = alloc("nonnull-A");
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_fresh(source, allocation.clone());
+        let args = [crate::structs::MirCallArgument {
+            arg: "Local(_1) [mutable]".to_string(),
+            is_mutable: Some(true),
+        }];
+
+        transfer_library_call(
+            "rust::main::bb0",
+            "main",
+            &[],
+            "core::ptr::non_null::NonNull::<u8>::new_unchecked",
+            &args,
+            "Local(_2)",
+            &mut memory,
+        );
+        assert_eq!(memory.points_to(&destination), BTreeSet::from([allocation]));
+
+        // `NonNull::new` returns Option<NonNull<T>>.  Until the aggregate
+        // wrapper relation is represented explicitly, flattening its pointee
+        // directly onto the result local would overstate precision.
+        transfer_library_call(
+            "rust::main::bb1",
+            "main",
+            &[],
+            "core::ptr::non_null::NonNull::<u8>::new",
+            &args,
+            "Local(_3)",
+            &mut memory,
+        );
+        assert!(memory.points_to(&option_destination).is_empty());
+    }
+
+    #[test]
+    fn std_nonnull_view_through_exact_field_reference_preserves_only_that_resource() {
+        let receiver = rust("drop_impl", 1);
+        let owner = rust("drop_impl", 8);
+        let destination = rust("drop_impl", 2);
+        let wanted = alloc("nonnull-field");
+        let sibling = alloc("sibling-field");
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_stack_refs(
+            receiver.clone(),
+            BTreeSet::from([PlaceId {
+                base: owner.clone(),
+                projection: vec![PlaceProjection::Field { index: 0 }],
+            }]),
+        );
+        memory.assign_place_points_to(
+            PlaceId {
+                base: owner.clone(),
+                projection: vec![PlaceProjection::Field { index: 0 }],
+            },
+            BTreeSet::from([wanted.clone()]),
+        );
+        memory.assign_place_points_to(
+            PlaceId {
+                base: owner,
+                projection: vec![PlaceProjection::Field { index: 1 }],
+            },
+            BTreeSet::from([sibling]),
+        );
+        let args = [crate::structs::MirCallArgument {
+            arg: "Local(_1) [mutable]".to_string(),
+            is_mutable: Some(true),
+        }];
+
+        transfer_library_call(
+            "rust::drop_impl::bb0",
+            "drop_impl",
+            &[],
+            "core::ptr::non_null::NonNull::<u8>::as_mut",
+            &args,
+            "Local(_2)",
+            &mut memory,
+        );
+        assert_eq!(memory.points_to(&destination), BTreeSet::from([wanted]));
+    }
+
+    #[test]
+    fn nonnull_lookalike_name_is_not_a_standard_library_identity_summary() {
+        let source = rust("main", 1);
+        let destination = rust("main", 2);
+        let mut memory = AllocationIdentityMemory::default();
+        memory.assign_fresh(source, alloc("A"));
+        let args = [crate::structs::MirCallArgument {
+            arg: "Local(_1)".to_string(),
+            is_mutable: Some(false),
+        }];
+
+        transfer_library_call(
+            "rust::main::bb0",
+            "main",
+            &[],
+            "mycrate::MyNonNull::<u8>::new_unchecked",
+            &args,
+            "Local(_2)",
+            &mut memory,
+        );
+        assert!(memory.points_to(&destination).is_empty());
+
+        transfer_library_call(
+            "rust::main::bb1",
+            "main",
+            &[],
+            "mycrate::MyNonNull::<u8>::as_ptr",
+            &args,
+            "Local(_2)",
+            &mut memory,
+        );
+        assert!(memory.points_to(&destination).is_empty());
     }
 
     #[test]
@@ -3956,6 +5939,7 @@ mod tests {
                 callee_def_path: None,
                 deallocator_evidence: None,
                 allocation_disposition_evidence: None,
+                atomic_ptr_evidence: None,
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -4178,14 +6162,247 @@ mod tests {
             dependency_body_ingestion_v1: None,};
 
         let result = fixed_point_identity_analysis(&icfg, "rust::main::bb0");
+        let at_call = result.by_node.get("rust::main::bb1").unwrap();
+        let in_callee = result.by_node.get("rust::foo::bb0").unwrap();
         let at_return = result.by_node.get("rust::main::bb2").unwrap();
         let main_1 = rust("main", 1);
         let main_2 = rust("main", 2);
         let foo_1 = rust("foo", 1);
 
+        // Actual -> formal continuity is an intra-activation property.  Check
+        // it while the callee frame is live, rather than requiring the formal
+        // local to leak into the caller after return.
+        assert_eq!(at_call.points_to(&main_1), in_callee.points_to(&foo_1));
+        assert_eq!(in_callee.points_to(&foo_1).len(), 1);
+
+        // Return continuity preserves the same AbstractAllocId at the caller
+        // destination, while the completed callee frame is no longer visible.
         assert_eq!(at_return.points_to(&main_1), at_return.points_to(&main_2));
-        assert_eq!(at_return.points_to(&main_1), at_return.points_to(&foo_1));
         assert_eq!(at_return.points_to(&main_1).len(), 1);
+        assert!(at_return.points_to(&foo_1).is_empty());
+    }
+
+
+    #[test]
+    fn act_lite_standard_call_boundary_does_not_recycle_prior_callee_locals() {
+        use crate::structs::{GlobalICFGOrdered, RustCallMetadata, RustFunctionMetadata};
+
+        let call = RustCallMetadata {
+            caller_function: "main".into(),
+            call_node: "rust::main::bb0".into(),
+            callee_function: "foo".into(),
+            dummy_call_node: "dummyCall::main::bb0".into(),
+            dummy_ret_node: "dummyRet::main::bb0".into(),
+            arguments: vec![crate::structs::MirCallArgument {
+                arg: "Local(_1)".into(),
+                is_mutable: Some(false),
+            }],
+            return_place: "_2".into(),
+            return_node: "rust::main::bb1".into(),
+            is_closure: false,
+        };
+        let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ordered_nodes: Vec::new(),
+            icfg_edges: Vec::new(),
+            rust_functions: BTreeMap::from([(
+                "foo".into(),
+                RustFunctionMetadata {
+                    name: "foo".into(),
+                    arg_count: 1,
+                    entry_node: "rust::foo::bb0".into(),
+                    return_nodes: vec!["rust::foo::bb1".into()],
+                },
+            )]),
+            rust_calls: vec![call.clone()],
+            dependency_body_ingestion_v1: None,
+        };
+
+        let argument = alloc("argument");
+        let stale = alloc("prior-activation-local");
+        let mut caller = AllocationIdentityMemory::default();
+        caller.assign_points_to(rust("main", 1), BTreeSet::from([argument.clone()]));
+
+        let first_entry = bind_actuals_to_formals(&icfg, &call, &caller);
+        assert_eq!(
+            first_entry.points_to(&rust("foo", 1)),
+            BTreeSet::from([argument.clone()])
+        );
+        assert!(first_entry.points_to(&rust("foo", 29)).is_empty());
+
+        let mut first_exit = first_entry;
+        first_exit.assign_points_to(rust("foo", 29), BTreeSet::from([stale]));
+        let returned = bind_return_to_caller(&call, &first_exit, &caller);
+
+        assert!(
+            returned.points_to(&rust("foo", 29)).is_empty(),
+            "ordinary callee locals must not escape a completed activation"
+        );
+
+        let second_entry = bind_actuals_to_formals(&icfg, &call, &returned);
+        assert!(
+            second_entry.points_to(&rust("foo", 29)).is_empty(),
+            "a later invocation must not start with a prior activation's local identity"
+        );
+        assert_eq!(
+            second_entry.points_to(&rust("foo", 1)),
+            BTreeSet::from([argument])
+        );
+    }
+
+    #[test]
+    fn act_lite_standard_return_preserves_return_value_and_caller_referent_effects() {
+        use crate::structs::{GlobalICFGOrdered, RustCallMetadata, RustFunctionMetadata};
+
+        let call = RustCallMetadata {
+            caller_function: "main".into(),
+            call_node: "rust::main::bb0".into(),
+            callee_function: "foo".into(),
+            dummy_call_node: "dummyCall::main::bb0".into(),
+            dummy_ret_node: "dummyRet::main::bb0".into(),
+            arguments: vec![crate::structs::MirCallArgument {
+                arg: "Local(_1)".into(),
+                is_mutable: Some(true),
+            }],
+            return_place: "_2".into(),
+            return_node: "rust::main::bb1".into(),
+            is_closure: false,
+        };
+        let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ordered_nodes: Vec::new(),
+            icfg_edges: Vec::new(),
+            rust_functions: BTreeMap::from([(
+                "foo".into(),
+                RustFunctionMetadata {
+                    name: "foo".into(),
+                    arg_count: 1,
+                    entry_node: "rust::foo::bb0".into(),
+                    return_nodes: vec!["rust::foo::bb1".into()],
+                },
+            )]),
+            rust_calls: vec![call.clone()],
+            dependency_body_ingestion_v1: None,
+        };
+
+        let before = alloc("before");
+        let after = alloc("after");
+        let returned_allocation = alloc("returned");
+        let caller_place = PlaceId {
+            base: rust("main", 9),
+            projection: Vec::new(),
+        };
+
+        let mut caller = AllocationIdentityMemory::default();
+        caller.assign_stack_refs(rust("main", 1), BTreeSet::from([caller_place.clone()]));
+        caller.assign_points_to(caller_place.base.clone(), BTreeSet::from([before]));
+
+        let mut callee = bind_actuals_to_formals(&icfg, &call, &caller);
+        assert_eq!(
+            callee.stack_refs(&rust("foo", 1)),
+            BTreeSet::from([caller_place.clone()])
+        );
+        callee.assign_points_to(caller_place.base.clone(), BTreeSet::from([after.clone()]));
+        callee.assign_points_to(
+            rust("foo", 0),
+            BTreeSet::from([returned_allocation.clone()]),
+        );
+        callee.assign_points_to(rust("foo", 17), BTreeSet::from([alloc("unrelated-callee")]));
+
+        let out = bind_return_to_caller(&call, &callee, &caller);
+
+        assert_eq!(
+            out.points_to(&caller_place.base),
+            BTreeSet::from([after]),
+            "caller-visible effects through an actual reference must survive"
+        );
+        assert_eq!(
+            out.points_to(&rust("main", 2)),
+            BTreeSet::from([returned_allocation]),
+            "the explicit return value must be rebound to the caller destination"
+        );
+        assert!(
+            out.points_to(&rust("foo", 17)).is_empty(),
+            "unrelated callee locals must not be joined into the caller"
+        );
+    }
+
+    #[test]
+    fn act_lite_standard_call_and_return_preserve_projected_resources() {
+        use crate::structs::{GlobalICFGOrdered, RustCallMetadata, RustFunctionMetadata};
+
+        let call = RustCallMetadata {
+            caller_function: "main".into(),
+            call_node: "rust::main::bb0".into(),
+            callee_function: "foo".into(),
+            dummy_call_node: "dummyCall::main::bb0".into(),
+            dummy_ret_node: "dummyRet::main::bb0".into(),
+            arguments: vec![crate::structs::MirCallArgument {
+                arg: "Local(_1)".into(),
+                is_mutable: Some(false),
+            }],
+            return_place: "_2".into(),
+            return_node: "rust::main::bb1".into(),
+            is_closure: false,
+        };
+        let icfg = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ordered_nodes: Vec::new(),
+            icfg_edges: Vec::new(),
+            rust_functions: BTreeMap::from([(
+                "foo".into(),
+                RustFunctionMetadata {
+                    name: "foo".into(),
+                    arg_count: 1,
+                    entry_node: "rust::foo::bb0".into(),
+                    return_nodes: vec!["rust::foo::bb1".into()],
+                },
+            )]),
+            rust_calls: vec![call.clone()],
+            dependency_body_ingestion_v1: None,
+        };
+
+        let argument_resource = alloc("argument-field-resource");
+        let return_resource = alloc("return-field-resource");
+        let arg_projection = vec![PlaceProjection::Field { index: 0 }];
+        let ret_projection = vec![PlaceProjection::Field { index: 1 }];
+
+        let mut caller = AllocationIdentityMemory::default();
+        caller.assign_place_resources(
+            PlaceId {
+                base: rust("main", 1),
+                projection: arg_projection.clone(),
+            },
+            BTreeSet::from([argument_resource.clone()]),
+        );
+
+        let mut callee = bind_actuals_to_formals(&icfg, &call, &caller);
+        assert_eq!(
+            callee.resources_for_place(&PlaceId {
+                base: rust("foo", 1),
+                projection: arg_projection,
+            }),
+            BTreeSet::from([argument_resource])
+        );
+
+        callee.assign_place_resources(
+            PlaceId {
+                base: rust("foo", 0),
+                projection: ret_projection.clone(),
+            },
+            BTreeSet::from([return_resource.clone()]),
+        );
+        let out = bind_return_to_caller(&call, &callee, &caller);
+        assert_eq!(
+            out.resources_for_place(&PlaceId {
+                base: rust("main", 2),
+                projection: ret_projection,
+            }),
+            BTreeSet::from([return_resource])
+        );
     }
 
     #[test]
@@ -4877,6 +7094,7 @@ mod tests {
                 callee_def_path: None,
                 deallocator_evidence: None,
                 allocation_disposition_evidence: None,
+                atomic_ptr_evidence: None,
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -4930,6 +7148,7 @@ mod tests {
                 callee_def_path: None,
                 deallocator_evidence: None,
                 allocation_disposition_evidence: None,
+                atomic_ptr_evidence: None,
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -4984,6 +7203,7 @@ mod tests {
                 callee_def_path: None,
                 deallocator_evidence: None,
                 allocation_disposition_evidence: None,
+                atomic_ptr_evidence: None,
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -6126,6 +8346,1120 @@ mod tests {
         assert_ne!(a, b);
     }
 
+
+      #[test]
+        fn r2b_scalar_field_write_preserves_sibling_projected_identity() {
+            let aggregate = rust("main", 2);
+            let allocation = alloc("backing");
+
+            let head = PlaceId {
+                base: aggregate.clone(),
+                projection: vec![
+                    PlaceProjection::Field { index: 1 },
+                ],
+            };
+            let written = PlaceId {
+                base: aggregate.clone(),
+                projection: vec![
+                    PlaceProjection::Field { index: 3 },
+                ],
+            };
+
+            let mut mem = AllocationIdentityMemory::default();
+
+            mem.assign_place_points_to(
+                head.clone(),
+                BTreeSet::from([allocation.clone()]),
+            );
+            mem.assign_place_points_to(
+                written.clone(),
+                BTreeSet::from([alloc("stale-field3")]),
+            );
+
+            let stmt = MirStatement {
+                resource_place_relation_v1: None,
+                source_info: source_info(),
+                kind: "Assign".to_string(),
+                details:
+                    "Assign(((_2.3: bool), const true))"
+                        .to_string(),
+                place: Some(
+                    "Local(_2) [mutable] -> Field(3, Type: bool)"
+                        .to_string(),
+                ),
+                is_mutable: Some(true),
+                rvalue: Some("const true".to_string()),
+            };
+
+            transfer_statement(
+                "main",
+                &stmt,
+                &mut mem,
+            );
+
+            assert!(
+                mem.points_to_place(&written).is_empty(),
+                "writing field 3 must strongly overwrite stale field-3 identity",
+            );
+            assert_eq!(
+                mem.points_to_place(&head),
+                BTreeSet::from([allocation]),
+                "writing field 3 must not erase sibling field 1 identity",
+            );
+        }
+
+    #[test]
+    fn r2c_projected_copy_through_stack_reference_loads_exact_field_identity() {
+        let reference = rust("main", 1);
+        let owner = rust("main", 2);
+        let result = rust("main", 7);
+        let backing = alloc("backing-M");
+        let sibling = alloc("sibling");
+
+        let owner_place = PlaceId {
+            base: owner.clone(),
+            projection: Vec::new(),
+        };
+        let field1 = PlaceId {
+            base: owner.clone(),
+            projection: vec![PlaceProjection::Field { index: 1 }],
+        };
+        let field2 = PlaceId {
+            base: owner,
+            projection: vec![PlaceProjection::Field { index: 2 }],
+        };
+
+        let mut mem = AllocationIdentityMemory::default();
+        mem.assign_stack_refs(reference, BTreeSet::from([owner_place]));
+        mem.assign_place_points_to(field1, BTreeSet::from([backing.clone()]));
+        mem.assign_place_points_to(field2, BTreeSet::from([sibling]));
+
+        let stmt = MirStatement {
+            resource_place_relation_v1: None,
+            source_info: source_info(),
+            kind: "Assign".into(),
+            details: "Assign((_7, copy ((*_1).1: *mut std::option::Option<u64>)))".into(),
+            place: Some("Local(_7) [mutable]".into()),
+            is_mutable: Some(true),
+            rvalue: Some("copy ((*_1).1: *mut std::option::Option<u64>)".into()),
+        };
+
+        transfer_statement("main", &stmt, &mut mem);
+
+        assert_eq!(mem.points_to(&result), BTreeSet::from([backing]));
+        assert!(mem.stack_refs(&result).is_empty());
+    }
+
+    #[test]
+    fn r2c_projected_copy_preserves_exact_projected_stack_reference() {
+        let reference = rust("main", 1);
+        let owner = rust("main", 2);
+        let result = rust("main", 7);
+        let target = PlaceId {
+            base: rust("main", 9),
+            projection: vec![PlaceProjection::Field { index: 0 }],
+        };
+
+        let mut mem = AllocationIdentityMemory::default();
+        mem.assign_stack_refs(
+            reference,
+            BTreeSet::from([PlaceId {
+                base: owner.clone(),
+                projection: Vec::new(),
+            }]),
+        );
+        mem.assign_place_stack_refs(
+            PlaceId {
+                base: owner,
+                projection: vec![PlaceProjection::Field { index: 1 }],
+            },
+            BTreeSet::from([target.clone()]),
+        );
+
+        let stmt = MirStatement {
+            resource_place_relation_v1: None,
+            source_info: source_info(),
+            kind: "Assign".into(),
+            details: "Assign((_7, copy ((*_1).1: &mut u64)))".into(),
+            place: Some("Local(_7) [mutable]".into()),
+            is_mutable: Some(true),
+            rvalue: Some("copy ((*_1).1: &mut u64)".into()),
+        };
+
+        transfer_statement("main", &stmt, &mut mem);
+        assert_eq!(mem.stack_refs(&result), BTreeSet::from([target]));
+        assert!(mem.points_to(&result).is_empty());
+    }
+
+    #[test]
+    fn r2c_projected_copy_rebases_below_projected_stack_referent() {
+        let reference = rust("main", 1);
+        let owner = rust("main", 2);
+        let result = rust("main", 8);
+        let backing = alloc("nested-M");
+
+        let referenced_prefix = PlaceId {
+            base: owner.clone(),
+            projection: vec![PlaceProjection::Field { index: 0 }],
+        };
+        let nested = PlaceId {
+            base: owner,
+            projection: vec![
+                PlaceProjection::Field { index: 0 },
+                PlaceProjection::Field { index: 2 },
+            ],
+        };
+
+        let mut mem = AllocationIdentityMemory::default();
+        mem.assign_stack_refs(reference, BTreeSet::from([referenced_prefix]));
+        mem.assign_place_points_to(nested, BTreeSet::from([backing.clone()]));
+
+        let stmt = MirStatement {
+            resource_place_relation_v1: None,
+            source_info: source_info(),
+            kind: "Assign".into(),
+            details: "Assign((_8, copy ((*_1).2: *mut u8)))".into(),
+            place: Some("Local(_8) [mutable]".into()),
+            is_mutable: Some(true),
+            rvalue: Some("copy ((*_1).2: *mut u8)".into()),
+        };
+
+        transfer_statement("main", &stmt, &mut mem);
+        assert_eq!(mem.points_to(&result), BTreeSet::from([backing]));
+    }
+
+    #[test]
+    fn r2c_projected_heap_shape_without_stack_place_fails_closed() {
+        let reference = rust("main", 1);
+        let result = rust("main", 7);
+        let heap = alloc("heap-owner");
+
+        let mut mem = AllocationIdentityMemory::default();
+        mem.assign_fresh(reference, heap);
+
+        let stmt = MirStatement {
+            resource_place_relation_v1: None,
+            source_info: source_info(),
+            kind: "Assign".into(),
+            details: "Assign((_7, copy ((*_1).1: *mut u8)))".into(),
+            place: Some("Local(_7) [mutable]".into()),
+            is_mutable: Some(true),
+            rvalue: Some("copy ((*_1).1: *mut u8)".into()),
+        };
+
+        transfer_statement("main", &stmt, &mut mem);
+        assert!(mem.event_allocations(&result).is_empty());
+    }
+
+    #[test]
+    fn r2c_unsupported_deref_projection_does_not_copy_reference_carrier_identity() {
+        let reference = rust("main", 1);
+        let result = rust("main", 7);
+        let carrier = alloc("reference-carrier");
+
+        let mut mem = AllocationIdentityMemory::default();
+        mem.assign_fresh(reference, carrier);
+
+        let stmt = MirStatement {
+            resource_place_relation_v1: None,
+            source_info: source_info(),
+            kind: "Assign".into(),
+            details: "Assign((_7, copy ((*_1)[_3])))".into(),
+            place: Some("Local(_7) [mutable]".into()),
+            is_mutable: Some(true),
+            rvalue: Some("copy ((*_1)[_3])".into()),
+        };
+
+        transfer_statement("main", &stmt, &mut mem);
+        assert!(
+            mem.event_allocations(&result).is_empty(),
+            "unsupported dereference projection must fail closed rather than copy the carrier",
+        );
+    }
+
+    #[test]
+    fn r2c_projected_load_flows_through_add_and_cast_as_access_base() {
+        let reference = rust("main", 1);
+        let owner = rust("main", 2);
+        let loaded = rust("main", 8);
+        let offset = rust("main", 7);
+        let cast = rust("main", 6);
+        let backing = alloc("backing-M");
+
+        let mut mem = AllocationIdentityMemory::default();
+        mem.assign_stack_refs(
+            reference,
+            BTreeSet::from([PlaceId {
+                base: owner.clone(),
+                projection: Vec::new(),
+            }]),
+        );
+        mem.assign_place_points_to(
+            PlaceId {
+                base: owner,
+                projection: vec![PlaceProjection::Field { index: 1 }],
+            },
+            BTreeSet::from([backing.clone()]),
+        );
+
+        let load = MirStatement {
+            resource_place_relation_v1: None,
+            source_info: source_info(),
+            kind: "Assign".into(),
+            details: "Assign((_8, copy ((*_1).1: *mut std::option::Option<u64>)))".into(),
+            place: Some("Local(_8) [mutable]".into()),
+            is_mutable: Some(true),
+            rvalue: Some("copy ((*_1).1: *mut std::option::Option<u64>)".into()),
+        };
+        transfer_statement("main", &load, &mut mem);
+        assert_eq!(mem.points_to(&loaded), BTreeSet::from([backing.clone()]));
+
+        transfer_library_call(
+            "rust::main::bb1",
+            "main",
+            &[],
+            "std::ptr::mut_ptr::<impl *mut u8>::add",
+            &[
+                crate::structs::MirCallArgument {
+                    arg: "Local(_8) [mutable]".into(),
+                    is_mutable: Some(true),
+                },
+                crate::structs::MirCallArgument {
+                    arg: "const 1_usize".into(),
+                    is_mutable: None,
+                },
+            ],
+            "_7",
+            &mut mem,
+        );
+
+        assert!(mem.points_to(&offset).is_empty());
+        assert_eq!(
+            mem.access_bases.get(&offset).cloned().unwrap_or_default(),
+            BTreeSet::from([backing.clone()]),
+        );
+
+        let cast_stmt = MirStatement {
+            resource_place_relation_v1: None,
+            source_info: source_info(),
+            kind: "Assign".into(),
+            details: "Assign((_6, move _7 as *const u8 (PtrToPtr)))".into(),
+            place: Some("Local(_6) [mutable]".into()),
+            is_mutable: Some(true),
+            rvalue: Some("move _7 as *const u8 (PtrToPtr)".into()),
+        };
+        transfer_statement("main", &cast_stmt, &mut mem);
+
+        assert!(mem.points_to(&cast).is_empty());
+        assert_eq!(
+            mem.access_bases.get(&cast).cloned().unwrap_or_default(),
+            BTreeSet::from([backing]),
+        );
+    }
+
+    fn ht2_arg(local: u32) -> crate::structs::MirCallArgument {
+        crate::structs::MirCallArgument {
+            arg: format!("Local(_{local}) [mutable]"),
+            is_mutable: Some(true),
+        }
+    }
+
+    #[test]
+    fn ht2_ptr_write_then_read_preserves_projected_resource_identity() {
+        let backing = alloc("backing-M");
+        let payload = alloc("payload-R");
+        let pointer = rust("main", 1);
+        let value = rust("main", 2);
+        let result = rust("main", 5);
+
+        let mut mem = AllocationIdentityMemory::default();
+        mem.assign_access_bases(pointer.clone(), BTreeSet::from([backing.clone()]));
+        mem.assign_place_points_to(
+            PlaceId {
+                base: value.clone(),
+                projection: vec![PlaceProjection::Field { index: 0 }],
+            },
+            BTreeSet::from([payload.clone()]),
+        );
+
+        transfer_library_call(
+            "rust::main::bb0",
+            "main",
+            &[],
+            "std::ptr::write",
+            &[ht2_arg(1), ht2_arg(2)],
+            "_90",
+            &mut mem,
+        );
+
+        let stored = mem
+            .heap_values
+            .get(&backing)
+            .expect("ptr::write must materialize a heap summary");
+        assert_eq!(
+            stored
+                .points_to
+                .get(&vec![PlaceProjection::Field { index: 0 }])
+                .cloned()
+                .unwrap_or_default(),
+            BTreeSet::from([payload.clone()]),
+        );
+
+        let heap_before_read = mem.heap_values.clone();
+        transfer_library_call(
+            "rust::main::bb1",
+            "main",
+            &[],
+            "std::ptr::read",
+            &[ht2_arg(1)],
+            "_5",
+            &mut mem,
+        );
+
+        assert_eq!(
+            mem.points_to_place(&PlaceId {
+                base: result,
+                projection: vec![PlaceProjection::Field { index: 0 }],
+            }),
+            BTreeSet::from([payload]),
+        );
+        assert_eq!(
+            mem.heap_values, heap_before_read,
+            "ptr::read must be non-destructive",
+        );
+    }
+
+    #[test]
+    fn ht2_empty_write_cannot_strong_kill_previous_may_heap_identity() {
+        let backing = alloc("backing-M");
+        let payload = alloc("payload-R");
+        let pointer = rust("main", 1);
+        let some_value = rust("main", 2);
+
+        let mut mem = AllocationIdentityMemory::default();
+        mem.assign_access_bases(pointer, BTreeSet::from([backing.clone()]));
+        mem.assign_place_points_to(
+            PlaceId {
+                base: some_value,
+                projection: vec![PlaceProjection::Field { index: 0 }],
+            },
+            BTreeSet::from([payload.clone()]),
+        );
+
+        transfer_library_call(
+            "rust::main::bb0",
+            "main",
+            &[],
+            "std::ptr::write",
+            &[ht2_arg(1), ht2_arg(2)],
+            "_90",
+            &mut mem,
+        );
+        let before = mem.heap_values.clone();
+
+        // Local _3 intentionally carries no identity, modeling None/scalar
+        // payload from the identity domain's perspective.
+        transfer_library_call(
+            "rust::main::bb1",
+            "main",
+            &[],
+            "std::ptr::write",
+            &[ht2_arg(1), ht2_arg(3)],
+            "_91",
+            &mut mem,
+        );
+
+        assert_eq!(
+            mem.heap_values, before,
+            "without must-slot evidence an empty write must not erase MAY contents",
+        );
+        assert_eq!(
+            mem.heap_values[&backing].points_to
+                [&vec![PlaceProjection::Field { index: 0 }]],
+            BTreeSet::from([payload]),
+        );
+    }
+
+    #[test]
+    fn ht2_repeated_writes_weakly_join_same_abstract_base() {
+        let backing = alloc("backing-M");
+        let a = alloc("payload-A");
+        let b = alloc("payload-B");
+
+        let mut mem = AllocationIdentityMemory::default();
+        mem.assign_access_bases(rust("main", 1), BTreeSet::from([backing.clone()]));
+        mem.assign_place_points_to(
+            PlaceId {
+                base: rust("main", 2),
+                projection: vec![PlaceProjection::Field { index: 0 }],
+            },
+            BTreeSet::from([a.clone()]),
+        );
+        mem.assign_place_points_to(
+            PlaceId {
+                base: rust("main", 3),
+                projection: vec![PlaceProjection::Field { index: 0 }],
+            },
+            BTreeSet::from([b.clone()]),
+        );
+
+        for (node, source) in [("bb0", 2), ("bb1", 3)] {
+            transfer_library_call(
+                &format!("rust::main::{node}"),
+                "main",
+                &[],
+                "std::ptr::write",
+                &[ht2_arg(1), ht2_arg(source)],
+                "_90",
+                &mut mem,
+            );
+        }
+
+        assert_eq!(
+            mem.heap_values[&backing].points_to
+                [&vec![PlaceProjection::Field { index: 0 }]],
+            BTreeSet::from([a, b]),
+        );
+    }
+
+    #[test]
+    fn ht2_distinct_allocation_bases_do_not_cross_contaminate() {
+        let m1 = alloc("M1");
+        let m2 = alloc("M2");
+        let payload = alloc("R");
+
+        let mut mem = AllocationIdentityMemory::default();
+        mem.assign_access_bases(rust("main", 1), BTreeSet::from([m1.clone()]));
+        mem.assign_access_bases(rust("main", 2), BTreeSet::from([m2]));
+        mem.assign_points_to(rust("main", 3), BTreeSet::from([payload]));
+
+        transfer_library_call(
+            "rust::main::bb0",
+            "main",
+            &[],
+            "std::ptr::write",
+            &[ht2_arg(1), ht2_arg(3)],
+            "_90",
+            &mut mem,
+        );
+        transfer_library_call(
+            "rust::main::bb1",
+            "main",
+            &[],
+            "std::ptr::read",
+            &[ht2_arg(2)],
+            "_4",
+            &mut mem,
+        );
+
+        assert!(mem.event_allocations(&rust("main", 4)).is_empty());
+        assert!(mem.heap_values.contains_key(&m1));
+    }
+
+    #[test]
+    fn ht2_roundtrip_preserves_access_only_pointer_provenance() {
+        let storage = alloc("storage-M");
+        let pointee = alloc("interior-base-R");
+        let mut mem = AllocationIdentityMemory::default();
+
+        mem.assign_access_bases(rust("main", 1), BTreeSet::from([storage]));
+        mem.assign_access_bases(rust("main", 2), BTreeSet::from([pointee.clone()]));
+
+        transfer_library_call(
+            "rust::main::bb0",
+            "main",
+            &[],
+            "std::ptr::write",
+            &[ht2_arg(1), ht2_arg(2)],
+            "_90",
+            &mut mem,
+        );
+        transfer_library_call(
+            "rust::main::bb1",
+            "main",
+            &[],
+            "std::ptr::read",
+            &[ht2_arg(1)],
+            "_3",
+            &mut mem,
+        );
+
+        assert!(mem.points_to(&rust("main", 3)).is_empty());
+        assert_eq!(
+            mem.access_bases.get(&rust("main", 3)).cloned().unwrap_or_default(),
+            BTreeSet::from([pointee]),
+        );
+    }
+
+    #[test]
+    fn ht2_projected_pointer_argument_fails_closed() {
+        let backing = alloc("M");
+        let payload = alloc("R");
+        let mut mem = AllocationIdentityMemory::default();
+
+        mem.assign_access_bases(rust("main", 1), BTreeSet::from([backing]));
+        mem.assign_points_to(rust("main", 2), BTreeSet::from([payload]));
+
+        let projected_pointer = crate::structs::MirCallArgument {
+            arg: "copy ((*_1).0: *mut u8)".into(),
+            is_mutable: Some(false),
+        };
+
+        transfer_library_call(
+            "rust::main::bb0",
+            "main",
+            &[],
+            "std::ptr::write",
+            &[projected_pointer, ht2_arg(2)],
+            "_90",
+            &mut mem,
+        );
+
+        assert!(
+            mem.heap_values.is_empty(),
+            "HT2 must not collapse an unsupported projected pointer argument to its carrier",
+        );
+    }
+
+    #[test]
+    fn ht2_ptr_read_projected_destination_does_not_overwrite_base_local() {
+        let backing = alloc("M");
+        let payload = alloc("R");
+        let stale = alloc("base-stale");
+        let mut mem = AllocationIdentityMemory::default();
+
+        mem.assign_access_bases(rust("main", 1), BTreeSet::from([backing.clone()]));
+        mem.assign_points_to(rust("main", 5), BTreeSet::from([stale.clone()]));
+        mem.heap_values.insert(
+            backing,
+            HeapIdentityValue {
+                points_to: BTreeMap::from([(Vec::new(), BTreeSet::from([payload]))]),
+                ..HeapIdentityValue::default()
+            },
+        );
+
+        transfer_library_call(
+            "rust::main::bb0",
+            "main",
+            &[],
+            "std::ptr::read",
+            &[ht2_arg(1)],
+            "Local(_5) [mutable] -> Field(0, Type: *mut u8)",
+            &mut mem,
+        );
+
+        assert_eq!(
+            mem.points_to(&rust("main", 5)),
+            BTreeSet::from([stale]),
+            "unsupported projected read destination must fail closed rather than overwrite its base",
+        );
+    }
+
+    #[test]
+    fn ht2_write_ignores_unsupported_nested_heap_projection() {
+        let backing = alloc("M");
+        let nested = alloc("nested-R");
+        let mut mem = AllocationIdentityMemory::default();
+
+        mem.assign_access_bases(rust("main", 1), BTreeSet::from([backing]));
+        mem.assign_place_points_to(
+            PlaceId {
+                base: rust("main", 2),
+                projection: vec![
+                    PlaceProjection::Deref,
+                    PlaceProjection::Field { index: 0 },
+                ],
+            },
+            BTreeSet::from([nested]),
+        );
+
+        transfer_library_call(
+            "rust::main::bb0",
+            "main",
+            &[],
+            "std::ptr::write",
+            &[ht2_arg(1), ht2_arg(2)],
+            "_90",
+            &mut mem,
+        );
+
+        assert!(
+            mem.heap_values.is_empty(),
+            "HT2-R1 stores only root/Field value identity and must not invent nested heap shape",
+        );
+    }
+
+    #[test]
+    fn ht2_heap_join_and_order_are_pointwise_may() {
+        let backing = alloc("M");
+        let a = alloc("A");
+        let b = alloc("B");
+
+        let mut left = AllocationIdentityMemory::default();
+        left.heap_values.insert(
+            backing.clone(),
+            HeapIdentityValue {
+                points_to: BTreeMap::from([(
+                    vec![PlaceProjection::Field { index: 0 }],
+                    BTreeSet::from([a.clone()]),
+                )]),
+                ..HeapIdentityValue::default()
+            },
+        );
+
+        let mut right = AllocationIdentityMemory::default();
+        right.heap_values.insert(
+            backing.clone(),
+            HeapIdentityValue {
+                points_to: BTreeMap::from([(
+                    vec![PlaceProjection::Field { index: 0 }],
+                    BTreeSet::from([b.clone()]),
+                )]),
+                ..HeapIdentityValue::default()
+            },
+        );
+
+        let joined = left.join(&right);
+        assert!(left.leq(&joined));
+        assert!(right.leq(&joined));
+        assert_eq!(
+            joined.heap_values[&backing].points_to
+                [&vec![PlaceProjection::Field { index: 0 }]],
+            BTreeSet::from([a, b]),
+        );
+    }
+
+    #[test]
+    fn ht2_identity_dump_exposes_heap_summary_without_changing_old_fields() {
+        let backing = alloc("M");
+        let payload = alloc("R");
+        let mut mem = AllocationIdentityMemory::default();
+        mem.assign_access_bases(rust("main", 1), BTreeSet::from([backing]));
+        mem.assign_points_to(rust("main", 2), BTreeSet::from([payload]));
+
+        transfer_library_call(
+            "rust::main::bb0",
+            "main",
+            &[],
+            "std::ptr::write",
+            &[ht2_arg(1), ht2_arg(2)],
+            "_90",
+            &mut mem,
+        );
+
+        let dump = serde_json::to_value(IdentityMemoryDump::from_memory(&mem))
+            .expect("identity dump must serialize");
+        assert_eq!(dump["heap_values"].as_array().map(Vec::len), Some(1));
+        assert!(dump.get("points_to").is_some());
+        assert!(dump.get("place_points_to").is_some());
+    }
+
+
+    // Nested contexts collapse at the wrapper's shared inner callsite (existing k=1).
+    // A direct two-callsite test cannot expose the missing return dependency.
+    fn continuation_repair_fixture(reverse: bool, third: bool) -> GlobalICFGOrdered {
+        let labels: Vec<_> = if third {
+            vec!["bb1", "bb2", "bb3"]
+        } else if reverse {
+            vec!["bb2", "bb1"]
+        } else {
+            vec!["bb1", "bb2"]
+        };
+        let mut graph = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ordered_nodes: vec![(
+                "rust::main::bb0".into(),
+                GlobalICFGNode::Mir(MirBasicBlock {
+                    block_id: 0,
+                    statements: vec![],
+                    terminator: Some(MirTerminator::Goto {
+                        details: String::new(),
+                        source_info: String::new(),
+                        target: labels[0].into(),
+                    }),
+                }),
+            )],
+            icfg_edges: vec![edge(
+                "rust::main::bb0",
+                &format!("rust::main::{}", labels[0]),
+            )],
+            rust_functions: BTreeMap::from([
+                (
+                    "main".into(),
+                    crate::structs::RustFunctionMetadata {
+                        name: "main".into(),
+                        arg_count: 0,
+                        entry_node: "rust::main::bb0".into(),
+                        return_nodes: vec!["rust::main::bb9".into()],
+                    },
+                ),
+                (
+                    "wrapper".into(),
+                    crate::structs::RustFunctionMetadata {
+                        name: "wrapper".into(),
+                        arg_count: 0,
+                        entry_node: "rust::wrapper::bb0".into(),
+                        return_nodes: vec!["rust::wrapper::bb1".into()],
+                    },
+                ),
+                (
+                    "leaf".into(),
+                    crate::structs::RustFunctionMetadata {
+                        name: "leaf".into(),
+                        arg_count: 0,
+                        entry_node: "rust::leaf::bb0".into(),
+                        return_nodes: vec!["rust::leaf::bb1".into()],
+                    },
+                ),
+            ]),
+            rust_calls: vec![],
+            dependency_body_ingestion_v1: None,
+        };
+        for (index, label) in labels.iter().enumerate() {
+            let node = format!("rust::main::{label}");
+            let next = if index + 1 < labels.len() {
+                format!("rust::main::{}", labels[index + 1])
+            } else {
+                "rust::main::bb8".into()
+            };
+            let dc = format!("dummyCall::main::{label}");
+            let dr = format!("dummyRet::main::{label}");
+            graph.ordered_nodes.push((
+                node.clone(),
+                GlobalICFGNode::Mir(call_block(
+                    "wrapper",
+                    vec![],
+                    &format!("_{}", index + 1),
+                    next.rsplit("::").next().unwrap(),
+                )),
+            ));
+            graph
+                .ordered_nodes
+                .push(internal_dummy_call(&dc, &node, "rust::wrapper::bb0"));
+            graph
+                .ordered_nodes
+                .push(internal_dummy_ret(&dr, "wrapper", &next));
+            graph.icfg_edges.extend([
+                edge(&node, &dc),
+                edge(&dc, "rust::wrapper::bb0"),
+                edge("rust::wrapper::bb1", &dr),
+                edge(&dr, &next),
+            ]);
+            graph.rust_calls.push(RustCallMetadata {
+                caller_function: "main".into(),
+                call_node: node,
+                callee_function: "wrapper".into(),
+                dummy_call_node: dc,
+                dummy_ret_node: dr,
+                arguments: vec![],
+                return_place: format!("_{}", index + 1),
+                return_node: next,
+                is_closure: false,
+            });
+        }
+        graph.ordered_nodes.extend([
+            (
+                "rust::wrapper::bb0".into(),
+                GlobalICFGNode::Mir(call_block("leaf", vec![], "_1", "bb1")),
+            ),
+            internal_dummy_call(
+                "dummyCall::wrapper::bb0",
+                "rust::wrapper::bb0",
+                "rust::leaf::bb0",
+            ),
+            internal_dummy_ret("dummyRet::wrapper::bb0", "leaf", "rust::wrapper::bb1"),
+            (
+                "rust::wrapper::bb1".into(),
+                GlobalICFGNode::Mir(return_block(1, vec![copy_statement(0, 1)])),
+            ),
+            (
+                "rust::leaf::bb0".into(),
+                GlobalICFGNode::Mir(call_block(
+                    "std::boxed::Box::<i32>::new",
+                    vec![],
+                    "_1",
+                    "bb1",
+                )),
+            ),
+            (
+                "rust::leaf::bb1".into(),
+                GlobalICFGNode::Mir(return_block(1, vec![copy_statement(0, 1)])),
+            ),
+            (
+                "rust::main::bb8".into(),
+                GlobalICFGNode::Mir(call_block(
+                    "std::boxed::Box::<i32>::new",
+                    vec![],
+                    "_8",
+                    "bb9",
+                )),
+            ),
+            (
+                "rust::main::bb9".into(),
+                GlobalICFGNode::Mir(return_block(9, vec![])),
+            ),
+        ]);
+        graph.icfg_edges.extend([
+            edge("rust::wrapper::bb0", "dummyCall::wrapper::bb0"),
+            edge("dummyCall::wrapper::bb0", "rust::leaf::bb0"),
+            edge("rust::leaf::bb0", "rust::leaf::bb1"),
+            edge("rust::leaf::bb1", "dummyRet::wrapper::bb0"),
+            edge("dummyRet::wrapper::bb0", "rust::wrapper::bb1"),
+            edge("rust::main::bb8", "rust::main::bb9"),
+        ]);
+        graph.rust_calls.push(RustCallMetadata {
+            caller_function: "wrapper".into(),
+            call_node: "rust::wrapper::bb0".into(),
+            callee_function: "leaf".into(),
+            dummy_call_node: "dummyCall::wrapper::bb0".into(),
+            dummy_ret_node: "dummyRet::wrapper::bb0".into(),
+            arguments: vec![],
+            return_place: "_1".into(),
+            return_node: "rust::wrapper::bb1".into(),
+            is_closure: false,
+        });
+        graph
+    }
+
+    fn assert_continuation_repair_fixture(reverse: bool, third: bool) {
+        let graph = continuation_repair_fixture(reverse, third);
+        let result = fixed_point_identity_analysis(&graph, "rust::main::bb0");
+        assert!(
+            result.by_node.contains_key("rust::main::bb8"),
+            "late continuation must receive cached normal return"
+        );
+        let ids = result.by_node["rust::main::bb8"].points_to(&rust("main", 8));
+        assert_eq!(
+            ids.len(),
+            1,
+            "allocation after the second call has genuine site provenance"
+        );
+        for call in graph
+            .rust_calls
+            .iter()
+            .filter(|call| call.caller_function == "main")
+        {
+            let point = IdentityAnalysisPoint {
+                node: "rust::wrapper::bb1".into(),
+                context: bounded_context(&call.call_node),
+            };
+            assert!(
+                result.by_point.contains_key(&point),
+                "wrapper return for {}",
+                call.call_node
+            );
+        }
+        assert_eq!(
+            serde_json::to_value(result.to_dump()).unwrap(),
+            serde_json::to_value(fixed_point_identity_analysis(&graph, "rust::main::bb0").to_dump())
+                .unwrap()
+        );
+        assert!(!result.by_point.contains_key(&IdentityAnalysisPoint {
+            node: "rust::wrapper::bb1".into(),
+            context: vec!["unreachable-callsite".into()]
+        }));
+    }
+    #[test]
+    fn identity_continuation_repair_nested_equivalent_inputs() {
+        assert_continuation_repair_fixture(false, false);
+    }
+    #[test]
+    fn identity_continuation_repair_reverse_callsite_order() {
+        assert_continuation_repair_fixture(true, false);
+    }
+    #[test]
+    fn identity_continuation_repair_three_subscribers() {
+        assert_continuation_repair_fixture(false, true);
+    }
+    #[test]
+    fn identity_continuation_repair_metadata_and_node_order() {
+        let a = continuation_repair_fixture(false, true);
+        let mut b = a.clone();
+        b.rust_calls.reverse();
+        b.ordered_nodes.reverse();
+        b.icfg_edges.reverse();
+        assert_eq!(
+            serde_json::to_value(fixed_point_identity_analysis(&a, "rust::main::bb0").to_dump())
+                .unwrap(),
+            serde_json::to_value(fixed_point_identity_analysis(&b, "rust::main::bb0").to_dump())
+                .unwrap()
+        );
+    }
+    #[test]
+    fn identity_continuation_repair_snapshot_change_and_idempotence() {
+        let mut k = IdentityContinuation::default();
+        let a = AllocationIdentityMemory::default();
+        assert!(k.join_snapshot(&[], &a));
+        assert!(!k.join_snapshot(&[], &a));
+        let mut b = a.clone();
+        b.assign_fresh(rust("main", 7), alloc("later"));
+        assert!(k.join_snapshot(&[], &b));
+        assert!(a.leq(&k.caller_memory));
+        assert!(b.leq(&k.caller_memory));
+        assert!(!k.join_snapshot(&[], &b));
+    }
+    #[test]
+    fn identity_continuation_repair_materialized_only_and_deduplicated() {
+        let graph = continuation_repair_fixture(false, false);
+        let mut w = BTreeSet::new();
+        let mut posts = BTreeMap::new();
+        notify_materialized_identity_returns(&graph, "rust::wrapper::bb0", &posts, &mut w);
+        assert!(w.is_empty());
+        let point = IdentityAnalysisPoint {
+            node: "rust::leaf::bb1".into(),
+            context: bounded_context("rust::wrapper::bb0"),
+        };
+        posts.insert(point.clone(), AllocationIdentityMemory::default());
+        // Another context, though materialized, is not a reader of this callsite.
+        posts.insert(
+            IdentityAnalysisPoint {
+                node: point.node.clone(),
+                context: bounded_context("different-site"),
+            },
+            AllocationIdentityMemory::default(),
+        );
+        notify_materialized_identity_returns(&graph, "rust::wrapper::bb0", &posts, &mut w);
+        notify_materialized_identity_returns(&graph, "rust::wrapper::bb0", &posts, &mut w);
+        assert_eq!(w, BTreeSet::from([point]));
+    }
+    #[test]
+    fn identity_continuation_repair_changed_input_joins_conservatively() {
+        let point = IdentityAnalysisPoint {
+            node: "rust::leaf::bb0".into(),
+            context: bounded_context("rust::wrapper::bb0"),
+        };
+        let mut states = BTreeMap::new();
+        let mut a = AllocationIdentityMemory::default();
+        a.assign_fresh(rust("leaf", 1), alloc("A"));
+        let mut b = AllocationIdentityMemory::default();
+        b.assign_fresh(rust("leaf", 1), alloc("B"));
+        assert!(join_input(&mut states, point.clone(), a.clone()));
+        assert!(join_input(&mut states, point.clone(), b.clone()));
+        assert!(a.leq(&states[&point]));
+        assert!(b.leq(&states[&point]));
+        assert_eq!(states[&point].points_to(&rust("leaf", 1)).len(), 2);
+        assert!(!join_input(&mut states, point, a));
+    }
+    fn recursive_continuation_repair_fixture(mutual: bool) -> GlobalICFGOrdered {
+        let mut g = GlobalICFGOrdered {
+            llvm_memory_effects: None,
+            svf_solved_points_to: None,
+            ordered_nodes: vec![],
+            icfg_edges: vec![],
+            rust_functions: BTreeMap::new(),
+            rust_calls: vec![],
+            dependency_body_ingestion_v1: None,
+        };
+        let names = if mutual {
+            vec!["rec_a", "rec_b"]
+        } else {
+            vec!["rec_a"]
+        };
+        let mut calls = vec![("main", "bb0", "rec_a", "bb1")];
+        for name in &names {
+            let callee = if mutual && *name == "rec_a" {
+                "rec_b"
+            } else {
+                "rec_a"
+            };
+            calls.push((name, "bb1", callee, "bb3"));
+            g.rust_functions.insert(
+                (*name).into(),
+                crate::structs::RustFunctionMetadata {
+                    name: (*name).into(),
+                    arg_count: 0,
+                    entry_node: format!("rust::{name}::bb0"),
+                    return_nodes: vec![format!("rust::{name}::bb2"), format!("rust::{name}::bb3")],
+                },
+            );
+            g.ordered_nodes.push((
+                format!("rust::{name}::bb0"),
+                GlobalICFGNode::Mir(MirBasicBlock {
+                    block_id: 0,
+                    statements: vec![],
+                    terminator: Some(MirTerminator::SwitchInt {
+                        details: String::new(),
+                        source_info: String::new(),
+                        targets: vec!["bb1".into()],
+                        discr: "_1".into(),
+                        otherwise: Some("bb2".into()),
+                    }),
+                }),
+            ));
+            g.ordered_nodes.push((
+                format!("rust::{name}::bb2"),
+                GlobalICFGNode::Mir(return_block(2, vec![])),
+            ));
+            g.ordered_nodes.push((
+                format!("rust::{name}::bb3"),
+                GlobalICFGNode::Mir(return_block(3, vec![])),
+            ));
+            g.icfg_edges.extend([
+                edge(&format!("rust::{name}::bb0"), &format!("rust::{name}::bb1")),
+                edge(&format!("rust::{name}::bb0"), &format!("rust::{name}::bb2")),
+            ]);
+        }
+        g.rust_functions.insert(
+            "main".into(),
+            crate::structs::RustFunctionMetadata {
+                name: "main".into(),
+                arg_count: 0,
+                entry_node: "rust::main::bb0".into(),
+                return_nodes: vec!["rust::main::bb1".into()],
+            },
+        );
+        g.ordered_nodes.push((
+            "rust::main::bb1".into(),
+            GlobalICFGNode::Mir(return_block(1, vec![])),
+        ));
+        for (caller, bb, callee, next) in calls {
+            let site = format!("rust::{caller}::{bb}");
+            let entry = format!("rust::{callee}::bb0");
+            let cont = format!("rust::{caller}::{next}");
+            let dc = format!("dummyCall::{caller}::{bb}");
+            let dr = format!("dummyRet::{caller}::{bb}");
+            g.ordered_nodes.extend([
+                (
+                    site.clone(),
+                    GlobalICFGNode::Mir(call_block(callee, vec![], "_0", next)),
+                ),
+                internal_dummy_call(&dc, &site, &entry),
+                internal_dummy_ret(&dr, callee, &cont),
+            ]);
+            g.icfg_edges
+                .extend([edge(&site, &dc), edge(&dc, &entry), edge(&dr, &cont)]);
+            for ret in &g.rust_functions[callee].return_nodes {
+                g.icfg_edges.push(edge(ret, &dr));
+            }
+            g.rust_calls.push(RustCallMetadata {
+                caller_function: caller.into(),
+                call_node: site,
+                callee_function: callee.into(),
+                dummy_call_node: dc,
+                dummy_ret_node: dr,
+                arguments: vec![],
+                return_place: "_0".into(),
+                return_node: cont,
+                is_closure: false,
+            });
+        }
+        g
+    }
+    #[test]
+    fn identity_continuation_repair_direct_recursion() {
+        let g = recursive_continuation_repair_fixture(false);
+        let result = fixed_point_identity_analysis(&g, "rust::main::bb0");
+        assert!(result.by_node.contains_key("rust::main::bb1"));
+        assert!(result.by_point.len() <= g.ordered_nodes.len() * (g.rust_calls.len() + 1));
+    }
+    #[test]
+    fn identity_continuation_repair_mutual_recursion() {
+        let g = recursive_continuation_repair_fixture(true);
+        let result = fixed_point_identity_analysis(&g, "rust::main::bb0");
+        assert!(result.by_node.contains_key("rust::main::bb1"));
+        assert!(result.by_point.len() <= g.ordered_nodes.len() * (g.rust_calls.len() + 1));
+    }
 }
 
 #[cfg(test)]
@@ -6212,6 +9546,102 @@ mod p3_r1_tests {
         assert_eq!(entry.stack_refs(&var("callee",1)),BTreeSet::from([place]));
         assert!(entry.points_to(&var("caller",8)).is_empty());assert_eq!(r[0]["status"],"resource_binding_available");
     }
+
+    #[test]
+    fn r1_aggregate_actual_with_existing_resource_is_bound_without_environment_copy() {
+        let mut caller = AllocationIdentityMemory::default();
+        let resource = alloc("string-buffer");
+        caller.assign_fresh(var("caller", 4), resource.clone());
+        caller.assign_fresh(var("caller", 8), alloc("unrelated"));
+        let aggregate = json!({
+            "operand":"move",
+            "actual_local":4,
+            "direct_local":true,
+            "value_shape":"aggregate"
+        });
+        let (entry, records) = transfer_actual_formal(&plan(vec![aggregate]), &caller);
+        assert_eq!(entry.points_to(&var("callee", 1)), BTreeSet::from([resource.clone()]));
+        assert!(entry.points_to(&var("caller", 8)).is_empty());
+        assert_eq!(records[0]["status"], "resource_binding_available");
+        assert_eq!(records[0]["resources"].as_array().map(Vec::len), Some(1));
+    }
+
+    #[test]
+    fn r1_aggregate_projected_identity_is_rebased_to_formal() {
+        let mut caller = AllocationIdentityMemory::default();
+        let resource = alloc("field-resource");
+        caller.assign_place_points_to(
+            PlaceId { base: var("caller", 4), projection: vec![PlaceProjection::Field { index: 0 }] },
+            BTreeSet::from([resource.clone()]),
+        );
+        let aggregate = json!({
+            "operand":"move",
+            "actual_local":4,
+            "direct_local":true,
+            "value_shape":"aggregate"
+        });
+        let (entry, records) = transfer_actual_formal(&plan(vec![aggregate]), &caller);
+        assert_eq!(
+            entry.points_to_place(&PlaceId { base: var("callee", 1), projection: vec![PlaceProjection::Field { index: 0 }] }),
+            BTreeSet::from([resource])
+        );
+        assert_eq!(records[0]["status"], "resource_binding_available");
+    }
+
+    #[test]
+    fn p3_r1_spawn_callback_binds_only_the_certified_closure_environment() {
+        let mut caller=AllocationIdentityMemory::default();
+        let captured=alloc("captured-resource");
+        caller.assign_place_points_to(
+            PlaceId {base:var("caller",4),projection:vec![PlaceProjection::Field{index:0}]},
+            BTreeSet::from([captured.clone()]),
+        );
+        caller.assign_fresh(var("caller",9),alloc("unrelated"));
+        let actual=json!({
+            "operand":"move","actual_local":4,"direct_local":true,
+            "value_shape":"closure_environment"
+        });
+        let mut callback=plan(vec![actual]);
+        callback.activation["activation_kind"]=json!("higher_order_callback");
+        callback.activation["callback_semantics"]=json!("spawn_may_once");
+        callback.abi="rustc_closure_body_v1".into();
+        let (entry,records)=transfer_actual_formal(&callback,&caller);
+        assert_eq!(
+            entry.points_to_place(&PlaceId {base:var("callee",1),projection:vec![PlaceProjection::Field{index:0}]}),
+            BTreeSet::from([captured]),
+        );
+        assert!(entry.points_to(&var("caller",9)).is_empty());
+        assert_eq!(records[0]["status"],"resource_binding_available");
+    }
+
+    #[test]
+    fn ht2_r1_actual_formal_preserves_global_heap_store_without_local_environment_copy() {
+        let backing = alloc("heap-M");
+        let payload = alloc("heap-R");
+        let mut caller = AllocationIdentityMemory::default();
+        caller.assign_fresh(var("caller",1),alloc("arg"));
+        caller.assign_fresh(var("caller",8),alloc("unrelated-local"));
+        caller.heap_values.insert(
+            backing.clone(),
+            HeapIdentityValue {
+                points_to: BTreeMap::from([(
+                    vec![PlaceProjection::Field { index: 0 }],
+                    BTreeSet::from([payload.clone()]),
+                )]),
+                ..HeapIdentityValue::default()
+            },
+        );
+
+        let (entry, _) = transfer_actual_formal(&plan(vec![pointer(1)]), &caller);
+
+        assert_eq!(entry.heap_values, caller.heap_values);
+        assert!(entry.points_to(&var("caller",8)).is_empty());
+        assert_eq!(
+            entry.heap_values[&backing].points_to
+                [&vec![PlaceProjection::Field { index: 0 }]],
+            BTreeSet::from([payload]),
+        );
+    }
 }
 
 #[cfg(test)]
@@ -6224,6 +9654,65 @@ mod p3_r2_tests {
     fn plan(shape:&str)->ReturnResourcePlan {ReturnResourcePlan{
         entry:ActualFormalPlan{activation:json!({"call_key":"K","caller_instance_id":"I0","callee_instance_id":"I1","parent_context":["outer"],"callee_context":["outer","K"],"caller_call_state":"call"}),caller_scope:"caller".into(),callee_scope:"callee".into(),abi:"Rust".into(),formals:vec![],actuals:vec![]},
         relation:json!({"callee_return_state":"return","dummy_ret_state":"proxy","continuation_state":"continuation"}),destination:Some(PlaceId{base:var("caller",3),projection:vec![]}),return_shape:shape.into()}}
+    #[test]
+    fn p3_r2_recursive_k1_shared_return_state_selects_only_matching_call_state() {
+        let mut plans = ReturnResourcePlans::new();
+        let mut left = plan("raw_pointer");
+        left.entry.activation["caller_call_state"] = json!("call-A");
+        left.relation["dummy_ret_state"] = json!("proxy-A");
+        let mut right = plan("raw_pointer");
+        right.entry.activation["caller_call_state"] = json!("call-B");
+        right.relation["dummy_ret_state"] = json!("proxy-B");
+
+        insert_return_resource_plan(&mut plans, "shared-return", left).unwrap();
+        insert_return_resource_plan(&mut plans, "shared-return", right).unwrap();
+        assert_eq!(plans["shared-return"].len(), 2);
+
+        let a_context = vec!["call-A".to_string()];
+        let a = matching_return_resource_plans(&plans, "shared-return", &a_context);
+        assert_eq!(a.len(), 1);
+        assert_eq!(a[0].relation["dummy_ret_state"], "proxy-A");
+
+        let b_context = vec!["call-B".to_string()];
+        let b = matching_return_resource_plans(&plans, "shared-return", &b_context);
+        assert_eq!(b.len(), 1);
+        assert_eq!(b[0].relation["dummy_ret_state"], "proxy-B");
+
+        let wrong_context = vec!["call-C".to_string()];
+        assert!(matching_return_resource_plans(&plans, "shared-return", &wrong_context).is_empty());
+    }
+
+    #[test]
+    fn p3_r2_spawn_callback_restores_caller_locals_and_joins_only_heap_effects() {
+        let mut callback=plan("unit");
+        callback.entry.activation["activation_kind"]=json!("higher_order_callback");
+        callback.entry.activation["callback_semantics"]=json!("spawn_may_once");
+        callback.destination=None;
+        callback.return_shape="detached_callback_no_value_to_provider".into();
+
+        let caller_resource=resource("caller-local");
+        let callback_local=resource("callback-local");
+        let heap_base=resource("heap-base");
+        let heap_payload=resource("heap-payload");
+        let mut caller=AllocationIdentityMemory::default();
+        caller.assign_fresh(var("caller",1),caller_resource.clone());
+        let mut callee=AllocationIdentityMemory::default();
+        callee.assign_fresh(var("callee",8),callback_local);
+        callee.heap_values.insert(
+            heap_base.clone(),
+            HeapIdentityValue {
+                points_to:BTreeMap::from([(vec![],BTreeSet::from([heap_payload.clone()]))]),
+                ..HeapIdentityValue::default()
+            },
+        );
+        let (out,record)=transfer_return_resource(&callback,&callee,&caller);
+        assert_eq!(out.points_to(&var("caller",1)),BTreeSet::from([caller_resource]));
+        assert!(out.points_to(&var("callee",8)).is_empty());
+        assert_eq!(out.heap_values[&heap_base].points_to[&vec![]],BTreeSet::from([heap_payload]));
+        assert_eq!(record["status"],"heap_effects_joined_into_caller_snapshot");
+        assert_eq!(record["return_value_to_provider"],false);
+    }
+
     #[test]
     fn p3_r2_alias_may_set_preserves_existing_ids_without_environment_join() {
         let a=resource("a");let b=resource("b");let resources=BTreeSet::from([a.clone(),b.clone()]);
@@ -6255,7 +9744,21 @@ mod p3_r2_tests {
     fn p3_r2_unsupported_and_missing_resource_fail_closed() {
         let (out,r)=transfer_return_resource(&plan("raw_pointer"),&AllocationIdentityMemory::default(),&AllocationIdentityMemory::default());assert!(out.points_to.is_empty());assert_eq!(r["status"],"unresolved_return");
         let mut p=plan("raw_pointer");p.destination=None;assert_eq!(transfer_return_resource(&p,&AllocationIdentityMemory::default(),&out).1["status"],"unsupported_destination_shape");
-        assert_eq!(transfer_return_resource(&plan("aggregate"),&AllocationIdentityMemory::default(),&out).1["status"],"unsupported_value_shape");
+        assert_eq!(transfer_return_resource(&plan("opaque"),&AllocationIdentityMemory::default(),&out).1["status"],"unsupported_value_shape");
+        assert_eq!(transfer_return_resource(&plan("aggregate"),&AllocationIdentityMemory::default(),&out).1["status"],"unresolved_return");
+    }
+    #[test]
+    fn p3_r2_aggregate_projected_identity_is_rebased_to_destination() {
+        let allocation=resource("aggregate_field");
+        let source_place=PlaceId{base:var("callee",0),projection:vec![PlaceProjection::Field{index:1}]};
+        let destination_place=PlaceId{base:var("caller",3),projection:vec![PlaceProjection::Field{index:1}]};
+        let mut callee=AllocationIdentityMemory::default();
+        callee.assign_place_points_to(source_place,BTreeSet::from([allocation.clone()]));
+        let caller=AllocationIdentityMemory::default();
+        let (out,r)=transfer_return_resource(&plan("aggregate"),&callee,&caller);
+        assert_eq!(r["status"],"resource_binding_available");
+        assert!(out.points_to(&var("caller",3)).is_empty());
+        assert_eq!(out.points_to_place(&destination_place),BTreeSet::from([allocation]));
     }
     #[test]
     fn p3_r2_projection_is_exact_and_never_collapsed_to_base() {
@@ -6266,6 +9769,35 @@ mod p3_r2_tests {
     fn p3_r2_reference_cannot_import_general_caller_side_effect() {
         let place=PlaceId{base:var("caller",1),projection:vec![]};let mut caller=AllocationIdentityMemory::default();caller.assign_fresh(place.base.clone(),resource("before"));let mut callee=caller.clone();callee.assign_fresh(place.base.clone(),resource("changed"));callee.assign_stack_refs(var("callee",0),BTreeSet::from([place]));
         let (out,r)=transfer_return_resource(&plan("shared_reference"),&callee,&caller);assert_eq!(r["status"],"unresolved_return");assert_eq!(out.points_to(&var("caller",1)),caller.points_to(&var("caller",1)));assert!(out.points_to(&var("caller",3)).is_empty());
+    }
+
+    #[test]
+    fn ht2_r2_return_preserves_heap_effect_without_importing_callee_locals() {
+        let backing = resource("heap-M");
+        let payload = resource("heap-R");
+        let caller = AllocationIdentityMemory::default();
+        let mut callee = AllocationIdentityMemory::default();
+        callee.assign_fresh(var("callee",8),resource("callee-local"));
+        callee.heap_values.insert(
+            backing.clone(),
+            HeapIdentityValue {
+                points_to: BTreeMap::from([(
+                    vec![PlaceProjection::Field { index: 0 }],
+                    BTreeSet::from([payload.clone()]),
+                )]),
+                ..HeapIdentityValue::default()
+            },
+        );
+
+        let (out, record) = transfer_return_resource(&plan("unit"), &callee, &caller);
+
+        assert_eq!(record["status"], "no_tracked_resource");
+        assert!(out.points_to(&var("callee",8)).is_empty());
+        assert_eq!(
+            out.heap_values[&backing].points_to
+                [&vec![PlaceProjection::Field { index: 0 }]],
+            BTreeSet::from([payload]),
+        );
     }
 }
 

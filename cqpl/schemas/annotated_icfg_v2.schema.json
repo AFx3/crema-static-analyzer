@@ -115,6 +115,14 @@
         "$ref": "#/$defs/typedEdgeRecord"
       }
     },
+    "opaque_memory_effects": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/opaqueMemoryEffectRecord"
+      }
+    },
     "allocation_existence_guards": {
       "type": "array",
       "minItems": 1,
@@ -586,6 +594,30 @@
           "type": [
             "string",
             "null"
+          ]
+        }
+      }
+    },
+    "opaqueMemoryEffectRecord": {
+      "type": "object",
+      "required": [
+        "node",
+        "effect",
+        "basis"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "node": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effect": {
+          "const": "may_read_write_allocate_deallocate"
+        },
+        "basis": {
+          "enum": [
+            "rust_dyn_trait_drop_vtable_summary_v1",
+            "rust_higher_order_callback_opaque_summary_v1"
           ]
         }
       }
@@ -1248,7 +1280,8 @@
               "enum": [
                 "rust_box_global_drop",
                 "rust_vec_global_drop",
-                "rust_cstring_global_drop"
+                "rust_cstring_global_drop",
+                "rust_string_global_drop"
               ]
             },
             "family": {
@@ -3076,6 +3109,14 @@
   },
   "allOf": [
     {
+      "if": {"required": ["capabilities"], "properties": {"capabilities": {"contains": {"const": "opaque_memory_effect_v1"}}}},
+      "then": {"required": ["opaque_memory_effects"]}
+    },
+    {
+      "if": {"required": ["opaque_memory_effects"]},
+      "then": {"required": ["capabilities"], "properties": {"capabilities": {"contains": {"const": "opaque_memory_effect_v1"}}}}
+    },
+    {
       "if": {"required": ["capabilities"], "properties": {"capabilities": {"allOf": [
         {"contains": {"const": "external_return_relations_v1"}},
         {"not": {"contains": {"const": "external_library_effects_v1"}}}
@@ -3287,6 +3328,29 @@
                   }
                 }
               }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "allocation_contracts_v4"
+            }
+          }
+        },
+        "required": [
+          "capabilities"
+        ]
+      },
+      "then": {
+        "properties": {
+          "capabilities": {
+            "contains": {
+              "const": "allocation_contracts_v2"
             }
           }
         }

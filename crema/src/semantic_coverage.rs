@@ -221,6 +221,7 @@ pub fn collect_root_coverage(
                 callee_def_path,
                 callee_is_local,
                 deallocator_evidence,
+                atomic_ptr_evidence,
                 resolved_instance_callees,
                 instance_dispatch_external,
                 instance_dispatch_unresolved,
@@ -231,6 +232,7 @@ pub fn collect_root_coverage(
                     && resolved_call_nodes.contains(node_id.as_str());
                 let instance_local_resolved = !resolved_instance_callees.is_empty();
                 let summary = deallocator_evidence.is_some()
+                    || atomic_ptr_evidence.is_some()
                     || has_explicit_rust_call_summary(function_called);
 
                 if *instance_dispatch_unresolved

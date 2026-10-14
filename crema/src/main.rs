@@ -134,7 +134,8 @@ fn main() {
 [--analysis-out-dir <dir>] [--cargo-plan-out <path>] [--semantic-coverage-out <path>] [--mir-semantics-v2] [--panic-unwind-lifecycle-v1] \
 [--dependency-body-ingestion-v1] [--dependency-drop-glue-ingestion-v1] \
 [--dependency-resource-identity-continuity-v1] [--dependency-resource-return-continuity-v1] \
-[--dependency-place-resource-relations-v1] [--dependency-drop-receiver-resource-continuity-v1]"
+[--dependency-place-resource-relations-v1] [--dependency-drop-receiver-resource-continuity-v1] \
+[--a3-bodyless-enum-constructor-callback-v1] [--a3-iterator-callback-ingestion-v1]"
         );
         exit(1);
     }
@@ -172,6 +173,11 @@ fn main() {
     let mut dependency_resource_return_continuity_v1 = false;
     let mut dependency_place_resource_relations_v1 = false;
     let mut dependency_drop_receiver_resource_continuity_v1 = false;
+    // Narrow A3 coverage capabilities. These are opt-in and intentionally
+    // independent of DEP1; the corpus runner enables them only for the
+    // explicitly audited subjects that require the corresponding semantics.
+    let mut a3_bodyless_enum_constructor_callback_v1 = false;
+    let mut a3_iterator_callback_ingestion_v1 = false;
     let mut idx = 2;
     while idx < args.len() {
         match args[idx].as_str() {
@@ -305,6 +311,14 @@ fn main() {
                 dependency_body_ingestion_v1 = true;
                 idx += 1;
             }
+            "--a3-bodyless-enum-constructor-callback-v1" => {
+                a3_bodyless_enum_constructor_callback_v1 = true;
+                idx += 1;
+            }
+            "--a3-iterator-callback-ingestion-v1" => {
+                a3_iterator_callback_ingestion_v1 = true;
+                idx += 1;
+            }
             other => {
                 eprintln!("Unknown flag: {}", other);
                 exit(1);
@@ -370,6 +384,22 @@ fn main() {
         std::env::set_var("CREMA_INTERNAL_DEP1_P3_R1", "1");
     } else {
         std::env::remove_var("CREMA_INTERNAL_DEP1_P3_R1");
+    }
+    if (a3_bodyless_enum_constructor_callback_v1 || a3_iterator_callback_ingestion_v1)
+        && (!mir_semantics_v2 || !panic_unwind_lifecycle_v1 || cqpl_schema_version != 2)
+    {
+        eprintln!("A3 callback coverage flags require --mir-semantics-v2, --panic-unwind-lifecycle-v1, and --cqpl-schema-version 2");
+        exit(1);
+    }
+    if a3_bodyless_enum_constructor_callback_v1 {
+        std::env::set_var("CREMA_INTERNAL_A3_BODYLESS_ENUM_CTOR_CALLBACK_V1", "1");
+    } else {
+        std::env::remove_var("CREMA_INTERNAL_A3_BODYLESS_ENUM_CTOR_CALLBACK_V1");
+    }
+    if a3_iterator_callback_ingestion_v1 {
+        std::env::set_var("CREMA_INTERNAL_A3_ITERATOR_CALLBACK_INGESTION_V1", "1");
+    } else {
+        std::env::remove_var("CREMA_INTERNAL_A3_ITERATOR_CALLBACK_INGESTION_V1");
     }
     set_mir_semantics_v2_enabled(mir_semantics_v2);
     set_panic_unwind_lifecycle_v1_enabled(panic_unwind_lifecycle_v1);
@@ -495,6 +525,12 @@ cannot claim whole-program C/FFI coverage. Files: {}",
     file.read_to_string(&mut json_str)
         .expect("Failed to read global_icfg.json file");
 
+    let operational_json: serde_json::Value = serde_json::from_str(&json_str)
+        .expect("Failed to parse operational ICFG metadata");
+    let unwind_scope_evidence = crate::cqpl_export::RustUnwindScopeEvidenceV1::from_operational_json(&operational_json)
+        .expect("Invalid preserved unwind scope evidence");
+    let activation_unwind_metadata = crate::structs::RustActivationUnwindMetadataV1::from_operational_json(&operational_json)
+        .expect("Invalid F6B0 activation unwind metadata");
     let mut global_icfg: GlobalICFGOrdered = serde_json::from_str(&json_str)
         .expect("Failed to deserialize global ICFG");
 
@@ -525,6 +561,10 @@ cannot claim whole-program C/FFI coverage. Files: {}",
             }
         }
     } else { selected_entry };
+    let activation_unwind_metadata = if global_icfg.dependency_body_ingestion_v1.is_some() {
+        execution_graph::rust_activation_unwind_metadata_from_execution_graph(&global_icfg)
+            .expect("Invalid finalized activation unwind ledger")
+    } else { activation_unwind_metadata };
     dump_dot_from_global_icfg(GLOBAL_ICFG_JSON);
     println!("entrypoint: {}", selected_entry);
     set_entrypoint(selected_entry.clone());
@@ -563,6 +603,8 @@ cannot claim whole-program C/FFI coverage. Files: {}",
             &abstract_state,
             &allocation_identity_state,
             &allocation_disposition_identity_state,
+            activation_unwind_metadata.as_ref(),
+            unwind_scope_evidence.as_ref(),
             &selected_entry,
             cqpl_schema_version,
             &annotated_icfg_out,
@@ -805,6 +847,10 @@ fn run_v6o_pipeline(
         dump_dot_from_global_icfg(staged_icfg.to_string_lossy().as_ref());
         let json_str = fs::read_to_string(&icfg_path)
             .map_err(|e| format!("failed to read {}: {e}", icfg_path.display()))?;
+        let operational_json: serde_json::Value = serde_json::from_str(&json_str)
+            .map_err(|e| format!("invalid operational ICFG JSON: {e}"))?;
+        let unwind_scope_evidence = crate::cqpl_export::RustUnwindScopeEvidenceV1::from_operational_json(&operational_json)?;
+        let activation_unwind_metadata = crate::structs::RustActivationUnwindMetadataV1::from_operational_json(&operational_json)?;
         let mut global_icfg: GlobalICFGOrdered = serde_json::from_str(&json_str)
             .map_err(|e| format!("failed to deserialize {}: {e}", icfg_path.display()))?;
         let selected_entry = resolve_entrypoint(&global_icfg, &normalized_root)
@@ -828,6 +874,9 @@ fn run_v6o_pipeline(
                 }
             }
         } else { selected_entry };
+        let activation_unwind_metadata = if global_icfg.dependency_body_ingestion_v1.is_some() {
+            execution_graph::rust_activation_unwind_metadata_from_execution_graph(&global_icfg)?
+        } else { activation_unwind_metadata };
         println!("entrypoint: {}", selected_entry);
         set_entrypoint(selected_entry.clone());
 
@@ -881,6 +930,8 @@ fn run_v6o_pipeline(
                 &abstract_state,
                 &allocation_identity_state,
                 &allocation_disposition_identity_state,
+                activation_unwind_metadata.as_ref(),
+                unwind_scope_evidence.as_ref(),
                 &selected_entry,
                 cqpl_schema_version,
                 &annotated_path,

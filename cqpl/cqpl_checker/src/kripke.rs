@@ -462,6 +462,179 @@ pub fn panic_lifecycle_overlay_from_json(root: &serde_json::Value) -> Result<Pan
     Ok(overlay)
 }
 
+/// Diagnostic-only producer-certified callsite pairing, not a truth relation.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RustCallReturnRelationRecord {
+    pub caller_function: String,
+    pub call_node: String,
+    pub dummy_call_node: String,
+    pub callee_function: String,
+    pub callee_entry_node: String,
+    #[serde(default)]
+    pub callee_return_nodes: Vec<String>,
+    pub dummy_ret_node: String,
+    pub continuation_node: String,
+    pub basis: String,
+}
+
+pub type RustCallReturnRelationOverlay = Vec<RustCallReturnRelationRecord>;
+
+fn validate_rust_call_return_relation_shape(records: &[RustCallReturnRelationRecord]) -> Result<(), String> {
+    for record in records {
+        if record.basis != "rust_call_metadata_v1" {
+            return Err("rust_call_return_relations has unsupported basis".into());
+        }
+        if [&record.caller_function, &record.call_node, &record.dummy_call_node,
+            &record.callee_function, &record.callee_entry_node, &record.dummy_ret_node,
+            &record.continuation_node].into_iter().chain(record.callee_return_nodes.iter())
+            .any(|s| s.trim().is_empty()) {
+            return Err("rust_call_return_relations has an empty structural string".into());
+        }
+        if record.callee_return_nodes.windows(2).any(|pair| pair[0] >= pair[1]) {
+            return Err("rust_call_return_relations callee_return_nodes must be sorted and unique".into());
+        }
+    }
+    let key = |r: &RustCallReturnRelationRecord| (
+        r.caller_function.clone(), r.call_node.clone(), r.dummy_call_node.clone(),
+        r.callee_function.clone(), r.dummy_ret_node.clone(), r.continuation_node.clone(),
+    );
+    if records.windows(2).any(|pair| key(&pair[0]) > key(&pair[1])) {
+        return Err("rust_call_return_relations records must be in producer canonical order".into());
+    }
+    Ok(())
+}
+
+/// Parse from the original JSON, leaving the core AnnotatedIcfg unchanged.
+pub fn rust_call_return_relation_overlay_from_json(
+    root: &serde_json::Value,
+) -> Result<Option<RustCallReturnRelationOverlay>, String> {
+    let Some(payload) = root.get("rust_call_return_relations") else { return Ok(None); };
+    if !payload.is_array() {
+        return Err("rust_call_return_relations must be an array".into());
+    }
+    let records: RustCallReturnRelationOverlay = serde_json::from_value(payload.clone())
+        .map_err(|e| format!("invalid rust_call_return_relations: {e}"))?;
+    validate_rust_call_return_relation_shape(&records)?;
+    Ok(Some(records))
+}
+
+/// Diagnostic-only producer certificates; never copied into CqplTruthModel.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RustUnwindActivation {
+    pub caller_function: String, pub call_node: String, pub dummy_call_node: String, pub callee_function: String,
+}
+impl RustCallReturnRelationRecord {
+    pub fn unwind_activation(&self) -> RustUnwindActivation {
+        RustUnwindActivation { caller_function:self.caller_function.clone(),call_node:self.call_node.clone(),
+            dummy_call_node:self.dummy_call_node.clone(),callee_function:self.callee_function.clone() }
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
+pub enum RustUnwindActivationKind { Direct, SynchronousCallback, DetachedCallback, Unresolved }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
+pub enum RustHigherOrderPolicy { LazyCarrier, RepeatedCallbacks, SpawnMayOnce, ConditionalCallbackOnce, Unknown }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag="kind",rename_all="snake_case",deny_unknown_fields)]
+pub enum RustUnwindSource { MirCall, MirDrop, HigherOrderPolicy { policy:RustHigherOrderPolicy }, ExecutionActivation { call_key:String }, MissingPolicy }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag="kind",rename_all="snake_case",deny_unknown_fields)]
+pub enum RustUnwindAction { Cleanup { target:String }, Continue, Terminate, Unreachable }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
+pub enum RustUnwindSemantics { Cleanup, Continue, Terminate, Unreachable, CertifiedCallback, DetachedNoCallerUnwind, Unresolved }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
+pub enum RustUnwindReason { MissingCallbackPolicy, MissingCallbackUnwindEvidence, UnsupportedMirUnwindAction }
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RustUnwindEdge { pub source_node:String, pub destination_node:String }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
+pub enum RustUnwindBasis { RustActivationUnwindMetadataV1 }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RustCallUnwindRelationRecord {
+    pub caller_function:String, pub call_node:String, pub dummy_call_node:String,
+    pub callee_function:String, pub callee_entry_node:String,
+    pub activation_kind:RustUnwindActivationKind, pub activation_source:RustUnwindSource,
+    pub unwind_semantics:RustUnwindSemantics,
+    #[serde(default,skip_serializing_if="Option::is_none")] pub unwind_action:Option<RustUnwindAction>,
+    #[serde(default,skip_serializing_if="Option::is_none")] pub unresolved_reason:Option<RustUnwindReason>,
+    pub unwind_edges:Vec<RustUnwindEdge>, pub basis:RustUnwindBasis,
+}
+impl RustCallUnwindRelationRecord {
+    pub fn activation(&self) -> RustUnwindActivation {
+        RustUnwindActivation { caller_function:self.caller_function.clone(),call_node:self.call_node.clone(),
+            dummy_call_node:self.dummy_call_node.clone(),callee_function:self.callee_function.clone() }
+    }
+}
+pub type RustCallUnwindRelationOverlay=Vec<RustCallUnwindRelationRecord>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
+pub enum RustUnwindEdgeScope { IntraActivation, RustActivationBoundary, NonRust, Unresolved }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
+pub enum RustUnwindScopeBasis { RustActivationUnwindMetadataV1, CanonicalRustFunctionMembershipV1, NonRustUnwindScopeV1, UnresolvedUnwindScopeV1, ExecutionContextMembershipV1 }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RustUnwindEdgeScopeRecord {
+    pub source_node:String, pub destination_node:String, pub scope:RustUnwindEdgeScope,
+    // Actual F6B1.5 wire field is singular `activation`, containing a canonical list.
+    #[serde(default,skip_serializing_if="Option::is_none")] pub activation:Option<Vec<RustUnwindActivation>>,
+    pub basis:RustUnwindScopeBasis,
+}
+pub type RustUnwindEdgeScopeOverlay=Vec<RustUnwindEdgeScopeRecord>;
+fn canonical_unwind_strings<'a>(values:impl IntoIterator<Item=&'a String>) -> Result<(),String> {
+    if values.into_iter().any(|s|s.trim().is_empty()) { Err("empty unwind structural string".into()) } else { Ok(()) }
+}
+pub fn rust_call_unwind_relation_overlay_from_json(root:&serde_json::Value) -> Result<Option<RustCallUnwindRelationOverlay>,String> {
+    let Some(value)=root.get("rust_call_unwind_relations") else {return Ok(None)};
+    let records:RustCallUnwindRelationOverlay=serde_json::from_value(value.clone()).map_err(|e|format!("invalid rust_call_unwind_relations: {e}"))?;
+    for r in &records {
+        canonical_unwind_strings([&r.caller_function,&r.call_node,&r.dummy_call_node,&r.callee_function,&r.callee_entry_node])?;
+        for e in &r.unwind_edges {canonical_unwind_strings([&e.source_node,&e.destination_node])?;}
+        if !r.unwind_edges.windows(2).all(|w|w[0]<w[1]) {return Err("noncanonical or duplicate unwind edge".into())}
+        if let Some(RustUnwindAction::Cleanup{target})=&r.unwind_action {canonical_unwind_strings([target])?;}
+        if let RustUnwindSource::ExecutionActivation{call_key}=&r.activation_source {canonical_unwind_strings([call_key])?;}
+        let action_ok=match r.unwind_semantics {
+            RustUnwindSemantics::Cleanup=>matches!(r.unwind_action,Some(RustUnwindAction::Cleanup{..})),
+            RustUnwindSemantics::Continue=>r.unwind_action==Some(RustUnwindAction::Continue),
+            RustUnwindSemantics::Terminate=>r.unwind_action==Some(RustUnwindAction::Terminate),
+            RustUnwindSemantics::Unreachable=>r.unwind_action==Some(RustUnwindAction::Unreachable),
+            RustUnwindSemantics::CertifiedCallback=>r.unwind_action.is_some(),
+            RustUnwindSemantics::DetachedNoCallerUnwind|RustUnwindSemantics::Unresolved=>r.unwind_action.is_none(),
+        };
+        if !action_ok || (r.unwind_semantics==RustUnwindSemantics::Unresolved)!=r.unresolved_reason.is_some() {
+            return Err("inconsistent unwind semantics/action/reason".into())
+        }
+        if matches!(r.unwind_semantics,RustUnwindSemantics::DetachedNoCallerUnwind|RustUnwindSemantics::Unresolved|RustUnwindSemantics::Unreachable)
+            && !r.unwind_edges.is_empty() {return Err("non-continuing unwind semantics has concrete edges".into())}
+        // Native F6B1 may certify an explicit terminal node for Terminate.
+        if r.unwind_semantics==RustUnwindSemantics::Terminate && !r.unwind_edges.is_empty()
+            && !matches!(r.activation_source,RustUnwindSource::ExecutionActivation{..}) {return Err("invented terminate continuation".into())}
+    }
+    if !records.windows(2).all(|w|w[0].activation()<w[1].activation()) {return Err("noncanonical or duplicate unwind activation".into())}
+    Ok(Some(records))
+}
+pub fn rust_unwind_edge_scope_overlay_from_json(root:&serde_json::Value) -> Result<Option<RustUnwindEdgeScopeOverlay>,String> {
+    let Some(value)=root.get("rust_unwind_edge_scopes") else {return Ok(None)};
+    let records:RustUnwindEdgeScopeOverlay=serde_json::from_value(value.clone()).map_err(|e|format!("invalid rust_unwind_edge_scopes: {e}"))?;
+    for r in &records {
+        canonical_unwind_strings([&r.source_node,&r.destination_node])?;
+        if r.scope==RustUnwindEdgeScope::RustActivationBoundary {
+            let keys=r.activation.as_ref().ok_or("boundary missing activation list")?;
+            if keys.is_empty() || !keys.windows(2).all(|w|w[0]<w[1]) {return Err("noncanonical or empty boundary activation list".into())}
+            for k in keys {canonical_unwind_strings([&k.caller_function,&k.call_node,&k.dummy_call_node,&k.callee_function])?;}
+        } else if r.activation.is_some() {return Err("non-boundary scope has activation".into())}
+    }
+    if !records.windows(2).all(|w|(&w[0].source_node,&w[0].destination_node)<(&w[1].source_node,&w[1].destination_node)) {return Err("noncanonical or duplicate scope edge".into())}
+    Ok(Some(records))
+}
+
 /// Parse the A/R2 typed canonical edge payload without changing the frozen
 /// AnnotatedIcfg serde struct used by legacy/unit-test constructors.
 pub fn typed_edge_overlay_from_json(
@@ -627,6 +800,8 @@ fn expected_typed_edge_flow(label: Option<&str>) -> TypedEdgeFlow {
         | Some("InlineAsm unwind")
         | Some("Rust unwind propagate")
         | Some("Rust drop unwind propagate")
+        | Some("DYNAMIC_TRAIT_DROP_SUMMARY_UNWIND_V1")
+        | Some("OPAQUE_HIGHER_ORDER_CALLBACK_SUMMARY_UNWIND_V1")
         | Some("DEP1 unwind exit -> matched caller cleanup") => TypedEdgeFlow::Unwind,
         _ => TypedEdgeFlow::Normal,
     }
@@ -759,6 +934,49 @@ pub struct NodeIdentityAnnotation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct OpaqueMemoryEffectRecord {
+    pub node: String,
+    pub effect: String,
+    pub basis: String,
+}
+
+pub type OpaqueMemoryEffectOverlay = Vec<OpaqueMemoryEffectRecord>;
+
+fn supported_opaque_memory_effect_basis(basis: &str) -> bool {
+    matches!(basis,
+        "rust_dyn_trait_drop_vtable_summary_v1"
+            | "rust_higher_order_callback_opaque_summary_v1")
+}
+
+fn supported_opaque_synthetic_allocation_label(label: &str) -> bool {
+    matches!(label,
+        "opaque_dynamic_trait_drop_allocation_v1"
+            | "opaque_higher_order_callback_allocation_v1")
+}
+
+pub fn opaque_memory_effect_overlay_from_json(
+    root: &serde_json::Value,
+) -> Result<Option<OpaqueMemoryEffectOverlay>, String> {
+    let Some(raw) = root.get("opaque_memory_effects") else { return Ok(None); };
+    let records: OpaqueMemoryEffectOverlay = serde_json::from_value(raw.clone())
+        .map_err(|err| format!("invalid opaque_memory_effects payload: {err}"))?;
+    if records.is_empty() {
+        return Err("opaque_memory_effects must be nonempty when present".into());
+    }
+    let mut seen = BTreeSet::new();
+    for record in &records {
+        if record.node.is_empty()
+            || record.effect != "may_read_write_allocate_deallocate"
+            || !supported_opaque_memory_effect_basis(&record.basis)
+            || !seen.insert(record.node.clone())
+        {
+            return Err("invalid or duplicate opaque_memory_effect_v1 record".into());
+        }
+    }
+    Ok(Some(records))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct AllocationExistenceGuardRecord {
     pub allocation: String,
     pub producer_call_node: String,
@@ -819,6 +1037,26 @@ pub fn reallocation_boundary_overlay_from_json(
     Ok(Some(records))
 }
 
+fn allocation_return_basis_matches_site(
+    basis: &str,
+    site_node: &str,
+    producer_call_node: &str,
+    producer_canonical_node: &str,
+) -> bool {
+    match basis {
+        // Rust-side bodyless allocator sites are materialized in the
+        // execution-node namespace once context-explicit ICFG is active.
+        "rust_foreign_decl_c_malloc_contract_v1" => site_node == producer_call_node,
+        // SVF sites remain LLVM node IDs suffixed by the canonical Rust
+        // boundary, so the canonical namespace is correct for this basis.
+        "svf_single_source_c_allocator_return_v1" => {
+            site_node.starts_with("llvm::")
+                && site_node.ends_with(&format!("::{producer_canonical_node}"))
+        }
+        _ => false,
+    }
+}
+
 fn producer_certified_rn1_source_for_reallocation_boundary(
     record: &ReallocationBoundaryRecord,
     allocation: &AbstractAllocation,
@@ -847,7 +1085,17 @@ fn producer_certified_rn1_source_for_reallocation_boundary(
 
     guards.iter().any(|guard| {
         guard.allocation == record.source_allocation
-            && guard.producer_call_canonical_node.as_deref().unwrap_or(&guard.producer_call_node) == site_node
+            // AllocationSiteId::c_call is serialized in the execution-node
+            // namespace once context-explicit ICFG is active.  Compare like
+            // with like: execution site to producer_call_node.  The optional
+            // canonical node is provenance for the exec->canonical mapping,
+            // not the identity of the allocation site itself.
+            && allocation_return_basis_matches_site(
+                &guard.allocation_return_basis,
+                site_node,
+                &guard.producer_call_node,
+                guard.producer_call_canonical_node.as_deref().unwrap_or(&guard.producer_call_node),
+            )
             && guard.tested_variable == record.source_variable
             && guard.non_null_successor == record.node
             && guard.allocation_return_basis == "rust_foreign_decl_c_malloc_contract_v1"
@@ -1285,21 +1533,21 @@ fn validate_allocation_existence_guards(
         let site_node = site.get("node_id").and_then(serde_json::Value::as_str);
         let producer_canonical_node = record.producer_call_canonical_node
             .as_deref().unwrap_or(&record.producer_call_node);
-        let return_basis_matches_site = site_node.is_some_and(|node| match record.allocation_return_basis.as_str() {
-            "rust_foreign_decl_c_malloc_contract_v1" => node == producer_canonical_node,
-            "svf_single_source_c_allocator_return_v1" => {
-                node.starts_with("llvm::")
-                    && node.ends_with(&format!("::{producer_canonical_node}"))
-            }
-            _ => false,
+        let return_basis_matches_site = site_node.is_some_and(|node| {
+            allocation_return_basis_matches_site(
+                &record.allocation_return_basis,
+                node,
+                &record.producer_call_node,
+                producer_canonical_node,
+            )
         });
         if site_kind != Some("c_call")
             || !matches!(site_allocator, Some("malloc") | Some("calloc") | Some("realloc"))
             || !return_basis_matches_site
         {
             return Err(format!(
-                "allocation_existence_guards_v1 allocation '{}' is not a malloc/calloc/RN1-realloc site tied to producer call '{}' by basis '{}'",
-                record.allocation, producer_canonical_node, record.allocation_return_basis
+                "allocation_existence_guards_v1 allocation '{}' is not a malloc/calloc/RN1-realloc site tied to producer execution call '{}' (canonical '{}') by basis '{}'",
+                record.allocation, record.producer_call_node, producer_canonical_node, record.allocation_return_basis
             ));
         }
         for variable in [&record.tested_variable, &record.predicate_result_variable] {
@@ -1508,6 +1756,13 @@ pub struct Kripke {
     /// W1 read-only source provenance, capability-gated and never consulted by
     /// the temporal semantics or truth evaluation.
     pub source_provenance: SourceProvenanceOverlay,
+    /// Diagnostic-only producer-certified call/return pairing; never copied into CqplTruthModel.
+    pub rust_call_return_relations: RustCallReturnRelationOverlay,
+    /// Diagnostic-only producer-certified metadata; never copied into CqplTruthModel.
+    pub rust_call_unwind_relations: RustCallUnwindRelationOverlay,
+    pub rust_unwind_edge_scopes: RustUnwindEdgeScopeOverlay,
+    pub rust_return_to_unwind: BTreeMap<usize,usize>,
+    pub rust_unwind_scope_index: BTreeMap<(String,String),usize>,
     /// AGE1 diagnostic-only existence guards. Never copied into CqplTruthModel.
     pub allocation_existence_guards: AllocationExistenceGuardOverlay,
     /// Reallocation-boundary overlay. Legacy RBF1 records remain diagnostic /
@@ -1528,6 +1783,11 @@ pub struct Kripke {
     pub llvm_memory_effects: Option<LlvmMemoryEffectsEvidenceV1>,
     pub svf_solved_points_to: Option<SvfSolvedPointsToEvidenceV1>,
     pub panic_lifecycle: PanicLifecycleOverlay,
+    /// Nodes at which an opaque producer summary may perform any heap event.
+    pub opaque_memory_effect_nodes: BTreeSet<String>,
+    /// Forward closure of opaque event nodes. State predicates are UNKNOWN on
+    /// this set because the summary may have changed arbitrary heap state.
+    pub opaque_memory_state_taint_nodes: BTreeSet<String>,
 }
 
 /// CQPL-only transition system used for state/path truth evaluation.
@@ -1547,6 +1807,8 @@ pub(crate) struct CqplTruthModel {
     /// allocation-state transitions.
     pub(crate) reallocation_boundaries: ReallocationBoundaryOverlay,
     pub(crate) panic_lifecycle: PanicLifecycleOverlay,
+    pub(crate) opaque_memory_effect_nodes: BTreeSet<String>,
+    pub(crate) opaque_memory_state_taint_nodes: BTreeSet<String>,
 }
 
 fn rust_function_scope(node_id: &str) -> Option<&str> {
@@ -1774,6 +2036,8 @@ impl CqplTruthModel {
                 .cloned()
                 .collect(),
             panic_lifecycle: k.panic_lifecycle.clone(),
+            opaque_memory_effect_nodes: k.opaque_memory_effect_nodes.clone(),
+            opaque_memory_state_taint_nodes: k.opaque_memory_state_taint_nodes.clone(),
         };
         model.apply_conditional_reallocation_success_semantics(k);
         model
@@ -1850,7 +2114,10 @@ impl CqplTruthModel {
                 self.panic_lifecycle.insert(synthetic_id.clone(), lifecycle.clone());
             }
             if let Some(coverage) = k.panic_lifecycle.coverage_at(&switch_id) {
-                self.panic_lifecycle.set_coverage(synthetic_id, coverage);
+                self.panic_lifecycle.set_coverage(synthetic_id.clone(), coverage);
+            }
+            if self.opaque_memory_state_taint_nodes.contains(&switch_id) {
+                self.opaque_memory_state_taint_nodes.insert(synthetic_id);
             }
         }
     }
@@ -1919,7 +2186,10 @@ impl CqplTruthModel {
             if let Some(coverage) = k.panic_lifecycle.coverage_at(&terminal_id) {
                 total
                     .panic_lifecycle
-                    .set_coverage(completion_id, coverage);
+                    .set_coverage(completion_id.clone(), coverage);
+            }
+            if k.opaque_memory_state_taint_nodes.contains(&terminal_id) {
+                total.opaque_memory_state_taint_nodes.insert(completion_id);
             }
         }
 
@@ -1961,9 +2231,13 @@ impl CqplTruthModel {
             MayPredicate::Alloc => CellValue::Alloc,
             MayPredicate::Drop => CellValue::Freed,
             MayPredicate::OwnForg => CellValue::Mv,
-            MayPredicate::RepeatDrop => return Truth::False,
+            MayPredicate::RepeatDrop => {
+                return if self.opaque_memory_state_taint_nodes.contains(node_id) { Truth::Unknown } else { Truth::False };
+            }
         };
-        if atom.leq(node.post.value_of(var)) { Truth::Unknown } else { Truth::False }
+        if atom.leq(node.post.value_of(var)) || self.opaque_memory_state_taint_nodes.contains(node_id) {
+            Truth::Unknown
+        } else { Truth::False }
     }
 
     pub(crate) fn label_hold(&self, node_id: &str, var: &str, p: LabelPredicate) -> Truth {
@@ -1980,7 +2254,9 @@ impl CqplTruthModel {
                 LabelPredicate::AllocatorMismatch => false,
             }
         });
-        if holds { Truth::True } else { Truth::False }
+        if holds { Truth::True }
+        else if self.opaque_memory_effect_nodes.contains(node_id) { Truth::Unknown }
+        else { Truth::False }
     }
 
     pub(crate) fn allocation_may_hold(&self, node_id: &str, allocation: &str, p: MayPredicate) -> Truth {
@@ -2003,16 +2279,20 @@ impl CqplTruthModel {
             {
                 return Truth::Unknown;
             }
-            return Truth::False;
+            return if self.opaque_memory_state_taint_nodes.contains(node_id) { Truth::Unknown } else { Truth::False };
         }
-        let Some(post) = node.allocation_post.as_ref() else { return Truth::False; };
+        let Some(post) = node.allocation_post.as_ref() else {
+            return if self.opaque_memory_state_taint_nodes.contains(node_id) { Truth::Unknown } else { Truth::False };
+        };
         let atom = match p {
             MayPredicate::Alloc => CellValue::Alloc,
             MayPredicate::Drop => CellValue::Freed,
             MayPredicate::OwnForg => CellValue::Mv,
             MayPredicate::RepeatDrop => unreachable!("handled above"),
         };
-        if atom.leq(post.value_of(allocation)) { Truth::Unknown } else { Truth::False }
+        if atom.leq(post.value_of(allocation)) || self.opaque_memory_state_taint_nodes.contains(node_id) {
+            Truth::Unknown
+        } else { Truth::False }
     }
 
     pub(crate) fn allocation_label_hold(&self, node_id: &str, allocation: &str, p: LabelPredicate) -> Truth {
@@ -2070,6 +2350,7 @@ impl CqplTruthModel {
                 acc = acc.join(Truth::Unknown);
             }
         }
+        if self.opaque_memory_effect_nodes.contains(node_id) { acc = acc.join(Truth::Unknown); }
         acc
     }
 }
@@ -2158,6 +2439,7 @@ impl Kripke {
         let has_allocation_contracts = capabilities.contains("allocation_contracts_v1");
         let has_allocation_contracts_v2 = capabilities.contains("allocation_contracts_v2");
         let has_allocation_contracts_v3 = capabilities.contains("allocation_contracts_v3");
+        let has_allocation_contracts_v4 = capabilities.contains("allocation_contracts_v4");
         let has_allocation_state = capabilities.contains("allocation_state_v1");
         let has_allocation_disposition = capabilities.contains("allocation_disposition_v1");
         let has_allocation_disposition_v2 = capabilities.contains("allocation_disposition_v2");
@@ -2269,6 +2551,12 @@ impl Kripke {
         }
         if has_allocation_contracts_v3 && (!has_allocation_contracts || !has_allocation_contracts_v2) {
             return Err("allocation_contracts_v3 refines allocation_contracts_v2 and requires allocation_contracts_v1 + allocation_contracts_v2 + allocation_contracts_v3".into());
+        }
+        if has_allocation_contracts_v4 && schema_version != 2 {
+            return Err("allocation_contracts_v4 requires annotated ICFG schema v2".into());
+        }
+        if has_allocation_contracts_v4 && (!has_allocation_contracts || !has_allocation_contracts_v2) {
+            return Err("allocation_contracts_v4 refines allocation_contracts_v2 and requires allocation_contracts_v1 + allocation_contracts_v2 + allocation_contracts_v4".into());
         }
         if has_allocation_state && schema_version != 2 {
             return Err("allocation_state_v1 requires annotated ICFG schema v2".into());
@@ -2426,6 +2714,7 @@ impl Kripke {
                             contract,
                             "deallocator_contract",
                             has_allocation_contracts_v3,
+                            has_allocation_contracts_v4,
                         )?;
                     }
                 }
@@ -2688,7 +2977,142 @@ impl Kripke {
             schema_version, entry: input.entry, capabilities, variables, allocations, nodes,
             source_provenance, allocation_existence_guards, reallocation_boundaries, conditional_reallocations, typed_edges, external_deallocation_effects, external_formal_memory_effects, ffi_argument_identity,
             llvm_memory_effects, svf_solved_points_to, panic_lifecycle,
+            rust_call_return_relations: Vec::new(),
+            rust_call_unwind_relations:vec![],rust_unwind_edge_scopes:vec![],rust_return_to_unwind:BTreeMap::new(),rust_unwind_scope_index:BTreeMap::new(),
+            opaque_memory_effect_nodes: BTreeSet::new(),
+            opaque_memory_state_taint_nodes: BTreeSet::new(),
         })
+    }
+
+    /// Diagnostic-only producer-certified unwind overlays; truth ignores them.
+    pub fn with_rust_unwind_overlays(mut self,
+        relations:Option<RustCallUnwindRelationOverlay>, scopes:Option<RustUnwindEdgeScopeOverlay>,
+    ) -> Result<Self,String> {
+        let has=self.capabilities.contains("rust_call_unwind_relation_v1");
+        let scope_has=self.capabilities.contains("rust_unwind_edge_scope_v1");
+        if has!=relations.is_some() || scope_has!=scopes.is_some() {return Err("unwind capability and payload must appear together".into())}
+        if (has || scope_has) && (self.schema_version!=2 || !self.capabilities.contains("typed_edge_flow_v1")
+            || !self.capabilities.contains("rust_call_return_relation_v1")) {return Err("unwind overlay requires schema v2, typed edges and return relations".into())}
+        if scope_has && !has {return Err("unwind scope requires unwind relations".into())}
+        let relations=relations.unwrap_or_default();let scopes=scopes.unwrap_or_default();
+        // Reuse the strict wire validators for typed builders as well.
+        rust_call_unwind_relation_overlay_from_json(&serde_json::json!({"rust_call_unwind_relations":relations}))?;
+        rust_unwind_edge_scope_overlay_from_json(&serde_json::json!({"rust_unwind_edge_scopes":scopes}))?;
+        let mut claimed=BTreeMap::<(String,String),BTreeSet<RustUnwindActivation>>::new();
+        let mut mapping=BTreeMap::new();
+        for (uid,u) in relations.iter().enumerate() {
+            let matched:Vec<_>=self.rust_call_return_relations.iter().enumerate().filter(|(_,r)|
+                r.unwind_activation()==u.activation() && r.callee_entry_node==u.callee_entry_node).collect();
+            if matched.len()!=1 {return Err("unwind activation lacks unique matching F3 relation".into())}
+            mapping.insert(matched[0].0,uid);
+            for node in [&u.call_node,&u.dummy_call_node,&u.callee_entry_node] {
+                if !self.nodes.contains_key(node) {return Err("unwind activation references missing node".into())}
+            }
+            for e in &u.unwind_edges {
+                if !self.nodes.contains_key(&e.source_node) || !self.nodes.contains_key(&e.destination_node) {return Err("unwind edge references missing node".into())}
+                if !self.typed_edges.iter().any(|t|t.source==e.source_node && t.destination==e.destination_node && t.flow==TypedEdgeFlow::Unwind) {return Err("unwind edge lacks typed Unwind flow".into())}
+                claimed.entry((e.source_node.clone(),e.destination_node.clone())).or_default().insert(u.activation());
+            }
+        }
+        if has && mapping.len()!=self.rust_call_return_relations.len() {return Err("incomplete unwind activation classification".into())}
+        let pairs:BTreeSet<_>=self.typed_edges.iter().filter(|e|e.flow==TypedEdgeFlow::Unwind).map(|e|(e.source.clone(),e.destination.clone())).collect();
+        let mut scope_index=BTreeMap::new();
+        for (id,s) in scopes.iter().enumerate() {
+            let pair=(s.source_node.clone(),s.destination_node.clone());
+            if !pairs.contains(&pair) || scope_index.insert(pair.clone(),id).is_some() {return Err("foreign or duplicate unwind scope edge".into())}
+            if s.scope==RustUnwindEdgeScope::RustActivationBoundary {
+                let listed:BTreeSet<_>=s.activation.as_ref().unwrap().iter().cloned().collect();
+                if claimed.get(&pair)!=Some(&listed) {return Err("unwind scope activation membership mismatch".into())}
+            } else if claimed.contains_key(&pair) {return Err("certified unwind edge is not a Rust boundary".into())}
+        }
+        if scope_has && scope_index.keys().cloned().collect::<BTreeSet<_>>()!=pairs {return Err("incomplete unwind scope coverage".into())}
+        self.rust_call_unwind_relations=relations;self.rust_unwind_edge_scopes=scopes;
+        self.rust_return_to_unwind=mapping;self.rust_unwind_scope_index=scope_index;
+        Ok(self)
+    }
+
+    /// Install evidence only after validation against the original producer graph.
+    pub fn with_rust_call_return_relations(
+        mut self,
+        relations: Option<RustCallReturnRelationOverlay>,
+    ) -> Result<Self, String> {
+        let has_capability = self.capabilities.contains("rust_call_return_relation_v1");
+        if has_capability != relations.is_some() {
+            return Err("rust_call_return_relation_v1 capability and rust_call_return_relations payload must appear together".into());
+        }
+        if has_capability && (self.schema_version != 2
+            || !self.capabilities.contains("typed_edge_flow_v1")
+            || !self.capabilities.contains("mir_semantics_v2")) {
+            return Err("rust_call_return_relation_v1 requires schema v2, typed_edge_flow_v1 and mir_semantics_v2".into());
+        }
+        let records = relations.unwrap_or_default();
+        validate_rust_call_return_relation_shape(&records)?;
+        let normal_edges: BTreeSet<_> = self.typed_edges.iter()
+            .filter(|edge| edge.flow == TypedEdgeFlow::Normal)
+            .map(|edge| (edge.source.as_str(), edge.destination.as_str())).collect();
+        let mut calls = BTreeSet::new();
+        let mut returns = BTreeSet::new();
+        let mut pairs = BTreeSet::new();
+        for r in &records {
+            for node in [&r.call_node, &r.dummy_call_node, &r.callee_entry_node,
+                &r.dummy_ret_node, &r.continuation_node].into_iter().chain(r.callee_return_nodes.iter()) {
+                if !self.nodes.contains_key(node) {
+                    return Err(format!("rust_call_return_relations references missing producer node '{node}'"));
+                }
+            }
+            if !pairs.insert((&r.call_node, &r.dummy_call_node, &r.dummy_ret_node, &r.continuation_node)) {
+                return Err("rust_call_return_relations has a duplicate call/return pair".into());
+            }
+            if !calls.insert(&r.dummy_call_node) {
+                return Err("rust_call_return_relations has a duplicate dummyCall".into());
+            }
+            if !returns.insert(&r.dummy_ret_node) {
+                return Err("rust_call_return_relations has a duplicate dummyRet".into());
+            }
+            let required = [(&r.call_node, &r.dummy_call_node), (&r.dummy_call_node, &r.callee_entry_node),
+                (&r.dummy_ret_node, &r.continuation_node)];
+            for (source, destination) in required.into_iter()
+                .chain(r.callee_return_nodes.iter().map(|ret| (ret, &r.dummy_ret_node))) {
+                if !normal_edges.contains(&(source.as_str(), destination.as_str())) {
+                    return Err(format!("rust_call_return_relations missing typed Normal edge '{source}' -> '{destination}'"));
+                }
+            }
+        }
+        self.rust_call_return_relations = records;
+        Ok(self)
+    }
+
+    pub fn with_opaque_memory_effects(
+        mut self,
+        overlay: Option<OpaqueMemoryEffectOverlay>,
+    ) -> Result<Self, String> {
+        let has_capability = self.capabilities.contains("opaque_memory_effect_v1");
+        if has_capability != overlay.is_some() {
+            return Err("opaque_memory_effect_v1 capability and payload must appear together".into());
+        }
+        let Some(records) = overlay else { return Ok(self); };
+        let mut event_nodes = BTreeSet::new();
+        for record in records {
+            if record.effect != "may_read_write_allocate_deallocate"
+                || !supported_opaque_memory_effect_basis(&record.basis)
+                || !self.nodes.contains_key(&record.node)
+                || !event_nodes.insert(record.node.clone())
+            {
+                return Err(format!("invalid opaque memory-effect record at '{}'", record.node));
+            }
+        }
+        let mut taint = event_nodes.clone();
+        let mut worklist: std::collections::VecDeque<String> = event_nodes.iter().cloned().collect();
+        while let Some(node_id) = worklist.pop_front() {
+            if let Some(node) = self.nodes.get(&node_id) {
+                for successor in &node.successors {
+                    if taint.insert(successor.clone()) { worklist.push_back(successor.clone()); }
+                }
+            }
+        }
+        self.opaque_memory_effect_nodes = event_nodes;
+        self.opaque_memory_state_taint_nodes = taint;
+        Ok(self)
     }
 
     /// Build the total transition system used by CQPL truth evaluation.
@@ -2809,6 +3233,22 @@ impl Kripke {
             }
         }
 
+        // OME1 synthetic allocation sites represent allocations that an opaque
+        // dynamic destructor may create.  They are producer-declared MAY sites,
+        // not checker-invented witnesses, and must remain in the quantified
+        // allocation domain whenever their opaque event node is retained.
+        for (id, allocation) in &self.allocations {
+            let is_opaque_synthetic = allocation.site.as_ref().is_some_and(|site| {
+                site.get("kind").and_then(serde_json::Value::as_str) == Some("synthetic")
+                    && site.get("label").and_then(serde_json::Value::as_str)
+                        .is_some_and(supported_opaque_synthetic_allocation_label)
+                    && site.get("scope").and_then(serde_json::Value::as_str)
+                        .is_some_and(|scope| retained.contains(scope)
+                            && self.opaque_memory_effect_nodes.contains(scope))
+            });
+            if is_opaque_synthetic { used_allocations.insert(id.clone()); }
+        }
+
         // Diagnostic overlays participate in projection catalog closure even
         // though they never enter CQPL truth semantics.  A retained proof
         // record must not become internally dangling after entry projection.
@@ -2927,6 +3367,21 @@ impl Kripke {
             .cloned()
             .collect();
 
+        let rust_call_return_relations:RustCallReturnRelationOverlay = self.rust_call_return_relations.iter()
+            .filter(|r| [&r.call_node, &r.dummy_call_node, &r.callee_entry_node,
+                &r.dummy_ret_node, &r.continuation_node].into_iter()
+                .chain(r.callee_return_nodes.iter()).all(|node| retained.contains(node)))
+            .cloned().collect();
+
+        let rust_call_unwind_relations:RustCallUnwindRelationOverlay=self.rust_call_unwind_relations.iter().filter(|u|
+            rust_call_return_relations.iter().any(|r|r.unwind_activation()==u.activation() && r.callee_entry_node==u.callee_entry_node)
+            && u.unwind_edges.iter().all(|e|retained.contains(&e.source_node) && retained.contains(&e.destination_node))).cloned().collect();
+        // Retain canonical producer activation lists even when an activation becomes unusable.
+        let rust_unwind_edge_scopes:RustUnwindEdgeScopeOverlay=self.rust_unwind_edge_scopes.iter().filter(|s|
+            retained.contains(&s.source_node) && retained.contains(&s.destination_node)).cloned().collect();
+        let rust_return_to_unwind=rust_call_return_relations.iter().enumerate().filter_map(|(rid,r)|
+            rust_call_unwind_relations.iter().position(|u|u.activation()==r.unwind_activation() && u.callee_entry_node==r.callee_entry_node).map(|uid|(rid,uid))).collect();
+        let rust_unwind_scope_index=rust_unwind_edge_scopes.iter().enumerate().map(|(i,s)|((s.source_node.clone(),s.destination_node.clone()),i)).collect();
         Ok(Self {
             schema_version: self.schema_version,
             entry,
@@ -2935,6 +3390,7 @@ impl Kripke {
             allocations,
             nodes,
             source_provenance,
+            rust_call_return_relations, rust_call_unwind_relations,rust_unwind_edge_scopes,rust_return_to_unwind,rust_unwind_scope_index,
             allocation_existence_guards,
             reallocation_boundaries,
             conditional_reallocations,
@@ -2955,6 +3411,8 @@ impl Kripke {
             llvm_memory_effects: self.llvm_memory_effects.clone(),
             svf_solved_points_to: self.svf_solved_points_to.clone(),
             panic_lifecycle,
+            opaque_memory_effect_nodes: self.opaque_memory_effect_nodes.intersection(&retained).cloned().collect(),
+            opaque_memory_state_taint_nodes: self.opaque_memory_state_taint_nodes.intersection(&retained).cloned().collect(),
         })
     }
 
@@ -3080,9 +3538,9 @@ impl Kripke {
             MayPredicate::Alloc => CellValue::Alloc,
             MayPredicate::Drop => CellValue::Freed,
             MayPredicate::OwnForg => CellValue::Mv,
-            MayPredicate::RepeatDrop => return Truth::False,
+            MayPredicate::RepeatDrop => return if self.opaque_memory_state_taint_nodes.contains(node_id) { Truth::Unknown } else { Truth::False },
         };
-        if atom.leq(node.post.value_of(var)) { Truth::Unknown } else { Truth::False }
+        if atom.leq(node.post.value_of(var)) || self.opaque_memory_state_taint_nodes.contains(node_id) { Truth::Unknown } else { Truth::False }
     }
 
     /// Exact syntactic label predicate, lifted only through the MAY-alias
@@ -3101,7 +3559,9 @@ impl Kripke {
                 LabelPredicate::AllocatorMismatch => false,
             }
         });
-        if holds { Truth::True } else { Truth::False }
+        if holds { Truth::True }
+        else if self.opaque_memory_effect_nodes.contains(node_id) { Truth::Unknown }
+        else { Truth::False }
     }
 
     /// Allocation-centric MAY state predicate provided by allocation_state_v1.
@@ -3127,16 +3587,18 @@ impl Kripke {
             {
                 return Truth::Unknown;
             }
-            return Truth::False;
+            return if self.opaque_memory_state_taint_nodes.contains(node_id) { Truth::Unknown } else { Truth::False };
         }
-        let Some(post) = node.allocation_post.as_ref() else { return Truth::False; };
+        let Some(post) = node.allocation_post.as_ref() else {
+            return if self.opaque_memory_state_taint_nodes.contains(node_id) { Truth::Unknown } else { Truth::False };
+        };
         let atom = match p {
             MayPredicate::Alloc => CellValue::Alloc,
             MayPredicate::Drop => CellValue::Freed,
             MayPredicate::OwnForg => CellValue::Mv,
             MayPredicate::RepeatDrop => unreachable!("handled above"),
         };
-        if atom.leq(post.value_of(allocation)) { Truth::Unknown } else { Truth::False }
+        if atom.leq(post.value_of(allocation)) || self.opaque_memory_state_taint_nodes.contains(node_id) { Truth::Unknown } else { Truth::False }
     }
 
     /// Allocation-centric event predicate introduced by schema v2.
@@ -3200,6 +3662,7 @@ impl Kripke {
                 acc = acc.join(Truth::Unknown);
             }
         }
+        if self.opaque_memory_effect_nodes.contains(node_id) { acc = acc.join(Truth::Unknown); }
         acc
     }
 }
@@ -3919,6 +4382,7 @@ fn validate_v2_deallocator_contract(
     contract: &AllocationContract,
     field: &str,
     allow_v3: bool,
+    allow_v4: bool,
 ) -> Result<(), String> {
     let basis = contract.basis.as_deref().ok_or_else(|| {
         format!("{field} requires proof field 'basis' under allocation_contracts_v2")
@@ -3941,6 +4405,30 @@ fn validate_v2_deallocator_contract(
             if contract.callee_def_path.is_some() {
                 return Err(format!(
                     "{field} basis '{basis}' does not accept explicit-call provenance"
+                ));
+            }
+        }
+        "rust_string_global_drop" => {
+            if !allow_v4 {
+                return Err(format!(
+                    "{field} basis 'rust_string_global_drop' requires artifact capability allocation_contracts_v4"
+                ));
+            }
+            if contract.family != "rust_global" || contract.operation != "drop" || contract.language != "rust" {
+                return Err(format!(
+                    "{field} basis 'rust_string_global_drop' requires family=rust_global operation=drop language=rust"
+                ));
+            }
+            if contract.owner_def_path.as_deref().map_or(true, str::is_empty)
+                || contract.allocator_def_path.as_deref().map_or(true, str::is_empty)
+            {
+                return Err(format!(
+                    "{field} basis 'rust_string_global_drop' requires diagnostic owner_def_path and allocator_def_path"
+                ));
+            }
+            if contract.callee_def_path.is_some() {
+                return Err(format!(
+                    "{field} basis 'rust_string_global_drop' does not accept explicit-call provenance"
                 ));
             }
         }
@@ -4035,6 +4523,33 @@ fn validate_memory(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn context_explicit_rust_allocator_guard_matches_execution_site_not_canonical_site() {
+        let exec = "rust::exec-v1::opaque::bb5";
+        let canonical = "rust::main::bb5";
+        assert!(super::allocation_return_basis_matches_site(
+            "rust_foreign_decl_c_malloc_contract_v1",
+            exec,
+            exec,
+            canonical,
+        ));
+        assert!(!super::allocation_return_basis_matches_site(
+            "rust_foreign_decl_c_malloc_contract_v1",
+            exec,
+            canonical,
+            canonical,
+        ));
+    }
+
+    #[test]
+    fn svf_allocator_guard_keeps_canonical_suffix_contract() {
+        assert!(super::allocation_return_basis_matches_site(
+            "svf_single_source_c_allocator_return_v1",
+            "llvm::malloc::node12::rust::main::bb5",
+            "rust::exec-v1::opaque::bb5",
+            "rust::main::bb5",
+        ));
+    }
     use super::*;
 
     #[test]
@@ -5536,6 +6051,42 @@ mod tests {
     }
 
     #[test]
+    fn ht2_r2_string_v4_requires_capability_and_accepts_producer_provenance() {
+        let contract = AllocationContract {
+            family: "rust_global".into(),
+            operation: "drop".into(),
+            language: "rust".into(),
+            basis: Some("rust_string_global_drop".into()),
+            owner_def_path: Some("alloc::string::String".into()),
+            allocator_def_path: Some("alloc::alloc::Global".into()),
+            callee_def_path: None,
+        };
+
+        let err = Kripke::from_annotated_icfg(v2_contract_test_input(contract.clone())).unwrap_err();
+        assert!(err.contains("requires artifact capability allocation_contracts_v4"), "unexpected error: {err}");
+
+        let mut input = v2_contract_test_input(contract);
+        input.capabilities.push("allocation_contracts_v4".into());
+        Kripke::from_annotated_icfg(input).unwrap();
+    }
+
+    #[test]
+    fn allocation_contracts_v4_requires_v1_and_v2() {
+        let mut input = v2_contract_test_input(AllocationContract {
+            family: "rust_global".into(),
+            operation: "drop".into(),
+            language: "rust".into(),
+            basis: Some("rust_string_global_drop".into()),
+            owner_def_path: Some("alloc::string::String".into()),
+            allocator_def_path: Some("alloc::alloc::Global".into()),
+            callee_def_path: None,
+        });
+        input.capabilities = vec!["allocation_contracts_v1".into(), "allocation_contracts_v4".into()];
+        let err = Kripke::from_annotated_icfg(input).unwrap_err();
+        assert!(err.contains("allocation_contracts_v4 refines allocation_contracts_v2"), "unexpected error: {err}");
+    }
+
+    #[test]
     fn allocation_contracts_v2_rejects_basis_family_mismatch() {
         let contract = AllocationContract {
             family: "c_malloc".into(),
@@ -6035,6 +6586,399 @@ mod tests {
         let input = typed_edge_test_input();
         let err = Kripke::from_annotated_icfg(input).unwrap_err();
         assert!(err.contains("capability and typed_edges payload"), "unexpected error: {err}");
+    }
+
+}
+
+#[cfg(test)]
+mod r4_opaque_memory_effect_tests {
+    use super::*;
+
+    fn node(id: &str, successors: Vec<&str>) -> AnnotatedNode {
+        let bottom = AbstractMemoryAnnotation { cells: vec![AbstractCell {
+            aliases: vec!["rust::x".into()], value: CellValue::Bottom,
+        }] };
+        AnnotatedNode {
+            id: id.into(), successors: successors.into_iter().map(str::to_owned).collect(),
+            labels: vec![], semantic_labels: vec![], allocation_labels: vec![],
+            allocation_disposition: vec![], identity: None, event_identity: None,
+            allocation_post: None, pre: bottom.clone(), post: bottom,
+        }
+    }
+
+    fn kripke() -> Kripke {
+        Kripke {
+            schema_version: 2, entry: "b0".into(),
+            capabilities: BTreeSet::from(["opaque_memory_effect_v1".into()]),
+            variables: BTreeMap::from([("rust::x".into(), ProgramVariable {
+                id:"rust::x".into(), language:ProgramLanguage::Rust, display:None, function:None,
+            })]),
+            allocations:BTreeMap::new(),
+            nodes:BTreeMap::from([("b0".into(),node("b0",vec!["b1"])),("b1".into(),node("b1",vec![]))]),
+            source_provenance:BTreeMap::new(), rust_call_return_relations:vec![],rust_call_unwind_relations:vec![],rust_unwind_edge_scopes:vec![],rust_return_to_unwind:BTreeMap::new(),rust_unwind_scope_index:BTreeMap::new(), allocation_existence_guards:vec![],
+            reallocation_boundaries:vec![], conditional_reallocations:vec![], typed_edges:vec![],
+            external_deallocation_effects:BTreeMap::new(), external_formal_memory_effects:vec![],
+            ffi_argument_identity:BTreeMap::new(), llvm_memory_effects:None, svf_solved_points_to:None,
+            panic_lifecycle:PanicLifecycleOverlay::new(),
+            opaque_memory_effect_nodes:BTreeSet::new(), opaque_memory_state_taint_nodes:BTreeSet::new(),
+        }
+    }
+
+    #[test]
+    fn opaque_dynamic_drop_is_event_unknown_and_taints_downstream_state() {
+        let k=kripke().with_opaque_memory_effects(Some(vec![OpaqueMemoryEffectRecord {
+            node:"b0".into(), effect:"may_read_write_allocate_deallocate".into(),
+            basis:"rust_dyn_trait_drop_vtable_summary_v1".into(),
+        }])).unwrap();
+        let truth=CqplTruthModel::partial_from(&k);
+        assert_eq!(truth.label_hold("b0","rust::x",LabelPredicate::Read),Truth::Unknown);
+        assert_eq!(truth.may_hold("b1","rust::x",MayPredicate::Alloc),Truth::Unknown);
+        assert_eq!(truth.structural_label_hold("b0",StructuralLabelKind::Terminator,"drop"),Truth::False);
+    }
+
+    #[test]
+    fn opaque_higher_order_callback_is_unknown_and_taints_downstream_state() {
+        let k=kripke().with_opaque_memory_effects(Some(vec![OpaqueMemoryEffectRecord {
+            node:"b0".into(), effect:"may_read_write_allocate_deallocate".into(),
+            basis:"rust_higher_order_callback_opaque_summary_v1".into(),
+        }])).unwrap();
+        let truth=CqplTruthModel::partial_from(&k);
+        assert_eq!(truth.label_hold("b0","rust::x",LabelPredicate::Write),Truth::Unknown);
+        assert_eq!(truth.may_hold("b1","rust::x",MayPredicate::Alloc),Truth::Unknown);
+    }
+
+    #[test]
+    fn dynamic_trait_drop_unwind_is_typed_as_unwind() {
+        assert_eq!(
+            expected_typed_edge_flow(Some("DYNAMIC_TRAIT_DROP_SUMMARY_UNWIND_V1")),
+            TypedEdgeFlow::Unwind
+        );
+        assert_eq!(
+            expected_typed_edge_flow(Some("DYNAMIC_TRAIT_DROP_SUMMARY_V1")),
+            TypedEdgeFlow::Normal
+        );
+        assert_eq!(
+            expected_typed_edge_flow(Some("OPAQUE_HIGHER_ORDER_CALLBACK_SUMMARY_UNWIND_V1")),
+            TypedEdgeFlow::Unwind
+        );
+    }
+
+    #[test]
+    fn opaque_dynamic_drop_synthetic_allocation_survives_entry_projection() {
+        let mut k = kripke();
+        let id = "opaque-allocation".to_string();
+        k.allocations.insert(id.clone(), AbstractAllocation {
+            id: id.clone(),
+            display: Some("opaque dyn drop allocation".into()),
+            site: Some(serde_json::json!({
+                "kind":"synthetic",
+                "scope":"b0",
+                "label":"opaque_dynamic_trait_drop_allocation_v1"
+            })),
+            context: vec![],
+            allocator_contract: None,
+        });
+        let k = k.with_opaque_memory_effects(Some(vec![OpaqueMemoryEffectRecord {
+            node:"b0".into(), effect:"may_read_write_allocate_deallocate".into(),
+            basis:"rust_dyn_trait_drop_vtable_summary_v1".into(),
+        }])).unwrap();
+        let projected = k.project_from_entry("b0", false).unwrap();
+        assert!(projected.allocations.contains_key(&id));
+    }
+
+    #[test]
+    fn opaque_higher_order_synthetic_allocation_survives_entry_projection() {
+        let mut k = kripke();
+        let id = "opaque-hoc-allocation".to_string();
+        k.allocations.insert(id.clone(), AbstractAllocation {
+            id: id.clone(),
+            display: Some("opaque higher-order allocation".into()),
+            site: Some(serde_json::json!({
+                "kind":"synthetic",
+                "scope":"b0",
+                "label":"opaque_higher_order_callback_allocation_v1"
+            })),
+            context: vec![],
+            allocator_contract: None,
+        });
+        let k = k.with_opaque_memory_effects(Some(vec![OpaqueMemoryEffectRecord {
+            node:"b0".into(), effect:"may_read_write_allocate_deallocate".into(),
+            basis:"rust_higher_order_callback_opaque_summary_v1".into(),
+        }])).unwrap();
+        let projected = k.project_from_entry("b0", false).unwrap();
+        assert!(projected.allocations.contains_key(&id));
+    }
+
+    #[test]
+    fn opaque_overlay_is_atomic_and_closed() {
+        let raw=serde_json::json!({"opaque_memory_effects":[{
+            "node":"b0","effect":"may_read_write_allocate_deallocate",
+            "basis":"rust_dyn_trait_drop_vtable_summary_v1"
+        }]});
+        assert_eq!(opaque_memory_effect_overlay_from_json(&raw).unwrap().unwrap().len(),1);
+        let hoc=serde_json::json!({"opaque_memory_effects":[{
+            "node":"b0","effect":"may_read_write_allocate_deallocate",
+            "basis":"rust_higher_order_callback_opaque_summary_v1"
+        }]});
+        assert_eq!(opaque_memory_effect_overlay_from_json(&hoc).unwrap().unwrap().len(),1);
+        let mut bad=raw.clone(); bad["opaque_memory_effects"][0]["basis"]=serde_json::json!("guess");
+        assert!(opaque_memory_effect_overlay_from_json(&bad).is_err());
+        assert!(kripke().with_opaque_memory_effects(Some(vec![OpaqueMemoryEffectRecord {
+            node:"missing".into(), effect:"may_read_write_allocate_deallocate".into(),
+            basis:"rust_dyn_trait_drop_vtable_summary_v1".into(),
+        }])).is_err());
+    }
+}
+#[cfg(test)]
+pub(crate) mod rust_call_return_relation_tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    pub(crate) fn record(suffix: &str) -> RustCallReturnRelationRecord {
+        RustCallReturnRelationRecord {
+            caller_function: "caller".into(), call_node: format!("call_{suffix}"),
+            dummy_call_node: format!("activation_{suffix}"), callee_function: "callee".into(),
+            callee_entry_node: "entry_f".into(), callee_return_nodes: vec!["return_f".into()],
+            dummy_ret_node: format!("matched_{suffix}"), continuation_node: format!("continue_{suffix}"),
+            basis: "rust_call_metadata_v1".into(),
+        }
+    }
+
+    pub(crate) fn raw_graph(relations: &[RustCallReturnRelationRecord]) -> Value {
+        let mut edges = BTreeSet::new();
+        let mut ids = BTreeSet::new();
+        for r in relations {
+            ids.extend([r.call_node.clone(), r.dummy_call_node.clone(), r.callee_entry_node.clone(),
+                r.dummy_ret_node.clone(), r.continuation_node.clone()]);
+            ids.extend(r.callee_return_nodes.iter().cloned());
+            edges.extend([(r.call_node.clone(), r.dummy_call_node.clone()),
+                (r.dummy_call_node.clone(), r.callee_entry_node.clone()),
+                (r.dummy_ret_node.clone(), r.continuation_node.clone())]);
+            for ret in &r.callee_return_nodes {
+                edges.insert((r.callee_entry_node.clone(), ret.clone()));
+                edges.insert((ret.clone(), r.dummy_ret_node.clone()));
+            }
+        }
+        json!({"schema_version":2, "entry":relations[0].call_node,
+            "capabilities":["typed_edge_flow_v1","mir_semantics_v2","mir_semantic_labels_v1","rust_call_return_relation_v1"],
+            "variables":[{"id":"v","language":"rust"}], "allocations":[],
+            "nodes":ids.iter().map(|id| json!({"id":id, "successors":edges.iter().filter(|(s,_)|s==id).map(|(_,d)|d).collect::<Vec<_>>(),
+                "labels":[], "pre":{"cells":[]}, "post":{"cells":[]}})).collect::<Vec<_>>(),
+            "typed_edges":edges.iter().map(|(s,d)|json!({"source":s,"destination":d,"flow":"normal"})).collect::<Vec<_>>(),
+            "rust_call_return_relations":relations})
+    }
+
+    pub(crate) fn base(raw: &Value) -> Kripke {
+        Kripke::from_annotated_icfg_with_overlays(serde_json::from_value(raw.clone()).unwrap(),
+            PanicLifecycleOverlay::new(), typed_edge_overlay_from_json(raw).unwrap()).unwrap()
+    }
+
+    fn install(raw: &Value) -> Result<Kripke, String> {
+        base(raw).with_rust_call_return_relations(rust_call_return_relation_overlay_from_json(raw)?)
+    }
+
+    #[test]
+    fn rust_call_return_relation_capability_payload_valid() {
+        let raw = raw_graph(&[record("a"),record("b")]);
+        let before = base(&raw);
+        let after = install(&raw).unwrap();
+        assert_eq!(after.rust_call_return_relations.len(),2);
+        assert_eq!(serde_json::to_value(&before.nodes).unwrap(),serde_json::to_value(&after.nodes).unwrap());
+        assert_eq!(before.typed_edges,after.typed_edges);
+        assert_eq!(after.rust_call_return_relations[0].callee_function,after.rust_call_return_relations[1].callee_function);
+    }
+    #[test]
+    fn rust_call_return_relation_capability_without_payload() {
+        let mut raw=raw_graph(&[record("a")]);raw.as_object_mut().unwrap().remove("rust_call_return_relations");
+        assert!(install(&raw).unwrap_err().contains("must appear together"));
+    }
+    #[test]
+    fn rust_call_return_relation_payload_without_capability() {
+        let mut raw=raw_graph(&[record("a")]);raw["capabilities"].as_array_mut().unwrap().pop();
+        assert!(install(&raw).unwrap_err().contains("must appear together"));
+    }
+    #[test]
+    fn rust_call_return_relation_empty_payload_valid() {
+        let mut raw=raw_graph(&[record("a")]);raw["rust_call_return_relations"]=json!([]);
+        assert!(install(&raw).unwrap().rust_call_return_relations.is_empty());
+    }
+    #[test]
+    fn rust_call_return_relation_invalid_basis() {
+        let mut raw=raw_graph(&[record("a")]);raw["rust_call_return_relations"][0]["basis"]=json!("other");
+        assert!(rust_call_return_relation_overlay_from_json(&raw).unwrap_err().contains("basis"));
+    }
+    #[test]
+    fn rust_call_return_relation_unknown_field() {
+        let mut raw=raw_graph(&[record("a")]);raw["rust_call_return_relations"][0]["arguments"]=json!([]);
+        assert!(rust_call_return_relation_overlay_from_json(&raw).unwrap_err().contains("unknown field"));
+    }
+    #[test]
+    fn rust_call_return_relation_unsorted_returns() {
+        let mut raw=raw_graph(&[record("a")]);raw["rust_call_return_relations"][0]["callee_return_nodes"]=json!(["z","a"]);
+        assert!(rust_call_return_relation_overlay_from_json(&raw).is_err());
+    }
+    #[test]
+    fn rust_call_return_relation_duplicate_returns() {
+        let mut raw=raw_graph(&[record("a")]);raw["rust_call_return_relations"][0]["callee_return_nodes"]=json!(["a","a"]);
+        assert!(rust_call_return_relation_overlay_from_json(&raw).is_err());
+    }
+    #[test]
+    fn rust_call_return_relation_missing_node() {
+        let r=record("a");let raw=raw_graph(&[r.clone()]);
+        for id in [&r.call_node,&r.dummy_call_node,&r.callee_entry_node,&r.dummy_ret_node,&r.continuation_node,&r.callee_return_nodes[0]] {
+            let mut k=base(&raw);k.nodes.remove(id);
+            assert!(k.with_rust_call_return_relations(Some(vec![r.clone()])).unwrap_err().contains("missing producer node"));
+        }
+    }
+    #[test]
+    fn rust_call_return_relation_missing_normal_edge() {
+        let r=record("a");let raw=raw_graph(&[r.clone()]);
+        for (s,d) in [(&r.call_node,&r.dummy_call_node),(&r.dummy_call_node,&r.callee_entry_node),
+            (&r.callee_return_nodes[0],&r.dummy_ret_node),(&r.dummy_ret_node,&r.continuation_node)] {
+            for replace_with_unwind in [false,true] {
+                let mut k=base(&raw);
+                if replace_with_unwind {
+                    k.typed_edges.iter_mut().filter(|e| &e.source==s && &e.destination==d).for_each(|e| e.flow=TypedEdgeFlow::Unwind);
+                } else { k.typed_edges.retain(|e| &e.source!=s || &e.destination!=d); }
+                assert!(k.with_rust_call_return_relations(Some(vec![r.clone()])).unwrap_err().contains("missing typed Normal edge"));
+            }
+        }
+    }
+    #[test]
+    fn rust_call_return_relation_duplicate_dummy_call() {
+        let a=record("a");let mut b=record("b");b.dummy_call_node=a.dummy_call_node.clone();
+        assert!(install(&raw_graph(&[a,b])).unwrap_err().contains("duplicate dummyCall"));
+    }
+    #[test]
+    fn rust_call_return_relation_duplicate_dummy_return() {
+        let a=record("a");let mut b=record("b");b.dummy_ret_node=a.dummy_ret_node.clone();
+        assert!(install(&raw_graph(&[a,b])).unwrap_err().contains("duplicate dummyRet"));
+    }
+    #[test]
+    fn rust_call_return_relation_projection_drops_partial() {
+        let mut r=record("a");r.call_node="rust::caller::bb0".into();r.continuation_node="rust::caller::bb1".into();
+        r.callee_return_nodes.push("unreachable_return".into());
+        let mut raw=raw_graph(&[r]);
+        raw["nodes"].as_array_mut().unwrap().iter_mut().find(|n| n["id"]=="entry_f").unwrap()["successors"]=json!(["return_f"]);
+        raw["typed_edges"].as_array_mut().unwrap().retain(|e| !(e["source"]=="entry_f" && e["destination"]=="unreachable_return"));
+        let k=install(&raw).unwrap();
+        let projected=k.project_from_entry("rust::caller::bb0",false).unwrap();
+        assert!(projected.nodes.contains_key("return_f"));
+        assert!(!projected.nodes.contains_key("unreachable_return"));
+        assert!(projected.rust_call_return_relations.is_empty());
+        assert!(k.project_from_entry("rust::caller::bb0",true).unwrap().rust_call_return_relations.is_empty());
+    }
+    #[test]
+    fn rust_call_return_relation_projection_keeps_complete() {
+        let r=record("a");let k=install(&raw_graph(&[r.clone()])).unwrap();
+        assert_eq!(k.project_from_entry(&r.call_node,false).unwrap().rust_call_return_relations,vec![r]);
+    }
+    #[test]
+    fn rust_call_return_relation_pair_uniqueness() {
+        let r=record("a");let mut other=r.clone();other.callee_function="different".into();
+        assert!(install(&raw_graph(&[r,other])).unwrap_err().contains("duplicate call/return pair"));
+    }
+    #[test]
+    fn rust_call_return_relation_strict_shapes() {
+        assert_eq!(rust_call_return_relation_overlay_from_json(&json!({})).unwrap(),None);
+        for v in [Value::Null,json!({}),json!("invalid")] {
+            assert!(rust_call_return_relation_overlay_from_json(&json!({"rust_call_return_relations":v})).is_err());
+        }
+        let raw=raw_graph(&[record("a")]);
+        for field in ["caller_function","call_node","dummy_call_node","callee_function","callee_entry_node","dummy_ret_node","continuation_node"] {
+            let mut bad=raw.clone();bad["rust_call_return_relations"][0][field]=json!(" ");
+            assert!(rust_call_return_relation_overlay_from_json(&bad).is_err());
+        }
+        let mut bad=raw.clone();bad["rust_call_return_relations"][0]["callee_return_nodes"]=json!([""]);
+        assert!(rust_call_return_relation_overlay_from_json(&bad).is_err());
+        let mut raw=raw_graph(&[record("a"),record("b")]);raw["rust_call_return_relations"].as_array_mut().unwrap().reverse();
+        assert!(rust_call_return_relation_overlay_from_json(&raw).unwrap_err().contains("canonical order"));
+    }
+    #[test]
+    fn rust_call_return_relation_builder_requirements_and_no_normal_return() {
+        let mut r=record("a");r.callee_return_nodes.clear();
+        let raw=raw_graph(&[r]);assert!(install(&raw).is_ok());
+        for missing in ["mir_semantics_v2","typed_edge_flow_v1"] {
+            let mut k=base(&raw);k.capabilities.remove(missing);
+            assert!(k.with_rust_call_return_relations(Some(vec![])).unwrap_err().contains("requires schema v2"));
+        }
+        let mut k=base(&raw);k.schema_version=1;
+        assert!(k.with_rust_call_return_relations(Some(vec![])).is_err());
+    }
+    #[test]
+    fn rust_call_return_relation_truth_model_has_no_sidecar() {
+        let raw=raw_graph(&[record("a")]);let mut a=base(&raw);
+        a.capabilities.remove("rust_call_return_relation_v1");
+        let b=install(&raw).unwrap();
+        let ta=a.totalized_for_cqpl_truth();let mut tb=b.totalized_for_cqpl_truth();
+        assert_eq!(serde_json::to_value(&ta.nodes).unwrap(),serde_json::to_value(&tb.nodes).unwrap());
+        tb.capabilities.remove("rust_call_return_relation_v1");
+        assert_eq!(format!("{ta:?}"), format!("{tb:?}"));
+        assert!(!format!("{tb:?}").contains("rust_call_return_relations:"));
+        assert!(!format!("{tb:?}").contains("rust_call_metadata_v1"));
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod rust_unwind_overlay_tests {
+    use super::*;
+    use serde_json::{json,Value};
+    pub(crate) fn raw() -> Value {
+        let a=super::rust_call_return_relation_tests::record("a");let mut b=super::rust_call_return_relation_tests::record("b");b.caller_function="caller_b".into();
+        let mut raw=super::rust_call_return_relation_tests::raw_graph(&[a.clone(),b.clone()]);
+        raw["capabilities"].as_array_mut().unwrap().extend([json!("rust_call_unwind_relation_v1"),json!("rust_unwind_edge_scope_v1")]);
+        for (s,d) in [("entry_f","continue_a"),("entry_f","continue_b")] {
+            raw["typed_edges"].as_array_mut().unwrap().push(json!({"source":s,"destination":d,"flow":"unwind","label":"Call unwind"}));
+            let node=raw["nodes"].as_array_mut().unwrap().iter_mut().find(|n|n["id"]==s).unwrap();node["successors"].as_array_mut().unwrap().push(json!(d));
+        }
+        raw["rust_call_unwind_relations"]=json!([&a,&b].iter().map(|r|json!({"caller_function":r.caller_function,"call_node":r.call_node,"dummy_call_node":r.dummy_call_node,"callee_function":r.callee_function,"callee_entry_node":r.callee_entry_node,"activation_kind":"direct","activation_source":{"kind":"mir_call"},"unwind_semantics":"cleanup","unwind_action":{"kind":"cleanup","target":"bb9"},"unwind_edges":[{"source_node":"entry_f","destination_node":r.continuation_node}],"basis":"rust_activation_unwind_metadata_v1"})).collect::<Vec<_>>());
+        raw["rust_unwind_edge_scopes"]=json!([&a,&b].iter().map(|r|json!({"source_node":"entry_f","destination_node":r.continuation_node,"scope":"rust_activation_boundary","activation":[r.unwind_activation()],"basis":"rust_activation_unwind_metadata_v1"})).collect::<Vec<_>>());raw
+    }
+    pub(crate) fn install(raw:&Value)->Result<Kripke,String> {
+        super::rust_call_return_relation_tests::base(raw).with_rust_call_return_relations(rust_call_return_relation_overlay_from_json(raw)?)?
+            .with_rust_unwind_overlays(rust_call_unwind_relation_overlay_from_json(raw)?,rust_unwind_edge_scope_overlay_from_json(raw)?)
+    }
+    pub(crate) fn shared(mut raw:Value)->Value {
+        raw["rust_call_unwind_relations"][1]["unwind_edges"][0]["destination_node"]=json!("continue_a");
+        let second=raw["rust_unwind_edge_scopes"][1]["activation"][0].clone();raw["rust_unwind_edge_scopes"][0]["activation"].as_array_mut().unwrap().push(second);
+        raw["rust_unwind_edge_scopes"][1]=json!({"source_node":"entry_f","destination_node":"continue_b","scope":"unresolved","basis":"unresolved_unwind_scope_v1"});raw
+    }
+    #[test] fn rust_call_unwind_relation_valid(){assert_eq!(install(&raw()).unwrap().rust_call_unwind_relations.len(),2);}
+    #[test] fn rust_call_unwind_relation_capability_payload(){let mut r=raw();r.as_object_mut().unwrap().remove("rust_call_unwind_relations");assert!(install(&r).is_err());let mut r=raw();r["capabilities"].as_array_mut().unwrap().retain(|v|v!="rust_call_unwind_relation_v1");assert!(install(&r).is_err());}
+    #[test] fn rust_call_unwind_relation_empty(){let mut r=raw();r["rust_call_unwind_relations"]=json!([]);assert_eq!(rust_call_unwind_relation_overlay_from_json(&r).unwrap(),Some(vec![]));}
+    #[test] fn rust_call_unwind_relation_malformed(){for v in [json!({}),json!(null),json!(2)] {let mut r=raw();r["rust_call_unwind_relations"]=v;assert!(rust_call_unwind_relation_overlay_from_json(&r).is_err());}}
+    #[test] fn rust_call_unwind_relation_unknown_enum_field(){for (k,v) in [("unwind_semantics",json!("other")),("foreign",json!(true))] {let mut r=raw();r["rust_call_unwind_relations"][0][k]=v;assert!(install(&r).is_err());}}
+    #[test] fn rust_call_unwind_relation_missing_nodes(){let mut r=raw();r["rust_call_unwind_relations"][0]["unwind_edges"][0]["source_node"]=json!("absent");assert!(install(&r).is_err());}
+    #[test] fn rust_call_unwind_relation_wrong_flow(){let mut r=raw();for e in r["typed_edges"].as_array_mut().unwrap(){if e["flow"]=="unwind" {e["flow"]=json!("normal");e.as_object_mut().unwrap().remove("label");}}assert!(install(&r).is_err());}
+    #[test] fn rust_call_unwind_relation_f3_mismatch(){let mut r=raw();r["rust_call_unwind_relations"][0]["callee_entry_node"]=json!("return_f");assert!(install(&r).is_err());}
+    #[test] fn rust_call_unwind_relation_duplicate_order(){for reverse in [false,true] {let mut r=raw();if reverse{r["rust_call_unwind_relations"].as_array_mut().unwrap().reverse()}else{r["rust_call_unwind_relations"][1]=r["rust_call_unwind_relations"][0].clone()}assert!(install(&r).is_err());}}
+    #[test] fn rust_unwind_edge_scope_complete(){assert_eq!(install(&raw()).unwrap().rust_unwind_edge_scopes.len(),2);}
+    #[test] fn rust_unwind_edge_scope_missing(){let mut r=raw();r["rust_unwind_edge_scopes"].as_array_mut().unwrap().pop();assert!(install(&r).is_err());}
+    #[test] fn rust_unwind_edge_scope_extra(){let mut r=raw();r["rust_unwind_edge_scopes"][1]["source_node"]=json!("return_f");assert!(install(&r).is_err());}
+    #[test] fn rust_unwind_edge_scope_duplicate_edge(){let mut r=raw();r["rust_unwind_edge_scopes"][1]=r["rust_unwind_edge_scopes"][0].clone();assert!(install(&r).is_err());}
+    #[test] fn rust_unwind_edge_scope_empty_activations(){let mut r=raw();r["rust_unwind_edge_scopes"][0]["activation"]=json!([]);assert!(install(&r).is_err());}
+    #[test] fn rust_unwind_edge_scope_duplicate_activations(){let mut r=shared(raw());let a=r["rust_unwind_edge_scopes"][0]["activation"][0].clone();r["rust_unwind_edge_scopes"][0]["activation"].as_array_mut().unwrap().push(a);assert!(install(&r).is_err());}
+    #[test] fn rust_unwind_edge_scope_noncanonical_activations(){let mut r=shared(raw());r["rust_unwind_edge_scopes"][0]["activation"].as_array_mut().unwrap().reverse();assert!(install(&r).is_err());}
+    #[test] fn rust_unwind_edge_scope_shared_physical_edge(){let k=install(&shared(raw())).unwrap();assert_eq!(k.rust_unwind_edge_scopes[0].activation.as_ref().unwrap().len(),2);}
+    #[test] fn rust_unwind_edge_scope_membership_mismatch(){let mut r=raw();r["rust_unwind_edge_scopes"][0]["activation"][0]=r["rust_unwind_edge_scopes"][1]["activation"][0].clone();assert!(install(&r).is_err());}
+    #[test] fn rust_unwind_edge_scope_intra(){scope_nonboundary("intra_activation");}
+    #[test] fn rust_unwind_edge_scope_non_rust(){scope_nonboundary("non_rust");}
+    #[test] fn rust_unwind_edge_scope_unresolved(){scope_nonboundary("unresolved");}
+    fn scope_nonboundary(scope:&str){let mut r=raw();for u in r["rust_call_unwind_relations"].as_array_mut().unwrap(){u["unwind_edges"]=json!([])}for s in r["rust_unwind_edge_scopes"].as_array_mut().unwrap(){s["scope"]=json!(scope);s.as_object_mut().unwrap().remove("activation");}install(&r).unwrap();}
+    #[test] fn rust_unwind_edge_scope_capability_payload(){let mut r=raw();r.as_object_mut().unwrap().remove("rust_unwind_edge_scopes");assert!(install(&r).is_err());let mut r=raw();r["capabilities"].as_array_mut().unwrap().retain(|v|v!="rust_unwind_edge_scope_v1");assert!(install(&r).is_err());}
+    #[test] fn rust_unwind_edge_scope_unknown_field_enum_order(){for (k,v) in [("scope",json!("other")),("extra",json!(true))] {let mut r=raw();r["rust_unwind_edge_scopes"][0][k]=v;assert!(install(&r).is_err());}let mut r=raw();r["rust_unwind_edge_scopes"].as_array_mut().unwrap().reverse();assert!(install(&r).is_err());}
+    #[test] fn rust_unwind_edge_scope_projection(){let k=install(&raw()).unwrap();let p=k.project_from_entry("call_a",false).unwrap();assert!(!p.rust_unwind_edge_scopes.is_empty());let mut k=k;k.nodes.get_mut("entry_f").unwrap().successors.retain(|n|n!="continue_b");let p=k.project_from_entry("call_a",false).unwrap();assert!(!p.rust_call_unwind_relations.iter().any(|u|u.call_node=="call_b"));}
+    #[test] fn rust_call_unwind_relation_projection_partial_removes_whole() {
+        let mut raw=raw();let extra=raw["rust_call_unwind_relations"][1]["unwind_edges"][0].clone();
+        raw["rust_call_unwind_relations"][0]["unwind_edges"].as_array_mut().unwrap().push(extra);
+        let a=raw["rust_unwind_edge_scopes"][0]["activation"][0].clone();raw["rust_unwind_edge_scopes"][1]["activation"].as_array_mut().unwrap().insert(0,a);
+        let mut k=install(&raw).unwrap();
+        let all=k.project_from_entry("call_a",false).unwrap();assert_eq!(all.rust_call_unwind_relations[0].unwind_edges.len(),2);
+        k.nodes.get_mut("entry_f").unwrap().successors.retain(|n|n!="continue_b");
+        k.nodes.get_mut("return_f").unwrap().successors.retain(|n|n!="matched_b");
+        let projected=k.project_from_entry("call_a",false).unwrap();assert!(projected.rust_call_unwind_relations.is_empty());
+        assert_eq!(projected.rust_unwind_edge_scopes[0].activation,k.rust_unwind_edge_scopes[0].activation);
+        assert!(!projected.rust_return_to_unwind.contains_key(&0));
     }
 
 }

@@ -42,6 +42,8 @@ pub fn edge_flow_kind(edge: &IcfgEdge) -> EdgeFlowKind {
         | Some("InlineAsm unwind")
         | Some("Rust unwind propagate")
         | Some("Rust drop unwind propagate")
+        | Some("DYNAMIC_TRAIT_DROP_SUMMARY_UNWIND_V1")
+        | Some("OPAQUE_HIGHER_ORDER_CALLBACK_SUMMARY_UNWIND_V1")
         | Some("DEP1 unwind exit -> matched caller cleanup") => EdgeFlowKind::Unwind,
         _ => EdgeFlowKind::Normal,
     }
@@ -70,6 +72,8 @@ mod tests {
             "InlineAsm unwind",
             "Rust unwind propagate",
             "Rust drop unwind propagate",
+            "DYNAMIC_TRAIT_DROP_SUMMARY_UNWIND_V1",
+            "OPAQUE_HIGHER_ORDER_CALLBACK_SUMMARY_UNWIND_V1",
             "DEP1 unwind exit -> matched caller cleanup",
         ] {
             assert_eq!(edge_flow_kind(&edge(label)), EdgeFlowKind::Unwind);

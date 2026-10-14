@@ -62,6 +62,12 @@ mod tests {
             assert_eq!(p.summary_id,summary_id); assert_eq!(p.kind,kind);
             assert_eq!(p.obligation_effect,effect); assert_eq!(p.basis,basis);
             assert_eq!(p.target_variable,target);
+            let expected_identity = match evidence {
+                BoxIntoRaw | BoxFromRaw | BoxLeak | CStringIntoRaw | CStringFromRaw =>
+                    ProducerIdentityRelation::PreserveArg0ToReturn,
+                MemForgetOwnedBox | MemDropRawPointer => ProducerIdentityRelation::None,
+            };
+            assert_eq!(producer_identity_relation_for_evidence(&evidence), expected_identity);
         }
     }
 }
