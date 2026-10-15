@@ -10,6 +10,16 @@ use std::{collections::{BTreeMap, BTreeSet}, env, fs, path::Path, process};
 
 const ELE1_FAMILIES: [&str; 6] = ["allocation_return", "reallocation", "deallocation", "formal_memory", "return_relation", "negative_evidence"];
 
+/// ELE1 allocation-return names are accepted only for the supported C
+/// allocator contract family. No suffix/namespace stripping is performed.
+fn ele1_allocation_callee_matches(callee: &str, operation: &str) -> bool {
+    matches!((callee, operation),
+        ("malloc" | "libc::malloc", "malloc")
+        | ("calloc" | "libc::calloc", "calloc")
+        | ("strdup" | "libc::strdup", "strdup")
+        | ("realloc" | "libc::realloc", "realloc"))
+}
+
 /// Validate ELE1 against the already-present proof records. The annotated
 /// artifact cannot prove its own MIR origin; the producer and gate test that
 /// separately. This routine never creates a semantic event.
@@ -79,7 +89,10 @@ fn validate_ele1(root: &Value) -> Result<Option<Vec<Value>>, String> {
             && matches!(contract["operation"].as_str(), Some("malloc" | "calloc" | "strdup" | "realloc")) {
             let node = site["node_id"].as_str().unwrap();
             let b = calls.get(node).ok_or("ELE1 allocation return without binding")?;
-            if b["callee"] != contract["operation"] { return Err("ELE1 allocation callee mismatch".into()); }
+            if !ele1_allocation_callee_matches(
+                b["callee"].as_str().ok_or("ELE1 binding callee")?,
+                contract["operation"].as_str().ok_or("ELE1 allocation operation")?,
+            ) { return Err("ELE1 allocation callee mismatch".into()); }
             count("allocation_return", a, node)?;
         }
     }
@@ -1039,6 +1052,67 @@ fn run() -> Result<(), String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn ele1_allocator_fixture(callee: &str, operation: &str) -> Value {
+        json!({
+            "capabilities":["external_library_effects_v1"],
+            "nodes":[{"id":"rust::main::bb0","semantic_labels":["term:call"]}],
+            "variables":[{"id":"rust::main::Local(_1)","language":"rust"}],
+            "external_call_bindings":[{"binding_id":"ele1:rust::main::bb0","node":"rust::main::bb0",
+                "rust_function_scope":"rust::main","callee":callee,"arity":0,"arguments":[],
+                "result_variable":"rust::main::Local(_1)","body_status":"bodyless","basis":"rustc_mir_external_call_binding_v1"}],
+            "external_library_effects":[{"binding_id":"ele1:rust::main::bb0","effect_families":["allocation_return"],
+                "effect_counts":{"allocation_return":1,"reallocation":0,"deallocation":0,"formal_memory":0,"return_relation":0,"negative_evidence":0},
+                "basis":"crema_external_library_effects_v1"}],
+            "allocations":[{"site":{"kind":"c_call","node_id":"rust::main::bb0"},
+                "allocator_contract":{"family":"c_malloc","operation":operation}}]
+        })
+    }
+
+    #[test]
+    fn ele1_allocator_name_allowlist_and_cross_operation_rejection() {
+        let operations = ["malloc", "calloc", "strdup", "realloc"];
+        for operation in operations {
+            for prefix in ["", "libc::"] {
+                let name = format!("{prefix}{operation}");
+                assert!(ele1_allocation_callee_matches(&name, operation));
+                assert!(validate_ele1(&ele1_allocator_fixture(&name, operation)).is_ok());
+                for other in operations {
+                    if other != operation {
+                        assert!(!ele1_allocation_callee_matches(&name, other));
+                        assert!(validate_ele1(&ele1_allocator_fixture(&name, other)).is_err());
+                    }
+                }
+            }
+            for name in [format!("other::{operation}"), format!("libc::nested::{operation}"),
+                         format!("::{operation}"), "libc::free".to_string(), "".to_string()] {
+                assert!(!ele1_allocation_callee_matches(&name, operation));
+                assert!(validate_ele1(&ele1_allocator_fixture(&name, operation)).is_err());
+            }
+        }
+        assert!(!ele1_allocation_callee_matches("libc::free", "free"));
+        assert!(!ele1_allocation_callee_matches("unknown", "unknown"));
+    }
+
+    #[test]
+    fn ele1_allocator_alias_keeps_proof_boundary_fail_closed() {
+        let valid = ele1_allocator_fixture("libc::malloc", "malloc");
+        let mut bad = valid.clone(); bad["external_call_bindings"] = json!([]);
+        assert!(validate_ele1(&bad).is_err());
+        let mut bad = valid.clone(); bad["allocations"][0]["allocator_contract"]["operation"] = Value::Null;
+        assert!(validate_ele1(&bad).is_err());
+        let mut bad = valid.clone(); bad["allocations"][0]["allocator_contract"]["family"] = json!("unknown");
+        assert!(validate_ele1(&bad).is_err());
+        let mut bad = valid.clone(); bad["external_call_bindings"][0]["callee"] = json!("libc::calloc");
+        assert!(validate_ele1(&bad).is_err());
+        let mut bad = valid.clone(); bad["external_library_effects"][0]["effect_counts"]["allocation_return"] = json!(2);
+        assert!(validate_ele1(&bad).is_err());
+        let mut bad = valid.clone(); bad["external_call_bindings"][0]["arguments"] = json!(["rust::other::Local(_1)"]);
+        bad["external_call_bindings"][0]["arity"] = json!(1);
+        assert!(validate_ele1(&bad).is_err());
+        let mut bad = valid.clone(); bad["capabilities"] = json!([]);
+        assert!(validate_ele1(&bad).is_err());
+    }
 
     #[test]
     fn ele1_binding_and_envelope_fail_closed() {
