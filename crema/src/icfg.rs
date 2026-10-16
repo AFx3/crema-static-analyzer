@@ -437,6 +437,52 @@ fn rust_atomic_ptr_call_evidence<'tcx>(
     })
 }
 
+/// Certify using rustc lang-item identities, never rendered callee text.
+/// A standard trait on the standard ManuallyDrop ADT cannot be replaced by
+/// a downstream custom Deref impl. Only a direct shared receiver is supported.
+fn manually_drop_borrow_evidence<'tcx>(
+    def_id: DefId, receiver_ty: Option<ty::Ty<'tcx>>,
+    receiver: Option<&Operand<'tcx>>, destination: &Place<'tcx>, tcx: TyCtxt<'tcx>,
+) -> Option<crate::structs::ManuallyDropBorrowEvidence> {
+    let trait_id = tcx.lang_items().deref_trait()?;
+    if tcx.trait_of_item(def_id) != Some(trait_id)
+        || tcx.item_name(def_id).as_str() != "deref" { return None; }
+    let TyKind::Ref(_, owner_ty, Mutability::Not) = receiver_ty?.kind() else { return None; };
+    let TyKind::Adt(owner, args) = owner_ty.kind() else { return None; };
+    if tcx.lang_items().manually_drop() != Some(owner.did()) { return None; }
+    let source = match receiver? { Operand::Copy(p) | Operand::Move(p) => p, _ => return None };
+    if !source.projection.is_empty() || !destination.projection.is_empty() { return None; }
+    Some(crate::structs::ManuallyDropBorrowEvidence {
+        receiver_local: source.local.as_u32(), destination_local: destination.local.as_u32(),
+        owner_def_path: tcx.def_path_str(owner.did()), trait_def_path: tcx.def_path_str(trait_id),
+        payload_type: format!("{:?}", args.type_at(0)),
+    })
+}
+
+/// Diagnostic boundary only. Certifies that the named argument is neither
+/// reclaimed nor handed to an unknown owner by this primitive. Pointer writes
+/// certify the destination argument only, never a resource stored through it.
+fn non_reclaiming_arguments<'tcx>(def_id: DefId, first_ty: Option<ty::Ty<'tcx>>, tcx: TyCtxt<'tcx>) -> Vec<usize> {
+    if tcx.is_diagnostic_item(sym::mem_forget, def_id) { return vec![0]; }
+    if tcx.crate_name(def_id.krate).as_str() != "core" { return vec![]; }
+    let path = tcx.def_path_str(def_id);
+    if matches!(path.as_str(), "std::hint::black_box" | "core::hint::black_box")
+        && first_ty.is_some_and(|t| matches!(t.kind(), TyKind::RawPtr(..))) { return vec![0]; }
+    let Some(item) = tcx.opt_associated_item(def_id) else { return vec![]; };
+    let Some(impl_id) = item.impl_container(tcx) else { return vec![]; };
+    if tcx.impl_trait_ref(impl_id).is_some() { return vec![]; }
+    let self_ty = tcx.type_of(impl_id).instantiate_identity();
+    let method = tcx.item_name(def_id);
+    match self_ty.kind() {
+        TyKind::RawPtr(..) if matches!(method.as_str(), "cast" | "is_null" | "write" | "as_ref" | "as_mut") => vec![0],
+        TyKind::Adt(owner, _) if tcx.is_diagnostic_item(sym::NonNull, owner.did())
+            && matches!(method.as_str(), "as_ptr" | "as_ref" | "as_mut" | "new_unchecked") => vec![0],
+        TyKind::Adt(owner, _) if tcx.lang_items().manually_drop() == Some(owner.did())
+            && method.as_str() == "new" => vec![0],
+        _ => vec![],
+    }
+}
+
 /// v6Q/A3.3: producer-certify bounded higher-order `Option` and `Result`
 /// combinators while rustc's semantic identity is still available.
 ///
@@ -1189,6 +1235,26 @@ impl MirExtractor {
         local_decls: &IndexVec<Local, LocalDecl<'tcx>>,
         tcx: TyCtxt<'tcx>,
     ) -> Option<RustPlaceRelationEvidence> {
+        if mir_semantics_v2_enabled() && crate::identity::p3_place_relation_enabled()
+            && destination.projection.is_empty() {
+            let reborrow = match rvalue {
+                Rvalue::Ref(_, _, source) | Rvalue::RawPtr(_, source) => Some(source),
+                _ => None,
+            };
+            if let Some(source) = reborrow {
+                if source.projection.len() == 1 && matches!(source.projection[0], PlaceElem::Deref)
+                    && matches!(local_decls[source.local].ty.kind(), TyKind::Ref(..) | TyKind::RawPtr(..)) {
+                    return Some(RustPlaceRelationEvidence {
+                        kind: RustPlaceRelationEvidenceKind::PointerReborrow,
+                        source_local: source.local.as_u32(), destination_local: destination.local.as_u32(),
+                        source_projection: vec![PlaceProjection::Deref], owner_def_path: String::new(),
+                        source_type_diagnostic: format!("{:?}", local_decls[source.local].ty),
+                        result_type_diagnostic: format!("{:?}", local_decls[destination.local].ty),
+                        transparent_wrapper_depth: 0,
+                    });
+                }
+            }
+        }
         if !crate::identity::p3_place_relation_enabled() {
             return None;
         }
@@ -1662,7 +1728,18 @@ impl MirExtractor {
                     }
                 }
 
+                let manually_drop_borrow = if mir_semantics_v2_enabled() {
+                    match func_ty.kind() {
+                        TyKind::FnDef(def_id, _) => manually_drop_borrow_evidence(
+                            *def_id, first_arg_ty, args.first().map(|arg| &arg.node), destination, tcx),
+                        _ => None,
+                    }
+                } else { None };
+                let non_reclaiming_arguments = if manually_drop_borrow.is_some() { vec![0] }
+                    else { match func_ty.kind() { TyKind::FnDef(def_id, _) => non_reclaiming_arguments(*def_id, first_arg_ty, tcx), _ => vec![] } };
                 MirTerminator::Call {
+                    non_reclaiming_arguments,
+                    manually_drop_borrow,
                     details: format!("{:?}", t),
                     source_info: format!("{:?}", t.source_info.span),
                     function_called: format!("{:?}", func),

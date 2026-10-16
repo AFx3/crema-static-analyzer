@@ -523,6 +523,8 @@ pub enum RustPlaceRelationEvidenceKind {
     /// `owned_box` lang item, then only through field-0 `repr(transparent)`
     /// wrappers, ending in a raw pointer to the same Box element type.
     OwnedBoxDataPointerCopyForDeref,
+    /// &*p / &raw *p preserves the pointer referent, not the pointer slot.
+    PointerReborrow,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -559,6 +561,17 @@ pub struct MirStatement {
     pub resource_place_relation_v1: Option<RustPlaceRelationEvidence>,
 }
 // new struct to represent a call argument and its mutability
+/// Rustc-certified std ManuallyDrop payload borrow. The identity domain erases
+/// ManuallyDrop::new's transparent shell; projection within T remains intact.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManuallyDropBorrowEvidence {
+    pub receiver_local: u32,
+    pub destination_local: u32,
+    pub owner_def_path: String,
+    pub trait_def_path: String,
+    pub payload_type: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MirCallArgument {
     pub arg: String,
@@ -848,6 +861,10 @@ pub enum MirTerminator {
         /// Historical MIR/ICFG JSON remains readable.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         atomic_ptr_evidence: Option<RustAtomicPtrCallEvidence>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        manually_drop_borrow: Option<ManuallyDropBorrowEvidence>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        non_reclaiming_arguments: Vec<usize>,
         /// v6P-r1b: producer-certified structural evidence for supported
         /// higher-order API contracts. Historical MIR JSON remains readable.
         #[serde(default, skip_serializing_if = "Option::is_none")]

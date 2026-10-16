@@ -1379,7 +1379,7 @@ mod tests {
             callee_def_path: Some(callee.to_string()),
             deallocator_evidence: None,
             allocation_disposition_evidence: None,
-            atomic_ptr_evidence: None,
+            atomic_ptr_evidence: None, manually_drop_borrow: None, non_reclaiming_arguments: vec![],
             higher_order_evidence: None,
             callee_is_local: false,
             callback_def_paths: Vec::new(),

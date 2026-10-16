@@ -3206,6 +3206,25 @@ mod ap1_atomic_ptr_tests {
     }
 }
 
+/// Copy MAY referents, not their resource values: Deref returns &T, not T.
+/// No allocation, strong alias assertion, or deallocation is introduced.
+fn apply_manually_drop_borrow(
+    function: &str, arguments: &[crate::structs::MirCallArgument], return_place: &str,
+    evidence: &crate::structs::ManuallyDropBorrowEvidence, memory: &mut AllocationIdentityMemory,
+) -> bool {
+    if arguments.len() != 1 { return false; }
+    let Some(source) = direct_call_value_local(function, &arguments[0].arg) else { return false; };
+    let Some(dest) = direct_assignment_local(function, return_place) else { return false; };
+    if source != (ProgramVarId::Rust { function: function.into(), local: evidence.receiver_local })
+        || dest != (ProgramVarId::Rust { function: function.into(), local: evidence.destination_local })
+        || !matches!(evidence.owner_def_path.as_str(), "core::mem::manually_drop::ManuallyDrop" | "std::mem::ManuallyDrop")
+        || !matches!(evidence.trait_def_path.as_str(), "core::ops::deref::Deref" | "std::ops::Deref") { return false; }
+    let refs = memory.stack_refs(&source);
+    clear_destination(memory, &dest);
+    memory.assign_stack_refs(dest, refs);
+    true
+}
+
 fn transfer_mir_node(
     node_id: &str,
     bb: &MirBasicBlock,
@@ -3245,6 +3264,7 @@ fn transfer_mir_node(
             return_place,
             allocation_disposition_evidence,
             atomic_ptr_evidence,
+            manually_drop_borrow,
             ..
         }) = &bb.terminator
         {
@@ -3271,7 +3291,10 @@ fn transfer_mir_node(
                     )
                 });
 
-            if !producer_identity_applied && !atomic_ptr_identity_applied {
+            let manually_drop_applied = !producer_identity_applied && !atomic_ptr_identity_applied
+                && manually_drop_borrow.as_ref().is_some_and(|evidence|
+                    apply_manually_drop_borrow(function, arguments, return_place, evidence, &mut out));
+            if !producer_identity_applied && !atomic_ptr_identity_applied && !manually_drop_applied {
                 transfer_library_call_with_external_context(
                     node_id,
                     function,
@@ -3878,6 +3901,20 @@ fn apply_certified_place_relation(
     };
 
     match &evidence.kind {
+        RustPlaceRelationEvidenceKind::PointerReborrow => {
+            if evidence.source_projection != vec![PlaceProjection::Deref] { return false; }
+            let source = ProgramVarId::Rust {function:function.into(),local:evidence.source_local};
+            // Both sets describe possible pointees. Copy neither the pointee's
+            // contents nor a fabricated reference to the pointer's own slot.
+            let allocs = memory.points_to(&source);
+            let refs = memory.stack_refs(&source);
+            let access = memory.access_bases.get(&source).cloned().unwrap_or_default();
+            clear_destination(memory, &destination);
+            memory.assign_points_to(destination.clone(), allocs);
+            memory.assign_stack_refs(destination.clone(), refs);
+            memory.assign_access_bases(destination, access);
+            true
+        }
         RustPlaceRelationEvidenceKind::OwnedBoxDataPointerCopyForDeref => {
             if !certified_owned_box_source_shape(evidence) {
                 return false;
@@ -5939,7 +5976,7 @@ mod tests {
                 callee_def_path: None,
                 deallocator_evidence: None,
                 allocation_disposition_evidence: None,
-                atomic_ptr_evidence: None,
+                atomic_ptr_evidence: None, manually_drop_borrow: None, non_reclaiming_arguments: vec![],
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -7094,7 +7131,7 @@ mod tests {
                 callee_def_path: None,
                 deallocator_evidence: None,
                 allocation_disposition_evidence: None,
-                atomic_ptr_evidence: None,
+                atomic_ptr_evidence: None, manually_drop_borrow: None, non_reclaiming_arguments: vec![],
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -7148,7 +7185,7 @@ mod tests {
                 callee_def_path: None,
                 deallocator_evidence: None,
                 allocation_disposition_evidence: None,
-                atomic_ptr_evidence: None,
+                atomic_ptr_evidence: None, manually_drop_borrow: None, non_reclaiming_arguments: vec![],
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -7203,7 +7240,7 @@ mod tests {
                 callee_def_path: None,
                 deallocator_evidence: None,
                 allocation_disposition_evidence: None,
-                atomic_ptr_evidence: None,
+                atomic_ptr_evidence: None, manually_drop_borrow: None, non_reclaiming_arguments: vec![],
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -10565,4 +10602,53 @@ mod p3_r1d_tests {
         assert_eq!(child_entry.points_to(&var("u64-glue", 1)), BTreeSet::from([r]));
     }
 
+}
+
+#[cfg(test)]
+mod md_borrow_tests {
+    use super::*;
+    fn var(n:u32)->ProgramVarId {ProgramVarId::Rust {function:"probe".into(),local:n}}
+    fn evidence()->crate::structs::ManuallyDropBorrowEvidence {
+        crate::structs::ManuallyDropBorrowEvidence {receiver_local:1,destination_local:2,
+            owner_def_path:"core::mem::manually_drop::ManuallyDrop".into(),
+            trait_def_path:"core::ops::deref::Deref".into(),payload_type:"T".into()}
+    }
+    fn apply(m:&mut AllocationIdentityMemory,e:&crate::structs::ManuallyDropBorrowEvidence)->bool {
+        apply_manually_drop_borrow("probe", &[crate::structs::MirCallArgument {arg:"Local(_1)".into(),is_mutable:None}], "Local(_2)",e,m)
+    }
+    #[test]
+    fn md_borrow_preserves_all_may_referents_without_fabricating_identity() {
+        let mut m=AllocationIdentityMemory::default();
+        let refs=BTreeSet::from([PlaceId {base:var(3),projection:vec![]},PlaceId {base:var(4),projection:vec![PlaceProjection::Field {index:1}]}]);
+        m.assign_stack_refs(var(1),refs.clone());
+        assert!(apply(&mut m,&evidence()));assert_eq!(m.stack_refs(&var(2)),refs);
+        assert!(m.points_to(&var(2)).is_empty());
+    }
+    #[test]
+    fn md_borrow_unknown_receiver_clears_stale_destination() {
+        let mut m=AllocationIdentityMemory::default();
+        m.assign_stack_refs(var(2),BTreeSet::from([PlaceId {base:var(9),projection:vec![]}]));
+        assert!(apply(&mut m,&evidence())); assert!(m.stack_refs(&var(2)).is_empty());
+    }
+    #[test]
+    fn md_borrow_rejects_custom_owner_trait_and_wrong_slots() {
+        for (owner,trait_name,source,dest) in [("user::ManuallyDrop","core::ops::deref::Deref",1,2),
+            ("core::mem::manually_drop::ManuallyDrop","user::Deref",1,2),
+            ("core::mem::manually_drop::ManuallyDrop","core::ops::deref::Deref",3,2),
+            ("core::mem::manually_drop::ManuallyDrop","core::ops::deref::Deref",1,7)] {
+            let mut m=AllocationIdentityMemory::default();let mut e=evidence();
+            e.owner_def_path=owner.into();e.trait_def_path=trait_name.into();e.receiver_local=source;e.destination_local=dest;
+            let before=m.clone();assert!(!apply(&mut m,&e));assert_eq!(m,before);
+        }
+    }
+    #[test]
+    fn md_borrow_retains_projected_payload_and_distinct_fields() {
+        let mut m=AllocationIdentityMemory::default();
+        let a=AbstractAllocId::new(crate::structs::AllocationSiteId::CCall {node_id:"alloc".into(),allocator:"malloc".into()},vec![]);
+        let p=PlaceId {base:var(3),projection:vec![PlaceProjection::Field {index:0}]};
+        m.assign_place_points_to(p.clone(),BTreeSet::from([a.clone()]));
+        m.assign_stack_refs(var(1),BTreeSet::from([PlaceId {base:var(3),projection:vec![]}]));
+        assert!(apply(&mut m,&evidence()));assert_eq!(m.points_to_place(&p),BTreeSet::from([a]));
+        assert!(m.points_to_place(&PlaceId {base:var(3),projection:vec![PlaceProjection::Field {index:1}]}).is_empty());
+    }
 }

@@ -94,6 +94,7 @@ impl QueryResultStrength {
 pub enum AllocationObligationFindingKind {
     NormalReturnOpenManualObligation,
     PersistentAllocationOnNormalCompletion,
+    UnreclaimedOwnedAllocationOnNormalCompletion,
     NormalReturnUnreleasedExternalAllocation,
     AllCandidateSuffixesCrossModeledDrop,
     AllCandidateDropSuffixesExcludeRepeatedDrop,
@@ -122,6 +123,7 @@ pub enum AllocationObligationEvidence {
     ProducerCertifiedBoxLeak,
     ProducerCertifiedCStringIntoRaw,
     ProducerCertifiedCStringFromRaw,
+    ProducerCertifiedMemForgetOwnedBox,
     ProducerCertifiedLocalReturnContinuity,
     NormalReturnReachable,
     AnalysisRootNormalReturnReachable,
@@ -169,6 +171,7 @@ impl AllocationObligationFindingKind {
         match self {
             Self::NormalReturnOpenManualObligation => "normal_return_open_manual_obligation",
             Self::PersistentAllocationOnNormalCompletion => "persistent_allocation_on_normal_completion",
+            Self::UnreclaimedOwnedAllocationOnNormalCompletion => "unreclaimed_owned_allocation_on_normal_completion",
             Self::NormalReturnUnreleasedExternalAllocation => "normal_return_unreleased_external_allocation",
             Self::AllCandidateSuffixesCrossModeledDrop => "all_candidate_suffixes_cross_modeled_drop",
             Self::AllCandidateDropSuffixesExcludeRepeatedDrop => "all_candidate_drop_suffixes_exclude_repeated_drop",
@@ -320,6 +323,7 @@ impl AllocationObligationEvidence {
             Self::ProducerCertifiedBoxLeak => "producer_certified_box_leak",
             Self::ProducerCertifiedCStringIntoRaw => "producer_certified_c_string_into_raw",
             Self::ProducerCertifiedCStringFromRaw => "producer_certified_c_string_from_raw",
+            Self::ProducerCertifiedMemForgetOwnedBox => "producer_certified_mem_forget_owned_box",
             Self::ProducerCertifiedLocalReturnContinuity => "producer_certified_local_return_continuity",
             Self::NormalReturnReachable => "normal_return_reachable",
             Self::AnalysisRootNormalReturnReachable => "analysis_root_normal_return_reachable",
@@ -2458,12 +2462,23 @@ impl<'a> ModelChecker<'a> {
                             "Box::leak",
                         )
                     }
+                    AllocationDispositionKind::MemForgetOwnedBox
+                        if record.obligation_effect
+                            == AllocationObligationEffect::PreserveUnreclaimedObligation =>
+                    {
+                        (
+                            AllocationObligationFindingKind::UnreclaimedOwnedAllocationOnNormalCompletion,
+                            AllocationObligationEvidence::ProducerCertifiedMemForgetOwnedBox,
+                            "mem::forget(Box)",
+                        )
+                    }
                     _ => continue,
                 };
 
                 let allocation = record.allocation.clone();
                 let path = match finding_kind {
-                    AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion => {
+                    AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion
+                    | AllocationObligationFindingKind::UnreclaimedOwnedAllocationOnNormalCompletion => {
                         // The finding name has application-level semantics: the
                         // persistent obligation must survive to normal completion
                         // of the analyzed root activation.  Do not accept an
@@ -2542,7 +2557,8 @@ impl<'a> ModelChecker<'a> {
                             label.allocation == allocation && label.predicate == EventKind::Drop
                         });
                         let can_reach_relevant_completion = match finding_kind {
-                            AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion => {
+                            AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion
+                            | AllocationObligationFindingKind::UnreclaimedOwnedAllocationOnNormalCompletion => {
                                 self.can_reach_analysis_root_normal_return_in_scope(scope, node_id)
                             }
                             _ => self.can_reach_normal_return_in_scope(scope, node_id),
@@ -2575,7 +2591,8 @@ impl<'a> ModelChecker<'a> {
                     }
                 });
                 let completion_evidence = match finding_kind {
-                    AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion => {
+                    AllocationObligationFindingKind::PersistentAllocationOnNormalCompletion
+                    | AllocationObligationFindingKind::UnreclaimedOwnedAllocationOnNormalCompletion => {
                         AllocationObligationEvidence::AnalysisRootNormalReturnReachable
                     }
                     _ => AllocationObligationEvidence::NormalReturnReachable,
@@ -8755,6 +8772,70 @@ mod tests {
             finding.return_node.as_deref(),
             Some("rust::main::{closure#0}::bb1")
         );
+    }
+
+    #[test]
+    fn mem_forget_owned_box_requires_matching_unreclaimed_certificate() {
+        let mut k = one_rust_root_allocation_graph();
+        k.capabilities.insert("allocation_disposition_v1".into());
+        k.capabilities.insert("mir_semantic_labels_v1".into());
+        k.capabilities.insert("typed_edge_flow_v1".into());
+        {
+            let root = k.nodes.get_mut("rust::main::bb0").unwrap();
+            root.successors = vec!["rust::main::bb1".into()];
+            root.allocation_disposition = vec![AllocationDispositionRecord {
+                allocation: "A".into(),
+                kind: AllocationDispositionKind::MemForgetOwnedBox,
+                certainty: AllocationEventCertainty::MayAbstract,
+                obligation_effect: AllocationObligationEffect::PreserveUnreclaimedObligation,
+                basis: "rustc_mem_forget_owned_box_v1".into(),
+                source_variable: Some("rust::main::_1".into()),
+                target_variable: None,
+                callee_def_path: Some("core::mem::forget".into()),
+            }];
+        }
+        k.nodes.insert(
+            "rust::main::bb1".into(),
+            AnnotatedNode {
+                id: "rust::main::bb1".into(),
+                successors: vec![],
+                labels: vec![],
+                semantic_labels: vec!["term:return".into()],
+                allocation_labels: vec![],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation::default()),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: None,
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        k.typed_edges = vec![TypedEdgeRecord {
+            source: "rust::main::bb0".into(),
+            destination: "rust::main::bb1".into(),
+            flow: TypedEdgeFlow::Normal,
+            label: Some("Goto".into()),
+            source_label: None,
+            destination_label: None,
+        }];
+
+        let findings = ModelChecker::new(&k)
+            .allocation_obligation_findings(Truth::Unknown, AssessmentScope::NormalExecution);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(
+            findings[0].kind,
+            AllocationObligationFindingKind::UnreclaimedOwnedAllocationOnNormalCompletion
+        );
+        assert_eq!(findings[0].allocation, "A");
+        assert!(findings[0].evidence.contains(
+            &AllocationObligationEvidence::ProducerCertifiedMemForgetOwnedBox
+        ));
+
+        k.nodes.get_mut("rust::main::bb0").unwrap().allocation_disposition[0]
+            .obligation_effect = AllocationObligationEffect::MayDischarge;
+        assert!(ModelChecker::new(&k)
+            .allocation_obligation_findings(Truth::Unknown, AssessmentScope::NormalExecution)
+            .is_empty());
     }
 
     #[test]

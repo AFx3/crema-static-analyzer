@@ -34,6 +34,18 @@ struct RustCallReturnRelationV1 {
     dummy_ret_node: String,
     continuation_node: String,
     basis: &'static str,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    resource_returns: Vec<ExactResourceReturn>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    return_destination: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct ExactResourceReturn {
+    return_node: String,
+    destination_variable: String,
+    fields: Vec<usize>,
+    allocation: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -764,6 +776,7 @@ struct AnnotatedNode {
     /// Auditable scoped post-state identity relation at this node. Present only in v2.
     #[serde(skip_serializing_if = "Option::is_none")]
     identity: Option<NodeIdentityAnnotation>,
+
     /// Auditable intra-node MAY summary used to resolve allocation-centric
     /// event labels. Present only in v2.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -825,6 +838,8 @@ struct AllocationDispositionRecord {
 
 #[derive(Debug, Clone, Default, Serialize)]
 struct NodeIdentityAnnotation {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    uncertain_resource_effects: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     access_bases: Vec<IdentityPointsToRecord>,
     points_to: Vec<IdentityPointsToRecord>,
@@ -1050,7 +1065,40 @@ fn export_cqpl_annotated_icfg_versioned(
     // in `icfg_edges`; the exporter is no longer allowed to synthesize a second
     // relation.  Validate the metadata/edge agreement instead.
     let rust_call_return_relations = if schema_version == 2 {
-        Some(rust_call_return_relation_records(icfg, &successors, &node_ids)?)
+        let mut records = rust_call_return_relation_records(icfg, &successors, &node_ids)?;
+        if let Some(state) = identity_state {
+            for record in &mut records {
+                let Some(call) = icfg.rust_calls.iter().find(|c| c.call_node == record.call_node) else { continue; };
+                // Only an exact direct MIR destination. Projected destinations
+                // need their own typed certificate and deliberately fail closed.
+                let raw = call.return_place.trim();
+                let Some(index) = raw.strip_prefix('_').and_then(|v| v.parse::<u32>().ok()) else { continue; };
+                let dest = ProgramVarId::Rust {function:call.caller_function.clone(), local:index};
+                let source = ProgramVarId::Rust {function:call.callee_function.clone(), local:0};
+                let Some(after) = state.by_node.get(&call.dummy_ret_node) else { continue; };
+                for ret in &record.callee_return_nodes {
+                    let Some(before) = state.by_node.get(ret) else { continue; };
+                    let mut pairs = vec![(vec![], before.points_to(&source), after.points_to(&dest))];
+                    for (place, allocations) in &before.place_points_to {
+                        if place.base != source { continue; }
+                        let fields: Option<Vec<usize>> = place.projection.iter().map(|p| match p {
+                            PlaceProjection::Field {index} => Some(*index as usize), _ => None }).collect();
+                        if let Some(fields) = fields {
+                            let target = PlaceId {base:dest.clone(), projection:place.projection.clone()};
+                            pairs.push((fields, allocations.clone(), after.points_to_place(&target)));
+                        }
+                    }
+                    for (fields, lhs, rhs) in pairs {
+                        for allocation in lhs.intersection(&rhs) {
+                            record.return_destination = Some(dest.canonical_string());
+                            record.resource_returns.push(ExactResourceReturn {return_node:ret.clone(),
+                                destination_variable:dest.canonical_string(),fields:fields.clone(),allocation:stable_allocation_id(allocation)});
+                        }
+                    }
+                }
+            }
+        }
+        Some(records)
     } else {
         validate_canonical_internal_rust_edges(icfg, &successors)?;
         None
@@ -1193,7 +1241,7 @@ fn export_cqpl_annotated_icfg_versioned(
             )
             .into());
         }
-        let (identity, event_identity, allocation_post, allocation_disposition) = if schema_version == 2 {
+        let (mut identity, event_identity, allocation_post, allocation_disposition) = if schema_version == 2 {
             let post_identity = identity_state
                 .and_then(|state| state.by_node.get(node_id))
                 .cloned()
@@ -1281,6 +1329,25 @@ fn export_cqpl_annotated_icfg_versioned(
             .as_ref()
             .map(|memory| memory.coverage().as_str());
 
+        let mut uncertain_resource_effects = BTreeSet::new();
+        if !icfg.rust_calls.iter().any(|call| call.call_node == *node_id) {
+            if let GlobalICFGNode::Mir(bb) = node {
+                if let Some(MirTerminator::Call { arguments, non_reclaiming_arguments, .. }) = &bb.terminator {
+                    if let Some((function, _)) = node_id.strip_prefix("rust::").and_then(|n| n.rsplit_once("::bb")) {
+                        for (index, argument) in arguments.iter().enumerate() {
+                            if non_reclaiming_arguments.contains(&index) { continue; }
+                            if let Some(var) = ProgramVarId::rust(function.to_string(), &argument.arg) {
+                                let resources = unknown_argument_resources(&event_mem, &var);
+                                uncertain_resource_effects.extend(resources.iter().map(stable_allocation_id));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(annotation) = identity.as_mut() {
+            annotation.uncertain_resource_effects = uncertain_resource_effects.into_iter().collect();
+        }
         nodes.push(AnnotatedNode {
             id: node_id.clone(),
             successors: successors
@@ -2855,8 +2922,34 @@ fn collect_identity_program_variables(mem: &AllocationIdentityMemory) -> BTreeSe
     out
 }
 
+/// MAY resources carried by an unknown argument, including projected values
+/// reachable through stack borrows. Finite closure over already represented
+/// places; no allocation or projection is invented by this traversal.
+fn unknown_argument_resources(memory: &AllocationIdentityMemory, source: &ProgramVarId) -> BTreeSet<AbstractAllocId> {
+    let mut result=memory.event_allocations(source);
+    let mut pending=vec![PlaceId {base:source.clone(),projection:vec![]}];
+    let mut seen=BTreeSet::new();
+    while let Some(root)=pending.pop() {
+        if !seen.insert(root.clone()) {continue;}
+        result.extend(memory.allocations_for_place(root.clone()));
+        pending.extend(memory.stack_refs_place(&root));
+        for (place,allocs) in &memory.place_points_to {
+            if place.base==root.base && place.projection.starts_with(&root.projection) {
+                result.extend(allocs.iter().cloned());
+            }
+        }
+        for (place,targets) in &memory.place_stack_refs {
+            if place.base==root.base && place.projection.starts_with(&root.projection) {
+                pending.extend(targets.iter().cloned());
+            }
+        }
+    }
+    result
+}
+
 fn identity_annotation(mem: &AllocationIdentityMemory) -> NodeIdentityAnnotation {
     NodeIdentityAnnotation {
+        uncertain_resource_effects: vec![],
         access_bases: mem.access_bases.iter().map(|(variable, allocations)| IdentityPointsToRecord {
             variable: variable.canonical_string(),
             allocations: allocations.iter().map(stable_allocation_id).collect(),
@@ -3938,6 +4031,7 @@ fn rust_call_return_relation_records(
             dummy_ret_node: call.dummy_ret_node.clone(),
             continuation_node: call.return_node.clone(),
             basis: "rust_call_metadata_v1",
+            resource_returns: vec![], return_destination: None,
         });
     }
     records.sort_by(|a, b| {
@@ -5813,6 +5907,19 @@ mod tests {
     }
 
     #[test]
+    fn unknown_argument_guard_follows_borrowed_owner_fields_and_keeps_other_resources() {
+        let var=|local| ProgramVarId::Rust {function:"caller".into(),local};
+        let a=AbstractAllocId::new(AllocationSiteId::CCall {node_id:"alloc-a".into(),allocator:"malloc".into()},vec![]);
+        let b=AbstractAllocId::new(AllocationSiteId::CCall {node_id:"alloc-b".into(),allocator:"malloc".into()},vec![]);
+        let mut memory=AllocationIdentityMemory::default();
+        memory.assign_stack_refs(var(1),BTreeSet::from([PlaceId {base:var(2),projection:vec![]}]));
+        memory.assign_place_points_to(PlaceId {base:var(2),projection:vec![PlaceProjection::Field {index:0}]},BTreeSet::from([a.clone()]));
+        memory.assign_points_to(var(3),BTreeSet::from([b]));
+        assert_eq!(unknown_argument_resources(&memory,&var(1)),BTreeSet::from([a]));
+        assert!(unknown_argument_resources(&memory,&var(9)).is_empty());
+    }
+
+    #[test]
     fn rust_unwind_edge_scope_native_context_ownership() {
         let (mut g,t,_)=rust_unwind_edge_scope_fixture();
         g.dependency_body_ingestion_v1=Some(serde_json::from_value(serde_json::json!({
@@ -6183,6 +6290,7 @@ mod tests {
             callee_entry_node: "entry".into(), callee_return_nodes: vec!["ret".into()],
             dummy_ret_node: "matched0".into(), continuation_node: "continuation0".into(),
             basis: "rust_call_metadata_v1",
+            resource_returns: vec![], return_destination: None,
         }]);
     }
 
@@ -6456,7 +6564,7 @@ mod tests {
                 callee_def_path: Some(function_called.into()),
                 deallocator_evidence: None,
                 allocation_disposition_evidence: None,
-                atomic_ptr_evidence: None,
+                atomic_ptr_evidence: None, manually_drop_borrow: None, non_reclaiming_arguments: vec![],
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -7526,7 +7634,7 @@ mod tests {
                 callee_def_path: Some("callee".into()),
                 deallocator_evidence: None,
                 allocation_disposition_evidence: None,
-                atomic_ptr_evidence: None,
+                atomic_ptr_evidence: None, manually_drop_borrow: None, non_reclaiming_arguments: vec![],
                 higher_order_evidence: None,
                 callee_is_local: true,
                 callback_def_paths: Vec::new(),
@@ -7849,7 +7957,7 @@ mod tests {
                     callee_def_path: "core::mem::drop".into(),
                     owner_def_path: None,
                 }),
-                atomic_ptr_evidence: None,
+                atomic_ptr_evidence: None, manually_drop_borrow: None, non_reclaiming_arguments: vec![],
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -7888,7 +7996,7 @@ mod tests {
                 callee_def_path: None,
                 deallocator_evidence: None,
                 allocation_disposition_evidence: None,
-                atomic_ptr_evidence: None,
+                atomic_ptr_evidence: None, manually_drop_borrow: None, non_reclaiming_arguments: vec![],
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -7931,7 +8039,7 @@ mod tests {
                 callee_def_path: None,
                 deallocator_evidence: None,
                 allocation_disposition_evidence: None,
-                atomic_ptr_evidence: None,
+                atomic_ptr_evidence: None, manually_drop_borrow: None, non_reclaiming_arguments: vec![],
                 higher_order_evidence: None,
                 callee_is_local: false,
                 callback_def_paths: Vec::new(),
@@ -8587,7 +8695,7 @@ mod tests {
                         allocator_def_path: None,
                     }),
                     allocation_disposition_evidence: None,
-                    atomic_ptr_evidence: None,
+                    atomic_ptr_evidence: None, manually_drop_borrow: None, non_reclaiming_arguments: vec![],
                     higher_order_evidence: None,
                     callee_is_local: false,
                     callback_def_paths: Vec::new(),
@@ -8631,7 +8739,7 @@ mod tests {
                         allocator_def_path: Some("alloc::alloc::Global".into()),
                     }),
                     allocation_disposition_evidence: None,
-                    atomic_ptr_evidence: None,
+                    atomic_ptr_evidence: None, manually_drop_borrow: None, non_reclaiming_arguments: vec![],
                     higher_order_evidence: None,
                     callee_is_local: false,
                     callback_def_paths: Vec::new(),
@@ -9247,7 +9355,7 @@ mod tests {
                     callee_def_path: Some("free".into()),
                     deallocator_evidence: None,
                     allocation_disposition_evidence: None,
-                    atomic_ptr_evidence: None,
+                    atomic_ptr_evidence: None, manually_drop_borrow: None, non_reclaiming_arguments: vec![],
                     higher_order_evidence: None,
                     callee_is_local: false,
                     callback_def_paths: Vec::new(),
