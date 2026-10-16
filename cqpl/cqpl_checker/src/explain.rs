@@ -2683,6 +2683,19 @@ impl<'a> ModelChecker<'a> {
     /// merely avoids that discharge is not sufficient positive leak evidence.
     /// The routine never changes CQPL truth and also fails closed on static-site
     /// recurrence.
+    fn blocks_exact_external_obligation(&self, node: &str, allocation: &str) -> bool {
+        let Some(n) = self.k.nodes.get(node) else {return true;};
+        if n.identity.as_ref().is_some_and(|i| i.uncertain_resource_effects.iter().any(|a| a==allocation)) {return true;}
+        let certified = self.k.rust_call_return_relations.iter().filter(|r|
+            r.callee_return_nodes.iter().any(|ret|ret==node)
+                && r.resource_returns.iter().any(|p|p.return_node==node && p.allocation==allocation)).count()==1;
+        if !certified {return self.blocks_open_obligation(node, allocation);}
+        n.allocation_disposition.iter().any(|r| r.allocation==allocation && matches!(r.obligation_effect,
+            AllocationObligationEffect::RestoreRaiiObligation | AllocationObligationEffect::MayDischarge))
+            || n.allocation_labels.iter().any(|l|l.allocation==allocation && l.predicate==EventKind::Drop)
+            || n.allocation_post.as_ref().is_some_and(|p|p.value_of(allocation)==CellValue::Freed)
+    }
+
     fn external_allocation_leak_findings(
         &self,
         result: Truth,
@@ -2741,32 +2754,29 @@ impl<'a> ModelChecker<'a> {
                 continue;
             }
 
-            // Nullable TOP does not correlate the abstract allocation identity
-            // with the non-null branch.  If any modeled discharge or escape of
-            // this same abstract allocation is reachable, an alternative path
-            // avoiding it may simply be the allocator-failure/null branch.  In
-            // that case positive orientation would be unsound; fail closed.
-            if self
-                .bfs_to_in_scope(
-                    scope,
-                    origin,
-                    |candidate| {
-                        candidate != origin
-                            && self.blocks_open_obligation(candidate, allocation)
-                    },
-                    |_| true,
-                )
-                .is_some()
-            {
-                continue;
-            }
-
-            let path = self.bfs_to_in_scope(
-                scope,
-                origin,
-                |candidate| self.is_normal_return_node(candidate),
-                |candidate| !self.blocks_open_obligation(candidate, allocation),
-            );
+            let certified_mode = self.k.rust_call_return_relations.iter().any(|r|
+                r.resource_returns.iter().any(|p| p.allocation == *allocation));
+            let path = if certified_mode {
+                // Check all matched normal routes for a possible compatible
+                // cleanup/real escape before choosing a positive witness.
+                if self.matched_bfs_to_in_scope(scope, origin,
+                    |n| n != origin && self.blocks_exact_external_obligation(n, allocation)
+                        && self.bfs_to_in_scope(scope, n,
+                            |end| self.is_analysis_root_normal_return_node(end), |_| true).is_some(),
+                    |_| true).is_some() {
+                    continue;
+                }
+                self.matched_bfs_to_in_scope(scope, origin,
+                    |n| self.is_analysis_root_normal_return_node(n),
+                    |n| !self.blocks_exact_external_obligation(n, allocation))
+            } else {
+                if self.bfs_to_in_scope(scope, origin,
+                    |n| n != origin && self.blocks_open_obligation(n, allocation), |_| true).is_some() {
+                    continue;
+                }
+                self.bfs_to_in_scope(scope, origin,
+                    |n| self.is_normal_return_node(n), |n| !self.blocks_open_obligation(n, allocation))
+            };
             let Some(witness_path) = path else { continue; };
             let Some(return_node) = witness_path.last().cloned() else { continue; };
 
@@ -6181,6 +6191,40 @@ mod tests {
 
     fn return_obligation_transfer_v2_findings(k: &Kripke) -> Vec<AllocationObligationFinding> {
         ModelChecker::new(k).allocation_obligation_findings(Truth::Unknown, AssessmentScope::NormalExecution)
+    }
+
+    #[test]
+    fn c_origin_exact_return_stays_blocked_without_or_with_other_resource_certificate() {
+        let mut k=return_obligation_transfer_v2_graph(&[&["A"]]);
+        assert!(ModelChecker::new(&k).blocks_exact_external_obligation("return_f","A"));
+        k.rust_call_return_relations[0].resource_returns.push(crate::kripke::ExactResourceReturn {
+            return_node:"return_f".into(),destination_variable:"rust::caller_a::Local(_1)".into(),fields:vec![],allocation:"B".into()});
+        assert!(ModelChecker::new(&k).blocks_exact_external_obligation("return_f","A"));
+    }
+    #[test]
+    fn c_origin_exact_return_only_ignores_its_local_escape_not_cleanup_or_unknown_effect() {
+        let mut k=return_obligation_transfer_v2_graph(&[&["A"]]);
+        k.rust_call_return_relations[0].resource_returns.push(crate::kripke::ExactResourceReturn {
+            return_node:"return_f".into(),destination_variable:"rust::caller_a::Local(_1)".into(),fields:vec![],allocation:"A".into()});
+        assert!(!ModelChecker::new(&k).blocks_exact_external_obligation("return_f","A"));
+        let clean=k.clone();
+        for effect in [AllocationObligationEffect::RestoreRaiiObligation,AllocationObligationEffect::MayDischarge] {
+            let mut k=clean.clone();k.nodes.get_mut("return_f").unwrap().allocation_disposition.push(
+                return_obligation_transfer_v2_disposition("A",AllocationDispositionKind::BoxFromRaw,effect));
+            assert!(ModelChecker::new(&k).blocks_exact_external_obligation("return_f","A"));
+        }
+        k.nodes.get_mut("return_f").unwrap().identity=Some(NodeIdentityAnnotation {
+            uncertain_resource_effects:vec!["A".into()],..Default::default()});
+        assert!(ModelChecker::new(&k).blocks_exact_external_obligation("return_f","A"));
+    }
+    #[test]
+    fn c_origin_unknown_other_resource_does_not_reclaim_current_resource() {
+        let mut k=return_obligation_transfer_v2_graph(&[&["A"]]);
+        k.rust_call_return_relations[0].resource_returns.push(crate::kripke::ExactResourceReturn {
+            return_node:"return_f".into(),destination_variable:"rust::caller_a::Local(_1)".into(),fields:vec![],allocation:"A".into()});
+        k.nodes.get_mut("return_f").unwrap().identity=Some(NodeIdentityAnnotation {
+            uncertain_resource_effects:vec!["B".into()],..Default::default()});
+        assert!(!ModelChecker::new(&k).blocks_exact_external_obligation("return_f","A"));
     }
 
     #[test]

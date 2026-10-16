@@ -476,6 +476,19 @@ pub struct RustCallReturnRelationRecord {
     pub dummy_ret_node: String,
     pub continuation_node: String,
     pub basis: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub resource_returns: Vec<ExactResourceReturn>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub return_destination: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExactResourceReturn {
+    pub return_node: String,
+    pub destination_variable: String,
+    pub fields: Vec<usize>,
+    pub allocation: String,
 }
 
 pub type RustCallReturnRelationOverlay = Vec<RustCallReturnRelationRecord>;
@@ -923,6 +936,10 @@ pub struct IdentityPointsToRecord {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeIdentityAnnotation {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub uncertain_resource_effects: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub place_points_to: Vec<serde_json::Value>,
     #[serde(default)]
     pub access_bases: Vec<IdentityPointsToRecord>,
     #[serde(default)]
@@ -3032,6 +3049,23 @@ impl Kripke {
     }
 
     /// Install evidence only after validation against the original producer graph.
+    /// Read post-state only. Event summaries and unrelated caller locals are
+    /// deliberately insufficient to establish the returned value identity.
+    pub(crate) fn exact_identity_at(&self, node: &str, variable: &str, fields: &[usize], allocation: &str) -> bool {
+        let Some(identity) = self.nodes.get(node).and_then(|n| n.identity.as_ref()) else { return false; };
+        if fields.is_empty() {
+            return identity.points_to.iter().any(|p| p.variable == variable && p.allocations.iter().any(|a| a == allocation));
+        }
+        let Some((scope, local)) = variable.strip_prefix("rust::").and_then(|v| v.rsplit_once("::Local(_")) else {return false;};
+        let Some(local) = local.strip_suffix(')').and_then(|v| v.parse::<u64>().ok()) else {return false;};
+        identity.place_points_to.iter().any(|p| {
+            let place=&p["place"];
+            place["base"]["kind"] == "rust" && place["base"]["function"] == scope && place["base"]["local"] == local
+                && place["projection"].as_array().is_some_and(|ps| ps.len()==fields.len() && ps.iter().zip(fields).all(|(p,i)| p["kind"]=="field" && p["index"].as_u64()==Some(*i as u64)))
+                && p["allocations"].as_array().is_some_and(|a| a.iter().any(|a| a.as_str()==Some(allocation)))
+        })
+    }
+
     pub fn with_rust_call_return_relations(
         mut self,
         relations: Option<RustCallReturnRelationOverlay>,
@@ -3075,6 +3109,18 @@ impl Kripke {
                 .chain(r.callee_return_nodes.iter().map(|ret| (ret, &r.dummy_ret_node))) {
                 if !normal_edges.contains(&(source.as_str(), destination.as_str())) {
                     return Err(format!("rust_call_return_relations missing typed Normal edge '{source}' -> '{destination}'"));
+                }
+            }
+        }
+        for r in &records {
+            for proof in &r.resource_returns {
+                if !r.callee_return_nodes.contains(&proof.return_node)
+                    || r.return_destination.as_ref() != Some(&proof.destination_variable)
+                    || !proof.destination_variable.starts_with(&format!("rust::{}::Local(_", r.caller_function))
+                    || !self.allocations.contains_key(&proof.allocation)
+                    || !self.exact_identity_at(&proof.return_node, &format!("rust::{}::Local(_0)", r.callee_function), &proof.fields, &proof.allocation)
+                    || !self.exact_identity_at(&r.dummy_ret_node, &proof.destination_variable, &proof.fields, &proof.allocation) {
+                    return Err("invalid exact resource return certificate".into());
                 }
             }
         }
@@ -5209,6 +5255,7 @@ mod tests {
             allocation_labels: vec![],
             allocation_disposition: vec![],
             identity: Some(NodeIdentityAnnotation {
+                uncertain_resource_effects: vec![], place_points_to: vec![],
                 access_bases: vec![],
                 points_to: vec![IdentityPointsToRecord {
                     variable: "rust::main::Local(_1)".into(),
@@ -6740,7 +6787,7 @@ pub(crate) mod rust_call_return_relation_tests {
             dummy_call_node: format!("activation_{suffix}"), callee_function: "callee".into(),
             callee_entry_node: "entry_f".into(), callee_return_nodes: vec!["return_f".into()],
             dummy_ret_node: format!("matched_{suffix}"), continuation_node: format!("continue_{suffix}"),
-            basis: "rust_call_metadata_v1".into(),
+            basis: "rust_call_metadata_v1".into(), resource_returns: vec![], return_destination: None,
         }
     }
 
@@ -6775,6 +6822,35 @@ pub(crate) mod rust_call_return_relation_tests {
 
     fn install(raw: &Value) -> Result<Kripke, String> {
         base(raw).with_rust_call_return_relations(rust_call_return_relation_overlay_from_json(raw)?)
+    }
+
+    #[test]
+    fn exact_return_identity_ignores_stale_local_and_event_summary() {
+        let rel=record("a"); let raw=raw_graph(&[rel.clone()]); let mut k=base(&raw);
+        k.nodes.get_mut(&rel.dummy_ret_node).unwrap().identity=Some(NodeIdentityAnnotation {
+            points_to:vec![IdentityPointsToRecord {variable:"rust::caller_a::Local(_9)".into(),allocations:vec!["A".into()]}],
+            ..Default::default()
+        });
+        k.nodes.get_mut(&rel.dummy_ret_node).unwrap().event_identity=Some(NodeIdentityAnnotation {
+            points_to:vec![IdentityPointsToRecord {variable:"rust::caller_a::Local(_1)".into(),allocations:vec!["A".into()]}],
+            ..Default::default()
+        });
+        assert!(!k.exact_identity_at(&rel.dummy_ret_node,"rust::caller_a::Local(_1)",&[],"A"));
+        assert!(k.exact_identity_at(&rel.dummy_ret_node,"rust::caller_a::Local(_9)",&[],"A"));
+        assert!(!k.exact_identity_at(&rel.dummy_ret_node,"rust::caller_a::Local(_9)",&[],"B"));
+    }
+
+    #[test]
+    fn exact_return_projection_keeps_field_and_function_scope() {
+        let rel=record("a");let mut k=base(&raw_graph(&[rel.clone()]));
+        k.nodes.get_mut(&rel.dummy_ret_node).unwrap().identity=Some(NodeIdentityAnnotation {
+            place_points_to:vec![json!({"place":{"base":{"kind":"rust","function":"caller_a","local":1},
+                "projection":[{"kind":"field","index":0}]},"allocations":["A"]})],..Default::default()
+        });
+        assert!(k.exact_identity_at(&rel.dummy_ret_node,"rust::caller_a::Local(_1)",&[0],"A"));
+        assert!(!k.exact_identity_at(&rel.dummy_ret_node,"rust::caller_a::Local(_1)",&[1],"A"));
+        assert!(!k.exact_identity_at(&rel.dummy_ret_node,"rust::caller_b::Local(_1)",&[0],"A"));
+        assert!(!k.exact_identity_at(&rel.dummy_ret_node,"rust::caller_a::Local(_1)",&[],"A"));
     }
 
     #[test]
