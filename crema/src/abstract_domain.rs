@@ -8500,7 +8500,7 @@ mod legacy_return_p0_d2_tests {
  let entry=format!("rust::{f}::bb0");let ret=format!("rust::{f}::bb1");let callsite=format!("rust::{f}::bb2");
  for e in &mut g.icfg_edges {if e.source==entry && e.label.as_deref()==Some("Rust Return -> dummyRet"){e.source=ret.clone();}}
  g.rust_functions.get_mut(*f).unwrap().return_nodes=vec![ret.clone()];
- block_mut(&mut g,&entry).terminator=Some(MirTerminator::SwitchInt{details:"branch".into(),source_info:"test".into(),targets:vec!["bb1".into()],discr:"copy _1".into(),otherwise:Some("bb2".into())});
+ block_mut(&mut g,&entry).terminator=Some(MirTerminator::SwitchInt{details:"branch".into(),source_info:"test".into(),targets:vec!["bb1".into()],discr:"copy _1".into(),otherwise:Some("bb2".into()),resolved_constant_target:None,constant_resolution_basis:None});
  g.ordered_nodes.push((ret.clone(),node(1,vec![],true)));g.ordered_nodes.push((callsite.clone(),node(2,vec![],false)));edge(&mut g,&entry,&ret,"SwitchInt");edge(&mut g,&entry,&callsite,"SwitchInt");
  }
  for f in functions {

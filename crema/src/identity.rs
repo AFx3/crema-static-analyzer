@@ -8190,6 +8190,8 @@ mod tests {
                 targets: vec!["bb0".into()],
                 discr: "Local(_8)".into(),
                 otherwise: Some("bb1".into()),
+                resolved_constant_target: None,
+                constant_resolution_basis: None,
             }),
         };
         let icfg = GlobalICFGOrdered {
@@ -9435,6 +9437,8 @@ mod tests {
                         targets: vec!["bb1".into()],
                         discr: "_1".into(),
                         otherwise: Some("bb2".into()),
+                        resolved_constant_target: None,
+                        constant_resolution_basis: None,
                     }),
                 }),
             ));

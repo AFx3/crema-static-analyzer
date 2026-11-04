@@ -814,7 +814,22 @@ pub struct RustHigherOrderCallEvidence {
 #[serde(tag = "kind")]
 pub enum MirTerminator {
     Goto { details: String, source_info: String, target: String }, // 1
-    SwitchInt { details: String, source_info: String, targets: Vec<String>, discr: String, otherwise: Option<String> }, //2
+    SwitchInt {
+        details: String,
+        source_info: String,
+        targets: Vec<String>,
+        discr: String,
+        otherwise: Option<String>,
+        /// Producer-proved successor when the discriminator is a closed MIR
+        /// constant expression in this basic block. Historical artifacts and
+        /// unresolved switches retain `None` and therefore all successors.
+        #[serde(default)]
+        resolved_constant_target: Option<String>,
+        /// Audit evidence for the restricted constant evaluation. This is
+        /// diagnostic provenance only; consumers use the typed target above.
+        #[serde(default)]
+        constant_resolution_basis: Option<String>,
+    }, //2
     UnwindResume { details: String, source_info: String }, //3
     /// Pinned rustc cleanup terminator: execution terminates rather than returning.
     #[serde(alias = "Terminate")]

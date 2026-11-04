@@ -1,6 +1,6 @@
 use rustc_driver::Callbacks;
 use rustc_interface::Queries;
-use rustc_middle::mir::{Body, Place, PlaceElem, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, Operand, NonDivergingIntrinsic};
+use rustc_middle::mir::{BinOp, Body, Place, PlaceElem, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, Operand, NonDivergingIntrinsic};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::{Write, Read};
@@ -80,6 +80,76 @@ fn a3_bodyless_enum_constructor_callback_v1_enabled() -> bool {
 fn a3_iterator_callback_ingestion_v1_enabled() -> bool {
     std::env::var("CREMA_INTERNAL_A3_ITERATOR_CALLBACK_INGESTION_V1")
         .ok().as_deref() == Some("1")
+}
+
+#[derive(Clone, Copy)]
+struct ClosedMirScalar<'tcx> {
+    bits: u128,
+    ty: ty::Ty<'tcx>,
+}
+
+fn eval_closed_scalar_operand<'tcx>(
+    operand: &Operand<'tcx>,
+    values: &HashMap<Local, ClosedMirScalar<'tcx>>,
+    tcx: TyCtxt<'tcx>,
+    typing_env: ty::TypingEnv<'tcx>,
+) -> Option<ClosedMirScalar<'tcx>> {
+    match operand {
+        Operand::Copy(place) | Operand::Move(place) if place.projection.is_empty() => {
+            values.get(&place.local).copied()
+        }
+        Operand::Constant(constant) => {
+            let ty = constant.const_.ty();
+            let scalar = constant.const_.try_eval_scalar_int(tcx, typing_env)?;
+            let size = tcx.layout_of(typing_env.as_query_input(ty)).ok()?.size;
+            Some(ClosedMirScalar { bits: scalar.to_bits(size), ty })
+        }
+        _ => None,
+    }
+}
+
+fn signed_scalar(bits: u128, size_bits: u64) -> i128 {
+    if size_bits == 0 || size_bits >= 128 {
+        return bits as i128;
+    }
+    let shift = 128 - size_bits;
+    ((bits << shift) as i128) >> shift
+}
+
+fn eval_closed_scalar_rvalue<'tcx>(
+    rvalue: &Rvalue<'tcx>,
+    values: &HashMap<Local, ClosedMirScalar<'tcx>>,
+    tcx: TyCtxt<'tcx>,
+    typing_env: ty::TypingEnv<'tcx>,
+) -> Option<ClosedMirScalar<'tcx>> {
+    match rvalue {
+        Rvalue::Use(operand) => {
+            eval_closed_scalar_operand(operand, values, tcx, typing_env)
+        }
+        Rvalue::BinaryOp(op, operands) => {
+            let left = eval_closed_scalar_operand(&operands.0, values, tcx, typing_env)?;
+            let right = eval_closed_scalar_operand(&operands.1, values, tcx, typing_env)?;
+            if left.ty != right.ty {
+                return None;
+            }
+            let size_bits = tcx.layout_of(typing_env.as_query_input(left.ty)).ok()?.size.bits();
+            let result = match (op, left.ty.kind()) {
+                (BinOp::Eq, _) => left.bits == right.bits,
+                (BinOp::Ne, _) => left.bits != right.bits,
+                (BinOp::Lt, TyKind::Int(_)) => signed_scalar(left.bits, size_bits) < signed_scalar(right.bits, size_bits),
+                (BinOp::Le, TyKind::Int(_)) => signed_scalar(left.bits, size_bits) <= signed_scalar(right.bits, size_bits),
+                (BinOp::Gt, TyKind::Int(_)) => signed_scalar(left.bits, size_bits) > signed_scalar(right.bits, size_bits),
+                (BinOp::Ge, TyKind::Int(_)) => signed_scalar(left.bits, size_bits) >= signed_scalar(right.bits, size_bits),
+                (BinOp::Lt, TyKind::Uint(_) | TyKind::Bool) => left.bits < right.bits,
+                (BinOp::Le, TyKind::Uint(_) | TyKind::Bool) => left.bits <= right.bits,
+                (BinOp::Gt, TyKind::Uint(_) | TyKind::Bool) => left.bits > right.bits,
+                (BinOp::Ge, TyKind::Uint(_) | TyKind::Bool) => left.bits >= right.bits,
+                _ => return None,
+            };
+            Some(ClosedMirScalar { bits: u128::from(result), ty: tcx.types.bool })
+        }
+        _ => None,
+    }
 }
 
 
@@ -1028,7 +1098,7 @@ mod rust_drop_owner_place_metadata_tests {
                         for (block,data) in body.basic_blocks.iter_enumerated() {
                             let Some(Terminator { kind:TerminatorKind::Drop { place,.. },.. })=&data.terminator else { continue; };
                             let legacy=extractor.convert_terminator(&data.terminator,&body.local_decls,tcx);
-                            let converted=extractor.convert_terminator_with_owner(&data.terminator,&body.local_decls,tcx,definition.to_def_id(),None,&function,block.index());
+                            let converted=extractor.convert_terminator_with_owner(&data.terminator,&data.statements,&body.local_decls,tcx,definition.to_def_id(),None,&function,block.index());
                             assert_eq!(serde_json::to_value(&legacy).unwrap(),serde_json::to_value(&converted).unwrap());
                             let record=extractor.rust_drop_owner_places.last().unwrap();
                             assert_eq!(record.drop_identity.definition_id,dep1_stable_def_id(tcx,definition.to_def_id()));
@@ -1520,6 +1590,7 @@ impl MirExtractor {
     fn convert_terminator_with_owner<'tcx>(
         &mut self,
         terminator: &Option<Terminator<'tcx>>,
+        statements: &[Statement<'tcx>],
         local_decls: &IndexVec<Local, LocalDecl<'tcx>>,
         tcx: TyCtxt<'tcx>,
         definition: DefId,
@@ -1539,7 +1610,63 @@ impl MirExtractor {
                 owner: rust_drop_owner_place_from_ref(function_key, place.as_ref(), local_decls.len()),
             });
         }
-        self.convert_terminator(terminator, local_decls, tcx)
+        let mut converted = self.convert_terminator(terminator, local_decls, tcx);
+        self.annotate_closed_constant_switch(
+            &mut converted,
+            terminator,
+            statements,
+            tcx,
+            definition,
+        );
+        converted
+    }
+
+    /// Resolve only closed, straight-line scalar expressions that rustc left
+    /// in the same MIR basic block as a `SwitchInt`.  This deliberately is not
+    /// a general constant propagator: any projection, unknown operand, write we
+    /// cannot interpret, or unsupported operation fails closed and preserves
+    /// every CFG successor.
+    fn annotate_closed_constant_switch<'tcx>(
+        &self,
+        converted: &mut Option<MirTerminator>,
+        original: &Option<Terminator<'tcx>>,
+        statements: &[Statement<'tcx>],
+        tcx: TyCtxt<'tcx>,
+        definition: DefId,
+    ) {
+        let Some(Terminator { kind: TerminatorKind::SwitchInt { discr, targets, .. }, .. }) = original else { return; };
+        let Some(MirTerminator::SwitchInt { resolved_constant_target, constant_resolution_basis, .. }) = converted.as_mut() else { return; };
+        let typing_env = ty::TypingEnv::post_analysis(tcx, definition);
+        let mut values = HashMap::new();
+
+        for statement in statements {
+            match &statement.kind {
+                StatementKind::Assign(assign) => {
+                    let (place, rvalue) = &**assign;
+                    if !place.projection.is_empty() {
+                        values.remove(&place.local);
+                        continue;
+                    }
+                    let value = eval_closed_scalar_rvalue(rvalue, &values, tcx, typing_env);
+                    match value {
+                        Some(value) => { values.insert(place.local, value); }
+                        None => { values.remove(&place.local); }
+                    }
+                }
+                StatementKind::StorageDead(local) => { values.remove(local); }
+                StatementKind::Deinit(place) | StatementKind::SetDiscriminant { place, .. }
+                    if place.projection.is_empty() => { values.remove(&place.local); }
+                _ => {}
+            }
+        }
+
+        let Some(value) = eval_closed_scalar_operand(discr, &values, tcx, typing_env) else { return; };
+        let target = targets.target_for_value(value.bits);
+        *resolved_constant_target = Some(format!("{:?}", target));
+        *constant_resolution_basis = Some(format!(
+            "closed_same_block_scalar_expression(value={}, type={:?})",
+            value.bits, value.ty,
+        ));
     }
 
     // pass the local declarations here as well so that any place conversions can include mutability
@@ -1572,6 +1699,8 @@ impl MirExtractor {
                     discr: discr_str,
                     targets: target_blocks,
                     otherwise: otherwise_block,
+                    resolved_constant_target: None,
+                    constant_resolution_basis: None,
                 }
             },
             TerminatorKind::Return => MirTerminator::Return {
@@ -2244,7 +2373,7 @@ fn dep1_materialize_dependency_bodies<'tcx>(
         let mut blocks = Vec::with_capacity(body.basic_blocks.len());
         for (bb, data) in body.basic_blocks.iter_enumerated() {
             let mut terminator = extractor.convert_terminator_with_owner(
-                &data.terminator, &body.local_decls, tcx, def_id,
+                &data.terminator, &data.statements, &body.local_decls, tcx, def_id,
                 Some(instance_id.clone()), &function_key, bb.index());
             if let Some(MirTerminator::Call {
                 resolved_instance_callees,
@@ -4033,7 +4162,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                     }
                 }
                 let mut terminator = self.convert_terminator_with_owner(
-                    &data.terminator, &body.local_decls, tcx, def_id.to_def_id(),
+                    &data.terminator, &data.statements, &body.local_decls, tcx, def_id.to_def_id(),
                     None, &function_name, bb.index());
                 if let Some(MirTerminator::Call {
                     resolved_instance_callees,
@@ -4222,7 +4351,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                     }
 
                     let mut terminator = self.convert_terminator_with_owner(
-                        &data.terminator, &body.local_decls, tcx, def_id,
+                        &data.terminator, &data.statements, &body.local_decls, tcx, def_id,
                         None, &function_name, bb.index());
                     if let Some(MirTerminator::Call {
                         resolved_instance_callees,
@@ -4749,8 +4878,19 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                 }
                 ///////////////////////////////////////////////////////////////////////////////////////////////////////
                 // handle others terminators (SwitchInt, Assert, Drop) 
-                if let Some(MirTerminator::SwitchInt { targets, otherwise, .. }) = &block.terminator {
+                if let Some(MirTerminator::SwitchInt { targets, otherwise, resolved_constant_target, .. }) = &block.terminator {
                     let src = format!("rust::{}::bb{}", rust_func, block.block_id);
+                    if let Some(target) = resolved_constant_target {
+                        let dst = format!("rust::{}::{}", rust_func, target);
+                        icfg_edges.push(IcfgEdge {
+                            source: src,
+                            destination: dst,
+                            label: Some("SwitchInt constant target".to_string()),
+                            source_label: Some(format!("Mir bb{}", block.block_id)),
+                            destination_label: None,
+                        });
+                        continue;
+                    }
                     for target in targets {
                         let trimmed = target.trim_matches(|c| c == '(' || c == ')');
                         let parts: Vec<&str> = trimmed.split(',').collect();
