@@ -1,0 +1,1819 @@
+use cqpl_checker::{
+    allocation_existence_guard_overlay_from_json, conditional_reallocation_overlay_from_json, reallocation_boundary_overlay_from_json,
+    opaque_memory_effect_overlay_from_json, panic_lifecycle_overlay_from_json, source_provenance_overlay_from_json, typed_edge_overlay_from_json,
+    rust_call_return_relation_overlay_from_json, rust_call_unwind_relation_overlay_from_json, rust_unwind_edge_scope_overlay_from_json,
+    parse_query_document, AnnotatedIcfg, Binding, Env, Kripke, ModelChecker, QueryResultAssessment,
+};
+use serde::Serialize;
+use serde_json::Value;
+use std::{collections::{BTreeMap, BTreeSet}, env, fs, path::Path, process};
+
+const ELE1_FAMILIES: [&str; 6] = ["allocation_return", "reallocation", "deallocation", "formal_memory", "return_relation", "negative_evidence"];
+
+/// ELE1 allocation-return names are accepted only for the supported C
+/// allocator contract family. No suffix/namespace stripping is performed.
+fn ele1_allocation_callee_matches(callee: &str, operation: &str) -> bool {
+    matches!((callee, operation),
+        ("malloc" | "libc::malloc", "malloc")
+        | ("calloc" | "libc::calloc", "calloc")
+        | ("strdup" | "libc::strdup", "strdup")
+        | ("realloc" | "libc::realloc", "realloc"))
+}
+
+/// Validate ELE1 against the already-present proof records. The annotated
+/// artifact cannot prove its own MIR origin; the producer and gate test that
+/// separately. This routine never creates a semantic event.
+fn validate_ele1(root: &Value) -> Result<Option<Vec<Value>>, String> {
+    let caps: BTreeSet<_> = root.get("capabilities").and_then(Value::as_array)
+        .into_iter().flatten().filter_map(Value::as_str).collect();
+    let enabled = caps.contains("external_library_effects_v1");
+    let bindings = root.get("external_call_bindings");
+    let envelopes = root.get("external_library_effects");
+    if !enabled {
+        if bindings.is_some() || envelopes.is_some() { return Err("ELE1 payload without capability".into()); }
+        return Ok(None);
+    }
+    let bindings = bindings.and_then(Value::as_array).filter(|a| !a.is_empty()).ok_or("ELE1 requires nonempty bindings")?;
+    let envelopes = envelopes.and_then(Value::as_array).filter(|a| !a.is_empty()).ok_or("ELE1 requires nonempty envelopes")?;
+    if root.get("external_return_call_bindings").is_some() { return Err("ELE1 rejects second ERR1 binding authority".into()); }
+    let nodes: BTreeMap<_, _> = root["nodes"].as_array().ok_or("ELE1 nodes missing")?.iter()
+        .filter_map(|n| n["id"].as_str().map(|id| (id, n))).collect();
+    let variables: BTreeSet<_> = root["variables"].as_array().ok_or("ELE1 variables missing")?.iter()
+        .filter_map(|v| (v["language"].as_str() == Some("rust")).then(|| v["id"].as_str()).flatten()).collect();
+    let mut calls = BTreeMap::new();
+    let mut ids = BTreeSet::new();
+    for b in bindings {
+        let node = b["node"].as_str().ok_or("ELE1 binding node")?;
+        let id = b["binding_id"].as_str().ok_or("ELE1 binding id")?;
+        let scope = b["rust_function_scope"].as_str().ok_or("ELE1 scope")?;
+        let expected_scope = node.rsplit_once("::bb").map(|(s, _)| s).ok_or("ELE1 non-Rust node")?;
+        if !node.starts_with("rust::") || scope != expected_scope || id != format!("ele1:{node}")
+            || b["basis"] != "rustc_mir_external_call_binding_v1" || b["body_status"] != "bodyless"
+            || !b["callee"].as_str().is_some_and(|c| !c.is_empty()) {
+            return Err("ELE1 invalid binding identity or basis".into());
+        }
+        let call_node = nodes.get(node).ok_or("ELE1 unknown binding node")?;
+        if !call_node["semantic_labels"].as_array().is_some_and(|a| a.iter().any(|v| v == "term:call")) {
+            return Err("ELE1 binding requires Rust term:call".into());
+        }
+        let callee = b["callee"].as_str().unwrap();
+        if nodes.keys().any(|n| n.starts_with(&format!("llvm::{callee}::"))) {
+            return Err("ELE1 represented body binding".into());
+        }
+        let args = b["arguments"].as_array().ok_or("ELE1 arguments")?;
+        if b["arity"].as_u64() != Some(args.len() as u64) { return Err("ELE1 arity mismatch".into()); }
+        for value in args.iter().chain(b.get("result_variable")) {
+            if value.is_null() { continue; }
+            let actual = value.as_str().ok_or("ELE1 non-string variable")?;
+            if !variables.contains(actual) || !actual.starts_with(&format!("{scope}::Local(_"))
+                || !actual.ends_with(')') {
+                return Err("ELE1 undeclared or cross-scope variable".into());
+            }
+        }
+        if !ids.insert(id) || calls.insert(node, b).is_some() { return Err("ELE1 duplicate binding".into()); }
+    }
+    let mut source: BTreeMap<String, BTreeMap<String, usize>> = BTreeMap::new();
+    let mut seen_records = BTreeSet::new();
+    let mut count = |family: &str, record: &Value, node: &str| -> Result<(), String> {
+        if !seen_records.insert((family.to_owned(), record.to_string())) { return Err("ELE1 duplicate underlying effect".into()); }
+        if !calls.contains_key(node) { return Err("ELE1 orphan underlying effect".into()); }
+        *source.entry(node.to_owned()).or_default().entry(family.to_owned()).or_default() += 1;
+        Ok(())
+    };
+    let records = |field: &str| -> Vec<&Value> { root.get(field).and_then(Value::as_array).map(|a| a.iter().collect()).unwrap_or_default() };
+    for a in records("allocations") {
+        let site = &a["site"];
+        let contract = &a["allocator_contract"];
+        if site["kind"] == "c_call" && site["node_id"].as_str().is_some_and(|n| n.starts_with("rust::"))
+            && contract["family"] == "c_malloc"
+            && matches!(contract["operation"].as_str(), Some("malloc" | "calloc" | "strdup" | "realloc")) {
+            let node = site["node_id"].as_str().unwrap();
+            let b = calls.get(node).ok_or("ELE1 allocation return without binding")?;
+            if !ele1_allocation_callee_matches(
+                b["callee"].as_str().ok_or("ELE1 binding callee")?,
+                contract["operation"].as_str().ok_or("ELE1 allocation operation")?,
+            ) { return Err("ELE1 allocation callee mismatch".into()); }
+            count("allocation_return", a, node)?;
+        }
+    }
+    for r in records("reallocation_boundaries") {
+        let node = r["node"].as_str().ok_or("ELE1 RBF node")?;
+        let b = calls.get(node).ok_or("ELE1 RBF binding")?;
+        if b["callee"] != "realloc" || b["arguments"][0] != r["source_variable"]
+            || b["result_variable"] != r["result_variable"] { return Err("ELE1 RBF identity mismatch".into()); }
+        count("reallocation", r, node)?;
+    }
+    for r in records("external_deallocation_call_provenance") {
+        let node = r["node"].as_str().ok_or("ELE1 DCP1 node")?;
+        let b = calls.get(node).ok_or("ELE1 DCP1 binding")?;
+        if b["callee"] != r["callee"] || b["arity"] != r["arity"]
+            || b["arguments"][0] != r["actual_variable"] { return Err("ELE1 DCP1 identity mismatch".into()); }
+        count("deallocation", r, node)?;
+    }
+    for r in records("external_formal_memory_effects") {
+        let node = r["node"].as_str().ok_or("ELE1 EFM2 node")?;
+        let b = calls.get(node).ok_or("ELE1 EFM2 binding")?;
+        let i = r["formal_index"].as_u64().ok_or("ELE1 EFM2 formal")? as usize;
+        if b["callee"] != r["callee"] || b["arguments"].as_array().and_then(|a| a.get(i)) != Some(&r["actual_variable"]) {
+            return Err("ELE1 EFM2 identity mismatch".into());
+        }
+        count("formal_memory", r, node)?;
+    }
+    for r in records("external_return_relations") {
+        let node = r["node"].as_str().ok_or("ELE1 ERR1 node")?;
+        let b = calls.get(node).ok_or("ELE1 ERR1 binding")?;
+        if b["callee"] != r["callee"] || b["arity"] != r["arity"] || b["result_variable"] != r["result_variable"]
+            || r.get("source_formal_index").is_some_and(|i| b["arguments"][i.as_u64().unwrap_or(u64::MAX) as usize] != r["source_actual_variable"]) {
+            return Err("ELE1 ERR1 identity mismatch".into());
+        }
+        count("return_relation", r, node)?;
+    }
+    for r in records("external_negative_evidence") {
+        let node = r["node"].as_str().ok_or("ELE1 ENE1 node")?;
+        let b = calls.get(node).ok_or("ELE1 ENE1 binding")?;
+        if b["callee"] != r["callee"] || b["arguments"] != r["call_arguments"] {
+            return Err("ELE1 ENE1 identity mismatch".into());
+        }
+        if let Some(i) = r["formal_index"].as_u64() {
+            if b["arguments"].as_array().and_then(|a| a.get(i as usize)) != Some(&r["actual_variable"]) {
+                return Err("ELE1 ENE1 formal mismatch".into());
+            }
+        }
+        count("negative_evidence", r, node)?;
+    }
+    let mut envelope_ids = BTreeSet::new();
+    for e in envelopes {
+        let id = e["binding_id"].as_str().ok_or("ELE1 envelope id")?;
+        let node = id.strip_prefix("ele1:").ok_or("ELE1 envelope binding id")?;
+        if !envelope_ids.insert(id) || !calls.contains_key(node) || e["basis"] != "crema_external_library_effects_v1" {
+            return Err("ELE1 duplicate or orphan envelope".into());
+        }
+        let counts = e["effect_counts"].as_object().ok_or("ELE1 counts")?;
+        let families = e["effect_families"].as_array().ok_or("ELE1 families")?;
+        if counts.len() != 6 || counts.keys().any(|k| !ELE1_FAMILIES.contains(&k.as_str())) { return Err("ELE1 unknown family".into()); }
+        let positive: BTreeSet<_> = ELE1_FAMILIES.iter().filter(|f| counts[**f].as_u64().unwrap_or(u64::MAX) > 0).copied().collect();
+        let listed: BTreeSet<_> = families.iter().filter_map(Value::as_str).collect();
+        if positive.is_empty() || listed.len() != families.len() || listed != positive
+            || ELE1_FAMILIES.iter().any(|f| counts[*f].as_u64() != Some(source.get(node).and_then(|m| m.get(*f)).copied().unwrap_or_default() as u64)) {
+            return Err("ELE1 envelope count mismatch".into());
+        }
+    }
+    if envelope_ids.len() != calls.len() || source.len() != calls.len() { return Err("ELE1 effectful-call closure mismatch".into()); }
+    // Only the in-memory ERR1 validator needs this compatibility adapter. The
+    // serialized ELE1 artifact has one authoritative binding protocol.
+    let legacy: Vec<Value> = records("external_return_relations").iter().map(|r| {
+        let b = calls[r["node"].as_str().unwrap()];
+        serde_json::json!({"node": b["node"], "callee": b["callee"], "arguments": b["arguments"],
+            "result_variable": b["result_variable"], "body_status": "bodyless", "basis": "rustc_mir_call_binding_v1"})
+    }).collect();
+    Ok(Some(legacy))
+}
+
+#[derive(Serialize)]
+struct JsonOutput<'a> {
+    result: &'a str,
+    assessment: &'a QueryResultAssessment,
+    entry: &'a str,
+    scope: &'a str,
+    query_file: &'a str,
+}
+
+fn usage() -> ! {
+    eprintln!("Usage: cqpl_checker <annotated-icfg.json> <query.cqpl> [--entry NODE_OR_FUNCTION] [--intra] [--bind x=PROGRAM_VAR_ID]... [--bind-alloc a=ABSTRACT_ALLOC_ID]... [--json] [--explain-json PATH] [--explain-unk-verbose] [--explain-max-witnesses N]");
+    process::exit(2);
+}
+
+fn main() {
+    if let Err(e) = run() {
+        eprintln!("cqpl_checker: {e}");
+        process::exit(2);
+    }
+}
+
+
+fn validate_contract_object(value: &Value, where_: &str) -> Result<(), String> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| format!("{where_} must be an object"))?;
+    for required in ["family", "operation", "language"] {
+        if !object.get(required).is_some_and(Value::is_string) {
+            return Err(format!("{where_} requires string field '{required}'"));
+        }
+    }
+    let family = object["family"].as_str().unwrap();
+    if !matches!(family, "rust_global" | "c_malloc" | "unknown") {
+        return Err(format!("{where_} has unsupported allocator family '{family}'"));
+    }
+    let language = object["language"].as_str().unwrap();
+    if !matches!(language, "rust" | "c" | "unknown") {
+        return Err(format!("{where_} has unsupported language '{language}'"));
+    }
+    if object["operation"].as_str().unwrap().is_empty() {
+        return Err(format!("{where_}.operation must be non-empty"));
+    }
+    Ok(())
+}
+
+
+fn validate_v2_deallocator_contract_object(
+    value: &Value,
+    where_: &str,
+    allow_v3: bool,
+    allow_v4: bool,
+) -> Result<(), String> {
+    validate_contract_object(value, where_)?;
+    let object = value.as_object().unwrap();
+    let basis = object
+        .get("basis")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| format!("{where_} requires non-empty string field 'basis' under allocation_contracts_v2"))?;
+    let family = object["family"].as_str().unwrap();
+    let operation = object["operation"].as_str().unwrap();
+    let language = object["language"].as_str().unwrap();
+    let owner = object.get("owner_def_path").and_then(Value::as_str);
+    let allocator = object.get("allocator_def_path").and_then(Value::as_str);
+    let callee = object.get("callee_def_path").and_then(Value::as_str);
+
+    match basis {
+        "rust_box_global_drop" | "rust_vec_global_drop" | "rust_cstring_global_drop" => {
+            if (family, operation, language) != ("rust_global", "drop", "rust") {
+                return Err(format!(
+                    "{where_} basis '{basis}' requires family=rust_global operation=drop language=rust"
+                ));
+            }
+            if owner.map_or(true, str::is_empty) || allocator.map_or(true, str::is_empty) {
+                return Err(format!(
+                    "{where_} basis '{basis}' requires non-empty owner_def_path and allocator_def_path"
+                ));
+            }
+            if callee.is_some() {
+                return Err(format!("{where_} basis '{basis}' does not accept callee_def_path"));
+            }
+        }
+        "rust_string_global_drop" => {
+            if !allow_v4 {
+                return Err(format!(
+                    "{where_} basis 'rust_string_global_drop' requires artifact capability allocation_contracts_v4"
+                ));
+            }
+            if (family, operation, language) != ("rust_global", "drop", "rust") {
+                return Err(format!(
+                    "{where_} basis 'rust_string_global_drop' requires family=rust_global operation=drop language=rust"
+                ));
+            }
+            if owner.map_or(true, str::is_empty) || allocator.map_or(true, str::is_empty) {
+                return Err(format!(
+                    "{where_} basis 'rust_string_global_drop' requires non-empty owner_def_path and allocator_def_path"
+                ));
+            }
+            if callee.is_some() {
+                return Err(format!(
+                    "{where_} basis 'rust_string_global_drop' does not accept callee_def_path"
+                ));
+            }
+        }
+        "rust_global_dealloc_api" => {
+            if (family, operation, language) != ("rust_global", "dealloc", "rust") {
+                return Err(format!(
+                    "{where_} basis '{basis}' requires family=rust_global operation=dealloc language=rust"
+                ));
+            }
+            if owner.is_some() || allocator.is_some() {
+                return Err(format!("{where_} basis '{basis}' does not accept typed-drop provenance fields"));
+            }
+            if callee.map_or(true, str::is_empty) {
+                return Err(format!("{where_} basis '{basis}' requires non-empty callee_def_path"));
+            }
+        }
+        "rust_mem_drop_owned_box_global_v1" => {
+            if !allow_v3 {
+                return Err(format!(
+                    "{where_} basis 'rust_mem_drop_owned_box_global_v1' requires artifact capability allocation_contracts_v3"
+                ));
+            }
+            if (family, operation, language) != ("rust_global", "drop", "rust") {
+                return Err(format!(
+                    "{where_} basis 'rust_mem_drop_owned_box_global_v1' requires family=rust_global operation=drop language=rust"
+                ));
+            }
+            if owner.map_or(true, str::is_empty)
+                || allocator.map_or(true, str::is_empty)
+                || callee.map_or(true, str::is_empty)
+            {
+                return Err(format!(
+                    "{where_} basis 'rust_mem_drop_owned_box_global_v1' requires non-empty owner_def_path, allocator_def_path, and callee_def_path"
+                ));
+            }
+        }
+        "structural_c_free_v1" => {
+            if (family, operation, language) != ("c_malloc", "free", "c") {
+                return Err(format!(
+                    "{where_} basis '{basis}' requires family=c_malloc operation=free language=c"
+                ));
+            }
+            if owner.is_some() || allocator.is_some() || callee.is_some() {
+                return Err(format!("{where_} basis '{basis}' does not accept Rust provenance fields"));
+            }
+        }
+        "unresolved" => {
+            if family != "unknown" {
+                return Err(format!("{where_} basis 'unresolved' must remain family=unknown"));
+            }
+            if owner.is_some() || allocator.is_some() || callee.is_some() {
+                return Err(format!("{where_} unresolved contracts must not carry provenance fields"));
+            }
+        }
+        other => {
+            return Err(format!(
+                "{where_} has unsupported allocation_contracts_v2 basis '{other}'"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_disposition_object(
+    value: &Value,
+    known_allocations: &std::collections::BTreeSet<&str>,
+    allow_cstring_v2: bool,
+    where_: &str,
+) -> Result<(), String> {
+    let object = value.as_object().ok_or_else(|| format!("{where_} must be an object"))?;
+    let allocation = object.get("allocation").and_then(Value::as_str)
+        .ok_or_else(|| format!("{where_} is missing string allocation"))?;
+    if !known_allocations.contains(allocation) {
+        return Err(format!("{where_} references unknown allocation '{allocation}'"));
+    }
+    let kind = object.get("kind").and_then(Value::as_str)
+        .ok_or_else(|| format!("{where_} is missing string kind"))?;
+    let certainty = object.get("certainty").and_then(Value::as_str)
+        .ok_or_else(|| format!("{where_} is missing string certainty"))?;
+    if certainty != "may_abstract" {
+        return Err(format!("{where_}.certainty must be 'may_abstract', got '{certainty}'"));
+    }
+    let effect = object.get("obligation_effect").and_then(Value::as_str)
+        .ok_or_else(|| format!("{where_} is missing string obligation_effect"))?;
+    let basis = object.get("basis").and_then(Value::as_str)
+        .ok_or_else(|| format!("{where_} is missing string basis"))?;
+    let (expected_effect, expected_basis, requires_callee) = match kind {
+        "box_into_raw" => ("preserve_manual_obligation", "rustc_box_into_raw_v1", true),
+        "box_from_raw" => ("restore_raii_obligation", "rustc_box_from_raw_v1", true),
+        "box_leak" => ("preserve_persistent_obligation", "rustc_box_leak_v1", true),
+        "cstring_into_raw" if allow_cstring_v2 => (
+            "preserve_manual_obligation",
+            "rustc_cstring_into_raw_v1",
+            true,
+        ),
+        "cstring_from_raw" if allow_cstring_v2 => (
+            "restore_raii_obligation",
+            "rustc_cstring_from_raw_v1",
+            true,
+        ),
+        "cstring_into_raw" | "cstring_from_raw" => {
+            return Err(format!(
+                "{where_} kind '{kind}' requires artifact capability allocation_disposition_v2"
+            ));
+        }
+        "mem_forget_owned_box" => ("preserve_unreclaimed_obligation", "rustc_mem_forget_owned_box_v1", true),
+        "raw_pointer_drop_noop" => ("no_pointee_lifecycle_effect", "rustc_mem_drop_raw_pointer_v1", true),
+        "return_escape" => ("may_escape_to_caller", "rust_return_identity_v1", false),
+        "may_deallocate" => ("may_discharge", "allocation_drop_label_v1", false),
+        other => return Err(format!("{where_} has unsupported allocation_disposition_v1 kind '{other}'")),
+    };
+    if effect != expected_effect || basis != expected_basis {
+        return Err(format!(
+            "{where_} invalid disposition tuple kind={kind} effect={effect} basis={basis}"
+        ));
+    }
+    let callee = object.get("callee_def_path").and_then(Value::as_str);
+    if requires_callee && callee.map_or(true, str::is_empty) {
+        return Err(format!("{where_} kind '{kind}' requires non-empty callee_def_path"));
+    }
+    if !requires_callee && callee.is_some() {
+        return Err(format!("{where_} kind '{kind}' must not carry call provenance"));
+    }
+    Ok(())
+}
+
+fn validate_boundary_requirements(root: &Value) -> Result<(), String> {
+    let Some(schema_version) = root.get("schema_version").and_then(Value::as_u64) else {
+        return Err("annotated ICFG is missing integer schema_version".into());
+    };
+    let has_relation = root.get("capabilities").and_then(Value::as_array)
+        .is_some_and(|caps| caps.iter().any(|cap| cap.as_str() == Some("rust_call_return_relation_v1")));
+    let relation_present = root.get("rust_call_return_relations").is_some();
+    if has_relation != relation_present {
+        return Err("rust_call_return_relation_v1 capability and rust_call_return_relations payload must appear together".into());
+    }
+    if has_relation {
+        let caps = root.get("capabilities").and_then(Value::as_array).unwrap();
+        if schema_version != 2 || !["typed_edge_flow_v1", "mir_semantics_v2"].iter()
+            .all(|required| caps.iter().any(|cap| cap.as_str() == Some(required))) {
+            return Err("rust_call_return_relation_v1 requires schema v2, typed_edge_flow_v1 and mir_semantics_v2".into());
+        }
+        rust_call_return_relation_overlay_from_json(root)?;
+    }
+    for (cap,payload) in [("rust_call_unwind_relation_v1","rust_call_unwind_relations"),("rust_unwind_edge_scope_v1","rust_unwind_edge_scopes")] {
+        let caps=root.get("capabilities").and_then(Value::as_array);
+        let has=caps.is_some_and(|c|c.iter().any(|v|v.as_str()==Some(cap)));
+        if has!=root.get(payload).is_some() {return Err(format!("{cap} capability and {payload} payload must appear together"))}
+        if has && (schema_version!=2 || !["typed_edge_flow_v1","rust_call_return_relation_v1"].iter().all(|r|
+            caps.unwrap().iter().any(|v|v.as_str()==Some(r)))) {return Err(format!("{cap} requires schema v2, typed edges and return relations"))}
+    }
+    rust_call_unwind_relation_overlay_from_json(root)?;
+    rust_unwind_edge_scope_overlay_from_json(root)?;
+    if schema_version != 2 {
+        return Ok(());
+    }
+
+    let allocations = root
+        .get("allocations")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "schema-v2 annotated ICFG requires an allocations array".to_string())?;
+
+    let capabilities = root
+        .get("capabilities")
+        .and_then(Value::as_array)
+        .map(|caps| {
+            caps.iter()
+                .filter_map(Value::as_str)
+                .collect::<std::collections::BTreeSet<_>>()
+        })
+        .unwrap_or_default();
+    let has_allocation_contracts = capabilities.contains("allocation_contracts_v1");
+    let has_allocation_contracts_v2 = capabilities.contains("allocation_contracts_v2");
+    let has_allocation_contracts_v3 = capabilities.contains("allocation_contracts_v3");
+    let has_allocation_contracts_v4 = capabilities.contains("allocation_contracts_v4");
+    let has_allocation_state = capabilities.contains("allocation_state_v1");
+    let has_allocation_disposition = capabilities.contains("allocation_disposition_v1");
+    let has_allocation_disposition_v2 = capabilities.contains("allocation_disposition_v2");
+    let has_mir_semantic_labels = capabilities.contains("mir_semantic_labels_v1");
+    let has_mir_semantics_v2 = capabilities.contains("mir_semantics_v2");
+    let has_panic_unwind_lifecycle_v1 = capabilities.contains("panic_unwind_lifecycle_v1");
+    let has_panic_lifecycle_state_v1 = capabilities.contains("panic_lifecycle_state_v1");
+    let has_panic_lifecycle_state_v2 = capabilities.contains("panic_lifecycle_state_v2");
+    let has_typed_edge_flow = capabilities.contains("typed_edge_flow_v1");
+    let has_source_provenance = capabilities.contains("source_provenance_v1");
+    let has_allocation_existence_guards = capabilities.contains("allocation_existence_guards_v1");
+    let has_reallocation_boundaries = capabilities.contains("reallocation_boundaries_v1");
+    let has_reallocation_boundaries_v2 = capabilities.contains("reallocation_boundaries_v2");
+    let has_conditional_reallocations = capabilities.contains("conditional_reallocations_v1");
+    let has_conditional_reallocations_v2 = capabilities.contains("conditional_reallocations_v2");
+    let has_external_formal_memory_effects_v1 = capabilities.contains("external_formal_memory_effects_v1");
+    let has_external_formal_memory_effects_v2 = capabilities.contains("external_formal_memory_effects_v2");
+
+    let guards_present = root.get("allocation_existence_guards").is_some();
+    if has_allocation_existence_guards != guards_present {
+        return Err("allocation_existence_guards_v1 capability and allocation_existence_guards payload must appear together".into());
+    }
+    if has_allocation_existence_guards && (!has_allocation_state || !has_mir_semantic_labels) {
+        return Err("allocation_existence_guards_v1 requires allocation_state_v1 and mir_semantic_labels_v1".into());
+    }
+    if let Some(records) = root.get("allocation_existence_guards") {
+        let records = records.as_array().ok_or_else(|| {
+            "schema-v2 allocation_existence_guards must be an array".to_string()
+        })?;
+        if records.is_empty() {
+            return Err("allocation_existence_guards_v1 payload must contain at least one record".into());
+        }
+    }
+
+    let reallocation_boundaries_present = root.get("reallocation_boundaries").is_some();
+    let reallocation_boundaries_has_v2_basis = root
+        .get("reallocation_boundaries")
+        .and_then(Value::as_array)
+        .is_some_and(|records| {
+            records.iter().any(|record| {
+                record.get("basis").and_then(Value::as_str)
+                    == Some("rust_foreign_decl_c_realloc_allocptr_family_v2")
+            })
+        });
+    if reallocation_boundaries_has_v2_basis && !has_reallocation_boundaries_v2 {
+        return Err("reallocation_boundaries payload contains a v2 allocator-family-consumer record without capability reallocation_boundaries_v2".into());
+    }
+    if has_reallocation_boundaries_v2 && !has_reallocation_boundaries {
+        return Err("reallocation_boundaries_v2 extends reallocation_boundaries_v1; both capabilities are required".into());
+    }
+    if has_reallocation_boundaries_v2
+        && (!has_allocation_contracts || !capabilities.contains("mir_semantics_v2"))
+    {
+        return Err("reallocation_boundaries_v2 requires allocation_contracts_v1 and mir_semantics_v2".into());
+    }
+    if has_reallocation_boundaries != reallocation_boundaries_present {
+        return Err("reallocation_boundaries_v1 capability and reallocation_boundaries payload must appear together".into());
+    }
+    if has_reallocation_boundaries && !has_allocation_state {
+        return Err("reallocation_boundaries_v1 requires allocation_state_v1".into());
+    }
+    if let Some(records) = root.get("reallocation_boundaries") {
+        let records = records.as_array().ok_or_else(|| {
+            "schema-v2 reallocation_boundaries must be an array".to_string()
+        })?;
+        if records.is_empty() {
+            return Err("reallocation_boundaries_v1 payload must contain at least one record".into());
+        }
+    }
+
+    let conditional_reallocations_present = root.get("conditional_reallocations").is_some();
+    if has_conditional_reallocations != conditional_reallocations_present {
+        return Err("conditional_reallocations_v1 capability and conditional_reallocations payload must appear together".into());
+    }
+    if has_conditional_reallocations_v2 && !has_conditional_reallocations {
+        return Err("conditional_reallocations_v2 strengthens conditional_reallocations_v1; both capabilities are required".into());
+    }
+    if has_conditional_reallocations
+        && (!has_allocation_state
+            || !has_reallocation_boundaries
+            || !has_allocation_existence_guards
+            || !has_mir_semantic_labels
+            || !has_typed_edge_flow)
+    {
+        return Err("conditional_reallocations_v1 requires allocation_state_v1, reallocation_boundaries_v1, allocation_existence_guards_v1, mir_semantic_labels_v1, and typed_edge_flow_v1".into());
+    }
+    if let Some(records) = root.get("conditional_reallocations") {
+        let records = records.as_array().ok_or_else(|| {
+            "schema-v2 conditional_reallocations must be an array".to_string()
+        })?;
+        if records.is_empty() {
+            return Err("conditional_reallocations_v1 payload must contain at least one record".into());
+        }
+    }
+
+    let external_formal_memory_effects_present = root.get("external_formal_memory_effects").is_some();
+    let has_ene1 = capabilities.contains("external_negative_evidence_v1");
+    let has_dcp1 = capabilities.contains("external_deallocation_call_provenance_v1");
+    let dcp1_payload = root.get("external_deallocation_call_provenance");
+    if has_dcp1 != dcp1_payload.is_some() {
+        return Err("DCP1 capability/payload must appear together".into());
+    }
+    if let Some(payload) = dcp1_payload {
+        if !payload.as_array().is_some_and(|records| !records.is_empty()) {
+            return Err("DCP1 requires nonempty record array".into());
+        }
+    }
+    if has_ene1 != root.get("external_negative_evidence").is_some() {
+        return Err("ENE1 capability/payload must appear together".into());
+    }
+    if has_ene1 && (!has_mir_semantics_v2 || !capabilities.contains("llvm_memory_effects_v1")) {
+        return Err("ENE1 requires MIR and LLVM proof capabilities".into());
+    }
+    if let Some(payload) = root.get("external_negative_evidence") {
+        let records = payload.as_array().filter(|a| !a.is_empty()).ok_or("ENE1 requires nonempty array")?;
+        for r in records {
+            let function = r.get("evidence_kind").and_then(Value::as_str) == Some("no_free_function");
+            for field in ["formal_index", "actual_variable"] {
+                if function == r.get(field).is_some() || r.get(field).is_some_and(Value::is_null) {
+                    return Err("ENE1 formal fields must be absent for function facts, present/non-null for formal facts".into());
+                }
+            }
+        }
+    }
+    let has_err1 = capabilities.contains("external_return_relations_v1");
+    for field in ["external_return_relations", "external_return_call_bindings"] {
+        if field == "external_return_call_bindings" && capabilities.contains("external_library_effects_v1") {
+            if root.get(field).is_some() { return Err("ELE1 forbids legacy ERR1 binding payload".into()); }
+            continue;
+        }
+        if has_err1 != root.get(field).is_some() {
+            return Err(format!("ERR1 capability and {field} must appear together"));
+        }
+        if let Some(payload) = root.get(field) {
+            if !payload.as_array().is_some_and(|records| !records.is_empty()) {
+                return Err(format!("ERR1 {field} must be a non-empty array"));
+            }
+        }
+    }
+    if has_err1 && !has_mir_semantics_v2 { return Err("ERR1 requires mir_semantics_v2".into()); }
+    if root.get("external_return_relations").and_then(Value::as_array).into_iter().flatten()
+        .any(|record| record.get("callee").and_then(Value::as_str) == Some("getenv")
+            && (record.get("source_formal_index").is_some() || record.get("source_actual_variable").is_some())) {
+        return Err("ERR1 borrowed getenv must omit source fields, including null fields".into());
+    }
+    if has_external_formal_memory_effects_v1 && has_external_formal_memory_effects_v2 {
+        return Err("external_formal_memory_effects_v1 and external_formal_memory_effects_v2 are mutually exclusive".into());
+    }
+    let has_external_formal_memory_effects =
+        has_external_formal_memory_effects_v1 || has_external_formal_memory_effects_v2;
+    if has_external_formal_memory_effects != external_formal_memory_effects_present {
+        return Err("exactly one external_formal_memory_effects_v1/v2 capability and external_formal_memory_effects payload must appear together".into());
+    }
+    if has_external_formal_memory_effects && !has_mir_semantics_v2 {
+        return Err("external_formal_memory_effects_v1/v2 requires mir_semantics_v2".into());
+    }
+    if let Some(records) = root.get("external_formal_memory_effects") {
+        let records = records.as_array().ok_or_else(|| {
+            "schema-v2 external_formal_memory_effects must be an array".to_string()
+        })?;
+        if records.is_empty() {
+            return Err("external_formal_memory_effects_v1/v2 payload must contain at least one record".into());
+        }
+    }
+
+    let typed_edges_present = root.get("typed_edges").is_some();
+    if has_typed_edge_flow != typed_edges_present {
+        return Err("typed_edge_flow_v1 capability and typed_edges payload must appear together".into());
+    }
+    if let Some(typed_edges) = root.get("typed_edges") {
+        if !typed_edges.is_array() {
+            return Err("schema-v2 typed_edges must be an array".into());
+        }
+    }
+
+    if has_allocation_contracts_v2 && !has_allocation_contracts {
+        return Err("allocation_contracts_v2 refines allocation_contracts_v1; the artifact must declare both capabilities".into());
+    }
+    if has_allocation_contracts_v3 && (!has_allocation_contracts || !has_allocation_contracts_v2) {
+        return Err("allocation_contracts_v3 refines allocation_contracts_v2; the artifact must declare allocation_contracts_v1 + allocation_contracts_v2 + allocation_contracts_v3".into());
+    }
+    if has_allocation_contracts_v4 && (!has_allocation_contracts || !has_allocation_contracts_v2) {
+        return Err("allocation_contracts_v4 refines allocation_contracts_v2; the artifact must declare allocation_contracts_v1 + allocation_contracts_v2 + allocation_contracts_v4".into());
+    }
+    if has_mir_semantics_v2 && !has_mir_semantic_labels {
+        return Err("mir_semantics_v2 requires mir_semantic_labels_v1 so the active transfer profile remains auditable".into());
+    }
+    if has_panic_unwind_lifecycle_v1 && (schema_version != 2 || !has_mir_semantics_v2) {
+        return Err("panic_unwind_lifecycle_v1 requires schema v2 and mir_semantics_v2".into());
+    }
+    if has_panic_lifecycle_state_v1 && !has_panic_unwind_lifecycle_v1 {
+        return Err("panic_lifecycle_state_v1 requires panic_unwind_lifecycle_v1".into());
+    }
+    if has_panic_lifecycle_state_v2 && !has_panic_lifecycle_state_v1 {
+        return Err("panic_lifecycle_state_v2 refines panic_lifecycle_state_v1; the artifact must declare both capabilities".into());
+    }
+
+    if has_allocation_disposition && schema_version != 2 {
+        return Err("allocation_disposition_v1 requires annotated ICFG schema v2".into());
+    }
+    if has_allocation_disposition_v2 && schema_version != 2 {
+        return Err("allocation_disposition_v2 requires annotated ICFG schema v2".into());
+    }
+    if has_allocation_disposition_v2 && !has_allocation_disposition {
+        return Err(
+            "allocation_disposition_v2 refines allocation_disposition_v1; the artifact must declare both capabilities"
+                .into(),
+        );
+    }
+
+    if has_allocation_contracts {
+        for (index, allocation) in allocations.iter().enumerate() {
+            let contract = allocation.get("allocator_contract").ok_or_else(|| {
+                format!("artifact declares allocation_contracts_v1 but allocations[{index}] is missing allocator_contract")
+            })?;
+            validate_contract_object(contract, &format!("allocations[{index}].allocator_contract"))?;
+        }
+    }
+
+    let nodes = root
+        .get("nodes")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "schema-v2 annotated ICFG requires a nodes array".to_string())?;
+    for (index, node) in nodes.iter().enumerate() {
+        let object = node
+            .as_object()
+            .ok_or_else(|| format!("schema-v2 nodes[{index}] must be an object"))?;
+        for required in ["allocation_labels", "identity", "event_identity"] {
+            if !object.contains_key(required) {
+                return Err(format!(
+                    "schema-v2 nodes[{index}] is missing required field '{required}'; validate the allocation-identity boundary before model checking"
+                ));
+            }
+        }
+        if has_mir_semantic_labels {
+            let structural = object.get("semantic_labels").ok_or_else(|| format!(
+                "artifact declares mir_semantic_labels_v1 but schema-v2 nodes[{index}] is missing semantic_labels"
+            ))?;
+            let labels = structural.as_array().ok_or_else(|| format!(
+                "schema-v2 nodes[{index}].semantic_labels must be an array"
+            ))?;
+            let mut seen = std::collections::BTreeSet::new();
+            for (label_index, label) in labels.iter().enumerate() {
+                let label = label.as_str().ok_or_else(|| format!(
+                    "schema-v2 nodes[{index}].semantic_labels[{label_index}] must be a string"
+                ))?;
+                let Some((kind, name)) = label.split_once(':') else {
+                    return Err(format!("invalid structural MIR label '{label}'"));
+                };
+                if !matches!(kind, "stmt" | "rvalue" | "term")
+                    || name.is_empty()
+                    || !name.chars().all(|c| c == '_' || c.is_ascii_lowercase() || c.is_ascii_digit())
+                {
+                    return Err(format!("invalid structural MIR label '{label}'"));
+                }
+                if !seen.insert(label) {
+                    return Err(format!("duplicate structural MIR label '{label}' in nodes[{index}]"));
+                }
+            }
+        } else if object.get("semantic_labels").is_some_and(|v| v.as_array().is_some_and(|a| !a.is_empty())) {
+            return Err(format!(
+                "schema-v2 nodes[{index}] contains structural MIR labels without capability mir_semantic_labels_v1"
+            ));
+        }
+        if has_allocation_state && !object.contains_key("allocation_post") {
+            return Err(format!(
+                "artifact declares allocation_state_v1 but schema-v2 nodes[{index}] is missing allocation_post"
+            ));
+        }
+        if has_allocation_disposition && !object.contains_key("allocation_disposition") {
+            return Err(format!(
+                "artifact declares allocation_disposition_v1 but schema-v2 nodes[{index}] is missing allocation_disposition"
+            ));
+        }
+        if has_source_provenance && !object.contains_key("source_provenance") {
+            return Err(format!(
+                "artifact declares source_provenance_v1 but schema-v2 nodes[{index}] is missing source_provenance"
+            ));
+        }
+        if !has_source_provenance && object.contains_key("source_provenance") {
+            return Err(format!(
+                "schema-v2 nodes[{index}] contains source_provenance without capability source_provenance_v1"
+            ));
+        }
+        if has_panic_lifecycle_state_v1 && !object.contains_key("panic_lifecycle") {
+            return Err(format!(
+                "artifact declares panic_lifecycle_state_v1 but schema-v2 nodes[{index}] is missing panic_lifecycle"
+            ));
+        }
+        if let Some(records) = object.get("panic_lifecycle") {
+            let records = records.as_array().ok_or_else(|| format!(
+                "schema-v2 nodes[{index}].panic_lifecycle must be an array"
+            ))?;
+            let known_allocations: std::collections::BTreeSet<_> = allocations
+                .iter()
+                .filter_map(|a| a.get("id").and_then(Value::as_str))
+                .collect();
+            let mut seen = std::collections::BTreeSet::new();
+            for (record_index, record) in records.iter().enumerate() {
+                let where_ = format!("nodes[{index}].panic_lifecycle[{record_index}]");
+                let allocation = record.get("allocation").and_then(Value::as_str)
+                    .ok_or_else(|| format!("{where_} is missing string allocation"))?;
+                if !known_allocations.contains(allocation) {
+                    return Err(format!("{where_} references unknown allocation '{allocation}'"));
+                }
+                if !seen.insert(allocation) {
+                    return Err(format!("nodes[{index}].panic_lifecycle contains duplicate allocation '{allocation}'"));
+                }
+                let certainty = record.get("certainty").and_then(Value::as_str)
+                    .ok_or_else(|| format!("{where_} is missing string certainty"))?;
+                if certainty != "may_abstract" {
+                    return Err(format!("{where_}.certainty must be 'may_abstract', got '{certainty}'"));
+                }
+                for field in ["may_own", "may_partial_drop", "may_stale_owner", "may_committed", "may_complete"] {
+                    if !record.get(field).is_some_and(Value::is_boolean) {
+                        return Err(format!("{where_}.{field} must be a boolean"));
+                    }
+                }
+            }
+        }
+        if has_panic_lifecycle_state_v2 {
+            let coverage = object.get("panic_lifecycle_coverage")
+                .and_then(Value::as_str)
+                .ok_or_else(|| format!(
+                    "artifact declares panic_lifecycle_state_v2 but schema-v2 nodes[{index}] is missing string panic_lifecycle_coverage"
+                ))?;
+            if !matches!(coverage, "complete" | "unresolved") {
+                return Err(format!(
+                    "schema-v2 nodes[{index}].panic_lifecycle_coverage must be 'complete' or 'unresolved', got '{coverage}'"
+                ));
+            }
+        } else if object.contains_key("panic_lifecycle_coverage") {
+            return Err(format!(
+                "schema-v2 nodes[{index}] contains panic_lifecycle_coverage without capability panic_lifecycle_state_v2"
+            ));
+        }
+        if let Some(records) = object.get("allocation_disposition") {
+            let records = records.as_array().ok_or_else(|| format!(
+                "schema-v2 nodes[{index}].allocation_disposition must be an array"
+            ))?;
+            let known_allocations: std::collections::BTreeSet<_> = allocations
+                .iter()
+                .filter_map(|a| a.get("id").and_then(Value::as_str))
+                .collect();
+            for (record_index, record) in records.iter().enumerate() {
+                validate_disposition_object(
+                    record,
+                    &known_allocations,
+                    has_allocation_disposition_v2,
+                    &format!("nodes[{index}].allocation_disposition[{record_index}]"),
+                )?;
+            }
+        }
+        if let Some(allocation_post) = object.get("allocation_post") {
+            let post_object = allocation_post
+                .as_object()
+                .ok_or_else(|| format!("schema-v2 nodes[{index}].allocation_post must be an object"))?;
+            let cells = post_object
+                .get("cells")
+                .and_then(Value::as_array)
+                .ok_or_else(|| format!("schema-v2 nodes[{index}].allocation_post.cells must be an array"))?;
+            let known_allocations: std::collections::BTreeSet<_> = allocations
+                .iter()
+                .filter_map(|a| a.get("id").and_then(Value::as_str))
+                .collect();
+            let mut seen = std::collections::BTreeSet::new();
+            for (cell_index, cell) in cells.iter().enumerate() {
+                let allocation = cell
+                    .get("allocation")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| format!(
+                        "schema-v2 nodes[{index}].allocation_post.cells[{cell_index}] is missing string allocation"
+                    ))?;
+                if !known_allocations.contains(allocation) {
+                    return Err(format!(
+                        "schema-v2 nodes[{index}].allocation_post.cells[{cell_index}] references unknown allocation '{allocation}'"
+                    ));
+                }
+                if !seen.insert(allocation) {
+                    return Err(format!(
+                        "schema-v2 nodes[{index}].allocation_post contains duplicate allocation '{allocation}'"
+                    ));
+                }
+                if !cell.get("value").is_some_and(Value::is_string) {
+                    return Err(format!(
+                        "schema-v2 nodes[{index}].allocation_post.cells[{cell_index}] is missing string value"
+                    ));
+                }
+            }
+        }
+        if !object.get("identity").is_some_and(Value::is_object) {
+            return Err(format!("schema-v2 nodes[{index}].identity must be an object"));
+        }
+        if !object.get("event_identity").is_some_and(Value::is_object) {
+            return Err(format!("schema-v2 nodes[{index}].event_identity must be an object"));
+        }
+        let labels = object
+            .get("allocation_labels")
+            .and_then(Value::as_array)
+            .ok_or_else(|| format!("schema-v2 nodes[{index}].allocation_labels must be an array"))?;
+        for (label_index, label) in labels.iter().enumerate() {
+            let certainty = label
+                .get("certainty")
+                .and_then(Value::as_str)
+                .ok_or_else(|| format!(
+                    "schema-v2 nodes[{index}].allocation_labels[{label_index}] is missing string certainty"
+                ))?;
+            if certainty != "may_abstract" {
+                return Err(format!(
+                    "schema-v2 allocation-event certainty must be 'may_abstract', got '{certainty}'"
+                ));
+            }
+            if has_allocation_contracts && label.get("predicate").and_then(Value::as_str) == Some("drop") {
+                let contract = label.get("deallocator_contract").ok_or_else(|| {
+                    format!("artifact declares allocation_contracts_v1 but nodes[{index}].allocation_labels[{label_index}] drop is missing deallocator_contract")
+                })?;
+                let where_ = format!("nodes[{index}].allocation_labels[{label_index}].deallocator_contract");
+                validate_contract_object(contract, &where_)?;
+                if has_allocation_contracts_v2 {
+                    validate_v2_deallocator_contract_object(contract, &where_, has_allocation_contracts_v3, has_allocation_contracts_v4)?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn run() -> Result<(), String> {
+    let args: Vec<String> = env::args().skip(1).collect();
+    if args.len() < 2 { usage(); }
+    let icfg_path = &args[0];
+    let query_path = &args[1];
+    let mut env0 = Env::new();
+    let mut json = false;
+    let mut entry_override: Option<String> = None;
+    let mut intra = false;
+    let mut explain_json: Option<String> = None;
+    let mut explain_unk_verbose = false;
+    let mut explain_max_witnesses: usize = 8;
+
+    let mut i = 2;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--json" => { json = true; i += 1; }
+            "--entry" => {
+                let Some(entry) = args.get(i + 1) else { return Err("--entry requires NODE_OR_FUNCTION".into()); };
+                entry_override = Some(entry.clone());
+                i += 2;
+            }
+            "--intra" => { intra = true; i += 1; }
+            "--explain-json" => {
+                let Some(path) = args.get(i + 1) else { return Err("--explain-json requires PATH".into()); };
+                explain_json = Some(path.clone());
+                i += 2;
+            }
+            "--explain-unk-verbose" => { explain_unk_verbose = true; i += 1; }
+            "--explain-max-witnesses" => {
+                let Some(raw) = args.get(i + 1) else { return Err("--explain-max-witnesses requires N".into()); };
+                explain_max_witnesses = raw.parse::<usize>()
+                    .map_err(|_| "--explain-max-witnesses requires a positive integer".to_string())?;
+                if explain_max_witnesses == 0 {
+                    return Err("--explain-max-witnesses requires N >= 1".into());
+                }
+                i += 2;
+            }
+            "--bind" => {
+                let Some(binding) = args.get(i + 1) else { return Err("--bind requires name=PROGRAM_VAR_ID".into()); };
+                let Some((logic, program)) = binding.split_once('=') else { return Err("--bind requires name=PROGRAM_VAR_ID".into()); };
+                if logic.is_empty() || program.is_empty() { return Err("empty side in --bind name=PROGRAM_VAR_ID".into()); }
+                env0.insert(logic.to_string(), Binding::ProgramVar(program.to_string()));
+                i += 2;
+            }
+            "--bind-alloc" => {
+                let Some(binding) = args.get(i + 1) else { return Err("--bind-alloc requires name=ABSTRACT_ALLOC_ID".into()); };
+                let Some((logic, allocation)) = binding.split_once('=') else { return Err("--bind-alloc requires name=ABSTRACT_ALLOC_ID".into()); };
+                if logic.is_empty() || allocation.is_empty() { return Err("empty side in --bind-alloc name=ABSTRACT_ALLOC_ID".into()); }
+                env0.insert(logic.to_string(), Binding::Allocation(allocation.to_string()));
+                i += 2;
+            }
+            other => return Err(format!("unknown argument '{other}'")),
+        }
+    }
+
+    let raw_icfg = fs::read_to_string(icfg_path).map_err(|e| format!("cannot read annotated ICFG '{icfg_path}': {e}"))?;
+    let raw_value: Value = serde_json::from_str(&raw_icfg)
+        .map_err(|e| format!("invalid annotated ICFG JSON: {e}"))?;
+    validate_boundary_requirements(&raw_value)?;
+    let ele1_legacy_adapter = validate_ele1(&raw_value)?;
+    let rust_call_return_relations = rust_call_return_relation_overlay_from_json(&raw_value)?;
+    let panic_lifecycle = panic_lifecycle_overlay_from_json(&raw_value)?;
+    let typed_edges = typed_edge_overlay_from_json(&raw_value)?;
+    let source_provenance = source_provenance_overlay_from_json(&raw_value)?;
+    let allocation_existence_guards = allocation_existence_guard_overlay_from_json(&raw_value)?;
+    let reallocation_boundaries = reallocation_boundary_overlay_from_json(&raw_value)?;
+    let conditional_reallocations = conditional_reallocation_overlay_from_json(&raw_value)?;
+    let opaque_memory_effects = opaque_memory_effect_overlay_from_json(&raw_value)?;
+    let dcp1_payload = raw_value.get("external_deallocation_call_provenance").cloned();
+    let unwind_relations=rust_call_unwind_relation_overlay_from_json(&raw_value)?;
+    let unwind_scopes=rust_unwind_edge_scope_overlay_from_json(&raw_value)?;
+    let mut parse_value = raw_value;
+    if let Some(bindings) = ele1_legacy_adapter {
+        if !bindings.is_empty() {
+            parse_value["external_return_call_bindings"] = Value::Array(bindings);
+        }
+    }
+    let annotated: AnnotatedIcfg = serde_json::from_value(parse_value)
+        .map_err(|e| format!("invalid annotated ICFG JSON: {e}"))?;
+    let base_k = Kripke::from_annotated_icfg_with_all_diagnostic_overlays(
+        annotated,
+        panic_lifecycle,
+        typed_edges,
+        source_provenance,
+        allocation_existence_guards,
+        reallocation_boundaries,
+        conditional_reallocations,
+    )?.with_opaque_memory_effects(opaque_memory_effects)?
+        .with_rust_call_return_relations(rust_call_return_relations)?
+        .with_rust_unwind_overlays(unwind_relations,unwind_scopes)?;
+    base_k.validate_external_deallocation_call_provenance_json(dcp1_payload.as_ref())?;
+    let requested_entry = entry_override.as_deref().unwrap_or(&base_k.entry);
+    let k = base_k.project_from_entry(requested_entry, intra)?;
+
+    let raw_query = fs::read_to_string(query_path).map_err(|e| format!("cannot read CQPL query '{query_path}': {e}"))?;
+    let query = parse_query_document(&raw_query)?;
+    let checker = if intra {
+        // The cqpl4 total-transition feature is whole-program only for now;
+        // keep the existing finite-path semantics of --intra until its scope
+        // boundaries are specified separately.
+        ModelChecker::new_partial_for_intra(&k)
+    } else {
+        ModelChecker::new(&k)
+    };
+    let result = checker.evaluate_document(&query, &env0)?;
+    let assessment = checker.assess_document(&query, result);
+
+    let need_explanation = explain_json.is_some() || (explain_unk_verbose && result.as_str() == "unk");
+    let explanation_report = if need_explanation {
+        let mut report = checker.explain_document(&query, &env0, explain_max_witnesses)?;
+        let query_id = Path::new(query_path)
+            .file_stem()
+            .and_then(|name| name.to_str())
+            .unwrap_or(query_path)
+            .to_string();
+        for certificate in &mut report.diagnostic_certificates {
+            certificate.query = Some(query_id.clone());
+        }
+        if report.result != result.as_str() {
+            return Err(format!(
+                "v6R explainability invariant violated: semantic result {} != explanation result {}",
+                result.as_str(),
+                report.result,
+            ));
+        }
+        if report.assessment != assessment {
+            return Err("R2 explainability invariant violated: query assessment differs between direct result and explanation".into());
+        }
+        Some(report)
+    } else {
+        None
+    };
+
+    if let (Some(path), Some(report)) = (explain_json.as_deref(), explanation_report.as_ref()) {
+        let text = serde_json::to_string_pretty(report)
+            .map_err(|e| format!("cannot serialize explanation JSON: {e}"))?;
+        fs::write(path, format!("{text}\n"))
+            .map_err(|e| format!("cannot write explanation JSON '{path}': {e}"))?;
+    }
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&JsonOutput {
+            result: result.as_str(),
+            assessment: &assessment,
+            entry: &k.entry,
+            scope: if intra { "intra" } else { "reachable" },
+            query_file: query_path,
+        }).unwrap());
+    } else {
+        println!("CQPL entry: {}", k.entry);
+        println!("CQPL scope: {}", if intra { "intra" } else { "reachable" });
+        println!("CQPL result: {}", result.as_str());
+        println!("CQPL subresult: {}", assessment.subresult.as_str());
+        println!("CQPL strength: {}", assessment.strength.as_str());
+        match result.as_str() {
+            "ff" => println!("Interpretation: the current annotated abstraction refutes the queried pattern within the modeled predicates."),
+            "unk" => println!("Interpretation: the current abstraction cannot refute or establish the queried pattern."),
+            "tt" => println!("Interpretation: the formula is established in the annotated abstract Kripke model; this is not by itself a proof of a concrete execution."),
+            _ => unreachable!(),
+        }
+    }
+
+    if explain_unk_verbose && result.as_str() == "unk" {
+        let report = explanation_report
+            .as_ref()
+            .ok_or_else(|| "internal error: verbose UNKNOWN explanation report was not built".to_string())?;
+        let query_name = Path::new(query_path)
+            .file_stem()
+            .and_then(|x| x.to_str())
+            .unwrap_or(query_path);
+        eprint!("{}", report.render_unknown_verbose(query_name));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn ele1_allocator_fixture(callee: &str, operation: &str) -> Value {
+        json!({
+            "capabilities":["external_library_effects_v1"],
+            "nodes":[{"id":"rust::main::bb0","semantic_labels":["term:call"]}],
+            "variables":[{"id":"rust::main::Local(_1)","language":"rust"}],
+            "external_call_bindings":[{"binding_id":"ele1:rust::main::bb0","node":"rust::main::bb0",
+                "rust_function_scope":"rust::main","callee":callee,"arity":0,"arguments":[],
+                "result_variable":"rust::main::Local(_1)","body_status":"bodyless","basis":"rustc_mir_external_call_binding_v1"}],
+            "external_library_effects":[{"binding_id":"ele1:rust::main::bb0","effect_families":["allocation_return"],
+                "effect_counts":{"allocation_return":1,"reallocation":0,"deallocation":0,"formal_memory":0,"return_relation":0,"negative_evidence":0},
+                "basis":"crema_external_library_effects_v1"}],
+            "allocations":[{"site":{"kind":"c_call","node_id":"rust::main::bb0"},
+                "allocator_contract":{"family":"c_malloc","operation":operation}}]
+        })
+    }
+
+    #[test]
+    fn ele1_allocator_name_allowlist_and_cross_operation_rejection() {
+        let operations = ["malloc", "calloc", "strdup", "realloc"];
+        for operation in operations {
+            for prefix in ["", "libc::"] {
+                let name = format!("{prefix}{operation}");
+                assert!(ele1_allocation_callee_matches(&name, operation));
+                assert!(validate_ele1(&ele1_allocator_fixture(&name, operation)).is_ok());
+                for other in operations {
+                    if other != operation {
+                        assert!(!ele1_allocation_callee_matches(&name, other));
+                        assert!(validate_ele1(&ele1_allocator_fixture(&name, other)).is_err());
+                    }
+                }
+            }
+            for name in [format!("other::{operation}"), format!("libc::nested::{operation}"),
+                         format!("::{operation}"), "libc::free".to_string(), "".to_string()] {
+                assert!(!ele1_allocation_callee_matches(&name, operation));
+                assert!(validate_ele1(&ele1_allocator_fixture(&name, operation)).is_err());
+            }
+        }
+        assert!(!ele1_allocation_callee_matches("libc::free", "free"));
+        assert!(!ele1_allocation_callee_matches("unknown", "unknown"));
+    }
+
+    #[test]
+    fn ele1_allocator_alias_keeps_proof_boundary_fail_closed() {
+        let valid = ele1_allocator_fixture("libc::malloc", "malloc");
+        let mut bad = valid.clone(); bad["external_call_bindings"] = json!([]);
+        assert!(validate_ele1(&bad).is_err());
+        let mut bad = valid.clone(); bad["allocations"][0]["allocator_contract"]["operation"] = Value::Null;
+        assert!(validate_ele1(&bad).is_err());
+        let mut bad = valid.clone(); bad["allocations"][0]["allocator_contract"]["family"] = json!("unknown");
+        assert!(validate_ele1(&bad).is_err());
+        let mut bad = valid.clone(); bad["external_call_bindings"][0]["callee"] = json!("libc::calloc");
+        assert!(validate_ele1(&bad).is_err());
+        let mut bad = valid.clone(); bad["external_library_effects"][0]["effect_counts"]["allocation_return"] = json!(2);
+        assert!(validate_ele1(&bad).is_err());
+        let mut bad = valid.clone(); bad["external_call_bindings"][0]["arguments"] = json!(["rust::other::Local(_1)"]);
+        bad["external_call_bindings"][0]["arity"] = json!(1);
+        assert!(validate_ele1(&bad).is_err());
+        let mut bad = valid.clone(); bad["capabilities"] = json!([]);
+        assert!(validate_ele1(&bad).is_err());
+    }
+
+    #[test]
+    fn ele1_binding_and_envelope_fail_closed() {
+        let valid = json!({
+            "capabilities": ["external_library_effects_v1"],
+            "nodes": [{"id": "rust::main::bb0", "semantic_labels": ["term:call"]}],
+            "variables": [{"id": "rust::main::Local(_1)", "language": "rust"}],
+            "external_call_bindings": [{
+                "binding_id": "ele1:rust::main::bb0", "node": "rust::main::bb0",
+                "rust_function_scope": "rust::main", "callee": "free", "arity": 1,
+                "arguments": ["rust::main::Local(_1)"], "result_variable": null,
+                "body_status": "bodyless", "basis": "rustc_mir_external_call_binding_v1"
+            }],
+            "external_library_effects": [{
+                "binding_id": "ele1:rust::main::bb0", "effect_families": ["deallocation"],
+                "effect_counts": {"allocation_return": 0, "reallocation": 0, "deallocation": 1,
+                    "formal_memory": 0, "return_relation": 0, "negative_evidence": 0},
+                "basis": "crema_external_library_effects_v1"
+            }],
+            "external_deallocation_call_provenance": [{"node": "rust::main::bb0", "callee": "free",
+                "arity": 1, "actual_variable": "rust::main::Local(_1)"}]
+        });
+        assert_eq!(validate_ele1(&valid).unwrap(), Some(vec![]));
+        let mut wrong = valid.clone();
+        wrong["external_call_bindings"][0]["arguments"][0] = json!("rust::main::Local(_999)");
+        assert!(validate_ele1(&wrong).is_err());
+        let mut wrong = valid.clone();
+        wrong["external_library_effects"][0]["effect_counts"]["deallocation"] = json!(2);
+        assert!(validate_ele1(&wrong).is_err());
+        let mut wrong = valid.clone();
+        wrong["external_return_call_bindings"] = json!([{}]);
+        assert!(validate_ele1(&wrong).is_err());
+    }
+
+    #[test]
+    fn rust_call_return_relation_boundary_contract() {
+        let mut valid = minimal_v2_node();
+        valid["capabilities"] = json!(["rust_call_return_relation_v1", "typed_edge_flow_v1",
+            "mir_semantics_v2", "mir_semantic_labels_v1"]);
+        valid["typed_edges"] = json!([]);
+        valid["nodes"][0]["semantic_labels"] = json!([]);
+        valid["rust_call_return_relations"] = json!([]);
+        validate_boundary_requirements(&valid).unwrap();
+        let mut bad = valid.clone();
+        bad.as_object_mut().unwrap().remove("rust_call_return_relations");
+        assert!(validate_boundary_requirements(&bad).unwrap_err().contains("must appear together"));
+        for capability in ["rust_call_return_relation_v1", "typed_edge_flow_v1", "mir_semantics_v2"] {
+            let mut bad = valid.clone();
+            bad["capabilities"].as_array_mut().unwrap().retain(|c| c != capability);
+            assert!(validate_boundary_requirements(&bad).is_err());
+        }
+        let mut bad = valid.clone(); bad["schema_version"] = json!(1);
+        assert!(validate_boundary_requirements(&bad).unwrap_err().contains("requires schema v2"));
+        for payload in [Value::Null, json!({}), json!([{"basis":"invalid"}])] {
+            let mut bad = valid.clone(); bad["rust_call_return_relations"] = payload;
+            assert!(validate_boundary_requirements(&bad).is_err());
+        }
+    }
+
+    #[test]
+    fn rust_call_unwind_relation_boundary_contract() {
+        let mut raw=minimal_v2_node();raw["typed_edges"]=json!([]);
+        raw["capabilities"]=json!(["typed_edge_flow_v1","mir_semantics_v2","mir_semantic_labels_v1","rust_call_return_relation_v1","rust_call_unwind_relation_v1","rust_unwind_edge_scope_v1"]);
+        raw["nodes"][0]["semantic_labels"]=json!([]);
+        raw["rust_call_return_relations"]=json!([]);raw["rust_call_unwind_relations"]=json!([]);raw["rust_unwind_edge_scopes"]=json!([]);
+        validate_boundary_requirements(&raw).unwrap();
+        for (cap,payload) in [("rust_call_unwind_relation_v1","rust_call_unwind_relations"),("rust_unwind_edge_scope_v1","rust_unwind_edge_scopes")] {
+            let mut bad=raw.clone();bad.as_object_mut().unwrap().remove(payload);assert!(validate_boundary_requirements(&bad).is_err());
+            let mut bad=raw.clone();bad["capabilities"].as_array_mut().unwrap().retain(|v|v!=cap);assert!(validate_boundary_requirements(&bad).is_err());
+        }
+        for required in ["typed_edge_flow_v1","rust_call_return_relation_v1"] {let mut bad=raw.clone();bad["capabilities"].as_array_mut().unwrap().retain(|v|v!=required);assert!(validate_boundary_requirements(&bad).is_err());}
+        raw["schema_version"]=json!(1);assert!(validate_boundary_requirements(&raw).is_err());
+    }
+
+    fn minimal_v2_node() -> Value {
+        json!({
+            "schema_version": 2,
+            "entry": "b0",
+            "variables": [{"id": "rust::main::_1", "language": "rust"}],
+            "allocations": [],
+            "nodes": [{
+                "id": "b0",
+                "successors": [],
+                "labels": [],
+                "allocation_labels": [],
+                "identity": {},
+                "event_identity": {},
+                "pre": {"cells": []},
+                "post": {"cells": []}
+            }]
+        })
+    }
+
+    #[test]
+    fn external_formal_memory_effect_cli_guard_requires_atomic_capability_and_payload() {
+        let mut missing = minimal_v2_node();
+        missing["capabilities"] = json!(["external_formal_memory_effects_v1"]);
+        let err = validate_boundary_requirements(&missing).unwrap_err();
+        assert!(err.contains("external_formal_memory_effects_v1"));
+
+        let mut naked = minimal_v2_node();
+        naked["external_formal_memory_effects"] = json!([{
+            "node":"rust::main::bb0", "callee":"strlen",
+            "semantic_class":"strlen_read_c_string_v1", "formal_index":0,
+            "access":"read", "event_variable":"Local(_1)",
+            "actual_variable":"rust::main::Local(_1)",
+            "basis":"crema_efm1_closed_contract_v1",
+            "semantic_sources":["svf_absextapi_strlen_semantics_v1","llvm16_tli_strlen_argmem_read_semantics_v1"]
+        }]);
+        let err = validate_boundary_requirements(&naked).unwrap_err();
+        assert!(err.contains("external_formal_memory_effects_v1"));
+    }
+
+    #[test]
+    fn external_formal_memory_effect_cli_guard_requires_mir_semantics_v2() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["external_formal_memory_effects_v1"]);
+        value["external_formal_memory_effects"] = json!([{
+            "node":"rust::main::bb0", "callee":"strlen",
+            "semantic_class":"strlen_read_c_string_v1", "formal_index":0,
+            "access":"read", "event_variable":"Local(_1)",
+            "actual_variable":"rust::main::Local(_1)",
+            "basis":"crema_efm1_closed_contract_v1",
+            "semantic_sources":["svf_absextapi_strlen_semantics_v1","llvm16_tli_strlen_argmem_read_semantics_v1"]
+        }]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("requires mir_semantics_v2"));
+    }
+
+    #[test]
+    fn ene1_raw_boundary_atomicity_and_null_attacks() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["mir_semantic_labels_v1", "mir_semantics_v2", "llvm_memory_effects_v1", "external_negative_evidence_v1"]);
+        value["llvm_memory_effects"] = json!({});
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        value["external_negative_evidence"] = json!([{"evidence_kind":"no_free_function"}]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+        for payload in [json!([]),json!(null),json!({})] {
+            let mut bad = value.clone(); bad["external_negative_evidence"] = payload;
+            assert!(validate_boundary_requirements(&bad).is_err());
+        }
+        let mut bad = value.clone(); bad.as_object_mut().unwrap().remove("external_negative_evidence");
+        assert!(validate_boundary_requirements(&bad).is_err());
+        let mut bad = value.clone(); bad["capabilities"] = json!([]);
+        assert!(validate_boundary_requirements(&bad).is_err());
+        for field in ["formal_index","actual_variable"] {
+            let mut bad = value.clone(); bad["external_negative_evidence"][0][field] = json!(null);
+            assert!(validate_boundary_requirements(&bad).is_err());
+        }
+    }
+
+    #[test]
+    fn dcp1_raw_boundary_atomicity() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["external_deallocation_call_provenance_v1"]);
+        value["external_deallocation_call_provenance"] = json!([{
+            "node":"rust::main::bb0", "callee":"free", "arity":1,
+            "formal_index":0, "actual_variable":null, "family":"c_malloc",
+            "operation":"free", "language":"c", "body_status":"bodyless",
+            "certainty":"may_effect", "basis":"rust_mir_exact_external_free_call_v1"
+        }]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+        for payload in [json!([]), json!(null), json!({})] {
+            let mut bad = value.clone();
+            bad["external_deallocation_call_provenance"] = payload;
+            assert!(validate_boundary_requirements(&bad).is_err());
+        }
+        let mut missing_payload = value.clone();
+        missing_payload.as_object_mut().unwrap().remove("external_deallocation_call_provenance");
+        assert!(validate_boundary_requirements(&missing_payload).is_err());
+        let mut missing_capability = value;
+        missing_capability["capabilities"] = json!([]);
+        assert!(validate_boundary_requirements(&missing_capability).is_err());
+    }
+
+    #[test]
+    fn err1_raw_boundary_is_atomic_nonempty_and_requires_mir() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["mir_semantic_labels_v1", "mir_semantics_v2", "external_return_relations_v1"]);
+        value["external_return_relations"] = json!([{}]);
+        value["external_return_call_bindings"] = json!([{}]);
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+        for field in ["external_return_relations", "external_return_call_bindings"] {
+            for payload in [json!([]), json!(null), json!({})] {
+                let mut bad = value.clone(); bad[field] = payload;
+                assert!(validate_boundary_requirements(&bad).is_err());
+            }
+            let mut bad = value.clone(); bad.as_object_mut().unwrap().remove(field);
+            assert!(validate_boundary_requirements(&bad).is_err());
+        }
+        let mut bad = value.clone(); bad["capabilities"] = json!(["mir_semantic_labels_v1", "mir_semantics_v2"]);
+        assert!(validate_boundary_requirements(&bad).is_err());
+        let mut borrowed = value.clone();
+        borrowed["external_return_relations"] = json!([{"callee":"getenv", "source_actual_variable":null}]);
+        assert!(validate_boundary_requirements(&borrowed).is_err());
+        value["capabilities"] = json!(["external_return_relations_v1"]);
+        assert!(validate_boundary_requirements(&value).is_err());
+    }
+
+    #[test]
+    fn external_formal_memory_effect_v2_cli_guard_is_atomic_and_version_exclusive() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!([
+            "mir_semantic_labels_v1",
+            "mir_semantics_v2",
+            "external_formal_memory_effects_v2"
+        ]);
+        value["external_formal_memory_effects"] = json!([{
+            "node":"rust::main::bb0", "callee":"memmove",
+            "semantic_class":"memmove_v1", "formal_index":0,
+            "access":"write", "event_variable":"Local(_1)",
+            "actual_variable":"rust::main::Local(_1)",
+            "extent_kind":"bytes_from_formal", "extent_argument_index":2,
+            "basis":"crema_efm2_closed_contract_v1",
+            "semantic_sources":[
+                "posix_memmove_n_byte_copy_semantics_v1",
+                "llvm16_memmove_formal_semantics_v1",
+                "llvm16_tli_memmove_recognition_v1"
+            ]
+        }]);
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        assert!(
+            validate_boundary_requirements(&value).is_ok(),
+            "valid EFM2 raw boundary must be accepted: {:?}",
+            validate_boundary_requirements(&value),
+        );
+
+        value["capabilities"].as_array_mut().unwrap().push(
+            json!("external_formal_memory_effects_v1"),
+        );
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("mutually exclusive"));
+
+        let mut missing = minimal_v2_node();
+        missing["capabilities"] = json!([
+            "mir_semantic_labels_v1",
+            "mir_semantics_v2",
+            "external_formal_memory_effects_v2"
+        ]);
+        let err = validate_boundary_requirements(&missing).unwrap_err();
+        assert!(err.contains("v1/v2 capability"));
+    }
+
+    #[test]
+    fn schema_v1_cli_guard_preserves_legacy_boundary() {
+        let mut value = minimal_v2_node();
+        value["schema_version"] = json!(1);
+        value.as_object_mut().unwrap().remove("allocations");
+        for key in ["allocation_labels", "identity", "event_identity"] {
+            value["nodes"][0].as_object_mut().unwrap().remove(key);
+        }
+        assert!(validate_boundary_requirements(&value).is_ok());
+    }
+
+    #[test]
+    fn schema_v2_cli_guard_requires_allocations_domain() {
+        let mut value = minimal_v2_node();
+        value.as_object_mut().unwrap().remove("allocations");
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("allocations"));
+    }
+
+    #[test]
+    fn schema_v2_cli_guard_requires_event_identity() {
+        let mut value = minimal_v2_node();
+        value["nodes"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("event_identity");
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("event_identity"));
+    }
+
+    #[test]
+    fn schema_v2_cli_guard_rejects_non_may_allocation_certainty() {
+        let mut value = minimal_v2_node();
+        value["nodes"][0]["allocation_labels"] = json!([{
+            "predicate": "drop",
+            "allocation": "A",
+            "certainty": "exact_abstract"
+        }]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("may_abstract"));
+    }
+    #[test]
+    fn capability_cli_guard_requires_allocator_contract_metadata() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["allocation_contracts_v1"]);
+        value["allocations"] = json!([{
+            "id":"A", "display":"A", "site":{"kind":"synthetic","scope":"t","label":"A"}, "context":[]
+        }]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("allocator_contract"));
+        value["allocations"][0]["allocator_contract"] = json!({
+            "family":"rust_global", "operation":"box_allocation", "language":"rust"
+        });
+        assert!(validate_boundary_requirements(&value).is_ok());
+    }
+
+    #[test]
+    fn capability_cli_guard_requires_drop_deallocator_contract() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["allocation_contracts_v1"]);
+        value["allocations"] = json!([{
+            "id":"A", "display":"A", "site":{"kind":"synthetic","scope":"t","label":"A"}, "context":[],
+            "allocator_contract":{"family":"rust_global","operation":"box_allocation","language":"rust"}
+        }]);
+        value["nodes"][0]["allocation_labels"] = json!([{
+            "predicate":"drop", "allocation":"A", "certainty":"may_abstract"
+        }]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("deallocator_contract"));
+    }
+
+
+    #[test]
+    fn allocation_contracts_v2_cli_guard_requires_v1_and_closed_basis() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["allocation_contracts_v2"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("must declare both"), "unexpected error: {err}");
+
+        value["capabilities"] = json!(["allocation_contracts_v1", "allocation_contracts_v2"]);
+        value["allocations"] = json!([{
+            "id":"A", "display":"A", "site":{"kind":"synthetic","scope":"t","label":"A"}, "context":[],
+            "allocator_contract":{"family":"rust_global","operation":"box_allocation","language":"rust"}
+        }]);
+        value["nodes"][0]["allocation_labels"] = json!([{
+            "predicate":"drop", "allocation":"A", "certainty":"may_abstract",
+            "deallocator_contract":{"family":"rust_global","operation":"drop","language":"rust"}
+        }]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("basis"), "unexpected error: {err}");
+
+        value["nodes"][0]["allocation_labels"][0]["deallocator_contract"] = json!({
+            "family":"rust_global", "operation":"drop", "language":"rust",
+            "basis":"rust_box_global_drop",
+            "owner_def_path":"opaque::owner",
+            "allocator_def_path":"opaque::allocator"
+        });
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["nodes"][0]["allocation_labels"][0]["deallocator_contract"]["family"] = json!("c_malloc");
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("requires family=rust_global"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn ht2_r2_string_v4_cli_guard_gates_string_basis() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["allocation_contracts_v1", "allocation_contracts_v2"]);
+        value["allocations"] = json!([{
+            "id":"S", "display":"S", "site":{"kind":"synthetic","scope":"t","label":"S"}, "context":[],
+            "allocator_contract":{"family":"rust_global","operation":"string_allocation","language":"rust"}
+        }]);
+        value["nodes"][0]["allocation_labels"] = json!([{
+            "predicate":"drop", "allocation":"S", "certainty":"may_abstract",
+            "deallocator_contract":{
+                "family":"rust_global", "operation":"drop", "language":"rust",
+                "basis":"rust_string_global_drop",
+                "owner_def_path":"alloc::string::String",
+                "allocator_def_path":"alloc::alloc::Global"
+            }
+        }]);
+
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("requires artifact capability allocation_contracts_v4"), "unexpected error: {err}");
+
+        value["capabilities"] = json!([
+            "allocation_contracts_v1",
+            "allocation_contracts_v2",
+            "allocation_contracts_v4"
+        ]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["capabilities"] = json!(["allocation_contracts_v1", "allocation_contracts_v4"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("allocation_contracts_v4 refines allocation_contracts_v2"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn bcontract_drop1_v3_cli_guard_gates_new_basis() {
+        let mut value = minimal_v2_node();
+        value["allocations"] = json!([{
+            "id":"A", "display":"A", "site":{"kind":"synthetic","scope":"t","label":"A"}, "context":[],
+            "allocator_contract":{"family":"rust_global","operation":"box_allocation","language":"rust"}
+        }]);
+        value["nodes"][0]["allocation_labels"] = json!([{
+            "predicate":"drop", "allocation":"A", "certainty":"may_abstract",
+            "deallocator_contract":{
+                "family":"rust_global",
+                "operation":"drop",
+                "language":"rust",
+                "basis":"rust_mem_drop_owned_box_global_v1",
+                "owner_def_path":"alloc::boxed::Box",
+                "allocator_def_path":"alloc::alloc::Global",
+                "callee_def_path":"core::mem::drop"
+            }
+        }]);
+
+        value["capabilities"] = json!(["allocation_contracts_v1", "allocation_contracts_v2"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("requires artifact capability allocation_contracts_v3"), "unexpected error: {err}");
+
+        value["capabilities"] = json!([
+            "allocation_contracts_v1",
+            "allocation_contracts_v2",
+            "allocation_contracts_v3"
+        ]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["nodes"][0]["allocation_labels"][0]["deallocator_contract"]["callee_def_path"] = Value::Null;
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("requires non-empty owner_def_path, allocator_def_path, and callee_def_path"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn b1_1_disposition_v2_cli_guard_gates_cstring_kinds() {
+        let mut value = minimal_v2_node();
+        value["allocations"] = json!([{
+            "id":"A", "display":"A", "site":{"kind":"synthetic","scope":"t","label":"A"}, "context":[]
+        }]);
+        value["nodes"][0]["allocation_disposition"] = json!([{
+            "allocation":"A",
+            "kind":"cstring_into_raw",
+            "certainty":"may_abstract",
+            "obligation_effect":"preserve_manual_obligation",
+            "basis":"rustc_cstring_into_raw_v1",
+            "callee_def_path":"alloc::ffi::c_str::CString::into_raw"
+        }]);
+
+        value["capabilities"] = json!(["allocation_disposition_v1"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("requires artifact capability allocation_disposition_v2"), "unexpected error: {err}");
+
+        value["capabilities"] = json!(["allocation_disposition_v2"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("must declare both capabilities"), "unexpected error: {err}");
+
+        value["capabilities"] = json!(["allocation_disposition_v1", "allocation_disposition_v2"]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+    }
+
+    #[test]
+    fn b1_1_r1_cli_guard_accepts_cstring_drop_and_rejects_wrong_family() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["allocation_contracts_v1", "allocation_contracts_v2"]);
+        value["allocations"] = json!([{
+            "id":"A", "display":"A", "site":{"kind":"synthetic","scope":"t","label":"A"}, "context":[],
+            "allocator_contract":{"family":"rust_global","operation":"cstring_allocation","language":"rust"}
+        }]);
+        value["nodes"][0]["allocation_labels"] = json!([{
+            "predicate":"drop", "allocation":"A", "certainty":"may_abstract",
+            "deallocator_contract":{
+                "family":"rust_global",
+                "operation":"drop",
+                "language":"rust",
+                "basis":"rust_cstring_global_drop",
+                "owner_def_path":"alloc::ffi::c_str::CString",
+                "allocator_def_path":"alloc::alloc::Global"
+            }
+        }]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["nodes"][0]["allocation_labels"][0]["deallocator_contract"]["family"] = json!("c_malloc");
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("requires family=rust_global"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn panic_unwind_cli_guard_requires_mir_v2() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["panic_unwind_lifecycle_v1"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("panic_unwind_lifecycle_v1"), "unexpected error: {err}");
+
+        value["capabilities"] = json!([
+            "mir_semantic_labels_v1",
+            "mir_semantics_v2",
+            "panic_unwind_lifecycle_v1"
+        ]);
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+    }
+
+    #[test]
+    fn panic_lifecycle_boundary_requires_may_abstract_boolean_records() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!([
+            "mir_semantic_labels_v1",
+            "mir_semantics_v2",
+            "panic_unwind_lifecycle_v1",
+            "panic_lifecycle_state_v1"
+        ]);
+        value["allocations"] = json!([{
+            "id": "A", "display": "A", "site": null, "context": []
+        }]);
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        value["nodes"][0]["panic_lifecycle"] = json!([{
+            "allocation": "A",
+            "certainty": "may_abstract",
+            "may_own": true,
+            "may_partial_drop": true,
+            "may_stale_owner": true,
+            "may_committed": false,
+            "may_complete": false
+        }]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["nodes"][0]["panic_lifecycle"][0]["certainty"] = json!("exact_abstract");
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("may_abstract"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn panic_lifecycle_boundary_requires_field_on_every_node_when_capability_is_declared() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!([
+            "mir_semantic_labels_v1",
+            "mir_semantics_v2",
+            "panic_unwind_lifecycle_v1",
+            "panic_lifecycle_state_v1"
+        ]);
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("missing panic_lifecycle"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn panic_lifecycle_v2_boundary_requires_explicit_coverage() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!([
+            "mir_semantic_labels_v1",
+            "mir_semantics_v2",
+            "panic_unwind_lifecycle_v1",
+            "panic_lifecycle_state_v1",
+            "panic_lifecycle_state_v2"
+        ]);
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        value["nodes"][0]["panic_lifecycle"] = json!([]);
+
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("panic_lifecycle_coverage"), "unexpected error: {err}");
+
+        value["nodes"][0]["panic_lifecycle_coverage"] = json!("complete");
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["nodes"][0]["panic_lifecycle_coverage"] = json!("unresolved");
+        assert!(validate_boundary_requirements(&value).is_ok());
+    }
+
+
+    #[test]
+    fn source_provenance_boundary_requires_atomic_capability_and_payload() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["source_provenance_v1"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("missing source_provenance"), "unexpected error: {err}");
+
+        value["nodes"][0]["source_provenance"] = json!({
+            "language": "synthetic",
+            "anchors": [],
+            "allocation_events": []
+        });
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["capabilities"] = json!([]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("without capability source_provenance_v1"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn typed_edge_flow_boundary_requires_atomic_capability_and_payload() {
+        let mut value = minimal_v2_node();
+        value["capabilities"] = json!(["typed_edge_flow_v1"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("typed_edges payload"), "unexpected error: {err}");
+
+        value["typed_edges"] = json!([]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["capabilities"] = json!([]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("typed_edges payload"), "unexpected error: {err}");
+    }
+
+
+    #[test]
+    fn reallocation_boundary_cli_guard_requires_atomic_capability_and_payload() {
+        let mut value = minimal_v2_node();
+        // This test exercises RBF1 capability/payload atomicity, so the
+        // surrounding schema-v2 artifact must first satisfy the independent
+        // allocation_state_v1 boundary contract.
+        value["nodes"][0]["allocation_post"] = json!({"cells": []});
+        value["capabilities"] = json!(["allocation_state_v1", "reallocation_boundaries_v1"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("reallocation_boundaries_v1"), "unexpected error: {err}");
+
+        value["reallocation_boundaries"] = json!([{
+            "node": "b0",
+            "source_allocation": "A",
+            "source_variable": "rust::main::_1",
+            "result_variable": "rust::main::_2",
+            "family": "c_malloc",
+            "operation": "realloc",
+            "certainty": "may_abstract",
+            "status": "conditional_unmodeled",
+            "basis": "rust_foreign_decl_c_realloc_boundary_v1"
+        }]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["capabilities"] = json!(["allocation_state_v1"]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("reallocation_boundaries_v1"), "unexpected error: {err}");
+    }
+
+
+    #[test]
+    fn reallocation_boundary_v2_cli_guard_requires_v1_contracts_and_mir_semantics() {
+        let mut value = minimal_v2_node();
+        value["nodes"][0]["allocation_post"] = json!({"cells": []});
+        value["reallocation_boundaries"] = json!([{
+            "basis": "rust_foreign_decl_c_realloc_allocptr_family_v2"
+        }]);
+        value["capabilities"] = json!([
+            "allocation_state_v1",
+            "reallocation_boundaries_v1"
+        ]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("without capability reallocation_boundaries_v2"));
+
+        value["reallocation_boundaries"] = json!([{"proof": "placeholder"}]);
+        value["capabilities"] = json!([
+            "allocation_state_v1",
+            "reallocation_boundaries_v1",
+            "reallocation_boundaries_v2"
+        ]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("allocation_contracts_v1") || err.contains("mir_semantics_v2"));
+
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        value["capabilities"] = json!([
+            "allocation_state_v1",
+            "allocation_contracts_v1",
+            "mir_semantic_labels_v1",
+            "mir_semantics_v2",
+            "reallocation_boundaries_v1",
+            "reallocation_boundaries_v2"
+        ]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+    }
+
+    #[test]
+    fn conditional_reallocation_cli_guard_requires_atomic_capability_and_dependencies() {
+        let mut value = minimal_v2_node();
+        value["nodes"][0]["allocation_post"] = json!({"cells": []});
+        value["nodes"][0]["semantic_labels"] = json!([]);
+        value["capabilities"] = json!([
+            "allocation_state_v1",
+            "mir_semantic_labels_v1",
+            "typed_edge_flow_v1",
+            "allocation_existence_guards_v1",
+            "reallocation_boundaries_v1",
+            "conditional_reallocations_v1"
+        ]);
+        value["typed_edges"] = json!([]);
+        value["allocation_existence_guards"] = json!([{"proof": "placeholder"}]);
+        value["reallocation_boundaries"] = json!([{"proof": "placeholder"}]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("conditional_reallocations_v1"), "unexpected error: {err}");
+
+        value["conditional_reallocations"] = json!([{"proof": "placeholder"}]);
+        assert!(validate_boundary_requirements(&value).is_ok());
+
+        value["capabilities"] = json!([
+            "allocation_state_v1",
+            "mir_semantic_labels_v1",
+            "typed_edge_flow_v1",
+            "allocation_existence_guards_v1",
+            "reallocation_boundaries_v1"
+        ]);
+        let err = validate_boundary_requirements(&value).unwrap_err();
+        assert!(err.contains("conditional_reallocations_v1"), "unexpected error: {err}");
+        let mut v2_without_v1 = value.clone();
+        v2_without_v1["capabilities"] = json!([
+            "allocation_state_v1", "reallocation_boundaries_v1",
+            "allocation_existence_guards_v1", "mir_semantic_labels_v1",
+            "typed_edge_flow_v1", "conditional_reallocations_v2"
+        ]);
+        // This fixture specifically exercises the v2 -> v1 capability
+        // dependency. Remove the inherited v1 payload so the earlier
+        // v1 capability/payload atomicity guard is not the violated
+        // invariant under test.
+        v2_without_v1
+            .as_object_mut()
+            .expect("test fixture must be a JSON object")
+            .remove("conditional_reallocations");
+        let err = validate_boundary_requirements(&v2_without_v1).unwrap_err();
+        assert!(err.contains("conditional_reallocations_v2"), "unexpected error: {err}");
+
+    }
+
+}

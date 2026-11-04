@@ -1,0 +1,24 @@
+pub mod ast;
+pub mod explain;
+pub mod kripke;
+pub mod model_checker;
+pub mod parser;
+pub mod truth;
+
+pub use ast::{AssessmentScope, QueryDocument};
+pub use explain::{
+    ExplanationReport, ExplanationWitness, QueryEvidenceDirection, QueryResultAssessment,
+    QueryResultStrength, QuerySubresult, UncertaintyReason, EXPLAINABILITY_TAXONOMY_VERSION,
+    QUERY_RESULT_ASSESSMENT_VERSION,
+};
+pub use kripke::{
+    allocation_existence_guard_overlay_from_json, conditional_reallocation_overlay_from_json,
+    opaque_memory_effect_overlay_from_json, panic_lifecycle_overlay_from_json,
+    reallocation_boundary_overlay_from_json, rust_call_return_relation_overlay_from_json,
+    rust_call_unwind_relation_overlay_from_json, rust_unwind_edge_scope_overlay_from_json,
+    RustCallReturnRelationRecord, RustCallReturnRelationOverlay,
+    source_provenance_overlay_from_json, typed_edge_overlay_from_json, AnnotatedIcfg, Kripke,
+};
+pub use model_checker::{Binding, Env, ModelChecker};
+pub use parser::{parse_query, parse_query_document};
+pub use truth::Truth;

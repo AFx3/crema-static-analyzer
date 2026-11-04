@@ -1,0 +1,26 @@
+{
+  "schema": "cqpl_queries_v3_suite_v1",
+  "purpose": "stable user-facing memory-safety detection",
+  "queries": [
+    {
+      "id": "use_after_free",
+      "file": "use_after_free_full.cqpl",
+      "v2_reference": "queries_v2/use_after_free_alloc_state.cqpl"
+    },
+    {
+      "id": "double_free",
+      "file": "double_free_full.cqpl",
+      "v2_reference": "queries_v2/double_free_alloc_state.cqpl"
+    },
+    {
+      "id": "allocator_mismatch",
+      "file": "allocator_mismatch_full.cqpl",
+      "v2_reference": "queries_v2/allocator_mismatch_ub_v2.cqpl"
+    },
+    {
+      "id": "leak",
+      "file": "leak_normal_completion.cqpl",
+      "v2_reference": "queries_v2/leak_alloc_state.cqpl"
+    }
+  ]
+}
