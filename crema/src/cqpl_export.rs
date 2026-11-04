@@ -12,6 +12,7 @@ use crate::structs::{
     SvfSolvedPointsToArtifactV1, RustActivationUnwindMetadataV1, RustActivationUnwindSemantics,
     RustActivationUnwindAction, RustActivationUnwindEdge, RustActivationIdentity, RustActivationKind,
     RustActivationMetadataSource, RustActivationUnresolvedReason,
+    RustPlaceRelationEvidenceKind,
 };
 use crate::utils::load_ffi_functions;
 use regex::Regex;
@@ -5250,14 +5251,50 @@ fn event_sources_for_node(
         GlobalICFGNode::Mir(bb) => {
             for (statement_index, stmt) in bb.statements.iter().enumerate() {
                 let anchor = mir_statement_source_anchor(statement_index, stmt);
+                // Producer-certified Box payload extraction is the mechanical
+                // prelude of drop glue.  It copies the owned data pointer so
+                // the pointee can be destroyed; it is not a source-level
+                // observation of storage after its lifetime.  Exporting this
+                // `CopyForDeref` as `read_l` makes every ordinary Box drop look
+                // like drop-then-use.  Restrict the suppression to the typed
+                // relation emitted by rustc inspection; rendered MIR text is
+                // deliberately not used as proof.
+                let drop_glue_pointer_extraction = stmt
+                    .resource_place_relation_v1
+                    .as_ref()
+                    .is_some_and(|relation| {
+                        if relation.kind
+                            == RustPlaceRelationEvidenceKind::OwnedBoxDataPointerCopyForDeref
+                        {
+                            return true;
+                        }
+                        if relation.kind != RustPlaceRelationEvidenceKind::PointerReborrow {
+                            return false;
+                        }
+                        let Some(MirTerminator::Call {
+                            callee_def_path: Some(callee_def_path),
+                            arguments,
+                            ..
+                        }) = bb.terminator.as_ref()
+                        else {
+                            return false;
+                        };
+                        callee_def_path == "std::ops::Drop::drop"
+                            && arguments.iter().any(|argument| {
+                                canonical_mir_local(&argument.arg)
+                                    == Some(format!("Local(_{})", relation.destination_local))
+                            })
+                    });
                 // A dereference/projection read is a syntactic memory read.
-                if let Some(rvalue) = &stmt.rvalue {
-                    for v in mir_deref_locals(rvalue) {
-                        insert_event_source(
-                            &mut events,
-                            EventLabel { predicate: "read", variable: v },
-                            anchor.clone(),
-                        );
+                if !drop_glue_pointer_extraction {
+                    if let Some(rvalue) = &stmt.rvalue {
+                        for v in mir_deref_locals(rvalue) {
+                            insert_event_source(
+                                &mut events,
+                                EventLabel { predicate: "read", variable: v },
+                                anchor.clone(),
+                            );
+                        }
                     }
                 }
                 // A write through a dereferenced place is a syntactic memory write.
@@ -5279,12 +5316,14 @@ fn event_sources_for_node(
                             anchor.clone(),
                         );
                     }
-                    for v in mir_deref_locals(rhs) {
-                        insert_event_source(
-                            &mut events,
-                            EventLabel { predicate: "read", variable: v },
-                            anchor.clone(),
-                        );
+                    if !drop_glue_pointer_extraction {
+                        for v in mir_deref_locals(rhs) {
+                            insert_event_source(
+                                &mut events,
+                                EventLabel { predicate: "read", variable: v },
+                                anchor.clone(),
+                            );
+                        }
                     }
                 }
             }
@@ -5392,10 +5431,18 @@ fn event_sources_for_node(
                                 );
                             }
                         }
+                        // `ptr::drop_in_place` is a destruction boundary, not a
+                        // source-level write through a dangling pointer.  Its
+                        // destructor body is represented by the interprocedural
+                        // graph and any genuine reads/writes performed there get
+                        // their own events.  Labelling the call itself as a write
+                        // creates an impossible UAF immediately after every
+                        // ordinary owner drop (the drop event is followed by its
+                        // own implementation call).  Keep explicit ptr::write*
+                        // operations as writes; do not synthesize one for
+                        // drop_in_place.
                         if is_ptr_write_call(function_called)
                             || is_ptr_write_call(call_text)
-                            || is_ptr_drop_in_place_call(function_called)
-                            || is_ptr_drop_in_place_call(call_text)
                         {
                             if let Some(v) = first_arg {
                                 insert_event_source(
@@ -5672,10 +5719,6 @@ fn is_ptr_write_call(s: &str) -> bool {
         || s.contains("core::ptr::write_unaligned::<")
         || s.contains("std::ptr::write_volatile::<")
         || s.contains("core::ptr::write_volatile::<")
-}
-
-fn is_ptr_drop_in_place_call(s: &str) -> bool {
-    s.contains("std::ptr::drop_in_place::<") || s.contains("core::ptr::drop_in_place::<")
 }
 
 fn is_explicit_mem_drop(s: &str) -> bool {
@@ -6832,6 +6875,129 @@ mod tests {
             let expected = expected.into_iter().collect::<BTreeSet<_>>();
             assert_eq!(actual, expected, "wrong EFM2 labels for {callee}");
         }
+    }
+
+    #[test]
+    fn drop_in_place_is_not_exported_as_a_uaf_write_event() {
+        let resolver = LlvmNameResolver::default();
+        let drop_call = efm2_call("core::ptr::drop_in_place::<i32>", &["Local(_1)"]);
+        let events = event_sources_for_node(
+            "rust::main::bb0",
+            &drop_call,
+            &resolver,
+            &HashSet::new(),
+            &HashSet::new(),
+        );
+        assert!(events
+            .keys()
+            .all(|event| !matches!(event.predicate, "read" | "write")));
+
+        let write_call = efm2_call("core::ptr::write::<i32>", &["Local(_1)", "const 7_i32"]);
+        let events = event_sources_for_node(
+            "rust::main::bb1",
+            &write_call,
+            &resolver,
+            &HashSet::new(),
+            &HashSet::new(),
+        );
+        assert!(events.keys().any(|event| {
+            event.predicate == "write" && event.variable == "Local(_1)"
+        }));
+    }
+
+    #[test]
+    fn certified_box_drop_glue_pointer_extraction_is_not_a_uaf_read() {
+        use crate::structs::{RustPlaceRelationEvidence, SourceInfoData};
+
+        let statement = crate::structs::MirStatement {
+            source_info: SourceInfoData { span: "core/src/ptr/mod.rs:1:1".into(), scope: "0".into() },
+            kind: "Assign".into(),
+            details: "Assign((_6, deref_copy ((((*_1).0).0).0)))".into(),
+            place: Some("Local(_6)".into()),
+            is_mutable: Some(true),
+            rvalue: Some("deref_copy ((((*_1).0).0).0)".into()),
+            resource_place_relation_v1: Some(RustPlaceRelationEvidence {
+                kind: RustPlaceRelationEvidenceKind::OwnedBoxDataPointerCopyForDeref,
+                source_local: 1,
+                destination_local: 6,
+                source_projection: vec![PlaceProjection::Deref],
+                owner_def_path: "std::boxed::Box".into(),
+                source_type_diagnostic: "*mut Box<i32>".into(),
+                result_type_diagnostic: "*const i32".into(),
+                transparent_wrapper_depth: 2,
+            }),
+        };
+        let node = GlobalICFGNode::Mir(MirBasicBlock {
+            block_id: 0,
+            statements: vec![statement],
+            terminator: None,
+        });
+        let events = event_sources_for_node(
+            "rust::drop_in_place::bb0",
+            &node,
+            &LlvmNameResolver::default(),
+            &HashSet::new(),
+            &HashSet::new(),
+        );
+        assert!(events.keys().all(|event| event.predicate != "read"));
+
+        let mut ordinary = node;
+        let GlobalICFGNode::Mir(bb) = &mut ordinary else { unreachable!() };
+        bb.statements[0].resource_place_relation_v1 = None;
+        let events = event_sources_for_node(
+            "rust::user_deref::bb0",
+            &ordinary,
+            &LlvmNameResolver::default(),
+            &HashSet::new(),
+            &HashSet::new(),
+        );
+        assert!(events.keys().any(|event| event.predicate == "read"));
+    }
+
+    #[test]
+    fn certified_destructor_receiver_reborrow_is_not_a_uaf_read() {
+        use crate::structs::{RustPlaceRelationEvidence, SourceInfoData};
+
+        let mut node = efm2_call("std::ops::Drop::drop", &["Local(_2)"]);
+        let GlobalICFGNode::Mir(bb) = &mut node else { unreachable!() };
+        bb.statements.push(crate::structs::MirStatement {
+            source_info: SourceInfoData { span: "core/src/ptr/mod.rs:1:1".into(), scope: "0".into() },
+            kind: "Assign".into(),
+            details: "Assign((_2, &mut (*_1)))".into(),
+            place: Some("Local(_2)".into()),
+            is_mutable: Some(true),
+            rvalue: Some("&mut (*_1)".into()),
+            resource_place_relation_v1: Some(RustPlaceRelationEvidence {
+                kind: RustPlaceRelationEvidenceKind::PointerReborrow,
+                source_local: 1,
+                destination_local: 2,
+                source_projection: vec![PlaceProjection::Deref],
+                owner_def_path: String::new(),
+                source_type_diagnostic: "*mut Box<i32>".into(),
+                result_type_diagnostic: "&mut Box<i32>".into(),
+                transparent_wrapper_depth: 0,
+            }),
+        });
+        let events = event_sources_for_node(
+            "rust::drop_in_place::bb3",
+            &node,
+            &LlvmNameResolver::default(),
+            &HashSet::new(),
+            &HashSet::new(),
+        );
+        assert!(events.keys().all(|event| event.predicate != "read"));
+
+        let GlobalICFGNode::Mir(bb) = &mut node else { unreachable!() };
+        let Some(MirTerminator::Call { callee_def_path, .. }) = &mut bb.terminator else { unreachable!() };
+        *callee_def_path = Some("user::observe".into());
+        let events = event_sources_for_node(
+            "rust::user_reborrow::bb0",
+            &node,
+            &LlvmNameResolver::default(),
+            &HashSet::new(),
+            &HashSet::new(),
+        );
+        assert!(events.keys().any(|event| event.predicate == "read"));
     }
 
     #[test]
