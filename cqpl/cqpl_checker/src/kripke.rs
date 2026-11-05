@@ -1037,7 +1037,11 @@ pub struct ReallocationBoundaryRecord {
     pub certainty: String,
     pub status: String,
     pub basis: String,
+    #[serde(default = "unknown_reallocation_size_semantics")]
+    pub size_semantics: String,
 }
+
+fn unknown_reallocation_size_semantics() -> String { "unknown".into() }
 
 /// RBF1 diagnostic-only unresolved conditional reallocation boundary. This
 /// evidence is intentionally absent from `CqplTruthModel`.
@@ -1255,6 +1259,10 @@ pub struct ConditionalReallocationRecord {
     #[serde(default)]
     pub outcome_value_flow_basis: Option<String>,
     #[serde(default)]
+    pub result_overwrite_node: Option<String>,
+    #[serde(default)]
+    pub result_overwrite_basis: Option<String>,
+    #[serde(default)]
     pub result_deallocations: Vec<ConditionalReallocationResultDeallocationRecord>,
 }
 
@@ -1380,6 +1388,14 @@ fn validate_conditional_reallocations(
         if hardened_v2 {
             if record.outcome_correlation_basis.as_deref() != Some("direct_cfg_edge_realloc_to_is_null_v1") {
                 return Err("conditional_reallocations_v2 requires direct realloc-result outcome correlation evidence".into());
+            }
+            match (&record.result_overwrite_node, &record.result_overwrite_basis) {
+                (None, None) => {}
+                (Some(node), Some(basis))
+                    if node == &record.success_successor
+                        && basis == "rust_mir_immediate_result_overwrite_with_source_v1"
+                        && nodes.get(node).is_some_and(|candidate| candidate.semantic_labels.iter().any(|label| label == "stmt:assign")) => {}
+                _ => return Err("conditional_reallocations_v2 contains an invalid immediate result-overwrite proof".into()),
             }
             let realloc_node = nodes.get(&record.reallocation_node).expect("closed above");
             if !realloc_node.successors.iter().any(|s| s == &record.outcome_predicate_call_node) {
@@ -3527,6 +3543,15 @@ impl Kripke {
         })
     }
 
+    pub fn reallocation_boundaries_for<'a>(
+        &'a self,
+        allocation: &'a str,
+    ) -> impl Iterator<Item = &'a ReallocationBoundaryRecord> + 'a {
+        self.reallocation_boundaries
+            .iter()
+            .filter(move |record| record.source_allocation == allocation)
+    }
+
     pub fn conditional_reallocations_for<'a>(
         &'a self,
         allocation: &'a str,
@@ -5283,6 +5308,7 @@ mod tests {
             certainty: "may_abstract".into(),
             status: "conditional_unmodeled".into(),
             basis: "rust_foreign_decl_c_realloc_allocptr_family_v2".into(),
+            size_semantics: "unknown".into(),
         }];
         (input, boundaries)
     }
