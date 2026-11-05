@@ -5867,7 +5867,8 @@ mod tests {
     use crate::ast::{AssessmentScope, PathFormula, PathQuantifier, QueryDocument, StateFormula};
     use crate::kripke::{
         AbstractAllocation, AbstractAllocationCell, AbstractAllocationMemoryAnnotation, AbstractMemoryAnnotation, AllocationContract, AllocationDispositionRecord, AllocationEventLabel, AllocationEventSourceRecord, AnnotatedIcfg, AnnotatedNode,
-        Kripke, NodeIdentityAnnotation, NodeSourceProvenance, ParsedSourceSpan, ProgramLanguage, ProgramVariable, TypedEdgeFlow, TypedEdgeRecord,
+        IdentityPointsToRecord, Kripke, NodeIdentityAnnotation, NodeSourceProvenance,
+        ParsedSourceSpan, ProgramLanguage, ProgramVariable, TypedEdgeFlow, TypedEdgeRecord,
     };
     use crate::parser::parse_query_document;
     use std::collections::BTreeSet;
@@ -7561,6 +7562,187 @@ mod tests {
         assert_eq!(report.assessment.subresult, QuerySubresult::UnkUnoriented);
     }
 
+    fn rename_test_node(k: &mut Kripke, old: &str, new: &str) {
+        let mut node = k.nodes.remove(old).unwrap();
+        node.id = new.into();
+        k.nodes.values_mut().for_each(|candidate| {
+            candidate.successors.iter_mut().for_each(|successor| {
+                if successor == old { *successor = new.into(); }
+            });
+        });
+        k.typed_edges.iter_mut().for_each(|edge| {
+            if edge.source == old { edge.source = new.into(); }
+            if edge.destination == old { edge.destination = new.into(); }
+        });
+        if let Some(provenance) = k.source_provenance.remove(old) {
+            k.source_provenance.insert(new.into(), provenance);
+        }
+        k.nodes.insert(new.into(), node);
+        if k.entry == old { k.entry = new.into(); }
+        for allocation in k.allocations.values_mut() {
+            if let Some(site) = allocation.site.as_mut() {
+                if site.get("node_id").and_then(serde_json::Value::as_str) == Some(old) {
+                    site["node_id"] = new.into();
+                }
+            }
+        }
+    }
+
+    fn mark_represented_c_allocation_returned_to_rust(
+        k: &mut Kripke,
+        rust_node: &str,
+        root_returns: &[(&str, &str)],
+    ) {
+        rename_test_node(k, "b0", "rust::main::bb0");
+        for (old, new) in root_returns {
+            rename_test_node(k, old, new);
+        }
+        k.source_provenance.get_mut("rust::main::bb0").unwrap().language = "c".into();
+        k.source_provenance.insert(
+            rust_node.into(),
+            NodeSourceProvenance {
+                language: "rust".into(),
+                anchors: vec![],
+                allocation_events: vec![],
+            },
+        );
+        k.nodes.get_mut(rust_node).unwrap().identity.as_mut().unwrap().points_to.push(
+            IdentityPointsToRecord {
+                variable: "rust::main::Local(_1)".into(),
+                allocations: vec!["A".into()],
+            },
+        );
+    }
+
+    #[test]
+    fn represented_c_malloc_and_calloc_returned_to_rust_keep_exact_leak_identity() {
+        for operation in ["malloc", "calloc"] {
+            let mut k = bodyless_c_malloc_leak_graph(false);
+            mark_represented_c_allocation_returned_to_rust(
+                &mut k,
+                "rust::main::bb1",
+                &[("ret", "rust::main::bb1")],
+            );
+            let allocation = k.allocations.get_mut("A").unwrap();
+            allocation.site.as_mut().unwrap()["allocator"] = operation.into();
+            allocation.allocator_contract.as_mut().unwrap().operation = operation.into();
+
+            let report = ModelChecker::new(&k)
+                .explain_document(&normal_scoped_leak_state_document(), &Env::new(), 4)
+                .unwrap();
+            let findings = report.supporting_findings.iter().filter(|finding| {
+                finding.kind
+                    == AllocationObligationFindingKind::NormalReturnUnreleasedExternalAllocation
+            }).collect::<Vec<_>>();
+            assert_eq!(findings.len(), 1, "{operation}");
+            assert_eq!(findings[0].allocation, "A");
+            assert_eq!(findings[0].origin_node.as_deref(), Some("rust::main::bb0"));
+            assert_eq!(findings[0].return_node.as_deref(), Some("rust::main::bb1"));
+            assert_eq!(report.assessment.subresult, QuerySubresult::UnkTrue);
+        }
+    }
+
+    #[test]
+    fn represented_c_allocation_with_reachable_free_has_no_positive_leak_finding() {
+        let mut k = bodyless_nullable_malloc_with_guarded_discharge_graph();
+        mark_represented_c_allocation_returned_to_rust(
+            &mut k,
+            "guard",
+            &[
+                ("ret_null", "rust::main::bb1"),
+                ("ret_freed", "rust::main::bb2"),
+            ],
+        );
+        let report = ModelChecker::new(&k)
+            .explain_document(&normal_scoped_leak_state_document(), &Env::new(), 4)
+            .unwrap();
+        assert!(!report.supporting_findings.iter().any(|finding| {
+            finding.kind
+                == AllocationObligationFindingKind::NormalReturnUnreleasedExternalAllocation
+        }));
+        assert_ne!(report.assessment.subresult, QuerySubresult::UnkTrue);
+    }
+
+    fn external_realloc_boundary_leak_graph(size_semantics: &str) -> Kripke {
+        let mut k = bodyless_c_malloc_leak_graph(false);
+        k.nodes.get_mut("b0").unwrap().successors = vec!["realloc".into()];
+        k.nodes.insert(
+            "realloc".into(),
+            AnnotatedNode {
+                id: "realloc".into(),
+                successors: vec!["ret".into()],
+                labels: vec![],
+                semantic_labels: vec!["term:call".into()],
+                allocation_labels: vec![],
+                allocation_disposition: vec![],
+                identity: Some(NodeIdentityAnnotation {
+                    points_to: vec![IdentityPointsToRecord {
+                        variable: "rust::main::Local(_1)".into(),
+                        allocations: vec!["A".into()],
+                    }],
+                    ..NodeIdentityAnnotation::default()
+                }),
+                event_identity: Some(NodeIdentityAnnotation::default()),
+                allocation_post: Some(AbstractAllocationMemoryAnnotation {
+                    cells: vec![AbstractAllocationCell {
+                        allocation: "A".into(), value: CellValue::Top,
+                    }],
+                }),
+                pre: AbstractMemoryAnnotation::default(),
+                post: AbstractMemoryAnnotation::default(),
+            },
+        );
+        k.typed_edges = vec![
+            TypedEdgeRecord {
+                source: "b0".into(), destination: "realloc".into(),
+                flow: TypedEdgeFlow::Normal, label: Some("Call return".into()),
+                source_label: None, destination_label: None,
+            },
+            TypedEdgeRecord {
+                source: "realloc".into(), destination: "ret".into(),
+                flow: TypedEdgeFlow::Normal, label: Some("Call return".into()),
+                source_label: None, destination_label: None,
+            },
+        ];
+        k.reallocation_boundaries.push(crate::kripke::ReallocationBoundaryRecord {
+            node: "realloc".into(), source_allocation: "A".into(),
+            source_variable: "rust::main::Local(_1)".into(),
+            result_variable: "rust::main::Local(_2)".into(),
+            family: "c_malloc".into(), operation: "realloc".into(),
+            certainty: "may_abstract".into(), status: "conditional_unmodeled".into(),
+            basis: "rust_foreign_decl_c_realloc_boundary_v1".into(),
+            size_semantics: size_semantics.into(),
+        });
+        k
+    }
+
+    #[test]
+    fn positive_size_realloc_boundary_preserves_failure_branch_leak_candidate() {
+        let k = external_realloc_boundary_leak_graph("positive_nonzero_constant");
+        let report = ModelChecker::new(&k)
+            .explain_document(&normal_scoped_leak_state_document(), &Env::new(), 4)
+            .unwrap();
+        assert!(report.supporting_findings.iter().any(|finding| {
+            finding.kind
+                == AllocationObligationFindingKind::NormalReturnUnreleasedExternalAllocation
+                && finding.allocation == "A"
+        }));
+    }
+
+    #[test]
+    fn zero_and_unknown_size_realloc_boundaries_remain_fail_closed() {
+        for size in ["zero_constant", "unknown"] {
+            let k = external_realloc_boundary_leak_graph(size);
+            let report = ModelChecker::new(&k)
+                .explain_document(&normal_scoped_leak_state_document(), &Env::new(), 4)
+                .unwrap();
+            assert!(!report.supporting_findings.iter().any(|finding| {
+                finding.kind
+                    == AllocationObligationFindingKind::NormalReturnUnreleasedExternalAllocation
+            }), "{size}");
+        }
+    }
+
     #[test]
     fn bodyless_nullable_malloc_with_reachable_discharge_does_not_orient_leak_true() {
         let k = bodyless_nullable_malloc_with_guarded_discharge_graph();
@@ -7671,7 +7853,7 @@ mod tests {
         })
         .collect();
 
-        let record = crate::kripke::ConditionalReallocationRecord {
+        let mut record = crate::kripke::ConditionalReallocationRecord {
             source_allocation: "A".into(),
             reallocation_node: "realloc".into(),
             source_variable: "rust::main::_1".into(),
@@ -7723,6 +7905,42 @@ mod tests {
             .diagnostic_abstract_witness(&path, AssessmentScope::NormalExecution)
             .expect("W1 must accept every adjacent pair as a real CFG edge");
         assert!(!path.contains(&"failure".to_string()));
+
+        drop(checker);
+        rename_test_node(&mut k, "b0", "rust::main::bb0");
+        rename_test_node(&mut k, "free_q", "rust::main::bb1");
+        k.capabilities.insert("allocation_state_v1".into());
+        k.capabilities.insert("typed_edge_flow_v1".into());
+        k.capabilities.insert("conditional_reallocations_v2".into());
+        k.nodes.get_mut("success").unwrap().semantic_labels = vec!["stmt:assign".into()];
+        k.nodes.get_mut("rust::main::bb1").unwrap().semantic_labels = vec!["term:return".into()];
+        record.result_overwrite_node = Some("success".into());
+        record.result_overwrite_basis =
+            Some("rust_mir_immediate_result_overwrite_with_source_v1".into());
+        k.conditional_reallocations.push(record);
+
+        let findings = ModelChecker::new(&k).conditional_reallocation_leak_findings(
+            Truth::Unknown,
+            AssessmentScope::NormalExecution,
+        );
+        let finding = findings.iter().find(|finding| {
+            finding.kind
+                == AllocationObligationFindingKind::NormalReturnUnreleasedReallocationResult
+        }).expect("lost successful realloc-result leak finding");
+        assert_eq!(finding.allocation, "A");
+        assert_eq!(finding.origin_node.as_deref(), Some("realloc"));
+        assert_eq!(finding.handoff_node.as_deref(), Some("success"));
+
+        for size in ["zero_constant", "unknown"] {
+            let mut negative = k.clone();
+            negative.conditional_reallocations[0].size_semantics = size.into();
+            assert!(ModelChecker::new(&negative)
+                .conditional_reallocation_leak_findings(
+                    Truth::Unknown,
+                    AssessmentScope::NormalExecution,
+                )
+                .is_empty(), "{size}");
+        }
     }
 
     #[test]
