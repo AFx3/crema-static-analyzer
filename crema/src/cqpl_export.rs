@@ -649,6 +649,7 @@ struct ReallocationBoundaryRecord {
     certainty: &'static str,
     status: &'static str,
     basis: &'static str,
+    size_semantics: &'static str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -702,6 +703,12 @@ struct ConditionalReallocationRecord {
     /// result local itself (without an intra-block redefinition) or one exact
     /// MIR `copy` temporary derived from that unchanged result local.
     outcome_value_flow_basis: &'static str,
+    /// CR1-v3 proof that the success block immediately overwrites the only
+    /// logical realloc-result local with the old source pointer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result_overwrite_node: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result_overwrite_basis: Option<&'static str>,
     result_deallocations: Vec<ConditionalReallocationResultDeallocationRecord>,
 }
 
@@ -2230,6 +2237,17 @@ fn reallocation_boundary_records(
                 } else {
                     "rust_foreign_decl_c_realloc_allocptr_family_v2"
                 },
+                size_semantics: if arguments.get(1).is_some_and(|argument| {
+                    positive_nonzero_usize_constant(&argument.arg)
+                }) {
+                    "positive_nonzero_constant"
+                } else if arguments.get(1).is_some_and(|argument| {
+                    definitely_zero_usize_constant(&argument.arg)
+                }) {
+                    "zero_constant"
+                } else {
+                    "unknown"
+                },
             });
         }
     }
@@ -2375,6 +2393,22 @@ fn rust_node_redefines_canonical_variable(
             if ProgramVarId::rust(function, return_place)
                 .is_some_and(|variable| variable.canonical_string() == canonical_variable)
     )
+}
+
+fn immediate_realloc_result_overwrite_basis(
+    node: &GlobalICFGNode,
+    function: &str,
+    result_variable: &str,
+    source_variable: &str,
+) -> Option<&'static str> {
+    let GlobalICFGNode::Mir(block) = node else { return None; };
+    let first = block.statements.first()?;
+    let destination = first.place.as_deref().and_then(|raw| exact_rust_local(function, raw))?;
+    let source = first.rvalue.as_deref().and_then(|raw| exact_mir_copy_source(function, raw))?;
+    if destination.canonical_string() != result_variable || source.canonical_string() != source_variable {
+        return None;
+    }
+    Some("rust_mir_immediate_result_overwrite_with_source_v1")
 }
 
 fn rust_node_consumes_result_obligation(
@@ -2597,6 +2631,15 @@ fn conditional_reallocation_records(
         ) = outcome_candidates.pop().expect("singleton checked");
 
         let reachable_success = reachable_from(&success_successor, &successors);
+        let result_overwrite_basis = nodes.get(success_successor.as_str()).and_then(|node| {
+            immediate_realloc_result_overwrite_basis(
+                node,
+                function,
+                &boundary.result_variable,
+                &boundary.source_variable,
+            )
+        });
+        let result_overwrite_node = result_overwrite_basis.map(|_| success_successor.clone());
         let mut result_deallocations = BTreeSet::new();
         for (node_id, candidate) in &icfg.ordered_nodes {
             if !reachable_success.contains(node_id) {
@@ -2682,6 +2725,8 @@ fn conditional_reallocation_records(
             basis: "rust_foreign_decl_c_realloc_is_null_switch_v1",
             outcome_correlation_basis: "direct_cfg_edge_realloc_to_is_null_v1",
             outcome_value_flow_basis,
+            result_overwrite_node,
+            result_overwrite_basis,
             result_deallocations: result_deallocations.into_iter().collect(),
         });
     }
@@ -9183,6 +9228,7 @@ mod tests {
             certainty: "may_abstract",
             status: "conditional_unmodeled",
             basis: "rust_foreign_decl_c_realloc_boundary_v1",
+            size_semantics: "positive_nonzero_constant",
         }];
 
         close_variable_catalog_over_reallocation_boundaries(
@@ -9488,6 +9534,8 @@ mod tests {
             basis: "rust_foreign_decl_c_realloc_is_null_switch_v1",
             outcome_correlation_basis: "direct_cfg_edge_realloc_to_is_null_v1",
             outcome_value_flow_basis: "rust_mir_single_local_copy_result_operand_v1",
+            result_overwrite_node: None,
+            result_overwrite_basis: None,
             result_deallocations: vec![ConditionalReallocationResultDeallocationRecord {
                 node: "rust::main::bb7".into(),
                 variable: "rust::main::Local(_3)".into(),

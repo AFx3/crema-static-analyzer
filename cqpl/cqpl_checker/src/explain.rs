@@ -96,6 +96,7 @@ pub enum AllocationObligationFindingKind {
     PersistentAllocationOnNormalCompletion,
     UnreclaimedOwnedAllocationOnNormalCompletion,
     NormalReturnUnreleasedExternalAllocation,
+    NormalReturnUnreleasedReallocationResult,
     AllCandidateSuffixesCrossModeledDrop,
     AllCandidateDropSuffixesExcludeRepeatedDrop,
     ConditionalReallocationObligationsClosed,
@@ -173,6 +174,7 @@ impl AllocationObligationFindingKind {
             Self::PersistentAllocationOnNormalCompletion => "persistent_allocation_on_normal_completion",
             Self::UnreclaimedOwnedAllocationOnNormalCompletion => "unreclaimed_owned_allocation_on_normal_completion",
             Self::NormalReturnUnreleasedExternalAllocation => "normal_return_unreleased_external_allocation",
+            Self::NormalReturnUnreleasedReallocationResult => "normal_return_unreleased_reallocation_result",
             Self::AllCandidateSuffixesCrossModeledDrop => "all_candidate_suffixes_cross_modeled_drop",
             Self::AllCandidateDropSuffixesExcludeRepeatedDrop => "all_candidate_drop_suffixes_exclude_repeated_drop",
             Self::ConditionalReallocationObligationsClosed => "conditional_reallocation_obligations_closed",
@@ -1229,6 +1231,7 @@ impl<'a> ModelChecker<'a> {
         }
         if formula_is_allocation_state_leak_shape(&document.formula) {
             findings.extend(self.external_allocation_leak_findings(result, document.assessment_scope));
+            findings.extend(self.conditional_reallocation_leak_findings(result, document.assessment_scope));
         }
         if formula_is_use_after_free_shape(&document.formula) {
             findings.extend(self.use_after_free_findings(result));
@@ -2755,12 +2758,19 @@ impl<'a> ModelChecker<'a> {
                 continue;
             }
 
-            // Temporary fail-closed bodyless discriminator.  A Phase-B-minimal
-            // materialized allocation is anchored at the Rust MIR external-call
-            // site; represented C/LLVM allocator bodies are anchored in C.  Do
-            // not infer bodylessness from `site.kind == c_call` alone.
+            // Represented C allocations are eligible only when the same
+            // abstract allocation is proven to cross into a Rust local.
             let Some(origin_provenance) = self.k.source_provenance_at(origin) else { continue; };
-            if origin_provenance.language != "rust" {
+            let represented_c_returned_to_rust = origin_provenance.language == "c"
+                && self.k.nodes.values().any(|node| {
+                    self.k.source_provenance_at(&node.id).is_some_and(|p| p.language == "rust")
+                        && [node.identity.as_ref(), node.event_identity.as_ref()]
+                            .into_iter().flatten().any(|identity| identity.points_to.iter().any(|relation| {
+                                relation.variable.starts_with("rust::")
+                                    && relation.allocations.iter().any(|candidate| candidate == allocation)
+                            }))
+                });
+            if origin_provenance.language != "rust" && !represented_c_returned_to_rust {
                 continue;
             }
 
@@ -2771,9 +2781,46 @@ impl<'a> ModelChecker<'a> {
                 continue;
             }
 
+            // A realloc boundary changes the lifetime represented by this
+            // source allocation.  Only a producer-certified positive-size
+            // failure branch may retain the old obligation.  Zero-size and
+            // otherwise uncorrelated reallocations remain a proof firewall.
+            let reallocation_boundary = reachable.iter().any(|node| {
+                self.k.has_unmodeled_reallocation_boundary(node, allocation)
+            });
+            let positive_reallocation_boundary = self.k
+                .reallocation_boundaries_for(allocation)
+                .any(|record| record.size_semantics == "positive_nonzero_constant");
+            let certified_reallocation_failure = self.k
+                .conditional_reallocations_for(allocation)
+                .find(|record| record.size_semantics == "positive_nonzero_constant");
+            if reallocation_boundary
+                && certified_reallocation_failure.is_none()
+                && !positive_reallocation_boundary
+            {
+                continue;
+            }
+
             let certified_mode = self.k.rust_call_return_relations.iter().any(|r|
                 r.resource_returns.iter().any(|p| p.allocation == *allocation));
-            let path = if certified_mode {
+            let path = if let Some(record) = certified_reallocation_failure {
+                let Some(mut prefix) = self.bfs_to_in_scope(
+                    scope,
+                    origin,
+                    |node| node == record.reallocation_node,
+                    |node| node == origin || !self.blocks_open_obligation(node, allocation),
+                ) else { continue; };
+                let Some(mut suffix) = self.bfs_to_in_scope(
+                    scope,
+                    &record.failure_successor,
+                    |node| self.is_analysis_root_normal_return_node(node),
+                    |node| !self.blocks_open_obligation(node, allocation),
+                ) else { continue; };
+                prefix.push(record.outcome_predicate_call_node.clone());
+                prefix.push(record.outcome_switch_node.clone());
+                prefix.append(&mut suffix);
+                Some(prefix)
+            } else if certified_mode {
                 // Check all matched normal routes for a possible compatible
                 // cleanup/real escape before choosing a positive witness.
                 if self.matched_bfs_to_in_scope(scope, origin,
@@ -2786,6 +2833,16 @@ impl<'a> ModelChecker<'a> {
                 self.matched_bfs_to_in_scope(scope, origin,
                     |n| self.is_analysis_root_normal_return_node(n),
                     |n| !self.blocks_exact_external_obligation(n, allocation))
+            } else if represented_c_returned_to_rust {
+                if self.bfs_to_in_scope(scope, origin,
+                    |n| n != origin && self.blocks_open_obligation(n, allocation)
+                        && self.can_reach_analysis_root_normal_return_in_scope(scope, n),
+                    |_| true).is_some() {
+                    continue;
+                }
+                self.bfs_to_in_scope(scope, origin,
+                    |n| self.is_analysis_root_normal_return_node(n),
+                    |n| !self.blocks_open_obligation(n, allocation))
             } else {
                 if self.bfs_to_in_scope(scope, origin,
                     |n| n != origin && self.blocks_open_obligation(n, allocation), |_| true).is_some() {
@@ -2868,6 +2925,48 @@ impl<'a> ModelChecker<'a> {
             (&a.allocation, &a.origin_node, &a.return_node)
                 .cmp(&(&b.allocation, &b.origin_node, &b.return_node))
         });
+        findings
+    }
+
+    fn conditional_reallocation_leak_findings(&self, result: Truth, scope: AssessmentScope) -> Vec<AllocationObligationFinding> {
+        if result != Truth::Unknown || scope != AssessmentScope::NormalExecution
+            || !self.k.capabilities.contains("conditional_reallocations_v2") {
+            return Vec::new();
+        }
+        let mut findings = Vec::new();
+        for record in &self.k.conditional_reallocations {
+            if record.size_semantics != "positive_nonzero_constant"
+                || !record.result_deallocations.is_empty()
+                || record.result_overwrite_node.as_deref() != Some(record.success_successor.as_str())
+                || record.result_overwrite_basis.as_deref() != Some("rust_mir_immediate_result_overwrite_with_source_v1") {
+                continue;
+            }
+            let Some(mut witness_path) = self.bfs_to_in_scope(scope, &record.success_successor,
+                |node| self.is_analysis_root_normal_return_node(node), |_| true) else { continue; };
+            witness_path.insert(0, record.outcome_switch_node.clone());
+            let return_node = witness_path.last().cloned();
+            findings.push(AllocationObligationFinding {
+                taxonomy: MEMORY_ERROR_DIAGNOSTICS_VERSION,
+                kind: AllocationObligationFindingKind::NormalReturnUnreleasedReallocationResult,
+                strength: AllocationObligationFindingStrength::StrongAbstractEvidence,
+                allocation: record.source_allocation.clone(), query_result: result.as_str(), witness_path,
+                evidence: vec![
+                    AllocationObligationEvidence::ProducerCertifiedConditionalReallocation,
+                    AllocationObligationEvidence::PositiveNonzeroReallocationSize,
+                    AllocationObligationEvidence::ReallocationSuccessInvalidatesSource,
+                    AllocationObligationEvidence::ReallocationResultObligationTransferred,
+                    AllocationObligationEvidence::AnalysisRootNormalReturnReachable,
+                    AllocationObligationEvidence::NoModeledDischargeOnWitnessPath,
+                ],
+                origin_node: Some(record.reallocation_node.clone()),
+                handoff_node: Some(record.success_successor.clone()), return_node,
+                first_drop_node: None, second_drop_node: None, use_node: None, mismatch_node: None,
+                allocator_family: Some("c_malloc".into()), deallocator_family: None,
+                contracts: Vec::new(), dispositions: Vec::new(), ffi_argument_identity: Vec::new(),
+                external_effects: Vec::new(), non_returning_discharge_nodes: Vec::new(),
+                summary: format!("The producer certifies a positive-size realloc success whose sole result local is immediately overwritten by the old source pointer before any certified result deallocation. The successful result allocation remains unreclaimed on a normal path to analysis-root completion; CQPL truth remains {}.", result.as_str()),
+            });
+        }
         findings
     }
 
@@ -7594,6 +7693,8 @@ mod tests {
             basis: "rust_foreign_decl_c_realloc_is_null_switch_v1".into(),
             outcome_correlation_basis: Some("direct_cfg_edge_realloc_to_is_null_v1".into()),
             outcome_value_flow_basis: Some("rust_mir_direct_result_operand_v1".into()),
+            result_overwrite_node: None,
+            result_overwrite_basis: None,
             result_deallocations: vec![],
         };
         let checker = ModelChecker::new(&k);
@@ -7678,6 +7779,7 @@ mod tests {
             source_variable: "rust::main::Local(_1)".into(), result_variable: "rust::main::Local(_3)".into(),
             family: "c_malloc".into(), operation: "realloc".into(), certainty: "may_abstract".into(),
             status: "conditional_unmodeled".into(), basis: "rust_foreign_decl_c_realloc_boundary_v1".into(),
+            size_semantics: "unknown".into(),
         });
 
         let checker = ModelChecker::new(&k);
@@ -10015,6 +10117,7 @@ mod tests {
             certainty: "may_abstract".into(),
             status: "conditional_unmodeled".into(),
             basis: "rust_foreign_decl_c_realloc_allocptr_family_v2".into(),
+            size_semantics: "unknown".into(),
         });
 
         let doc = parse_query_document(
@@ -10082,6 +10185,7 @@ mod tests {
             certainty: "may_abstract".into(),
             status: "conditional_unmodeled".into(),
             basis: "rust_foreign_decl_c_realloc_allocptr_family_v2".into(),
+            size_semantics: "unknown".into(),
         });
 
         let doc = parse_query_document(
