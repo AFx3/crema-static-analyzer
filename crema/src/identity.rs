@@ -4623,7 +4623,7 @@ fn actual_formal_plans(icfg: &GlobalICFGOrdered) -> Result<BTreeMap<String, Actu
         let scopes: Vec<_> = icfg.rust_functions.iter().filter(|(_,f)| f.entry_node == entry).collect();
         let [(callee_scope, metadata)] = scopes.as_slice() else { return Err("unresolved_formal: entry scope".into()); };
         let caller_scope = rust_function_from_node(text("caller_call_state")?).ok_or("unresolved_actual: caller scope")?.to_string();
-        let actuals = binding.get("actual_operands_v1").and_then(serde_json::Value::as_array).ok_or("unresolved_actual: compiler operand proof absent")?.clone();
+        let mut actuals = binding.get("actual_operands_v1").and_then(serde_json::Value::as_array).ok_or("unresolved_actual: compiler operand proof absent")?.clone();
         let formal_proof = &body["formal_arguments_v1"];
         let formals = formal_proof["arguments"].as_array().ok_or("unresolved_formal: compiler locals proof absent")?.clone();
         let is_spawn_callback = a.get("activation_kind").and_then(serde_json::Value::as_str)
@@ -4638,6 +4638,18 @@ fn actual_formal_plans(icfg: &GlobalICFGOrdered) -> Result<BTreeMap<String, Actu
                 return Err("unresolved_formal: uncertified higher-order closure environment boundary".into());
             }
         }
+        // A direct zero-argument Fn::call carries a compiler-generated empty
+        // aggregate tuple in addition to the closure receiver. It is not a
+        // formal of the closure body. Accept only this closed rustc shape;
+        // indirect calls and every other cardinality mismatch remain unresolved.
+        let is_direct_zero_arg_closure = a.get("activation_kind").and_then(serde_json::Value::as_str)
+            == Some("mir_call")
+            && formal_proof["abi"] == "rustc_closure_body_v1"
+            && actuals.len() == formals.len() + 1
+            && actuals.last().and_then(|v| v.get("operand")).and_then(serde_json::Value::as_str) == Some("constant")
+            && actuals.last().and_then(|v| v.get("value_shape")).and_then(serde_json::Value::as_str) == Some("aggregate")
+            && actuals.last().and_then(|v| v.get("actual_local")).is_some_and(serde_json::Value::is_null);
+        if is_direct_zero_arg_closure { actuals.pop(); }
         if actuals.len() != formals.len() || formals.len() != metadata.arg_count
             || formal_proof["arg_count"].as_u64() != Some(formals.len() as u64) {
             return Err("unresolved_formal: ABI/argument cardinality".into());
@@ -4709,7 +4721,10 @@ fn transfer_actual_formal(plan: &ActualFormalPlan, caller: &AllocationIdentityMe
             == Some("higher_order_callback")
             && plan.activation.get("callback_semantics").and_then(serde_json::Value::as_str) == Some("spawn_may_once");
         let boundary_supported = plan.abi == "Rust"
-            || (is_spawn_callback && plan.abi == "rustc_closure_body_v1" && shape == "closure_environment");
+            || (plan.abi == "rustc_closure_body_v1"
+                && ((is_spawn_callback && shape == "closure_environment")
+                    || (plan.activation.get("activation_kind").and_then(serde_json::Value::as_str) == Some("mir_call")
+                        && matches!(shape, "shared_reference"|"mutable_reference"|"closure_environment"))));
         let status = if !boundary_supported || !supported || shape != formal["value_shape"].as_str().unwrap_or("")
             || (actual["operand"] != "constant" && actual["direct_local"] != true)
             || (actual["operand"] == "constant" && shape != "scalar") {
@@ -8176,6 +8191,8 @@ mod tests {
                 targets: vec!["bb0".into()],
                 discr: "Local(_8)".into(),
                 otherwise: Some("bb1".into()),
+                resolved_constant_target: None,
+                constant_resolution_basis: None,
             }),
         };
         let icfg = GlobalICFGOrdered {
@@ -9421,6 +9438,8 @@ mod tests {
                         targets: vec!["bb1".into()],
                         discr: "_1".into(),
                         otherwise: Some("bb2".into()),
+                        resolved_constant_target: None,
+                        constant_resolution_basis: None,
                     }),
                 }),
             ));
@@ -9649,6 +9668,51 @@ mod p3_r1_tests {
         );
         assert!(entry.points_to(&var("caller",9)).is_empty());
         assert_eq!(records[0]["status"],"resource_binding_available");
+    }
+
+    #[test]
+    fn p3_r1_direct_closure_call_propagates_captured_allocation_identity() {
+        let mut caller = AllocationIdentityMemory::default();
+        let captured = alloc("direct-closure-capture");
+        caller.assign_place_points_to(
+            PlaceId { base: var("caller", 4), projection: vec![PlaceProjection::Field { index: 0 }] },
+            BTreeSet::from([captured.clone()]),
+        );
+        let actual = json!({
+            "operand":"move", "actual_local":4, "direct_local":true,
+            "value_shape":"closure_environment"
+        });
+        let mut direct = plan(vec![actual]);
+        direct.activation["activation_kind"] = json!("mir_call");
+        direct.abi = "rustc_closure_body_v1".into();
+
+        let (entry, records) = transfer_actual_formal(&direct, &caller);
+        assert_eq!(
+            entry.points_to_place(&PlaceId {
+                base: var("callee", 1),
+                projection: vec![PlaceProjection::Field { index: 0 }],
+            }),
+            BTreeSet::from([captured]),
+        );
+        assert_eq!(records[0]["status"], "resource_binding_available");
+    }
+
+    #[test]
+    fn p3_r1_uncertified_closure_boundary_remains_fail_closed() {
+        let mut caller = AllocationIdentityMemory::default();
+        caller.assign_fresh(var("caller", 4), alloc("must-not-cross"));
+        let actual = json!({
+            "operand":"move", "actual_local":4, "direct_local":true,
+            "value_shape":"closure_environment"
+        });
+        for (kind, abi) in [("indirect_call", "rustc_closure_body_v1"), ("mir_call", "unsupported_abi")] {
+            let mut unsupported = plan(vec![actual.clone()]);
+            unsupported.activation["activation_kind"] = json!(kind);
+            unsupported.abi = abi.into();
+            let (entry, records) = transfer_actual_formal(&unsupported, &caller);
+            assert!(entry.points_to(&var("callee", 1)).is_empty());
+            assert_eq!(records[0]["status"], "unsupported_value_shape");
+        }
     }
 
     #[test]

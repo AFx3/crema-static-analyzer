@@ -1,0 +1,39 @@
+{
+  "crema_flags": [
+    "--analysis-mode",
+    "application",
+    "--dependency-body-ingestion-v1",
+    "--dependency-drop-glue-ingestion-v1",
+    "--dependency-resource-identity-continuity-v1",
+    "--dependency-resource-return-continuity-v1",
+    "--dependency-place-resource-relations-v1",
+    "--dependency-drop-receiver-resource-continuity-v1",
+    "--cqpl-schema-version",
+    "2",
+    "--mir-semantics-v2",
+    "--panic-unwind-lifecycle-v1",
+    "--only-icfg-annotated"
+  ],
+  "description": "Single producer profile used for every local evaluation target. All query suites are evaluated on the same annotated ICFG.",
+  "primary_detection_suite": "queries_v3",
+  "query_suites": [
+    "queries_v2",
+    "queries_experimental",
+    "queries_v3"
+  ],
+  "required_capabilities": [
+    "allocation_state_v1",
+    "allocation_contracts_v1",
+    "allocation_contracts_v2",
+    "allocation_contracts_v3",
+    "allocation_contracts_v4",
+    "typed_edge_flow_v1",
+    "mir_semantics_v2",
+    "panic_unwind_lifecycle_v1",
+    "panic_lifecycle_state_v1",
+    "panic_lifecycle_state_v2"
+  ],
+  "schema": "crema_full_memory_safety_profile_v1",
+  "schema_version": 2,
+  "toolchain": "nightly-2024-11-21"
+}

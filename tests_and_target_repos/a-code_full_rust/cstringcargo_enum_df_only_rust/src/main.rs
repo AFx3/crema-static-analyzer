@@ -1,6 +1,4 @@
 use std::{ffi::CString, process::abort};
-use log::error;
-extern crate log;
 use std::ptr;
 
 // cargo +nightly rustc -- -Z unpretty=mir-cfg > mir.dot
@@ -20,10 +18,8 @@ fn main() {
         // success: hand back the raw C-pointer
         Ok(cstring) => cstring.into_raw(),
         // failure: log and return a null pointer
-        Err(err) => {
-            error!("Failed to create CString for {:?}: {}", name, err);
-            abort();
-        }};
+        Err(_) => abort(),
+        };
         println!("Got raw C pointer: {:?}", c_name_ptr);
 
 

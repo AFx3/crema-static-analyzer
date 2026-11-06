@@ -1,0 +1,2 @@
+target_id	capability	evidence
+a-code_full_rust/cstringcargo_enum_df_only_rust	a3_bodyless_enum_constructor_callback_v1	log::MaybeStaticStr::Static is a rustc DefKind::Ctor callback of producer-certified Option::map in RecordBuilder::file_static/module_path_static; constructors have no MIR callback body

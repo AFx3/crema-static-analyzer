@@ -1,6 +1,6 @@
 use rustc_driver::Callbacks;
 use rustc_interface::Queries;
-use rustc_middle::mir::{Body, Place, PlaceElem, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, Operand, NonDivergingIntrinsic};
+use rustc_middle::mir::{BinOp, Body, Place, PlaceElem, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, Operand, NonDivergingIntrinsic};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::{Write, Read};
@@ -72,6 +72,14 @@ fn a3_bodyless_enum_constructor_callback_v1_enabled() -> bool {
         .ok().as_deref() == Some("1")
 }
 
+/// Admit a callback summary only when both sides of the proof are present:
+/// the experiment explicitly enabled the capability and rustc classified the
+/// callback definition as an enum/struct constructor.  This never substitutes
+/// a summary for an ordinary function or closure with a missing MIR body.
+fn a3_bodyless_constructor_summary_allowed(enabled: bool, is_ctor: bool) -> bool {
+    enabled && is_ctor
+}
+
 /// Opt-in A3 coverage gate for dependency closures carried by the already
 /// modeled Iterator lazy-adaptor/consumer protocol. This does not invent a new
 /// control-flow semantics: `higher_order_call_semantics` remains authoritative.
@@ -80,6 +88,96 @@ fn a3_bodyless_enum_constructor_callback_v1_enabled() -> bool {
 fn a3_iterator_callback_ingestion_v1_enabled() -> bool {
     std::env::var("CREMA_INTERNAL_A3_ITERATOR_CALLBACK_INGESTION_V1")
         .ok().as_deref() == Some("1")
+}
+
+#[derive(Clone, Copy)]
+struct ClosedMirScalar<'tcx> {
+    bits: u128,
+    ty: ty::Ty<'tcx>,
+}
+
+/// Select the exported successors of a MIR `SwitchInt`.  A producer-certified
+/// constant target replaces the ordinary fan-out; otherwise the complete MIR
+/// successor set is retained.  This helper is intentionally independent of
+/// pretty-printed discriminants and is used only after typed-MIR evaluation.
+fn exported_switch_successors(
+    targets: &[String],
+    otherwise: Option<&String>,
+    resolved_constant_target: Option<&String>,
+) -> Vec<(String, &'static str)> {
+    if let Some(target) = resolved_constant_target {
+        return vec![(target.clone(), "SwitchInt constant target")];
+    }
+    let mut successors = Vec::new();
+    for target in targets {
+        let trimmed = target.trim_matches(|c| c == '(' || c == ')');
+        let parts: Vec<&str> = trimmed.split(',').collect();
+        if parts.len() >= 2 {
+            successors.push((parts[1].trim().to_string(), "SwitchInt target"));
+        }
+    }
+    if let Some(target) = otherwise {
+        successors.push((target.clone(), "SwitchInt otherwise"));
+    }
+    successors
+}
+
+fn eval_closed_scalar_operand<'tcx>(
+    operand: &Operand<'tcx>,
+    values: &HashMap<Local, ClosedMirScalar<'tcx>>,
+    tcx: TyCtxt<'tcx>,
+    typing_env: ty::TypingEnv<'tcx>,
+) -> Option<ClosedMirScalar<'tcx>> {
+    match operand {
+        Operand::Copy(place) | Operand::Move(place) if place.projection.is_empty() => {
+            values.get(&place.local).copied()
+        }
+        Operand::Constant(constant) => {
+            let ty = constant.const_.ty();
+            let scalar = constant.const_.try_eval_scalar_int(tcx, typing_env)?;
+            let size = tcx.layout_of(typing_env.as_query_input(ty)).ok()?.size;
+            Some(ClosedMirScalar { bits: scalar.to_bits(size), ty })
+        }
+        _ => None,
+    }
+}
+
+fn signed_scalar(bits: u128, size_bits: u64) -> i128 {
+    if size_bits == 0 || size_bits >= 128 { return bits as i128; }
+    let shift = 128 - size_bits;
+    ((bits << shift) as i128) >> shift
+}
+
+fn eval_closed_scalar_rvalue<'tcx>(
+    rvalue: &Rvalue<'tcx>,
+    values: &HashMap<Local, ClosedMirScalar<'tcx>>,
+    tcx: TyCtxt<'tcx>,
+    typing_env: ty::TypingEnv<'tcx>,
+) -> Option<ClosedMirScalar<'tcx>> {
+    match rvalue {
+        Rvalue::Use(operand) => eval_closed_scalar_operand(operand, values, tcx, typing_env),
+        Rvalue::BinaryOp(op, operands) => {
+            let left = eval_closed_scalar_operand(&operands.0, values, tcx, typing_env)?;
+            let right = eval_closed_scalar_operand(&operands.1, values, tcx, typing_env)?;
+            if left.ty != right.ty { return None; }
+            let size_bits = tcx.layout_of(typing_env.as_query_input(left.ty)).ok()?.size.bits();
+            let result = match (op, left.ty.kind()) {
+                (BinOp::Eq, _) => left.bits == right.bits,
+                (BinOp::Ne, _) => left.bits != right.bits,
+                (BinOp::Lt, TyKind::Int(_)) => signed_scalar(left.bits, size_bits) < signed_scalar(right.bits, size_bits),
+                (BinOp::Le, TyKind::Int(_)) => signed_scalar(left.bits, size_bits) <= signed_scalar(right.bits, size_bits),
+                (BinOp::Gt, TyKind::Int(_)) => signed_scalar(left.bits, size_bits) > signed_scalar(right.bits, size_bits),
+                (BinOp::Ge, TyKind::Int(_)) => signed_scalar(left.bits, size_bits) >= signed_scalar(right.bits, size_bits),
+                (BinOp::Lt, TyKind::Uint(_) | TyKind::Bool) => left.bits < right.bits,
+                (BinOp::Le, TyKind::Uint(_) | TyKind::Bool) => left.bits <= right.bits,
+                (BinOp::Gt, TyKind::Uint(_) | TyKind::Bool) => left.bits > right.bits,
+                (BinOp::Ge, TyKind::Uint(_) | TyKind::Bool) => left.bits >= right.bits,
+                _ => return None,
+            };
+            Some(ClosedMirScalar { bits: u128::from(result), ty: tcx.types.bool })
+        }
+        _ => None,
+    }
 }
 
 
@@ -736,6 +834,23 @@ fn a3_certified_external_callback_bodies<'tcx>(
     out
 }
 
+/// Legacy callback discovery identifies only a `DefId`.  That is sufficient
+/// for the pre-DEP1 body worklist, but it must never be used to select a body
+/// when the instance-sensitive DEP1 reuse index is active: distinct generic
+/// instantiations may share the same definition.  Rejecting this optional body
+/// acquisition is the conservative outcome; the higher-order call remains
+/// represented with an unresolved callback body instead of aborting the whole
+/// crate export.
+fn a3_legacy_callback_body_acquisition_allowed(
+    dep1_instance_reuse_active: bool,
+) -> Result<(), &'static str> {
+    if dep1_instance_reuse_active {
+        Err("legacy callback discovery lacks concrete Instance certificate")
+    } else {
+        Ok(())
+    }
+}
+
 
 // NOTE: rustc unwind Terminate is materialized as an explicit terminal ICFG node; from 1.86, unwind actions are:
 /* 
@@ -1028,7 +1143,7 @@ mod rust_drop_owner_place_metadata_tests {
                         for (block,data) in body.basic_blocks.iter_enumerated() {
                             let Some(Terminator { kind:TerminatorKind::Drop { place,.. },.. })=&data.terminator else { continue; };
                             let legacy=extractor.convert_terminator(&data.terminator,&body.local_decls,tcx);
-                            let converted=extractor.convert_terminator_with_owner(&data.terminator,&body.local_decls,tcx,definition.to_def_id(),None,&function,block.index());
+                            let converted=extractor.convert_terminator_with_owner(&data.terminator,&data.statements,&body.local_decls,tcx,definition.to_def_id(),None,&function,block.index());
                             assert_eq!(serde_json::to_value(&legacy).unwrap(),serde_json::to_value(&converted).unwrap());
                             let record=extractor.rust_drop_owner_places.last().unwrap();
                             assert_eq!(record.drop_identity.definition_id,dep1_stable_def_id(tcx,definition.to_def_id()));
@@ -1520,6 +1635,7 @@ impl MirExtractor {
     fn convert_terminator_with_owner<'tcx>(
         &mut self,
         terminator: &Option<Terminator<'tcx>>,
+        statements: &[Statement<'tcx>],
         local_decls: &IndexVec<Local, LocalDecl<'tcx>>,
         tcx: TyCtxt<'tcx>,
         definition: DefId,
@@ -1539,7 +1655,48 @@ impl MirExtractor {
                 owner: rust_drop_owner_place_from_ref(function_key, place.as_ref(), local_decls.len()),
             });
         }
-        self.convert_terminator(terminator, local_decls, tcx)
+        let mut converted = self.convert_terminator(terminator, local_decls, tcx);
+        self.annotate_closed_constant_switch(&mut converted, terminator, statements, tcx, definition);
+        converted
+    }
+
+    /// Resolve only closed, straight-line scalar expressions in the same MIR
+    /// block. Unknown writes, projections and unsupported operations preserve
+    /// the full successor relation.
+    fn annotate_closed_constant_switch<'tcx>(
+        &self,
+        converted: &mut Option<MirTerminator>,
+        original: &Option<Terminator<'tcx>>,
+        statements: &[Statement<'tcx>],
+        tcx: TyCtxt<'tcx>,
+        definition: DefId,
+    ) {
+        let Some(Terminator { kind: TerminatorKind::SwitchInt { discr, targets, .. }, .. }) = original else { return; };
+        let Some(MirTerminator::SwitchInt { resolved_constant_target, constant_resolution_basis, .. }) = converted.as_mut() else { return; };
+        let typing_env = ty::TypingEnv::post_analysis(tcx, definition);
+        let mut values = HashMap::new();
+        for statement in statements {
+            match &statement.kind {
+                StatementKind::Assign(assign) => {
+                    let (place, rvalue) = &**assign;
+                    if !place.projection.is_empty() { values.remove(&place.local); continue; }
+                    match eval_closed_scalar_rvalue(rvalue, &values, tcx, typing_env) {
+                        Some(value) => { values.insert(place.local, value); }
+                        None => { values.remove(&place.local); }
+                    }
+                }
+                StatementKind::StorageDead(local) => { values.remove(local); }
+                StatementKind::Deinit(place) | StatementKind::SetDiscriminant { place, .. }
+                    if place.projection.is_empty() => { values.remove(&place.local); }
+                _ => {}
+            }
+        }
+        let Some(value) = eval_closed_scalar_operand(discr, &values, tcx, typing_env) else { return; };
+        let target = targets.target_for_value(value.bits);
+        *resolved_constant_target = Some(format!("{:?}", target));
+        *constant_resolution_basis = Some(format!(
+            "closed_same_block_scalar_expression(value={}, type={:?})", value.bits, value.ty,
+        ));
     }
 
     // pass the local declarations here as well so that any place conversions can include mutability
@@ -1572,6 +1729,8 @@ impl MirExtractor {
                     discr: discr_str,
                     targets: target_blocks,
                     otherwise: otherwise_block,
+                    resolved_constant_target: None,
+                    constant_resolution_basis: None,
                 }
             },
             TerminatorKind::Return => MirTerminator::Return {
@@ -1711,9 +1870,10 @@ impl MirExtractor {
                         match nested_ty.kind() {
                             TyKind::Closure(def_id, _) | TyKind::FnDef(def_id, _) => {
                                 let callback_path = tcx.def_path_str(*def_id);
-                                if a3_bodyless_enum_constructor_callback_v1_enabled()
-                                    && matches!(tcx.def_kind(*def_id), DefKind::Ctor(..))
-                                {
+                                if a3_bodyless_constructor_summary_allowed(
+                                    a3_bodyless_enum_constructor_callback_v1_enabled(),
+                                    matches!(tcx.def_kind(*def_id), DefKind::Ctor(..)),
+                                ) {
                                     if self.bodyless_callback_summaries.insert(callback_path.clone()) {
                                         eprintln!(
                                             "A3_BODYLESS_ENUM_CONSTRUCTOR_CALLBACK_V1: callback={}",
@@ -2244,7 +2404,7 @@ fn dep1_materialize_dependency_bodies<'tcx>(
         let mut blocks = Vec::with_capacity(body.basic_blocks.len());
         for (bb, data) in body.basic_blocks.iter_enumerated() {
             let mut terminator = extractor.convert_terminator_with_owner(
-                &data.terminator, &body.local_decls, tcx, def_id,
+                &data.terminator, &data.statements, &body.local_decls, tcx, def_id,
                 Some(instance_id.clone()), &function_key, bb.index());
             if let Some(MirTerminator::Call {
                 resolved_instance_callees,
@@ -4033,7 +4193,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                     }
                 }
                 let mut terminator = self.convert_terminator_with_owner(
-                    &data.terminator, &body.local_decls, tcx, def_id.to_def_id(),
+                    &data.terminator, &data.statements, &body.local_decls, tcx, def_id.to_def_id(),
                     None, &function_name, bb.index());
                 if let Some(MirTerminator::Call {
                     resolved_instance_callees,
@@ -4138,11 +4298,21 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                         &body.local_decls,
                     ));
                     for (callback_path, callback_def) in discovered_callbacks {
-                        if a3_dep1_reuse.is_some() {
-                            // Legacy callback discovery carries only DefId, not
-                            // a concrete Instance certificate. It must not reuse
-                            // a different instantiation sharing that definition.
-                            panic!("P2_R10_SEMANTIC_OWNERSHIP_BLOCKER: IDENTITY_MISMATCH: A3 callback request lacks concrete Instance certificate {}", dep1_stable_def_id(tcx,callback_def));
+                        if let Err(reason) = a3_legacy_callback_body_acquisition_allowed(
+                            a3_dep1_reuse.is_some(),
+                        ) {
+                            // Do not turn DefId-only legacy evidence into a
+                            // concrete Instance choice.  Omitting the optional
+                            // callback body preserves fail-closed higher-order
+                            // semantics and lets the rest of the crate export.
+                            eprintln!(
+                                "A3_EXTERNAL_CALLBACK_MIR_SKIPPED_FAIL_CLOSED: caller={} callback={} definition_id={} reason={}",
+                                function_name,
+                                callback_path,
+                                dep1_stable_def_id(tcx, callback_def),
+                                reason,
+                            );
+                            continue;
                         }
                         if external_mir_scheduled.insert(callback_path.clone()) {
                             eprintln!(
@@ -4222,7 +4392,7 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                     }
 
                     let mut terminator = self.convert_terminator_with_owner(
-                        &data.terminator, &body.local_decls, tcx, def_id,
+                        &data.terminator, &data.statements, &body.local_decls, tcx, def_id,
                         None, &function_name, bb.index());
                     if let Some(MirTerminator::Call {
                         resolved_instance_callees,
@@ -4749,29 +4919,16 @@ impl Callbacks for MirExtractor {fn after_analysis<'tcx>(&mut self, _compiler: &
                 }
                 ///////////////////////////////////////////////////////////////////////////////////////////////////////
                 // handle others terminators (SwitchInt, Assert, Drop) 
-                if let Some(MirTerminator::SwitchInt { targets, otherwise, .. }) = &block.terminator {
+                if let Some(MirTerminator::SwitchInt { targets, otherwise, resolved_constant_target, .. }) = &block.terminator {
                     let src = format!("rust::{}::bb{}", rust_func, block.block_id);
-                    for target in targets {
-                        let trimmed = target.trim_matches(|c| c == '(' || c == ')');
-                        let parts: Vec<&str> = trimmed.split(',').collect();
-                        if parts.len() >= 2 {
-                            let target_block = parts[1].trim();
-                            let dst = format!("rust::{}::{}", rust_func, target_block);
-                            icfg_edges.push(IcfgEdge {
-                                source: src.clone(),
-                                destination: dst,
-                                label: Some("SwitchInt target".to_string()),
-                                source_label: Some(format!("Mir bb{}", block.block_id)),
-                                destination_label: None,
-                            });
-                        }
-                    }
-                    if let Some(otherwise_target) = otherwise {
-                        let dst = format!("rust::{}::{}", rust_func, otherwise_target);
+                    for (target, edge_label) in exported_switch_successors(
+                        targets, otherwise.as_ref(), resolved_constant_target.as_ref(),
+                    ) {
+                        let dst = format!("rust::{}::{}", rust_func, target);
                         icfg_edges.push(IcfgEdge {
                             source: src.clone(),
                             destination: dst,
-                            label: Some("SwitchInt otherwise".to_string()),
+                            label: Some(edge_label.to_string()),
                             source_label: Some(format!("Mir bb{}", block.block_id)),
                             destination_label: None,
                         });
@@ -6006,6 +6163,13 @@ mod phase6k_callee_resolution_tests {
     }
 
     #[test]
+    fn bodyless_constructor_summary_requires_capability_and_typed_ctor() {
+        assert!(a3_bodyless_constructor_summary_allowed(true, true));
+        assert!(!a3_bodyless_constructor_summary_allowed(false, true));
+        assert!(!a3_bodyless_constructor_summary_allowed(true, false));
+    }
+
+    #[test]
     fn generic_pretty_print_resolves_by_canonical_def_path() {
         let functions = empty_functions(&["MyStruct::new"]);
         assert_eq!(
@@ -6641,5 +6805,67 @@ mod a3_dep1_scope_tests {
         a3_dep1_certify_request(&mut request,&[],&[leaf]).unwrap();
         assert_eq!(request["classification"],"A3_ONLY_OUT_OF_SCOPE_INFORMATION");
         assert_eq!(request["program_body_imported"],false);
+    }
+}
+
+#[cfg(test)]
+mod certified_switch_successor_tests {
+    use super::exported_switch_successors;
+
+    fn dynamic_targets() -> Vec<String> {
+        vec!["(0, bb_false)".to_string(), "(1, bb_true)".to_string()]
+    }
+
+    #[test]
+    fn certified_constant_false_exports_only_false_successor() {
+        let targets = dynamic_targets();
+        let otherwise = "bb_otherwise".to_string();
+        let resolved = "bb_false".to_string();
+        assert_eq!(
+            exported_switch_successors(&targets, Some(&otherwise), Some(&resolved)),
+            vec![("bb_false".to_string(), "SwitchInt constant target")],
+        );
+    }
+
+    #[test]
+    fn certified_constant_true_exports_only_true_successor() {
+        let targets = dynamic_targets();
+        let otherwise = "bb_otherwise".to_string();
+        let resolved = "bb_true".to_string();
+        assert_eq!(
+            exported_switch_successors(&targets, Some(&otherwise), Some(&resolved)),
+            vec![("bb_true".to_string(), "SwitchInt constant target")],
+        );
+    }
+
+    #[test]
+    fn dynamic_switch_preserves_every_successor() {
+        let targets = dynamic_targets();
+        let otherwise = "bb_otherwise".to_string();
+        assert_eq!(
+            exported_switch_successors(&targets, Some(&otherwise), None),
+            vec![
+                ("bb_false".to_string(), "SwitchInt target"),
+                ("bb_true".to_string(), "SwitchInt target"),
+                ("bb_otherwise".to_string(), "SwitchInt otherwise"),
+            ],
+        );
+    }
+}
+
+#[cfg(test)]
+mod legacy_callback_acquisition_tests {
+    use super::a3_legacy_callback_body_acquisition_allowed;
+
+    #[test]
+    fn def_id_only_callback_is_rejected_without_aborting_dep1_export() {
+        let error = a3_legacy_callback_body_acquisition_allowed(true)
+            .expect_err("DEP1 must not select an Instance from DefId-only evidence");
+        assert!(error.contains("lacks concrete Instance certificate"));
+    }
+
+    #[test]
+    fn legacy_non_dep1_body_worklist_remains_available() {
+        assert!(a3_legacy_callback_body_acquisition_allowed(false).is_ok());
     }
 }

@@ -814,7 +814,20 @@ pub struct RustHigherOrderCallEvidence {
 #[serde(tag = "kind")]
 pub enum MirTerminator {
     Goto { details: String, source_info: String, target: String }, // 1
-    SwitchInt { details: String, source_info: String, targets: Vec<String>, discr: String, otherwise: Option<String> }, //2
+    SwitchInt {
+        details: String,
+        source_info: String,
+        targets: Vec<String>,
+        discr: String,
+        otherwise: Option<String>,
+        /// Producer-proved successor for a closed scalar expression in this
+        /// basic block. Missing evidence retains every successor.
+        #[serde(default)]
+        resolved_constant_target: Option<String>,
+        /// Diagnostic provenance for the restricted rustc scalar evaluation.
+        #[serde(default)]
+        constant_resolution_basis: Option<String>,
+    }, //2
     UnwindResume { details: String, source_info: String }, //3
     /// Pinned rustc cleanup terminator: execution terminates rather than returning.
     #[serde(alias = "Terminate")]
